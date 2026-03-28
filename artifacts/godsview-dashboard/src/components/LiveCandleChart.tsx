@@ -25,18 +25,39 @@ const TIMEFRAMES: { label: string; value: Timeframe }[] = [
 
 const SYMBOLS = ["BTCUSD", "ETHUSD"];
 
-type Props = { defaultSymbol?: string; defaultTimeframe?: Timeframe };
+type Props = {
+  defaultSymbol?: string;
+  defaultTimeframe?: Timeframe;
+  /** Called on every SSE tick with the live price and symbol */
+  onPriceUpdate?: (price: number, symbol: string) => void;
+  /** Chart canvas height in px (default 360) */
+  height?: number;
+};
 
-export default function LiveCandleChart({ defaultSymbol = "BTCUSD", defaultTimeframe = "5Min" }: Props) {
+export default function LiveCandleChart({
+  defaultSymbol = "BTCUSD",
+  defaultTimeframe = "5Min",
+  onPriceUpdate,
+  height = 360,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const volRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   const esRef = useRef<EventSource | null>(null);
   const lastPriceRef = useRef<number | null>(null);
+  // Stable ref so connectStream never needs to re-create when callback changes
+  const onPriceUpdateRef = useRef(onPriceUpdate);
+  useEffect(() => { onPriceUpdateRef.current = onPriceUpdate; }, [onPriceUpdate]);
 
   const [symbol, setSymbol] = useState(defaultSymbol);
   const [timeframe, setTimeframe] = useState<Timeframe>(defaultTimeframe);
+
+  // Sync symbol when parent changes active instrument
+  useEffect(() => {
+    if (defaultSymbol && defaultSymbol !== symbol) setSymbol(defaultSymbol);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaultSymbol]);
   const [livePrice, setLivePrice] = useState<number | null>(null);
   const [liveCandle, setLiveCandle] = useState<Candle | null>(null);
   const [loading, setLoading] = useState(true);
@@ -147,6 +168,9 @@ export default function LiveCandleChart({ defaultSymbol = "BTCUSD", defaultTimef
         setLiveCandle(c);
         lastPriceRef.current = price;
         setTickCount((n) => n + 1);
+
+        // Notify parent (e.g. dashboard) of live price via stable ref
+        onPriceUpdateRef.current?.(price, symbol);
       } catch { /* ignore parse errors */ }
     };
 
@@ -228,7 +252,7 @@ export default function LiveCandleChart({ defaultSymbol = "BTCUSD", defaultTimef
       </div>
 
       {/* Chart */}
-      <div style={{ position: "relative", height: "360px" }}>
+      <div style={{ position: "relative", height: `${height}px` }}>
         {loading && (
           <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: C.card, zIndex: 10 }}>
             <div className="flex flex-col items-center gap-2">

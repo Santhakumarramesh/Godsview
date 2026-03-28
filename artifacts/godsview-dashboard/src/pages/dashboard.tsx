@@ -2,7 +2,8 @@ import { useGetSystemStatus, useGetPerformance, useGetSignals } from "@workspace
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/utils";
 import { format } from "date-fns";
 import { Link } from "wouter";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
+import LiveCandleChart from "@/components/LiveCandleChart";
 
 const C = {
   bg: "#0e0e0f",
@@ -25,27 +26,35 @@ function MicroLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-function StatCard({ label, value, sub, accent }: { label: string; value: React.ReactNode; sub?: string; accent?: string }) {
-  return (
-    <div className="rounded p-4 transition-all hover:brightness-110" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
-      <MicroLabel>{label}</MicroLabel>
-      <div className="mt-2 font-headline font-bold text-xl" style={{ color: accent ?? "#ffffff" }}>{value}</div>
-      {sub && <div style={{ fontSize: "9px", color: C.outline, fontFamily: "Space Grotesk", marginTop: "4px" }}>{sub}</div>}
-    </div>
-  );
-}
-
 export default function Dashboard() {
-  const { data: systemStatus, isLoading: sysLoading, refetch: refetchStatus } = useGetSystemStatus();
-  const { data: performance, isLoading: perfLoading, refetch: refetchPerf } = useGetPerformance({ days: 1 });
-  const { data: signals, isLoading: sigLoading } = useGetSignals({ limit: 5 });
+  // ── Live chart price feed ────────────────────────────────────────────────
+  const [chartLivePrice, setChartLivePrice] = useState<number | null>(null);
+  const [chartSymbol, setChartSymbol] = useState<string>("BTCUSD");
+  const onPriceUpdate = useCallback((price: number, symbol: string) => {
+    setChartLivePrice(price);
+    setChartSymbol(symbol);
+  }, []);
 
-  // Auto-refresh every 30 seconds
+  // ── Data hooks — 5 s auto-refresh ────────────────────────────────────────
+  const { data: systemStatus, isLoading: sysLoading, refetch: refetchStatus } =
+    useGetSystemStatus({ query: { refetchInterval: 5000, staleTime: 4000 } });
+
+  const { data: performance, isLoading: perfLoading, refetch: refetchPerf } =
+    useGetPerformance({ days: 1 }, { query: { refetchInterval: 5000, staleTime: 4000 } });
+
+  const { data: signals, isLoading: sigLoading, refetch: refetchSigs } =
+    useGetSignals({ limit: 5 }, { query: { refetchInterval: 10000, staleTime: 9000 } });
+
+  // Fallback manual interval (belt & braces)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
-    intervalRef.current = setInterval(() => { refetchStatus(); refetchPerf(); }, 30_000);
+    intervalRef.current = setInterval(() => {
+      refetchStatus();
+      refetchPerf();
+      refetchSigs();
+    }, 5000);
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [refetchStatus, refetchPerf]);
+  }, [refetchStatus, refetchPerf, refetchSigs]);
 
   if (sysLoading || perfLoading || sigLoading) {
     return (
@@ -61,7 +70,7 @@ export default function Dashboard() {
   const layers = systemStatus?.layers ?? [];
   const sigs = signals?.signals ?? [];
 
-  // Combined P&L: realized (closed trades in DB) + unrealized (live Alpaca positions)
+  // ── P&L calculations ──────────────────────────────────────────────────────
   const realizedPnl = performance?.total_pnl ?? 0;
   const unrealizedPnl = (systemStatus as Record<string, number> | undefined)?.unrealized_pnl ?? 0;
   const totalPnl = realizedPnl + unrealizedPnl;
@@ -78,8 +87,15 @@ export default function Dashboard() {
   const winRate = performance?.win_rate ?? 0;
   const expectancy = performance?.expectancy ?? 0;
 
+  // Chart symbol: follow active instrument from system status, default BTCUSD
+  const rawInstrument = systemStatus?.active_instrument ?? "BTCUSD";
+  // Normalize: strip /USD suffix if needed, map to chart format
+  const activeChartSymbol =
+    rawInstrument.includes("BTC") ? "BTCUSD" :
+    rawInstrument.includes("ETH") ? "ETHUSD" : "BTCUSD";
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
@@ -104,9 +120,9 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Top Metrics */}
+      {/* ── Top Metrics ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {/* Today's P&L — realized + unrealized */}
+        {/* Today's P&L */}
         <div className="rounded p-4 transition-all hover:brightness-110" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
           <MicroLabel>Today&apos;s P&amp;L</MicroLabel>
           <div className="mt-2 font-headline font-bold text-xl" style={{ color: totalPnl >= 0 ? C.primary : C.tertiary }}>
@@ -140,7 +156,7 @@ export default function Dashboard() {
             {closedTrades === 0 ? "—" : formatCurrency(expectancy)}
           </div>
           <div style={{ fontSize: "9px", color: C.outline, fontFamily: "Space Grotesk", marginTop: "4px" }}>
-            {closedTrades === 0 ? "Per trade average" : "Per trade average"}
+            Per trade average
           </div>
         </div>
 
@@ -156,7 +172,41 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* 6-Layer Pipeline */}
+      {/* ── Live Chart — synced to active instrument ── */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-3">
+            <span className="material-symbols-outlined text-base" style={{ color: C.secondary }}>candlestick_chart</span>
+            <span style={{ fontSize: "9px", color: C.outline, fontFamily: "Space Grotesk", letterSpacing: "0.2em", textTransform: "uppercase" }}>
+              Live Market Chart
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            {chartLivePrice && (
+              <span className="flex items-center gap-2">
+                <span style={{ fontSize: "12px", fontFamily: "JetBrains Mono", color: "#fff", fontWeight: 700 }}>
+                  {chartSymbol === "BTCUSD" ? "BTC" : "ETH"}{" "}
+                  ${chartLivePrice.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                </span>
+                <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: C.primary }} />
+              </span>
+            )}
+            <Link href="/alpaca">
+              <span style={{ fontSize: "9px", color: C.secondary, fontFamily: "Space Grotesk", letterSpacing: "0.1em", cursor: "pointer" }}>
+                FULL ANALYSIS →
+              </span>
+            </Link>
+          </div>
+        </div>
+        <LiveCandleChart
+          defaultSymbol={activeChartSymbol}
+          defaultTimeframe="5Min"
+          onPriceUpdate={onPriceUpdate}
+          height={320}
+        />
+      </div>
+
+      {/* ── 6-Layer Pipeline ── */}
       <div>
         <div className="flex items-center gap-3 mb-4">
           <span className="material-symbols-outlined text-base" style={{ color: C.primary }}>account_tree</span>
@@ -183,7 +233,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Recent Signals */}
+      {/* ── Recent Signals ── */}
       <div>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
@@ -265,7 +315,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Footer Status */}
+      {/* Footer */}
       <div className="pt-6 border-t flex items-center justify-between" style={{ borderColor: "rgba(72,72,73,0.15)" }}>
         <div className="flex items-center gap-6">
           <div>
@@ -277,7 +327,13 @@ export default function Dashboard() {
           <div>
             <MicroLabel>Data Source</MicroLabel>
             <div style={{ fontSize: "10px", fontFamily: "Space Grotesk", fontWeight: 700, color: "#ffffff", marginTop: "2px" }}>
-              Alpaca Crypto
+              Alpaca Crypto · Live
+            </div>
+          </div>
+          <div>
+            <MicroLabel>Refresh Rate</MicroLabel>
+            <div style={{ fontSize: "10px", fontFamily: "JetBrains Mono", fontWeight: 700, color: C.secondary, marginTop: "2px" }}>
+              5s stats · SSE chart
             </div>
           </div>
         </div>
