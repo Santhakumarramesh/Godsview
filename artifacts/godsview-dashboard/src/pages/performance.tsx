@@ -1,161 +1,206 @@
 import { useGetPerformance } from "@workspace/api-client-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency, formatPercent, cn } from "@/lib/utils";
-import { RefreshCcw } from "lucide-react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useState } from "react";
+
+const C = {
+  card: "#1a191b",
+  cardHigh: "#201f21",
+  border: "rgba(72,72,73,0.25)",
+  primary: "#9cff93",
+  secondary: "#669dff",
+  tertiary: "#ff7162",
+  muted: "#adaaab",
+  outline: "#767576",
+  outlineVar: "#484849",
+};
+
+function MicroLabel({ children }: { children: React.ReactNode }) {
+  return <span style={{ fontSize: "8px", fontFamily: "Space Grotesk", letterSpacing: "0.2em", textTransform: "uppercase", color: C.outline }}>{children}</span>;
+}
+
+const DAYS_OPTIONS = [7, 30, 90];
 
 export default function Performance() {
   const [days, setDays] = useState(30);
   const { data, isLoading } = useGetPerformance({ days });
 
   if (isLoading || !data) {
-    return <div className="flex items-center justify-center h-full"><RefreshCcw className="w-8 h-8 animate-spin text-primary" /></div>;
+    return (
+      <div className="flex items-center justify-center h-64">
+        <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: C.primary }} />
+      </div>
+    );
   }
 
+  const stats = [
+    { label: "Total P&L", value: formatCurrency(data.total_pnl), accent: data.total_pnl >= 0 ? C.primary : C.tertiary },
+    { label: "Win Rate", value: formatPercent(data.win_rate), accent: data.win_rate > 50 ? C.primary : C.muted },
+    { label: "Profit Factor", value: data.profit_factor.toFixed(2), accent: data.profit_factor > 1 ? C.primary : C.tertiary },
+    { label: "Total Trades", value: String(data.total_trades), accent: "#ffffff" },
+    { label: "Avg Win", value: formatCurrency(data.avg_win), accent: C.primary },
+    { label: "Max Drawdown", value: formatCurrency(data.max_drawdown), accent: C.tertiary },
+  ];
+
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Performance Analytics</h1>
-          <p className="text-muted-foreground mt-1">Deep dive into bot profitability and edge.</p>
+          <div style={{ fontSize: "9px", color: C.outline, fontFamily: "Space Grotesk", letterSpacing: "0.25em", textTransform: "uppercase", marginBottom: "6px" }}>
+            Godsview · Performance
+          </div>
+          <h1 className="font-headline font-bold text-2xl tracking-tight">Performance Analytics</h1>
         </div>
-        <select 
-          className="bg-card border border-border rounded-lg px-3 py-2 text-sm focus:border-primary focus:outline-none w-fit"
-          value={days}
-          onChange={(e) => setDays(Number(e.target.value))}
-        >
-          <option value={7}>Last 7 Days</option>
-          <option value={30}>Last 30 Days</option>
-          <option value={90}>Last 90 Days</option>
-        </select>
+        <div className="flex gap-1 rounded p-1" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+          {DAYS_OPTIONS.map((d) => (
+            <button
+              key={d}
+              onClick={() => setDays(d)}
+              className="rounded px-3 py-1.5 transition-all"
+              style={{
+                fontSize: "9px", fontFamily: "Space Grotesk", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase",
+                backgroundColor: days === d ? "rgba(156,255,147,0.12)" : "transparent",
+                color: days === d ? C.primary : C.outline,
+                border: days === d ? `1px solid rgba(156,255,147,0.2)` : "1px solid transparent",
+              }}
+            >
+              {d}D
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        {[
-          { label: "Total P&L", value: formatCurrency(data.total_pnl), positive: data.total_pnl > 0 },
-          { label: "Win Rate", value: formatPercent(data.win_rate), positive: data.win_rate > 50 },
-          { label: "Profit Factor", value: data.profit_factor.toFixed(2), positive: data.profit_factor > 1 },
-          { label: "Total Trades", value: data.total_trades, positive: true },
-          { label: "Avg Win", value: formatCurrency(data.avg_win), positive: true },
-          { label: "Max Drawdown", value: formatCurrency(data.max_drawdown), positive: false },
-        ].map((stat, i) => (
-          <Card key={i} className="border-border/50 bg-card">
-            <CardContent className="p-4">
-              <p className="text-xs font-medium text-muted-foreground">{stat.label}</p>
-              <h4 className={cn("text-xl font-bold font-mono-num mt-1", stat.positive ? "text-foreground" : "text-destructive")}>
-                {stat.value}
-              </h4>
-            </CardContent>
-          </Card>
+      {/* Stat Grid */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
+        {stats.map((s, i) => (
+          <div key={i} className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+            <MicroLabel>{s.label}</MicroLabel>
+            <div className="mt-2 font-headline font-bold text-lg" style={{ color: s.accent }}>{s.value}</div>
+          </div>
         ))}
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-2 border-border/50">
-          <CardHeader className="pb-2 border-b-0">
-            <CardTitle className="text-base font-semibold">Equity Curve</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[300px] w-full mt-4">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={data.equity_curve} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="colorEquity" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                  <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-                  <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(val) => `$${val}`} />
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', borderRadius: '8px' }}
-                    itemStyle={{ color: 'hsl(var(--foreground))', fontFamily: 'var(--font-mono)' }}
-                  />
-                  <Area type="monotone" dataKey="equity" stroke="hsl(var(--primary))" strokeWidth={2} fillOpacity={1} fill="url(#colorEquity)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Charts */}
+      <div className="grid lg:grid-cols-3 gap-4">
+        {/* Equity Curve */}
+        <div className="lg:col-span-2 rounded p-5" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+          <div className="flex items-center gap-2 mb-5">
+            <span className="material-symbols-outlined text-base" style={{ color: C.primary }}>show_chart</span>
+            <MicroLabel>Equity Curve</MicroLabel>
+          </div>
+          <div style={{ height: "240px" }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={data.equity_curve} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="eqGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#9cff93" stopOpacity={0.25} />
+                    <stop offset="95%" stopColor="#9cff93" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="2 4" stroke="rgba(72,72,73,0.3)" vertical={false} />
+                <XAxis dataKey="date" stroke={C.outlineVar} fontSize={9} tickLine={false} axisLine={false} fontFamily="Space Grotesk" />
+                <YAxis stroke={C.outlineVar} fontSize={9} tickLine={false} axisLine={false} tickFormatter={(v) => `$${v}`} fontFamily="JetBrains Mono, monospace" />
+                <Tooltip
+                  contentStyle={{ backgroundColor: "#201f21", borderColor: "rgba(72,72,73,0.4)", borderRadius: "4px", fontSize: "10px" }}
+                  itemStyle={{ color: C.primary, fontFamily: "JetBrains Mono, monospace" }}
+                />
+                <Area type="monotone" dataKey="equity" stroke="#9cff93" strokeWidth={1.5} fillOpacity={1} fill="url(#eqGrad)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
 
-        <Card className="border-border/50">
-          <CardHeader className="pb-2 border-b-0">
-            <CardTitle className="text-base font-semibold">Edge by Setup</CardTitle>
-          </CardHeader>
-          <CardContent>
-             <div className="h-[300px] w-full mt-4">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data.by_setup} layout="vertical" margin={{ top: 0, right: 0, left: 20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={true} vertical={false} />
-                  <XAxis type="number" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-                  <YAxis dataKey="setup_type" type="category" stroke="hsl(var(--muted-foreground))" fontSize={10} tickLine={false} axisLine={false} width={80} />
-                  <Tooltip cursor={{fill: 'hsl(var(--muted)/0.3)'}} contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', borderRadius: '8px' }} />
-                  <Bar dataKey="expectancy" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} barSize={20} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Edge by Setup */}
+        <div className="rounded p-5" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+          <div className="flex items-center gap-2 mb-5">
+            <span className="material-symbols-outlined text-base" style={{ color: C.secondary }}>bar_chart</span>
+            <MicroLabel>Edge by Setup</MicroLabel>
+          </div>
+          <div style={{ height: "240px" }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={data.by_setup} layout="vertical" margin={{ top: 0, right: 4, left: 10, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="2 4" stroke="rgba(72,72,73,0.3)" horizontal={false} vertical={true} />
+                <XAxis type="number" stroke={C.outlineVar} fontSize={9} tickLine={false} axisLine={false} fontFamily="JetBrains Mono, monospace" />
+                <YAxis dataKey="setup_type" type="category" stroke={C.outlineVar} fontSize={8} tickLine={false} axisLine={false} width={70} fontFamily="Space Grotesk" />
+                <Tooltip contentStyle={{ backgroundColor: "#201f21", borderColor: "rgba(72,72,73,0.4)", borderRadius: "4px", fontSize: "10px" }} cursor={{ fill: "rgba(156,255,147,0.04)" }} />
+                <Bar dataKey="expectancy" fill="#9cff93" radius={[0, 2, 2, 0]} barSize={14} fillOpacity={0.85} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-6">
-        <Card className="border-border/50">
-          <CardHeader>
-            <CardTitle className="text-base font-semibold">Session Performance</CardTitle>
-          </CardHeader>
-          <div className="p-0 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50 text-muted-foreground border-y border-border/50">
-                <tr>
-                  <th className="py-2 px-4 text-left font-medium">Session</th>
-                  <th className="py-2 px-4 text-right font-medium">Win Rate</th>
-                  <th className="py-2 px-4 text-right font-medium">P&L</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/50">
-                {data.by_session.map(s => (
-                  <tr key={s.session} className="hover:bg-muted/30">
-                    <td className="py-3 px-4 font-medium">{s.session}</td>
-                    <td className="py-3 px-4 text-right font-mono-num">{formatPercent(s.win_rate)}</td>
-                    <td className={cn("py-3 px-4 text-right font-mono-num font-medium", s.total_pnl >= 0 ? "text-success" : "text-destructive")}>
-                      {formatCurrency(s.total_pnl)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {/* Session + Regime Tables */}
+      <div className="grid md:grid-cols-2 gap-4">
+        {/* Session */}
+        <div className="rounded overflow-hidden" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+          <div className="px-5 py-3 border-b flex items-center gap-2" style={{ borderColor: "rgba(72,72,73,0.2)" }}>
+            <span className="material-symbols-outlined text-base" style={{ color: C.secondary }}>schedule</span>
+            <MicroLabel>Session Performance</MicroLabel>
           </div>
-        </Card>
-        
-        <Card className="border-border/50">
-          <CardHeader>
-            <CardTitle className="text-base font-semibold">Regime Performance</CardTitle>
-          </CardHeader>
-          <div className="p-0 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50 text-muted-foreground border-y border-border/50">
-                <tr>
-                  <th className="py-2 px-4 text-left font-medium">Regime</th>
-                  <th className="py-2 px-4 text-right font-medium">Win Rate</th>
-                  <th className="py-2 px-4 text-right font-medium">P&L</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/50">
-                {data.by_regime.map(r => (
-                  <tr key={r.regime} className="hover:bg-muted/30">
-                    <td className="py-3 px-4 font-medium capitalize">{r.regime.replace('_', ' ')}</td>
-                    <td className="py-3 px-4 text-right font-mono-num">{formatPercent(r.win_rate)}</td>
-                    <td className={cn("py-3 px-4 text-right font-mono-num font-medium", r.total_pnl >= 0 ? "text-success" : "text-destructive")}>
-                      {formatCurrency(r.total_pnl)}
-                    </td>
-                  </tr>
+          <table className="w-full">
+            <thead>
+              <tr style={{ borderBottom: "1px solid rgba(72,72,73,0.2)" }}>
+                {["Session", "Win Rate", "P&L"].map((h) => (
+                  <th key={h} className="px-4 py-2 text-left" style={{ fontSize: "8px", fontFamily: "Space Grotesk", letterSpacing: "0.15em", textTransform: "uppercase", color: C.outlineVar }}>
+                    {h}
+                  </th>
                 ))}
-              </tbody>
-            </table>
+              </tr>
+            </thead>
+            <tbody>
+              {data.by_session.map((s) => (
+                <tr key={s.session} className="hover:brightness-105 transition-all" style={{ borderBottom: "1px solid rgba(72,72,73,0.1)" }}>
+                  <td className="px-4 py-2.5 font-headline font-bold text-xs">{s.session}</td>
+                  <td className="px-4 py-2.5" style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: C.muted }}>{formatPercent(s.win_rate)}</td>
+                  <td className="px-4 py-2.5" style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, color: s.total_pnl >= 0 ? C.primary : C.tertiary }}>
+                    {formatCurrency(s.total_pnl)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Regime */}
+        <div className="rounded overflow-hidden" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+          <div className="px-5 py-3 border-b flex items-center gap-2" style={{ borderColor: "rgba(72,72,73,0.2)" }}>
+            <span className="material-symbols-outlined text-base" style={{ color: C.primary }}>trending_up</span>
+            <MicroLabel>Regime Performance</MicroLabel>
           </div>
-        </Card>
+          <table className="w-full">
+            <thead>
+              <tr style={{ borderBottom: "1px solid rgba(72,72,73,0.2)" }}>
+                {["Regime", "Win Rate", "P&L"].map((h) => (
+                  <th key={h} className="px-4 py-2 text-left" style={{ fontSize: "8px", fontFamily: "Space Grotesk", letterSpacing: "0.15em", textTransform: "uppercase", color: C.outlineVar }}>
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {data.by_regime.map((r) => (
+                <tr key={r.regime} className="hover:brightness-105 transition-all" style={{ borderBottom: "1px solid rgba(72,72,73,0.1)" }}>
+                  <td className="px-4 py-2.5 font-headline font-bold text-xs capitalize">{r.regime.replace("_", " ")}</td>
+                  <td className="px-4 py-2.5" style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: C.muted }}>{formatPercent(r.win_rate)}</td>
+                  <td className="px-4 py-2.5" style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, color: r.total_pnl >= 0 ? C.primary : C.tertiary }}>
+                    {formatCurrency(r.total_pnl)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Footer Status */}
+      <div className="pt-5 border-t flex justify-between items-center" style={{ borderColor: "rgba(72,72,73,0.15)" }}>
+        <div className="flex items-center gap-2">
+          <span className="w-1 h-1 rounded-full animate-pulse" style={{ backgroundColor: C.primary }} />
+          <span style={{ fontSize: "9px", fontFamily: "Space Grotesk", color: C.outlineVar, letterSpacing: "0.2em", textTransform: "uppercase" }}>Data Pipeline Healthy</span>
+        </div>
+        <span style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: C.outlineVar }}>System V: 4.2.1-GODSVIEW</span>
       </div>
     </div>
   );

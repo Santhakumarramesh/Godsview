@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
@@ -42,6 +42,7 @@
   --color-warning-foreground: hsl(var(--warning-foreground));
 
   --font-sans: 'Inter', sans-serif;
+  --font-headline: 'Space Grotesk', sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 
   --radius-sm: calc(var(--radius) - 4px);
@@ -50,45 +51,52 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* Base Terminal Theme (Forced Dark) */
+/* Obsidian Elite — Stitch Design System */
 :root {
-  --background: 240 10% 4%;
-  --foreground: 0 0% 98%;
+  /* Background: #0e0e0f */
+  --background: 240 8% 6%;
+  --foreground: 0 0% 100%;
   
-  --card: 240 10% 6%;
-  --card-foreground: 0 0% 98%;
-  --card-border: 240 10% 12%;
+  /* Cards: #1a191b */
+  --card: 270 4% 10%;
+  --card-foreground: 0 0% 100%;
+  --card-border: 270 3% 28%;
   
-  --popover: 240 10% 6%;
-  --popover-foreground: 0 0% 98%;
-  --popover-border: 240 10% 12%;
+  --popover: 270 4% 10%;
+  --popover-foreground: 0 0% 100%;
+  --popover-border: 270 3% 28%;
   
-  --primary: 217 91% 60%;
-  --primary-foreground: 0 0% 100%;
+  /* Primary: #9cff93 neon green */
+  --primary: 116 100% 79%;
+  --primary-foreground: 116 100% 6%;
   
-  --secondary: 240 10% 12%;
-  --secondary-foreground: 0 0% 98%;
+  /* Secondary: #669dff blue */
+  --secondary: 221 100% 70%;
+  --secondary-foreground: 0 0% 100%;
   
-  --muted: 240 10% 12%;
-  --muted-foreground: 240 5% 65%;
+  --muted: 270 4% 13%;
+  --muted-foreground: 270 2% 68%;
   
-  --accent: 217 91% 60%;
-  --accent-foreground: 0 0% 100%;
+  --accent: 116 100% 79%;
+  --accent-foreground: 116 100% 6%;
   
-  --destructive: 342 90% 55%;
-  --destructive-foreground: 0 0% 98%;
+  /* Destructive / Tertiary: #ff7162 */
+  --destructive: 5 100% 69%;
+  --destructive-foreground: 0 0% 100%;
 
-  --success: 160 84% 39%;
-  --success-foreground: 0 0% 98%;
+  /* Success = same as primary (neon green) */
+  --success: 116 100% 79%;
+  --success-foreground: 116 100% 6%;
 
+  /* Warning: amber */
   --warning: 38 92% 50%;
   --warning-foreground: 0 0% 98%;
   
-  --border: 240 10% 12%;
-  --input: 240 10% 12%;
-  --ring: 217 91% 60%;
+  --border: 270 3% 28%;
+  --input: 270 4% 13%;
+  --ring: 116 100% 79%;
   
-  --radius: 0.5rem;
+  --radius: 0.25rem;
 }
 
 @layer base {
@@ -97,23 +105,27 @@
   }
   body {
     @apply font-sans antialiased bg-background text-foreground;
-    /* Force dark theme for terminal aesthetic */
+    background-color: #0e0e0f;
     color-scheme: dark;
   }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Space Grotesk', sans-serif;
+  }
   
-  /* Custom scrollbar for terminal feel */
   ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 4px;
+    height: 4px;
   }
   ::-webkit-scrollbar-track {
-    @apply bg-background;
+    background: #0e0e0f;
   }
   ::-webkit-scrollbar-thumb {
-    @apply bg-muted rounded-full;
+    background: #484849;
+    border-radius: 2px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    @apply bg-muted-foreground;
+    background: #767576;
   }
 }
 
@@ -122,12 +134,51 @@
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
   }
+
+  .font-headline {
+    font-family: 'Space Grotesk', sans-serif;
+  }
   
   .glass-panel {
-    @apply bg-card/80 backdrop-blur-md border border-card-border shadow-lg;
+    background: rgba(26, 25, 27, 0.6);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(72, 72, 73, 0.3);
+  }
+
+  .neon-glow {
+    box-shadow: 0 0 12px rgba(156, 255, 147, 0.3);
   }
 
   .terminal-glow {
     box-shadow: 0 0 15px -3px var(--tw-shadow-color);
+  }
+
+  .obsidian-card {
+    background-color: #1a191b;
+    border: 1px solid rgba(72, 72, 73, 0.25);
+  }
+
+  .label-micro {
+    font-size: 8px;
+    font-family: 'Space Grotesk', sans-serif;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #767576;
+  }
+
+  .material-symbols-outlined {
+    font-family: 'Material Symbols Outlined';
+    font-weight: normal;
+    font-style: normal;
+    font-size: 20px;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    display: inline-block;
+    white-space: nowrap;
+    word-wrap: normal;
+    direction: ltr;
+    vertical-align: middle;
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
   }
 }

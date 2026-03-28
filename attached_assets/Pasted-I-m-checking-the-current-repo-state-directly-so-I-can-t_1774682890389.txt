@@ -1,0 +1,106 @@
+I’m checking the current repo state directly so I can tell you what changed, what still looks weak, and what to do next.
+
+
+I checked the repo now, and it has moved a lot from the earlier Python-only pipeline shape into a **fuller app product** with an API layer, dashboard UI, Alpaca integration, and strategy-engine work around **SK structure + CVD order flow**. The recent commit history shows a fast burst of changes on March 28, 2026, including Alpaca integration, historical recall/diagnostics, and then SK/CVD setup expansion. 
+
+My honest take: **the repo is more impressive now, but it is also more fragile now.**
+
+What looks good now:
+
+The strongest improvement is that the repo is no longer just “trading bot logic.” It is becoming a **productized trading intelligence system**. The latest changes add:
+
+* new setup types: `cvd_divergence` and `breakout_failure`
+* an SK structure engine
+* a CVD feature engine
+* normalized chart overlay payloads for plotting findings on chart
+* dashboard panels for SK and CVD in the UI. 
+
+That is the right direction. It matches the product story you were building: **structure intelligence → flow confirmation → decision visualization**. The Alpaca client is also more practical now than before because it explicitly separates crypto vs stock handling, recognizes Trading API key prefixes, and documents that broker keys do not grant market data access. 
+
+What I like most:
+
+* `alpaca.ts` is actually thoughtful and clearer than a lot of rushed API wrappers
+* the strategy engine now has real feature-level ambition
+* the dashboard is starting to expose strategy internals instead of just returning a black-box signal.  
+
+What still looks weak:
+
+The biggest weakness is that the repo still feels like **rapid accumulation of features**, not a cleanly stabilized system.
+
+The latest commit diff shows a lot of logic added at once:
+
+* SK engine
+* CVD engine
+* new setups
+* new blocking reasons
+* chart overlay event generation
+* API route changes
+* UI panel additions
+* documentation pasted into the repo itself. 
+
+That is exciting, but also risky. Right now the repo looks like it is being driven by fast ideation rather than hardening. In practical terms, I’d worry about:
+
+1. **Too much strategy logic in one commit**
+   You changed detection, scoring, filters, overlays, and UI together. That makes it hard to know what actually improved performance.
+
+2. **Documentation pollution**
+   The commit shows pasted advisory/chat text files being committed under `attached_assets/`. That makes the repo look messy and less professional. 
+
+3. **No evidence yet that overlays are truly live-rendered**
+   I can see the backend now builds `ChartOverlayEvent` payloads, which is a good step, but from what I inspected, the key win is still mostly on the backend/data side. I do not yet see proof that the UI has fully become the chart-first, overlay-driven experience you wanted. 
+
+4. **Possible overfitting-by-design risk**
+   The SK + CVD additions are smart conceptually, but the heuristics are hand-tuned heavily in the strategy engine. That can look excellent in controlled backtests while being unstable live if not validated carefully. 
+
+My current rating of the repo:
+
+* **Idea / ambition:** 9/10
+* **Product direction:** 8.5/10
+* **Engineering cleanliness:** 6.5/10
+* **Research discipline:** 6/10
+* **Portfolio / recruiter appeal:** 8/10
+* **Live trading trustworthiness today:** 5.5/10
+
+So compared with before: **much stronger, but still not “trust-ready.”**
+
+What I would fix next, in order:
+
+First, clean the repo surface.
+
+* remove chat dump files and stray attached assets from the main codebase
+* make the repo look intentional
+* separate docs, assets, and code
+
+Second, split strategy logic from product UI more clearly.
+
+* `strategy_engine`
+* `api routes`
+* `dashboard rendering`
+  should feel like separate layers
+
+Third, stop adding strategy features for a moment and add validation.
+
+* compare old setups vs SK/CVD setups
+* measure whether `cvd_divergence` and `breakout_failure` actually help
+* add ablation reports
+
+Fourth, finish the chart-overlay story.
+You now have the backend payload idea. Finish the front end so the repo’s main value is immediately visible.
+
+Fifth, add a proper README and screenshots.
+Right now the repo work is better than the repo presentation.
+
+Bottom line:
+
+**Yes, the repo is better now.**
+It is noticeably more like a real product and less like a loose experiment. The SK/CVD additions and Alpaca work are meaningful upgrades. But you are at the stage where adding more features will help less than:
+
+* cleaning structure
+* proving performance
+* making the live overlay UX obvious
+* removing messy repo artifacts.  
+
+The next best move is not another new indicator or UI prompt. It is:
+**stabilize, validate, and polish what you already added.**
+
+I can turn this into a **repo cleanup + hardening checklist** for Godsview.

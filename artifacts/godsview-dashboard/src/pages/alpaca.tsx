@@ -1,179 +1,138 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Brain, Shield, TrendingUp, BarChart3, Database, AlertTriangle, CheckCircle2, Clock } from "lucide-react";
 
 const BASE = "/api";
 
+const C = {
+  bg: "#0e0e0f",
+  card: "#1a191b",
+  cardHigh: "#201f21",
+  cardLow: "#131314",
+  border: "rgba(72,72,73,0.25)",
+  primary: "#9cff93",
+  secondary: "#669dff",
+  tertiary: "#ff7162",
+  muted: "#adaaab",
+  outline: "#767576",
+  outlineVar: "#484849",
+};
+
 type AnalyzeResult = {
-  instrument: string;
-  alpaca_symbol: string;
-  analyzed_at: string;
-  regime: string;
-  regime_label: string;
-  bars_analyzed: Record<string, number>;
-  recall_features: Record<string, number>;
-  setups_detected: number;
-  setups_blocked: Array<{ setup_type: string; reason: string }>;
-  high_conviction: Array<SetupResult>;
-  setups: Array<SetupResult>;
+  instrument: string; alpaca_symbol: string; analyzed_at: string; regime: string; regime_label: string;
+  bars_analyzed: Record<string, number>; recall_features: Record<string, any>;
+  setups_detected: number; setups_blocked: Array<{ setup_type: string; reason: string }>;
+  high_conviction: Array<SetupResult>; setups: Array<SetupResult>;
 };
-
 type SetupResult = {
-  setup_type: string;
-  direction: string;
-  structure_score: number;
-  order_flow_score: number;
-  recall_score: number;
-  final_quality: number;
-  quality_threshold: number;
-  meets_threshold: boolean;
-  entry_price: number;
-  stop_loss: number;
-  take_profit: number;
-  tp_ticks: number;
-  sl_ticks: number;
-  bar_time: string;
-  atr: number;
+  setup_type: string; direction: string; structure_score: number; order_flow_score: number;
+  recall_score: number; final_quality: number; quality_threshold: number; meets_threshold: boolean;
+  entry_price: number; stop_loss: number; take_profit: number; tp_ticks: number; sl_ticks: number;
+  bar_time: string; atr: number;
 };
-
 type BacktestResult = {
-  instrument: string;
-  setup_type: string;
-  days_analyzed: number;
-  bars_scanned: number;
-  total_signals: number;
-  closed_signals: number;
-  wins: number;
-  losses: number;
-  win_rate: number;
-  profit_factor: number;
-  expectancy_ticks: number;
-  avg_final_quality: number;
-  high_conviction_signals: number;
-  high_conviction_win_rate: number;
+  instrument: string; setup_type: string; days_analyzed: number; bars_scanned: number;
+  total_signals: number; closed_signals: number; wins: number; losses: number; win_rate: number;
+  profit_factor: number; expectancy_ticks: number; avg_final_quality: number;
+  high_conviction_signals: number; high_conviction_win_rate: number;
   by_regime: Array<{ regime: string; total: number; wins: number; win_rate: number }>;
-  results: Array<{
-    bar_time: string;
-    entry_price: number;
-    direction: string;
-    structure_score: number;
-    order_flow_score: number;
-    recall_score: number;
-    final_quality: number;
-    meets_threshold: boolean;
-    regime: string;
-    outcome: string;
-    tp_ticks: number;
-    sl_ticks: number;
-  }>;
+  results: Array<{ bar_time: string; entry_price: number; direction: string; structure_score: number; order_flow_score: number; recall_score: number; final_quality: number; meets_threshold: boolean; regime: string; outcome: string; tp_ticks: number; sl_ticks: number }>;
 };
-
 type AccuracyResult = {
-  total_records: number;
-  closed: number;
-  wins: number;
-  losses: number;
-  win_rate: number;
-  profit_factor: number;
+  total_records: number; closed: number; wins: number; losses: number; win_rate: number; profit_factor: number;
   by_setup: Array<{ setup_type: string; total: number; wins: number; win_rate: number; avg_quality: number }>;
   by_symbol: Array<{ symbol: string; total: number; wins: number; win_rate: number }>;
   recent: Array<{ bar_time: string; setup_type: string; symbol: string; outcome: string; final_quality: string }>;
 };
-
 type RecallBuildResult = {
-  status: string;
-  symbols_processed: number;
-  total_records_saved: number;
-  years_back: number;
-  summary: Record<string, {
-    bars_fetched?: number;
-    signals_detected?: number;
-    closed?: number;
-    wins?: number;
-    win_rate?: string;
-    by_setup?: Array<{ setup: string; total: number; wins: number; win_rate: string }>;
-    date_range?: { start: string; end: string };
-    timeframe?: string;
-    error?: string;
-  }>;
+  status: string; symbols_processed: number; total_records_saved: number; years_back: number;
+  summary: Record<string, { bars_fetched?: number; signals_detected?: number; closed?: number; wins?: number; win_rate?: string; by_setup?: Array<{ setup: string; total: number; wins: number; win_rate: string }>; date_range?: { start: string; end: string }; timeframe?: string; error?: string }>;
 };
-
-function pct(n: number) { return (n * 100).toFixed(1) + "%"; }
-function fmt(n: number, d = 3) { return n.toFixed(d); }
-function price(n: number) { return n > 1000 ? n.toFixed(2) : n.toFixed(4); }
 
 const INSTRUMENTS = [
   { value: "BTCUSDT", label: "BTC/USD · Live", live: true },
   { value: "ETHUSDT", label: "ETH/USD · Live", live: true },
-  { value: "MES", label: "MES → SPY (Trading Key)", live: false },
-  { value: "MNQ", label: "MNQ → QQQ (Trading Key)", live: false },
+  { value: "MES", label: "MES → SPY", live: false },
+  { value: "MNQ", label: "MNQ → QQQ", live: false },
 ];
 
-const SETUPS = [
-  "absorption_reversal",
-  "sweep_reclaim",
-  "continuation_pullback",
-  "cvd_divergence",
-  "breakout_failure",
-];
+const SETUPS = ["absorption_reversal", "sweep_reclaim", "continuation_pullback", "cvd_divergence", "breakout_failure"];
 
 const REGIME_COLORS: Record<string, string> = {
-  trending_bull: "text-emerald-400 bg-emerald-400/10 border-emerald-400/30",
-  trending_bear: "text-red-400 bg-red-400/10 border-red-400/30",
-  ranging: "text-blue-400 bg-blue-400/10 border-blue-400/30",
-  volatile: "text-amber-400 bg-amber-400/10 border-amber-400/30",
-  chop: "text-slate-400 bg-slate-400/10 border-slate-400/30",
+  trending_bull: C.primary, trending_bear: C.tertiary, ranging: C.secondary, volatile: "#fbbf24", chop: C.outline,
+};
+const REGIME_ICONS: Record<string, string> = {
+  trending_bull: "trending_up", trending_bear: "trending_down", ranging: "swap_horiz", volatile: "bolt", chop: "waves",
 };
 
-const REGIME_ICONS: Record<string, string> = {
-  trending_bull: "↑",
-  trending_bear: "↓",
-  ranging: "↔",
-  volatile: "⚡",
-  chop: "~",
-};
+function MicroLabel({ children }: { children: React.ReactNode }) {
+  return <span style={{ fontSize: "8px", fontFamily: "Space Grotesk", letterSpacing: "0.2em", textTransform: "uppercase", color: C.outline }}>{children}</span>;
+}
 
 function RegimeBadge({ regime }: { regime: string }) {
-  const color = REGIME_COLORS[regime] ?? "text-slate-400 bg-slate-400/10 border-slate-400/30";
-  const icon = REGIME_ICONS[regime] ?? "?";
+  const color = REGIME_COLORS[regime] ?? C.muted;
+  const icon = REGIME_ICONS[regime] ?? "circle";
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold border ${color}`}>
-      {icon} {regime.replace(/_/g, " ")}
+    <span className="flex items-center gap-1 px-2 py-0.5 rounded" style={{
+      fontSize: "8px", fontFamily: "Space Grotesk", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase",
+      backgroundColor: `${color}14`, color, border: `1px solid ${color}30`,
+    }}>
+      <span className="material-symbols-outlined" style={{ fontSize: "11px" }}>{icon}</span>
+      {regime.replace(/_/g, " ")}
     </span>
   );
 }
 
 function QualityBar({ value, threshold }: { value: number; threshold?: number }) {
-  const pctVal = Math.round(value * 100);
-  const meetsThreshold = threshold !== undefined ? value >= threshold : pctVal >= 65;
-  const color = meetsThreshold ? "bg-emerald-500" : pctVal >= 50 ? "bg-yellow-500" : "bg-red-500";
+  const pct = Math.round(value * 100);
+  const meets = threshold !== undefined ? value >= threshold : pct >= 65;
+  const color = meets ? C.primary : pct >= 50 ? "#fbbf24" : C.tertiary;
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 bg-white/10 rounded-full h-1.5 overflow-hidden relative">
-        <div className={`h-full ${color} transition-all`} style={{ width: `${pctVal}%` }} />
+      <div className="flex-1 rounded-full h-1 overflow-hidden relative" style={{ backgroundColor: "rgba(72,72,73,0.4)" }}>
+        <div style={{ width: `${pct}%`, height: "100%", backgroundColor: color, transition: "width 0.3s" }} />
         {threshold !== undefined && (
-          <div
-            className="absolute top-0 h-full w-0.5 bg-white/40"
-            style={{ left: `${Math.round(threshold * 100)}%` }}
-          />
+          <div className="absolute top-0 h-full w-px" style={{ left: `${Math.round(threshold * 100)}%`, backgroundColor: "rgba(255,255,255,0.3)" }} />
         )}
       </div>
-      <span className="text-xs font-mono w-10 text-right">{pctVal}%</span>
+      <span style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color, minWidth: "30px", textAlign: "right" }}>{pct}%</span>
     </div>
   );
 }
 
-function OutcomeBadge({ outcome }: { outcome: string }) {
-  if (outcome === "win") return <span className="text-xs font-semibold text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded">WIN</span>;
-  if (outcome === "loss") return <span className="text-xs font-semibold text-red-400 bg-red-400/10 px-2 py-0.5 rounded">LOSS</span>;
-  return <span className="text-xs font-semibold text-slate-400 bg-slate-400/10 px-2 py-0.5 rounded">OPEN</span>;
+function SelectInput({ label, value, onChange, children }: { label: string; value: string | number; onChange: (v: string) => void; children: React.ReactNode }) {
+  return (
+    <div>
+      <MicroLabel>{label}</MicroLabel>
+      <select value={value} onChange={(e) => onChange(e.target.value)} className="mt-1.5 w-full rounded px-3 py-2 outline-none text-xs"
+        style={{ backgroundColor: "#0e0e0f", border: `1px solid ${C.border}`, color: "#ffffff", fontFamily: "Space Grotesk" }}>
+        {children}
+      </select>
+    </div>
+  );
 }
+
+function ActionBtn({ onClick, pending, pendingLabel, label, color, icon }: { onClick: () => void; pending: boolean; pendingLabel: string; label: string; color: string; icon: string }) {
+  return (
+    <button onClick={onClick} disabled={pending}
+      className="flex items-center justify-center gap-1.5 w-full rounded py-2 transition-all hover:brightness-110 disabled:opacity-50 font-bold"
+      style={{ backgroundColor: `${color}14`, border: `1px solid ${color}30`, color, fontSize: "9px", fontFamily: "Space Grotesk", letterSpacing: "0.12em", textTransform: "uppercase" }}>
+      {pending ? (
+        <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: color }} />
+      ) : (
+        <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>{icon}</span>
+      )}
+      {pending ? pendingLabel : label}
+    </button>
+  );
+}
+
+type Tab = "live" | "backtest" | "accuracy" | "recall";
 
 export default function AlpacaPage() {
   const [instrument, setInstrument] = useState("BTCUSDT");
   const [selectedSetup, setSelectedSetup] = useState("absorption_reversal");
   const [backtestDays, setBacktestDays] = useState(3);
-  const [activeTab, setActiveTab] = useState<"live" | "backtest" | "accuracy" | "recall">("live");
+  const [activeTab, setActiveTab] = useState<Tab>("live");
   const [recallYears, setRecallYears] = useState(1);
   const [showAllSetups, setShowAllSetups] = useState(false);
 
@@ -183,229 +142,135 @@ export default function AlpacaPage() {
   });
 
   const analyzeMutation = useMutation<AnalyzeResult>({
-    mutationFn: () =>
-      fetch(`${BASE}/alpaca/analyze`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ instrument, setups: SETUPS }),
-      }).then((r) => r.json()),
+    mutationFn: () => fetch(`${BASE}/alpaca/analyze`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ instrument, setups: SETUPS }) }).then((r) => r.json()),
   });
-
   const backtestMutation = useMutation<BacktestResult>({
-    mutationFn: () =>
-      fetch(`${BASE}/alpaca/backtest`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ instrument, setup_type: selectedSetup, days: backtestDays }),
-      }).then((r) => {
-        refetchAccuracy();
-        return r.json();
-      }),
+    mutationFn: () => fetch(`${BASE}/alpaca/backtest`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ instrument, setup_type: selectedSetup, days: backtestDays }) }).then((r) => { refetchAccuracy(); return r.json(); }),
   });
-
   const recallBuildMutation = useMutation<RecallBuildResult>({
-    mutationFn: () =>
-      fetch(`${BASE}/alpaca/recall-build`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          symbols: ["BTCUSD", "ETHUSD"],
-          timeframe: "15Min",
-          years: recallYears,
-        }),
-      }).then((r) => {
-        refetchAccuracy();
-        return r.json();
-      }),
+    mutationFn: () => fetch(`${BASE}/alpaca/recall-build`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ symbols: ["BTCUSD", "ETHUSD"], timeframe: "15Min", years: recallYears }) }).then((r) => { refetchAccuracy(); return r.json(); }),
   });
 
   const analyzeData = analyzeMutation.data;
   const btData = backtestMutation.data;
   const recallData = recallBuildMutation.data;
+  const displaySetups = analyzeData ? (showAllSetups ? analyzeData.setups : analyzeData.high_conviction) : [];
 
-  const displaySetups = analyzeData
-    ? (showAllSetups ? analyzeData.setups : analyzeData.high_conviction)
-    : [];
+  const TABS: { id: Tab; label: string; icon: string }[] = [
+    { id: "live", label: "Live Analysis", icon: "sensors" },
+    { id: "backtest", label: "Backtest", icon: "history" },
+    { id: "accuracy", label: "Accuracy DB", icon: "database" },
+    { id: "recall", label: "Recall Build", icon: "psychology" },
+  ];
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Live Market Analysis</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Regime detection · No-trade filters · Walk-forward accuracy recall
-          </p>
-        </div>
-        <div className="flex flex-col items-end gap-1">
-          <div className="flex items-center gap-2 text-xs bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-3 py-1.5 rounded-full">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Crypto Data Live
+          <div style={{ fontSize: "9px", color: C.outline, fontFamily: "Space Grotesk", letterSpacing: "0.25em", textTransform: "uppercase", marginBottom: "6px" }}>
+            Godsview · Intelligence Engine
           </div>
-          <span className="text-xs text-amber-400/80">Stocks: Trading API key needed</span>
+          <h1 className="font-headline font-bold text-2xl tracking-tight">Live Intelligence</h1>
+          <p style={{ fontSize: "10px", color: C.muted, marginTop: "4px" }}>Regime detection · SK structure · CVD order flow · Walk-forward accuracy</p>
+        </div>
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded" style={{ backgroundColor: "rgba(156,255,147,0.06)", border: "1px solid rgba(156,255,147,0.15)" }}>
+          <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: C.primary }} />
+          <span style={{ fontSize: "9px", fontFamily: "Space Grotesk", color: C.primary, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" }}>Crypto Data Live</span>
         </div>
       </div>
 
       {/* Controls */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <div>
-          <label className="block text-xs text-muted-foreground mb-1">Instrument</label>
-          <select
-            value={instrument}
-            onChange={(e) => setInstrument(e.target.value)}
-            className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground"
-          >
-            {INSTRUMENTS.map((i) => (
-              <option key={i.value} value={i.value}>{i.label}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs text-muted-foreground mb-1">Setup Filter</label>
-          <select
-            value={selectedSetup}
-            onChange={(e) => setSelectedSetup(e.target.value)}
-            className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground"
-          >
-            {SETUPS.map((s) => (
-              <option key={s} value={s}>
-                {s === "absorption_reversal" ? "Absorption Reversal" :
-                 s === "sweep_reclaim" ? "Sweep Reclaim" :
-                 s === "continuation_pullback" ? "Continuation Pullback" :
-                 s === "cvd_divergence" ? "CVD Divergence ★" :
-                 s === "breakout_failure" ? "Breakout Failure ★" : s}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs text-muted-foreground mb-1">Backtest Days</label>
-          <select
-            value={backtestDays}
-            onChange={(e) => setBacktestDays(Number(e.target.value))}
-            className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground"
-          >
-            {[1, 2, 3, 5, 7, 10, 14].map((d) => (
-              <option key={d} value={d}>{d} day{d > 1 ? "s" : ""}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs text-muted-foreground mb-1">Recall History</label>
-          <select
-            value={recallYears}
-            onChange={(e) => setRecallYears(Number(e.target.value))}
-            className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground"
-          >
+      <div className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <SelectInput label="Instrument" value={instrument} onChange={setInstrument}>
+            {INSTRUMENTS.map((i) => <option key={i.value} value={i.value}>{i.label}</option>)}
+          </SelectInput>
+          <SelectInput label="Setup Filter" value={selectedSetup} onChange={setSelectedSetup}>
+            {SETUPS.map((s) => <option key={s} value={s}>{s === "cvd_divergence" ? "CVD Divergence ★" : s === "breakout_failure" ? "Breakout Failure ★" : s.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}</option>)}
+          </SelectInput>
+          <SelectInput label="Backtest Days" value={backtestDays} onChange={(v) => setBacktestDays(Number(v))}>
+            {[1, 2, 3, 5, 7, 10, 14].map((d) => <option key={d} value={d}>{d} day{d > 1 ? "s" : ""}</option>)}
+          </SelectInput>
+          <SelectInput label="Recall History" value={recallYears} onChange={(v) => setRecallYears(Number(v))}>
             <option value={0.5}>6 months</option>
             <option value={1}>1 year</option>
             <option value={2}>2 years</option>
-          </select>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <div className="flex gap-1.5">
-            <button
-              onClick={() => { analyzeMutation.mutate(); setActiveTab("live"); }}
-              disabled={analyzeMutation.isPending}
-              className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors"
-            >
-              {analyzeMutation.isPending ? "Scanning..." : "Scan Now"}
-            </button>
-            <button
-              onClick={() => { backtestMutation.mutate(); setActiveTab("backtest"); }}
-              disabled={backtestMutation.isPending}
-              className="flex-1 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors"
-            >
-              {backtestMutation.isPending ? "Running..." : "Backtest"}
-            </button>
+          </SelectInput>
+          <div className="flex flex-col gap-1.5">
+            <div className="flex gap-1.5">
+              <ActionBtn onClick={() => { analyzeMutation.mutate(); setActiveTab("live"); }} pending={analyzeMutation.isPending} pendingLabel="Scanning..." label="Scan Now" color={C.secondary} icon="radar" />
+              <ActionBtn onClick={() => { backtestMutation.mutate(); setActiveTab("backtest"); }} pending={backtestMutation.isPending} pendingLabel="Running..." label="Backtest" color="#a78bfa" icon="history" />
+            </div>
+            <ActionBtn onClick={() => { recallBuildMutation.mutate(); setActiveTab("recall"); }} pending={recallBuildMutation.isPending} pendingLabel="Building Recall..." label="Build Recall Memory" color="#fbbf24" icon="psychology" />
           </div>
-          <button
-            onClick={() => { recallBuildMutation.mutate(); setActiveTab("recall"); }}
-            disabled={recallBuildMutation.isPending}
-            className="w-full bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5"
-          >
-            <Brain className="w-3.5 h-3.5" />
-            {recallBuildMutation.isPending ? "Building Recall..." : "Build Recall"}
-          </button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-card border border-border rounded-lg p-1 w-fit">
-        {(["live", "backtest", "accuracy", "recall"] as const).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              activeTab === tab ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {tab === "live" ? "Live Analysis" : tab === "backtest" ? "Backtest" : tab === "accuracy" ? "Accuracy DB" : "Recall Build"}
+      <div className="flex gap-1 p-1 w-fit rounded" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+        {TABS.map((tab) => (
+          <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded transition-all"
+            style={{
+              fontSize: "9px", fontFamily: "Space Grotesk", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase",
+              backgroundColor: activeTab === tab.id ? "rgba(156,255,147,0.1)" : "transparent",
+              color: activeTab === tab.id ? C.primary : C.outline,
+              border: activeTab === tab.id ? "1px solid rgba(156,255,147,0.2)" : "1px solid transparent",
+            }}>
+            <span className="material-symbols-outlined" style={{ fontSize: "13px" }}>{tab.icon}</span>
+            {tab.label}
           </button>
         ))}
       </div>
 
-      {/* ── LIVE ANALYSIS TAB ─────────────────────────────── */}
+      {/* ── LIVE ANALYSIS ── */}
       {activeTab === "live" && (
         <div className="space-y-4">
           {analyzeMutation.isPending && (
-            <div className="bg-card border border-border rounded-xl p-8 text-center">
-              <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-              <p className="text-muted-foreground text-sm">Fetching live bars · Detecting regime · Running setup scan...</p>
+            <div className="rounded p-10 text-center" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+              <div className="flex flex-col items-center gap-3">
+                <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: C.primary, boxShadow: `0 0 10px ${C.primary}` }} />
+                <MicroLabel>Fetching live bars · Detecting regime · Running setup scan</MicroLabel>
+              </div>
             </div>
           )}
 
           {!analyzeMutation.isPending && !analyzeData && (
-            <div className="bg-card border border-border rounded-xl p-12 text-center text-muted-foreground">
-              <TrendingUp className="w-10 h-10 mx-auto mb-3 opacity-30" />
-              <p className="font-medium">Click "Scan Now" to run the full pipeline on live bars</p>
-              <p className="text-xs mt-1 opacity-60">Fetches 1m · 5m · 15m → regime detection → setup scan → quality scoring</p>
+            <div className="rounded p-14 text-center" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+              <span className="material-symbols-outlined text-4xl mb-3 block" style={{ color: C.outlineVar }}>radar</span>
+              <p className="font-headline font-bold text-sm" style={{ color: C.muted }}>Click "Scan Now" to run the full 6-layer pipeline</p>
+              <p style={{ fontSize: "9px", color: C.outlineVar, marginTop: "6px", fontFamily: "Space Grotesk" }}>1m · 5m · 15m bars → regime detection → setup scan → quality scoring</p>
             </div>
           )}
 
           {analyzeData && !(analyzeData as any).error && (
             <>
-              {/* Regime + stats bar */}
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                <div className="bg-card border border-border rounded-xl p-4">
-                  <div className="text-xs text-muted-foreground mb-1">Market Regime</div>
-                  <RegimeBadge regime={analyzeData.regime} />
-                </div>
-                <div className="bg-card border border-border rounded-xl p-4">
-                  <div className="text-xs text-muted-foreground">Bars Loaded</div>
-                  <div className="text-lg font-bold mt-1">
-                    {Object.values(analyzeData.bars_analyzed).join("/")}
-                    <span className="text-xs text-muted-foreground ml-1">1m/5m/15m</span>
+              {/* Stat row */}
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                {[
+                  { label: "Market Regime", value: <RegimeBadge regime={analyzeData.regime} /> },
+                  { label: "Bars Loaded", value: <span className="font-headline font-bold text-sm">{Object.values(analyzeData.bars_analyzed).join("/")} <span style={{ fontSize: "9px", color: C.muted }}>1m/5m/15m</span></span> },
+                  { label: "High Conviction", value: <span className="font-headline font-bold text-sm" style={{ color: analyzeData.high_conviction.length > 0 ? C.primary : C.muted }}>{analyzeData.high_conviction.length} <span style={{ fontSize: "9px", color: C.muted }}>/ {analyzeData.setups_detected}</span></span> },
+                  { label: "Blocked", value: <span className="font-headline font-bold text-sm" style={{ color: analyzeData.setups_blocked.length > 0 ? "#fbbf24" : C.muted }}>{analyzeData.setups_blocked.length}</span> },
+                  { label: "Scanned At", value: <span style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace" }}>{new Date(analyzeData.analyzed_at).toLocaleTimeString()}</span> },
+                ].map((s, i) => (
+                  <div key={i} className="rounded p-3" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+                    <MicroLabel>{s.label}</MicroLabel>
+                    <div className="mt-2">{s.value}</div>
                   </div>
-                </div>
-                <div className="bg-card border border-border rounded-xl p-4">
-                  <div className="text-xs text-muted-foreground">High Conviction</div>
-                  <div className={`text-lg font-bold mt-1 ${analyzeData.high_conviction.length > 0 ? "text-emerald-400" : "text-muted-foreground"}`}>
-                    {analyzeData.high_conviction.length}
-                    <span className="text-xs text-muted-foreground ml-1">/ {analyzeData.setups_detected} detected</span>
-                  </div>
-                </div>
-                <div className="bg-card border border-border rounded-xl p-4">
-                  <div className="text-xs text-muted-foreground">Blocked Setups</div>
-                  <div className={`text-lg font-bold mt-1 ${analyzeData.setups_blocked.length > 0 ? "text-amber-400" : "text-muted-foreground"}`}>
-                    {analyzeData.setups_blocked.length}
-                  </div>
-                </div>
-                <div className="bg-card border border-border rounded-xl p-4">
-                  <div className="text-xs text-muted-foreground">Scanned</div>
-                  <div className="text-sm font-mono mt-1">{new Date(analyzeData.analyzed_at).toLocaleTimeString()}</div>
-                </div>
+                ))}
               </div>
 
-              {/* Blocked setups notice */}
+              {/* Blocked setups */}
               {analyzeData.setups_blocked.length > 0 && (
-                <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex items-start gap-3">
-                  <Shield className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" />
+                <div className="rounded p-4 flex items-start gap-3" style={{ backgroundColor: "rgba(251,191,36,0.05)", border: "1px solid rgba(251,191,36,0.2)" }}>
+                  <span className="material-symbols-outlined text-base" style={{ color: "#fbbf24" }}>shield</span>
                   <div>
-                    <div className="text-sm font-semibold text-amber-400">No-Trade Filters Active</div>
-                    <div className="flex flex-wrap gap-2 mt-1.5">
+                    <div className="font-headline font-bold text-xs" style={{ color: "#fbbf24", letterSpacing: "0.1em" }}>No-Trade Filters Active</div>
+                    <div className="flex flex-wrap gap-1.5 mt-2">
                       {analyzeData.setups_blocked.map((b, i) => (
-                        <span key={i} className="text-xs text-amber-300/80 bg-amber-400/10 px-2 py-0.5 rounded">
+                        <span key={i} className="px-2 py-0.5 rounded" style={{ fontSize: "8px", fontFamily: "Space Grotesk", color: "#fbbf24", backgroundColor: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.2)" }}>
                           {b.setup_type.replace(/_/g, " ")} — {b.reason.replace(/_/g, " ")}
                         </span>
                       ))}
@@ -417,312 +282,228 @@ export default function AlpacaPage() {
               {/* Toggle */}
               {analyzeData.setups_detected > 0 && (
                 <div className="flex items-center justify-between">
-                  <div className="text-sm font-medium text-foreground">
-                    {showAllSetups ? "All detected setups" : "High-conviction only"}
-                  </div>
-                  <button
-                    onClick={() => setShowAllSetups(!showAllSetups)}
-                    className="text-xs text-muted-foreground hover:text-foreground underline"
-                  >
-                    {showAllSetups ? "Show high-conviction only" : "Show all detections"}
+                  <MicroLabel>{showAllSetups ? "All detected setups" : "High-conviction only"}</MicroLabel>
+                  <button onClick={() => setShowAllSetups(!showAllSetups)} style={{ fontSize: "9px", color: C.secondary, fontFamily: "Space Grotesk", cursor: "pointer" }}>
+                    {showAllSetups ? "Show high-conviction only ↑" : "Show all detections ↓"}
                   </button>
                 </div>
               )}
 
-              {/* No setups */}
+              {/* Empty states */}
               {displaySetups.length === 0 && analyzeData.setups_detected === 0 && (
-                <div className="bg-card border border-border rounded-xl p-6 text-center text-muted-foreground text-sm">
-                  No setups detected in current bars. Market may be consolidating.
+                <div className="rounded p-6 text-center" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+                  <span style={{ fontSize: "11px", color: C.muted }}>No setups detected. Market may be consolidating.</span>
                 </div>
               )}
               {displaySetups.length === 0 && analyzeData.setups_detected > 0 && (
-                <div className="bg-card border border-border rounded-xl p-6 text-center">
-                  <div className="text-amber-400 font-medium text-sm">{analyzeData.setups_detected} setup{analyzeData.setups_detected > 1 ? "s" : ""} detected but below quality threshold for this regime</div>
-                  <button onClick={() => setShowAllSetups(true)} className="text-xs text-muted-foreground underline mt-1">
-                    View anyway
-                  </button>
+                <div className="rounded p-5 text-center" style={{ backgroundColor: C.card, border: "1px solid rgba(251,191,36,0.15)" }}>
+                  <span style={{ fontSize: "11px", color: "#fbbf24", fontFamily: "Space Grotesk" }}>
+                    {analyzeData.setups_detected} setup{analyzeData.setups_detected > 1 ? "s" : ""} detected but below quality threshold for this regime.
+                  </span>
+                  <button onClick={() => setShowAllSetups(true)} style={{ fontSize: "9px", color: C.muted, marginLeft: "8px", cursor: "pointer", textDecoration: "underline" }}>View anyway</button>
                 </div>
               )}
 
               {/* Setup cards */}
               {displaySetups.map((setup, i) => (
-                <div key={i} className={`bg-card border rounded-xl p-5 space-y-4 ${setup.meets_threshold ? "border-emerald-500/30" : "border-amber-500/20"}`}>
+                <div key={i} className="rounded p-5 space-y-4" style={{ backgroundColor: C.card, border: `1px solid ${setup.meets_threshold ? "rgba(156,255,147,0.2)" : "rgba(251,191,36,0.12)"}` }}>
                   <div className="flex items-center justify-between flex-wrap gap-2">
-                    <div className="flex items-center gap-3">
-                      <span className={`text-sm font-bold px-2.5 py-1 rounded-lg ${setup.direction === "long" ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"}`}>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="px-2.5 py-1 rounded font-headline font-bold text-xs" style={{ backgroundColor: setup.direction === "long" ? "rgba(156,255,147,0.12)" : "rgba(255,113,98,0.12)", color: setup.direction === "long" ? C.primary : C.tertiary }}>
                         {setup.direction.toUpperCase()}
                       </span>
-                      <span className="text-sm font-semibold text-foreground">{setup.setup_type.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}</span>
+                      <span className="font-headline font-bold text-sm">{setup.setup_type.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}</span>
                       <RegimeBadge regime={analyzeData.regime} />
                     </div>
-                    <div className="flex items-center gap-2">
-                      {setup.meets_threshold ? (
-                        <span className="flex items-center gap-1 text-xs text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded border border-emerald-400/30">
-                          <CheckCircle2 className="w-3 h-3" /> High Conviction
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-1 text-xs text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/30">
-                          <AlertTriangle className="w-3 h-3" /> Below Threshold
-                        </span>
-                      )}
-                    </div>
+                    {setup.meets_threshold ? (
+                      <span className="flex items-center gap-1 px-2 py-0.5 rounded" style={{ fontSize: "8px", fontFamily: "Space Grotesk", fontWeight: 700, color: C.primary, backgroundColor: "rgba(156,255,147,0.08)", border: "1px solid rgba(156,255,147,0.2)" }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: "11px" }}>check_circle</span> High Conviction
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1 px-2 py-0.5 rounded" style={{ fontSize: "8px", fontFamily: "Space Grotesk", fontWeight: 700, color: "#fbbf24", backgroundColor: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.2)" }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: "11px" }}>warning</span> Below Threshold
+                      </span>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-3 gap-3">
-                    <div className="bg-background/40 rounded-lg p-3">
-                      <div className="text-xs text-muted-foreground mb-1.5">Structure Score</div>
-                      <QualityBar value={setup.structure_score} />
-                    </div>
-                    <div className="bg-background/40 rounded-lg p-3">
-                      <div className="text-xs text-muted-foreground mb-1.5">Order Flow</div>
-                      <QualityBar value={setup.order_flow_score} />
-                    </div>
-                    <div className="bg-background/40 rounded-lg p-3">
-                      <div className="text-xs text-muted-foreground mb-1.5">Recall Score</div>
-                      <QualityBar value={setup.recall_score} />
-                    </div>
+                    {[
+                      { label: "Structure Score", value: setup.structure_score },
+                      { label: "Order Flow", value: setup.order_flow_score },
+                      { label: "Recall Score", value: setup.recall_score },
+                    ].map((sc) => (
+                      <div key={sc.label} className="rounded p-3" style={{ backgroundColor: "#0e0e0f" }}>
+                        <MicroLabel>{sc.label}</MicroLabel>
+                        <div className="mt-2"><QualityBar value={sc.value} /></div>
+                      </div>
+                    ))}
                   </div>
 
-                  <div className="bg-background/40 rounded-lg p-3">
-                    <div className="flex justify-between items-center mb-1.5">
-                      <div className="text-xs text-muted-foreground">Final Quality</div>
-                      <div className="text-xs text-muted-foreground">Threshold: {Math.round(setup.quality_threshold * 100)}%</div>
+                  <div className="rounded p-3" style={{ backgroundColor: "#0e0e0f" }}>
+                    <div className="flex justify-between mb-2">
+                      <MicroLabel>Final Quality</MicroLabel>
+                      <MicroLabel>Threshold: {Math.round(setup.quality_threshold * 100)}%</MicroLabel>
                     </div>
                     <QualityBar value={setup.final_quality} threshold={setup.quality_threshold} />
                   </div>
 
-                  <div className="grid grid-cols-3 gap-3 text-sm">
-                    <div>
-                      <div className="text-xs text-muted-foreground">Entry</div>
-                      <div className="font-mono font-bold">${price(setup.entry_price)}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-emerald-400">Take Profit</div>
-                      <div className="font-mono text-emerald-400 font-bold">${price(setup.take_profit)} <span className="text-xs opacity-70">+{setup.tp_ticks}t</span></div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-red-400">Stop Loss</div>
-                      <div className="font-mono text-red-400 font-bold">${price(setup.stop_loss)} <span className="text-xs opacity-70">-{setup.sl_ticks}t</span></div>
-                    </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { label: "Entry", value: `$${setup.entry_price > 1000 ? setup.entry_price.toFixed(2) : setup.entry_price.toFixed(4)}`, color: "#ffffff" },
+                      { label: "Take Profit", value: `$${setup.take_profit > 1000 ? setup.take_profit.toFixed(2) : setup.take_profit.toFixed(4)} +${setup.tp_ticks}t`, color: C.primary },
+                      { label: "Stop Loss", value: `$${setup.stop_loss > 1000 ? setup.stop_loss.toFixed(2) : setup.stop_loss.toFixed(4)} -${setup.sl_ticks}t`, color: C.tertiary },
+                    ].map((f) => (
+                      <div key={f.label} className="rounded p-3" style={{ backgroundColor: "#0e0e0f" }}>
+                        <MicroLabel>{f.label}</MicroLabel>
+                        <div className="mt-1 font-mono-num font-bold text-xs" style={{ color: f.color }}>{f.value}</div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               ))}
 
-              {/* SK Structure Intelligence Panel */}
+              {/* SK Structure Panel */}
               {analyzeData.recall_features?.sk && (
-                <div className="bg-card border border-blue-500/20 rounded-xl p-5">
+                <div className="rounded p-5" style={{ backgroundColor: C.card, border: "1px solid rgba(102,157,255,0.2)" }}>
                   <div className="flex items-center gap-2 mb-4">
-                    <div className="w-2 h-2 rounded-full bg-blue-400" />
-                    <span className="text-sm font-bold text-blue-400">SK Structure Intelligence</span>
-                    <span className="text-xs text-muted-foreground ml-auto">Price-action location filter</span>
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: C.secondary }} />
+                    <span className="font-headline font-bold text-xs" style={{ color: C.secondary }}>SK Structure Intelligence</span>
+                    <MicroLabel>Price-action location filter</MicroLabel>
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <div className="bg-background/40 rounded-lg p-3">
-                      <div className="text-xs text-muted-foreground mb-1">HTF Bias</div>
-                      <div className={`font-bold text-sm ${
-                        analyzeData.recall_features.sk.bias === "bull" ? "text-emerald-400" :
-                        analyzeData.recall_features.sk.bias === "bear" ? "text-red-400" : "text-slate-400"
-                      }`}>
-                        {analyzeData.recall_features.sk.bias === "bull" ? "▲ Bullish" :
-                         analyzeData.recall_features.sk.bias === "bear" ? "▼ Bearish" : "→ Neutral"}
-                      </div>
-                    </div>
-                    <div className="bg-background/40 rounded-lg p-3">
-                      <div className="text-xs text-muted-foreground mb-1">Sequence Stage</div>
-                      <div className={`font-bold text-sm capitalize ${
-                        analyzeData.recall_features.sk.sequence_stage === "completion" ? "text-emerald-400" :
-                        analyzeData.recall_features.sk.sequence_stage === "correction" ? "text-amber-400" :
-                        analyzeData.recall_features.sk.sequence_stage === "impulse" ? "text-blue-400" : "text-slate-400"
-                      }`}>
-                        {analyzeData.recall_features.sk.sequence_stage === "none" ? "No pattern" : analyzeData.recall_features.sk.sequence_stage}
-                        {analyzeData.recall_features.sk.correction_complete && " ✓"}
-                      </div>
-                    </div>
-                    <div className="bg-background/40 rounded-lg p-3">
-                      <div className="text-xs text-muted-foreground mb-1">SK Zone</div>
-                      <div className={`font-bold text-sm ${analyzeData.recall_features.sk.in_zone ? "text-emerald-400" : "text-slate-400"}`}>
-                        {analyzeData.recall_features.sk.in_zone ? "✓ In Zone" : `${(analyzeData.recall_features.sk.zone_distance_pct * 100).toFixed(1)}% away`}
-                      </div>
-                    </div>
-                    <div className="bg-background/40 rounded-lg p-3">
-                      <div className="text-xs text-muted-foreground mb-1">R:R Quality</div>
-                      <QualityBar value={analyzeData.recall_features.sk.rr_quality} />
-                    </div>
-                  </div>
-                  <div className="mt-3 grid grid-cols-2 gap-3">
-                    <div className="bg-background/40 rounded-lg p-3">
-                      <div className="text-xs text-muted-foreground mb-1">Sequence Score</div>
-                      <QualityBar value={analyzeData.recall_features.sk.sequence_score} />
-                    </div>
-                    <div className="bg-background/40 rounded-lg p-3 text-xs text-muted-foreground">
-                      <div className="mb-1 font-medium text-foreground">Structural Zones</div>
-                      <div>High: <span className="font-mono text-emerald-400">{price(analyzeData.recall_features.sk.swing_high)}</span></div>
-                      <div>Low: <span className="font-mono text-red-400">{price(analyzeData.recall_features.sk.swing_low)}</span></div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* CVD Order Flow Panel */}
-              {analyzeData.recall_features?.cvd && (
-                <div className="bg-card border border-violet-500/20 rounded-xl p-5">
-                  <div className="flex items-center gap-2 mb-4">
-                    <div className="w-2 h-2 rounded-full bg-violet-400" />
-                    <span className="text-sm font-bold text-violet-400">CVD Order Flow</span>
-                    <span className="text-xs text-muted-foreground ml-auto">Cumulative Volume Delta</span>
-                  </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <div className="bg-background/40 rounded-lg p-3">
-                      <div className="text-xs text-muted-foreground mb-1">CVD Direction</div>
-                      <div className={`font-bold text-sm ${
-                        analyzeData.recall_features.cvd.cvd_slope > 0 ? "text-emerald-400" : "text-red-400"
-                      }`}>
-                        {analyzeData.recall_features.cvd.cvd_slope > 0 ? "▲ Buying" : "▼ Selling"}
-                      </div>
-                    </div>
-                    <div className="bg-background/40 rounded-lg p-3">
-                      <div className="text-xs text-muted-foreground mb-1">Buy/Sell Ratio</div>
-                      <div className="font-bold text-sm font-mono">
-                        <span className="text-emerald-400">{(analyzeData.recall_features.cvd.buy_volume_ratio * 100).toFixed(0)}%</span>
-                        <span className="text-muted-foreground"> / </span>
-                        <span className="text-red-400">{((1 - analyzeData.recall_features.cvd.buy_volume_ratio) * 100).toFixed(0)}%</span>
-                      </div>
-                    </div>
-                    <div className="bg-background/40 rounded-lg p-3">
-                      <div className="text-xs text-muted-foreground mb-1">Divergence</div>
-                      <div className={`font-bold text-sm ${analyzeData.recall_features.cvd.cvd_divergence ? "text-amber-400" : "text-slate-400"}`}>
-                        {analyzeData.recall_features.cvd.cvd_divergence ? "⚡ Active" : "None"}
-                      </div>
-                    </div>
-                    <div className="bg-background/40 rounded-lg p-3">
-                      <div className="text-xs text-muted-foreground mb-1">Delta Spike</div>
-                      <div className={`font-bold text-sm ${analyzeData.recall_features.cvd.large_delta_bar ? "text-amber-400" : "text-slate-400"}`}>
-                        {analyzeData.recall_features.cvd.large_delta_bar ? "⚡ Yes" : "Normal"}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Recall Features */}
-              <details className="bg-card border border-border rounded-xl">
-                <summary className="p-4 text-sm font-medium cursor-pointer text-muted-foreground hover:text-foreground">
-                  Raw Recall Features ({Object.keys(analyzeData.recall_features).length} features)
-                </summary>
-                <div className="px-4 pb-4 grid grid-cols-2 md:grid-cols-4 gap-2">
-                  {Object.entries(analyzeData.recall_features).map(([k, v]) => (
-                    typeof v === "number" && (
-                      <div key={k} className="bg-background/40 rounded px-3 py-2">
-                        <div className="text-xs text-muted-foreground">{k}</div>
-                        <div className="font-mono text-xs text-foreground">{typeof v === "number" ? v.toFixed(4) : String(v)}</div>
-                      </div>
-                    )
-                  ))}
-                </div>
-              </details>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* ── BACKTEST TAB ──────────────────────────────────── */}
-      {activeTab === "backtest" && (
-        <div className="space-y-4">
-          {backtestMutation.isPending && (
-            <div className="bg-card border border-border rounded-xl p-8 text-center">
-              <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-              <p className="text-muted-foreground text-sm">Running walk-forward scan with no-trade filters...</p>
-            </div>
-          )}
-
-          {!btData && !backtestMutation.isPending && (
-            <div className="bg-card border border-border rounded-xl p-12 text-center text-muted-foreground">
-              <BarChart3 className="w-10 h-10 mx-auto mb-3 opacity-30" />
-              <p className="font-medium">Click "Backtest" to run walk-forward analysis</p>
-            </div>
-          )}
-
-          {btData && !(btData as any).error && (
-            <>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {[
-                  { label: "Win Rate", value: pct(btData.win_rate), color: btData.win_rate >= 0.55 ? "text-emerald-400" : "text-red-400" },
-                  { label: "Profit Factor", value: btData.profit_factor >= 999 ? "∞" : fmt(btData.profit_factor, 2), color: btData.profit_factor >= 1.5 ? "text-emerald-400" : "text-red-400" },
-                  { label: "Expectancy", value: `${btData.expectancy_ticks.toFixed(1)}t`, color: btData.expectancy_ticks > 0 ? "text-emerald-400" : "text-red-400" },
-                  { label: "High Conviction WR", value: pct(btData.high_conviction_win_rate), color: btData.high_conviction_win_rate >= 0.6 ? "text-emerald-400" : "text-amber-400" },
-                ].map((m) => (
-                  <div key={m.label} className="bg-card border border-border rounded-xl p-4">
-                    <div className="text-xs text-muted-foreground">{m.label}</div>
-                    <div className={`text-2xl font-bold mt-1 ${m.color}`}>{m.value}</div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div className="bg-card border border-border rounded-xl p-4">
-                  <div className="text-xs text-muted-foreground">Bars Scanned</div>
-                  <div className="text-lg font-bold mt-1">{btData.bars_scanned.toLocaleString()}</div>
-                </div>
-                <div className="bg-card border border-border rounded-xl p-4">
-                  <div className="text-xs text-muted-foreground">Signals Found</div>
-                  <div className="text-lg font-bold mt-1">{btData.total_signals}</div>
-                </div>
-                <div className="bg-card border border-border rounded-xl p-4">
-                  <div className="text-xs text-muted-foreground">W / L</div>
-                  <div className="text-lg font-bold mt-1 text-emerald-400">{btData.wins} <span className="text-muted-foreground">/</span> <span className="text-red-400">{btData.losses}</span></div>
-                </div>
-                <div className="bg-card border border-border rounded-xl p-4">
-                  <div className="text-xs text-muted-foreground">Avg Quality</div>
-                  <div className="text-lg font-bold mt-1">{pct(btData.avg_final_quality)}</div>
-                </div>
-              </div>
-
-              {/* By Regime */}
-              {btData.by_regime.length > 0 && (
-                <div className="bg-card border border-border rounded-xl p-5">
-                  <div className="text-sm font-semibold mb-3">Performance by Regime</div>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                    {btData.by_regime.map((r) => (
-                      <div key={r.regime} className="bg-background/40 rounded-lg p-3 flex items-center justify-between">
-                        <RegimeBadge regime={r.regime} />
-                        <div className="text-right">
-                          <div className={`text-sm font-bold ${r.win_rate >= 0.55 ? "text-emerald-400" : "text-red-400"}`}>{pct(r.win_rate)}</div>
-                          <div className="text-xs text-muted-foreground">{r.total} trades</div>
-                        </div>
+                    {[
+                      { label: "HTF Bias", value: analyzeData.recall_features.sk.htf_bias ?? "—", color: analyzeData.recall_features.sk.htf_bias === "bullish" ? C.primary : analyzeData.recall_features.sk.htf_bias === "bearish" ? C.tertiary : C.muted },
+                      { label: "Sequence Stage", value: analyzeData.recall_features.sk.sequence_stage ?? "—" },
+                      { label: "Zone Distance", value: analyzeData.recall_features.sk.zone_distance != null ? `${(analyzeData.recall_features.sk.zone_distance * 100).toFixed(1)}%` : "—" },
+                      { label: "R:R Quality", value: analyzeData.recall_features.sk.rr_quality != null ? analyzeData.recall_features.sk.rr_quality.toFixed(2) : "—", color: (analyzeData.recall_features.sk.rr_quality ?? 0) >= 2 ? C.primary : C.muted },
+                    ].map((f) => (
+                      <div key={f.label} className="rounded p-3" style={{ backgroundColor: "#0e0e0f" }}>
+                        <MicroLabel>{f.label}</MicroLabel>
+                        <div className="mt-1 font-headline font-bold text-sm" style={{ color: f.color ?? "#ffffff" }}>{f.value}</div>
                       </div>
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* Results table */}
-              <div className="bg-card border border-border rounded-xl overflow-hidden">
-                <div className="px-5 py-3 border-b border-border text-sm font-semibold">Walk-Forward Results</div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
+              {/* CVD Order Flow Panel */}
+              {analyzeData.recall_features?.cvd && (
+                <div className="rounded p-5" style={{ backgroundColor: C.card, border: "1px solid rgba(255,113,98,0.15)" }}>
+                  <div className="flex items-center gap-2 mb-4">
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: C.tertiary }} />
+                    <span className="font-headline font-bold text-xs" style={{ color: C.tertiary }}>CVD Order Flow Analysis</span>
+                    <MicroLabel>Buy/sell pressure detection</MicroLabel>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {[
+                      { label: "Buy/Sell Ratio", value: analyzeData.recall_features.cvd.buy_sell_ratio != null ? analyzeData.recall_features.cvd.buy_sell_ratio.toFixed(3) : "—", color: (analyzeData.recall_features.cvd.buy_sell_ratio ?? 1) > 1 ? C.primary : C.tertiary },
+                      { label: "CVD Slope", value: analyzeData.recall_features.cvd.cvd_slope != null ? analyzeData.recall_features.cvd.cvd_slope.toFixed(0) : "—" },
+                      { label: "Price-Delta Div", value: analyzeData.recall_features.cvd.price_delta_divergence ? "YES" : "NO", color: analyzeData.recall_features.cvd.price_delta_divergence ? C.primary : C.muted },
+                      { label: "Delta Spike", value: analyzeData.recall_features.cvd.delta_spike ? "DETECTED" : "NONE", color: analyzeData.recall_features.cvd.delta_spike ? "#fbbf24" : C.muted },
+                    ].map((f) => (
+                      <div key={f.label} className="rounded p-3" style={{ backgroundColor: "#0e0e0f" }}>
+                        <MicroLabel>{f.label}</MicroLabel>
+                        <div className="mt-1 font-headline font-bold text-sm" style={{ color: f.color ?? "#ffffff" }}>{f.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── BACKTEST ── */}
+      {activeTab === "backtest" && (
+        <div className="space-y-4">
+          {backtestMutation.isPending && (
+            <div className="rounded p-10 text-center" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+              <span className="w-2 h-2 rounded-full animate-pulse inline-block mb-3" style={{ backgroundColor: "#a78bfa" }} />
+              <p style={{ fontSize: "10px", color: C.muted, fontFamily: "Space Grotesk" }}>Running walk-forward backtest...</p>
+            </div>
+          )}
+
+          {!backtestMutation.isPending && !btData && (
+            <div className="rounded p-14 text-center" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+              <span className="material-symbols-outlined text-4xl mb-3 block" style={{ color: C.outlineVar }}>history</span>
+              <p style={{ fontSize: "11px", color: C.muted, fontFamily: "Space Grotesk" }}>Select an instrument + setup, then click "Backtest"</p>
+            </div>
+          )}
+
+          {btData && !(btData as any).error && (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                {[
+                  { label: "Win Rate", value: `${(btData.win_rate * 100).toFixed(1)}%`, accent: btData.win_rate > 0.5 ? C.primary : C.tertiary },
+                  { label: "Profit Factor", value: btData.profit_factor.toFixed(2), accent: btData.profit_factor > 1 ? C.primary : C.tertiary },
+                  { label: "Total Signals", value: String(btData.total_signals) },
+                  { label: "High Conv. WR", value: `${(btData.high_conviction_win_rate * 100).toFixed(1)}%`, accent: btData.high_conviction_win_rate > 0.6 ? C.primary : C.muted },
+                ].map((s, i) => (
+                  <div key={i} className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+                    <MicroLabel>{s.label}</MicroLabel>
+                    <div className="mt-2 font-headline font-bold text-xl" style={{ color: s.accent ?? "#ffffff" }}>{s.value}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Regime breakdown */}
+              {btData.by_regime.length > 0 && (
+                <div className="rounded overflow-hidden" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+                  <div className="px-5 py-3 border-b flex items-center gap-2" style={{ borderColor: "rgba(72,72,73,0.2)" }}>
+                    <MicroLabel>Performance by Regime</MicroLabel>
+                  </div>
+                  <table className="w-full">
                     <thead>
-                      <tr className="text-muted-foreground border-b border-border">
-                        <th className="px-4 py-2 text-left">Time</th>
-                        <th className="px-4 py-2 text-left">Dir</th>
-                        <th className="px-4 py-2 text-left">Regime</th>
-                        <th className="px-4 py-2 text-right">Quality</th>
-                        <th className="px-4 py-2 text-right">TP/SL</th>
-                        <th className="px-4 py-2 text-center">HC</th>
-                        <th className="px-4 py-2 text-center">Outcome</th>
+                      <tr style={{ borderBottom: "1px solid rgba(72,72,73,0.2)" }}>
+                        {["Regime", "Signals", "Wins", "Win Rate"].map((h) => (
+                          <th key={h} className="px-4 py-2 text-left" style={{ fontSize: "8px", fontFamily: "Space Grotesk", letterSpacing: "0.15em", textTransform: "uppercase", color: C.outlineVar }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {btData.by_regime.map((r) => (
+                        <tr key={r.regime} style={{ borderBottom: "1px solid rgba(72,72,73,0.1)" }}>
+                          <td className="px-4 py-2.5"><RegimeBadge regime={r.regime} /></td>
+                          <td className="px-4 py-2.5" style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace" }}>{r.total}</td>
+                          <td className="px-4 py-2.5" style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: C.primary }}>{r.wins}</td>
+                          <td className="px-4 py-2.5" style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: r.win_rate > 0.5 ? C.primary : C.tertiary, fontWeight: 700 }}>
+                            {(r.win_rate * 100).toFixed(1)}%
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Result rows */}
+              <div className="rounded overflow-hidden" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+                <div className="px-5 py-3 border-b flex items-center gap-2" style={{ borderColor: "rgba(72,72,73,0.2)" }}>
+                  <MicroLabel>Detailed Results ({btData.results.length} signals)</MicroLabel>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr style={{ borderBottom: "1px solid rgba(72,72,73,0.2)" }}>
+                        {["Time", "Dir", "Entry", "Quality", "Regime", "Outcome"].map((h) => (
+                          <th key={h} className="px-4 py-2 text-left" style={{ fontSize: "8px", fontFamily: "Space Grotesk", letterSpacing: "0.15em", textTransform: "uppercase", color: C.outlineVar }}>{h}</th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody>
                       {btData.results.slice(0, 30).map((r, i) => (
-                        <tr key={i} className="border-b border-border/40 hover:bg-white/[0.02]">
-                          <td className="px-4 py-2 font-mono text-muted-foreground">{new Date(r.bar_time).toLocaleDateString()}</td>
-                          <td className={`px-4 py-2 font-semibold ${r.direction === "long" ? "text-emerald-400" : "text-red-400"}`}>
-                            {r.direction === "long" ? "▲" : "▼"} {r.direction}
-                          </td>
+                        <tr key={i} className="hover:brightness-105 transition-all" style={{ borderBottom: "1px solid rgba(72,72,73,0.1)" }}>
+                          <td className="px-4 py-2" style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: C.muted }}>{new Date(r.bar_time).toLocaleDateString()}</td>
+                          <td className="px-4 py-2"><span style={{ fontSize: "9px", fontFamily: "Space Grotesk", fontWeight: 700, color: r.direction === "long" ? C.primary : C.tertiary }}>{r.direction.toUpperCase()}</span></td>
+                          <td className="px-4 py-2" style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace" }}>{r.entry_price > 1000 ? r.entry_price.toFixed(2) : r.entry_price.toFixed(4)}</td>
+                          <td className="px-4 py-2" style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: r.final_quality > 0.65 ? C.primary : C.muted }}>{(r.final_quality * 100).toFixed(0)}%</td>
                           <td className="px-4 py-2"><RegimeBadge regime={r.regime} /></td>
-                          <td className="px-4 py-2 text-right font-mono">{pct(r.final_quality)}</td>
-                          <td className="px-4 py-2 text-right font-mono text-emerald-400/80">{r.tp_ticks}t / <span className="text-red-400/80">{r.sl_ticks}t</span></td>
-                          <td className="px-4 py-2 text-center">{r.meets_threshold ? "✓" : ""}</td>
-                          <td className="px-4 py-2 text-center"><OutcomeBadge outcome={r.outcome} /></td>
+                          <td className="px-4 py-2">
+                            <span className="px-2 py-0.5 rounded" style={{ fontSize: "8px", fontFamily: "Space Grotesk", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", backgroundColor: r.outcome === "win" ? "rgba(156,255,147,0.1)" : r.outcome === "loss" ? "rgba(255,113,98,0.1)" : "rgba(72,72,73,0.2)", color: r.outcome === "win" ? C.primary : r.outcome === "loss" ? C.tertiary : C.muted }}>
+                              {r.outcome}
+                            </span>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -734,104 +515,89 @@ export default function AlpacaPage() {
         </div>
       )}
 
-      {/* ── ACCURACY DB TAB ───────────────────────────────── */}
+      {/* ── ACCURACY DB ── */}
       {activeTab === "accuracy" && (
         <div className="space-y-4">
-          {!accuracy && (
-            <div className="bg-card border border-border rounded-xl p-8 text-center text-muted-foreground">
-              <Database className="w-10 h-10 mx-auto mb-3 opacity-30" />
-              <p>Loading accuracy database...</p>
+          {!accuracy ? (
+            <div className="rounded p-10 text-center" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+              <MicroLabel>Loading accuracy database...</MicroLabel>
             </div>
-          )}
-
-          {accuracy && (
+          ) : (
             <>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 {[
-                  { label: "Total Records", value: accuracy.total_records.toLocaleString(), color: "" },
-                  { label: "Win Rate", value: accuracy.closed > 0 ? pct(accuracy.win_rate) : "—", color: accuracy.win_rate >= 0.55 ? "text-emerald-400" : "text-red-400" },
-                  { label: "Profit Factor", value: accuracy.profit_factor >= 999 ? "∞" : fmt(accuracy.profit_factor, 2), color: accuracy.profit_factor >= 1.5 ? "text-emerald-400" : "text-amber-400" },
-                  { label: "Closed Trades", value: accuracy.closed.toLocaleString(), color: "" },
-                ].map((m) => (
-                  <div key={m.label} className="bg-card border border-border rounded-xl p-4">
-                    <div className="text-xs text-muted-foreground">{m.label}</div>
-                    <div className={`text-2xl font-bold mt-1 ${m.color}`}>{m.value}</div>
+                  { label: "Total Records", value: String(accuracy.total_records) },
+                  { label: "Closed", value: String(accuracy.closed) },
+                  { label: "Win Rate", value: `${(accuracy.win_rate * 100).toFixed(1)}%`, accent: accuracy.win_rate > 0.5 ? C.primary : C.tertiary },
+                  { label: "Profit Factor", value: accuracy.profit_factor.toFixed(2), accent: accuracy.profit_factor > 1 ? C.primary : C.tertiary },
+                ].map((s, i) => (
+                  <div key={i} className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+                    <MicroLabel>{s.label}</MicroLabel>
+                    <div className="mt-2 font-headline font-bold text-xl" style={{ color: s.accent ?? "#ffffff" }}>{s.value}</div>
                   </div>
                 ))}
               </div>
 
-              {accuracy.total_records === 0 && (
-                <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-6 text-center">
-                  <Brain className="w-8 h-8 text-amber-400 mx-auto mb-2" />
-                  <div className="text-amber-400 font-semibold">No recall data yet</div>
-                  <p className="text-sm text-muted-foreground mt-1">Click "Build Recall" to run the strategy engine over years of historical BTC/ETH data and populate this database.</p>
+              {/* By Setup */}
+              <div className="rounded overflow-hidden" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+                <div className="px-5 py-3 border-b flex items-center gap-2" style={{ borderColor: "rgba(72,72,73,0.2)" }}>
+                  <MicroLabel>Accuracy by Setup Type</MicroLabel>
                 </div>
-              )}
-
-              {accuracy.by_setup.length > 0 && (
-                <div className="bg-card border border-border rounded-xl p-5">
-                  <div className="text-sm font-semibold mb-3">By Setup Type</div>
-                  <div className="space-y-3">
+                <table className="w-full">
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid rgba(72,72,73,0.2)" }}>
+                      {["Setup", "Total", "Wins", "Win Rate", "Avg Quality"].map((h) => (
+                        <th key={h} className="px-4 py-2 text-left" style={{ fontSize: "8px", fontFamily: "Space Grotesk", letterSpacing: "0.15em", textTransform: "uppercase", color: C.outlineVar }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
                     {accuracy.by_setup.map((s) => (
-                      <div key={s.setup_type} className="flex items-center gap-3">
-                        <div className="w-36 text-xs text-muted-foreground truncate">{s.setup_type.replace(/_/g, " ")}</div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1 bg-white/10 rounded-full h-1.5 overflow-hidden">
-                              <div className={`h-full ${s.win_rate >= 0.55 ? "bg-emerald-500" : "bg-red-500"}`} style={{ width: `${s.win_rate * 100}%` }} />
-                            </div>
-                            <span className="text-xs font-mono w-12 text-right">{pct(s.win_rate)}</span>
-                          </div>
-                        </div>
-                        <div className="text-xs text-muted-foreground w-20 text-right">{s.wins}W / {s.total - s.wins}L</div>
-                      </div>
+                      <tr key={s.setup_type} style={{ borderBottom: "1px solid rgba(72,72,73,0.1)" }}>
+                        <td className="px-4 py-2.5 font-headline font-bold text-xs">{s.setup_type.replace(/_/g, " ")}</td>
+                        <td className="px-4 py-2.5" style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace" }}>{s.total}</td>
+                        <td className="px-4 py-2.5" style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: C.primary }}>{s.wins}</td>
+                        <td className="px-4 py-2.5" style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, color: s.win_rate > 0.5 ? C.primary : C.tertiary }}>{(s.win_rate * 100).toFixed(1)}%</td>
+                        <td className="px-4 py-2.5" style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: C.muted }}>{(s.avg_quality * 100).toFixed(1)}%</td>
+                      </tr>
                     ))}
-                  </div>
-                </div>
-              )}
+                    {accuracy.by_setup.length === 0 && (
+                      <tr><td colSpan={5} className="px-4 py-8 text-center" style={{ fontSize: "11px", color: C.outlineVar }}>No accuracy data yet — run a backtest or build recall.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
 
-              {accuracy.by_symbol.length > 0 && (
-                <div className="bg-card border border-border rounded-xl p-5">
-                  <div className="text-sm font-semibold mb-3">By Symbol</div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    {accuracy.by_symbol.map((s) => (
-                      <div key={s.symbol} className="bg-background/40 rounded-lg p-3">
-                        <div className="text-sm font-bold">{s.symbol}</div>
-                        <div className={`text-xl font-bold ${s.win_rate >= 0.55 ? "text-emerald-400" : "text-red-400"}`}>{pct(s.win_rate)}</div>
-                        <div className="text-xs text-muted-foreground">{s.total} trades</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
+              {/* Recent */}
               {accuracy.recent.length > 0 && (
-                <div className="bg-card border border-border rounded-xl overflow-hidden">
-                  <div className="px-5 py-3 border-b border-border text-sm font-semibold">Recent Records</div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="text-muted-foreground border-b border-border">
-                          <th className="px-4 py-2 text-left">Date</th>
-                          <th className="px-4 py-2 text-left">Symbol</th>
-                          <th className="px-4 py-2 text-left">Setup</th>
-                          <th className="px-4 py-2 text-right">Quality</th>
-                          <th className="px-4 py-2 text-center">Outcome</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {accuracy.recent.slice(0, 30).map((r, i) => (
-                          <tr key={i} className="border-b border-border/40 hover:bg-white/[0.02]">
-                            <td className="px-4 py-2 font-mono text-muted-foreground">{new Date(r.bar_time).toLocaleDateString()}</td>
-                            <td className="px-4 py-2 font-semibold">{r.symbol}</td>
-                            <td className="px-4 py-2 text-muted-foreground">{r.setup_type.replace(/_/g, " ")}</td>
-                            <td className="px-4 py-2 text-right font-mono">{(Number(r.final_quality) * 100).toFixed(1)}%</td>
-                            <td className="px-4 py-2 text-center"><OutcomeBadge outcome={r.outcome} /></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                <div className="rounded overflow-hidden" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+                  <div className="px-5 py-3 border-b flex items-center gap-2" style={{ borderColor: "rgba(72,72,73,0.2)" }}>
+                    <MicroLabel>Recent Accuracy Records</MicroLabel>
                   </div>
+                  <table className="w-full">
+                    <thead>
+                      <tr style={{ borderBottom: "1px solid rgba(72,72,73,0.2)" }}>
+                        {["Date", "Setup", "Symbol", "Quality", "Outcome"].map((h) => (
+                          <th key={h} className="px-4 py-2 text-left" style={{ fontSize: "8px", fontFamily: "Space Grotesk", letterSpacing: "0.15em", textTransform: "uppercase", color: C.outlineVar }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {accuracy.recent.map((r, i) => (
+                        <tr key={i} style={{ borderBottom: "1px solid rgba(72,72,73,0.1)" }}>
+                          <td className="px-4 py-2" style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: C.muted }}>{new Date(r.bar_time).toLocaleDateString()}</td>
+                          <td className="px-4 py-2" style={{ fontSize: "9px", color: C.muted }}>{r.setup_type.replace(/_/g, " ")}</td>
+                          <td className="px-4 py-2 font-headline font-bold text-xs">{r.symbol}</td>
+                          <td className="px-4 py-2" style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: Number(r.final_quality) > 0.65 ? C.primary : C.muted }}>{(Number(r.final_quality) * 100).toFixed(0)}%</td>
+                          <td className="px-4 py-2">
+                            <span className="px-2 py-0.5 rounded" style={{ fontSize: "8px", fontFamily: "Space Grotesk", fontWeight: 700, textTransform: "uppercase", backgroundColor: r.outcome === "win" ? "rgba(156,255,147,0.1)" : r.outcome === "loss" ? "rgba(255,113,98,0.1)" : "rgba(72,72,73,0.2)", color: r.outcome === "win" ? C.primary : r.outcome === "loss" ? C.tertiary : C.muted }}>
+                              {r.outcome}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </>
@@ -839,104 +605,88 @@ export default function AlpacaPage() {
         </div>
       )}
 
-      {/* ── RECALL BUILD TAB ──────────────────────────────── */}
+      {/* ── RECALL BUILD ── */}
       {activeTab === "recall" && (
         <div className="space-y-4">
-          <div className="bg-card border border-border rounded-xl p-6">
-            <div className="flex items-start gap-4">
-              <Brain className="w-10 h-10 text-amber-400 flex-shrink-0 mt-1" />
-              <div>
-                <div className="text-lg font-bold">Historical Recall Builder</div>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Fetches years of BTC/USD and ETH/USD 15-min bars from Alpaca (free, no key required) and runs the full walk-forward strategy engine over every window. Results are saved to the accuracy database and improve future signal scoring.
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                  <span className="bg-white/5 px-2 py-1 rounded">15-min bars · 24/7 crypto</span>
-                  <span className="bg-white/5 px-2 py-1 rounded">Regime detection on every window</span>
-                  <span className="bg-white/5 px-2 py-1 rounded">No-trade filters applied</span>
-                  <span className="bg-white/5 px-2 py-1 rounded">Walk-forward outcomes (20-bar forward)</span>
-                  <span className="bg-white/5 px-2 py-1 rounded">All 3 setup types</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
           {recallBuildMutation.isPending && (
-            <div className="bg-card border border-border rounded-xl p-8 text-center">
-              <div className="w-10 h-10 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-              <div className="text-amber-400 font-semibold mb-1">Building Recall Database</div>
-              <p className="text-sm text-muted-foreground">Fetching historical bars · Running strategy engine · Saving results...</p>
-              <p className="text-xs text-muted-foreground mt-2">This may take 30–120 seconds depending on date range</p>
+            <div className="rounded p-10 text-center" style={{ backgroundColor: C.card, border: "1px solid rgba(251,191,36,0.2)" }}>
+              <div className="flex flex-col items-center gap-3">
+                <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: "#fbbf24", boxShadow: "0 0 10px rgba(251,191,36,0.5)" }} />
+                <MicroLabel>Fetching 1+ year of crypto bars · Running detection · Saving to recall database</MicroLabel>
+              </div>
             </div>
           )}
 
-          {!recallData && !recallBuildMutation.isPending && (
-            <div className="bg-card border border-border rounded-xl p-8 text-center text-muted-foreground">
-              <Clock className="w-10 h-10 mx-auto mb-3 opacity-30" />
-              <p className="font-medium">Choose your date range above and click "Build Recall"</p>
-              <p className="text-xs mt-1 opacity-60">1 year ≈ 35,000 bars · 2 years ≈ 70,000 bars</p>
+          {!recallBuildMutation.isPending && !recallData && (
+            <div className="rounded p-14 text-center" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+              <span className="material-symbols-outlined text-4xl mb-3 block" style={{ color: C.outlineVar }}>psychology</span>
+              <p className="font-headline font-bold text-sm" style={{ color: C.muted }}>Build AI Recall Memory</p>
+              <p style={{ fontSize: "9px", color: C.outlineVar, marginTop: "6px", fontFamily: "Space Grotesk" }}>
+                Fetches BTC/USD + ETH/USD history · Runs full strategy detection · Saves outcomes to accuracy DB
+              </p>
+              <p style={{ fontSize: "9px", color: "#fbbf24", marginTop: "8px", fontFamily: "Space Grotesk" }}>
+                Warning: 1-year build may take 2-5 minutes
+              </p>
             </div>
           )}
 
-          {recallData && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4">
-                  <div className="text-xs text-emerald-400/70">Records Saved</div>
-                  <div className="text-3xl font-bold text-emerald-400 mt-1">{recallData.total_records_saved.toLocaleString()}</div>
-                </div>
-                <div className="bg-card border border-border rounded-xl p-4">
-                  <div className="text-xs text-muted-foreground">Symbols</div>
-                  <div className="text-3xl font-bold mt-1">{recallData.symbols_processed}</div>
-                </div>
-                <div className="bg-card border border-border rounded-xl p-4">
-                  <div className="text-xs text-muted-foreground">History</div>
-                  <div className="text-3xl font-bold mt-1">{recallData.years_back}yr</div>
-                </div>
+          {recallData && !(recallData as any).error && (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                {[
+                  { label: "Status", value: recallData.status.toUpperCase(), accent: recallData.status === "complete" ? C.primary : "#fbbf24" },
+                  { label: "Symbols Processed", value: String(recallData.symbols_processed) },
+                  { label: "Records Saved", value: String(recallData.total_records_saved), accent: C.primary },
+                ].map((s, i) => (
+                  <div key={i} className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+                    <MicroLabel>{s.label}</MicroLabel>
+                    <div className="mt-2 font-headline font-bold text-xl" style={{ color: s.accent ?? "#ffffff" }}>{s.value}</div>
+                  </div>
+                ))}
               </div>
 
-              {Object.entries(recallData.summary).map(([sym, s]) => (
-                <div key={sym} className="bg-card border border-border rounded-xl p-5">
-                  <div className="flex items-center gap-3 mb-4">
-                    <span className="font-bold text-lg">{sym}</span>
-                    {"error" in s ? (
-                      <span className="text-xs text-red-400 bg-red-400/10 px-2 py-0.5 rounded">{s.error}</span>
-                    ) : (
-                      <span className="text-xs text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded">Complete</span>
+              {Object.entries(recallData.summary).map(([sym, data]) => (
+                <div key={sym} className="rounded p-5" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+                  <div className="flex items-center gap-2 mb-4">
+                    <span className="font-headline font-bold text-sm">{sym}</span>
+                    {data.date_range && (
+                      <span style={{ fontSize: "9px", color: C.muted, fontFamily: "JetBrains Mono, monospace" }}>
+                        {data.date_range.start} → {data.date_range.end}
+                      </span>
                     )}
                   </div>
-
-                  {"bars_fetched" in s && (
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                      <div><div className="text-xs text-muted-foreground">Bars Fetched</div><div className="font-bold">{s.bars_fetched?.toLocaleString()}</div></div>
-                      <div><div className="text-xs text-muted-foreground">Signals</div><div className="font-bold">{s.signals_detected}</div></div>
-                      <div><div className="text-xs text-muted-foreground">Win Rate</div><div className={`font-bold ${Number(s.win_rate) >= 0.55 ? "text-emerald-400" : "text-red-400"}`}>{s.win_rate ? `${(Number(s.win_rate) * 100).toFixed(1)}%` : "—"}</div></div>
-                      <div><div className="text-xs text-muted-foreground">Timeframe</div><div className="font-bold">{s.timeframe}</div></div>
-                    </div>
-                  )}
-
-                  {s.by_setup && s.by_setup.length > 0 && (
-                    <div className="space-y-2">
-                      <div className="text-xs font-semibold text-muted-foreground">By Setup</div>
-                      {s.by_setup.map((bs) => (
-                        <div key={bs.setup} className="flex items-center gap-3">
-                          <div className="w-40 text-xs text-muted-foreground">{bs.setup.replace(/_/g, " ")}</div>
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <div className="flex-1 bg-white/10 rounded-full h-1.5 overflow-hidden">
-                                <div className={`h-full ${Number(bs.win_rate) >= 0.55 ? "bg-emerald-500" : "bg-red-500"}`} style={{ width: `${Number(bs.win_rate) * 100}%` }} />
-                              </div>
-                              <span className="text-xs font-mono w-12 text-right">{(Number(bs.win_rate) * 100).toFixed(1)}%</span>
-                            </div>
-                          </div>
-                          <div className="text-xs text-muted-foreground w-20 text-right">{bs.wins}W / {bs.total - bs.wins}L</div>
+                  {data.error ? (
+                    <p style={{ fontSize: "11px", color: C.tertiary }}>{data.error}</p>
+                  ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {[
+                        { label: "Bars Fetched", value: String(data.bars_fetched ?? 0) },
+                        { label: "Signals", value: String(data.signals_detected ?? 0) },
+                        { label: "Closed", value: String(data.closed ?? 0) },
+                        { label: "Win Rate", value: data.win_rate ?? "—", accent: data.wins && data.closed && data.wins / data.closed > 0.5 ? C.primary : C.muted },
+                      ].map((f) => (
+                        <div key={f.label} className="rounded p-3" style={{ backgroundColor: "#0e0e0f" }}>
+                          <MicroLabel>{f.label}</MicroLabel>
+                          <div className="mt-1 font-headline font-bold text-lg" style={{ color: f.accent ?? "#ffffff" }}>{f.value}</div>
                         </div>
                       ))}
                     </div>
                   )}
+                  {data.by_setup && data.by_setup.length > 0 && (
+                    <div className="mt-4">
+                      <MicroLabel>By Setup</MicroLabel>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {data.by_setup.map((s) => (
+                          <span key={s.setup} className="px-2 py-1 rounded" style={{ fontSize: "9px", fontFamily: "Space Grotesk", backgroundColor: "#0e0e0f", border: `1px solid ${C.border}`, color: C.muted }}>
+                            {s.setup.replace(/_/g, " ")} · {s.total} signals · {s.win_rate} WR
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
-            </div>
+            </>
           )}
         </div>
       )}

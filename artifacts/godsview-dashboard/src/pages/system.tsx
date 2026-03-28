@@ -1,9 +1,20 @@
 import { useGetSystemStatus } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent } from "@/components/ui/card";
-import { cn, getStatusColor } from "@/lib/utils";
-import { Cpu, Terminal, ShieldAlert, Activity, GitBranch, Brain, Settings2, RefreshCcw, Wifi, WifiOff, AlertCircle } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+
+const C = {
+  bg: "#0e0e0f",
+  card: "#1a191b",
+  cardHigh: "#201f21",
+  border: "rgba(72,72,73,0.25)",
+  primary: "#9cff93",
+  secondary: "#669dff",
+  tertiary: "#ff7162",
+  muted: "#adaaab",
+  outline: "#767576",
+  outlineVar: "#484849",
+};
 
 type DiagnosticsLayer = { status: "live" | "degraded" | "offline"; detail: string };
 type Diagnostics = {
@@ -20,24 +31,36 @@ const LAYER_LABELS: Record<string, string> = {
   database: "PostgreSQL Database",
   recall_engine: "Recall / Accuracy DB",
   ml_model: "ML Model Layer",
-  claude_reasoning: "Claude Reasoning Layer",
+  claude_reasoning: "Claude Reasoning",
 };
 
-const LAYER_ICONS: Record<string, React.ReactNode> = {
-  data_feed: <Activity className="w-4 h-4" />,
-  trading_api: <Wifi className="w-4 h-4" />,
-  strategy_engine: <GitBranch className="w-4 h-4" />,
-  database: <Cpu className="w-4 h-4" />,
-  recall_engine: <Brain className="w-4 h-4" />,
-  ml_model: <Settings2 className="w-4 h-4" />,
-  claude_reasoning: <Terminal className="w-4 h-4" />,
+const LAYER_ICONS: Record<string, string> = {
+  data_feed: "wifi",
+  trading_api: "vpn_key",
+  strategy_engine: "account_tree",
+  database: "storage",
+  recall_engine: "psychology",
+  ml_model: "smart_toy",
+  claude_reasoning: "auto_awesome",
 };
 
-function StatusDot({ status }: { status: string }) {
-  if (status === "live") return <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse inline-block" />;
-  if (status === "degraded") return <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />;
-  return <span className="w-2 h-2 rounded-full bg-red-400 inline-block" />;
+function MicroLabel({ children }: { children: React.ReactNode }) {
+  return <span style={{ fontSize: "8px", fontFamily: "Space Grotesk", letterSpacing: "0.2em", textTransform: "uppercase", color: C.outline }}>{children}</span>;
 }
+
+function StatusPill({ status }: { status: string }) {
+  const color = status === "live" ? C.primary : status === "degraded" ? "#fbbf24" : C.tertiary;
+  return (
+    <span className="px-2 py-0.5 rounded" style={{
+      fontSize: "8px", fontFamily: "Space Grotesk", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase",
+      backgroundColor: `${color}12`, color, border: `1px solid ${color}30`,
+    }}>
+      {status}
+    </span>
+  );
+}
+
+const PIPELINE_ICONS = ["sensors", "account_tree", "psychology", "smart_toy", "auto_awesome", "shield"];
 
 export default function System() {
   const { data, isLoading } = useGetSystemStatus();
@@ -48,155 +71,136 @@ export default function System() {
   });
 
   if (isLoading || !data) {
-    return <div className="flex items-center justify-center h-full"><RefreshCcw className="w-8 h-8 animate-spin text-primary" /></div>;
+    return (
+      <div className="flex items-center justify-center h-64">
+        <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: C.primary }} />
+      </div>
+    );
   }
 
-  const getLayerIcon = (name: string) => {
-    if (name.includes('TradingView')) return <Activity className="w-6 h-6" />;
-    if (name.includes('Order Flow')) return <GitBranch className="w-6 h-6" />;
-    if (name.includes('Recall')) return <Brain className="w-6 h-6" />;
-    if (name.includes('ML')) return <Cpu className="w-6 h-6" />;
-    if (name.includes('Claude')) return <Terminal className="w-6 h-6" />;
-    if (name.includes('Risk')) return <ShieldAlert className="w-6 h-6" />;
-    return <Settings2 className="w-6 h-6" />;
-  };
+  const healthy = data.overall === "healthy";
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 max-w-5xl mx-auto">
+    <div className="space-y-8">
+      {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">System Core</h1>
-        <p className="text-muted-foreground mt-1">Status diagnostics for the 6-layer reasoning engine.</p>
+        <div style={{ fontSize: "9px", color: C.outline, fontFamily: "Space Grotesk", letterSpacing: "0.25em", textTransform: "uppercase", marginBottom: "6px" }}>
+          Godsview · System Diagnostics
+        </div>
+        <h1 className="font-headline font-bold text-2xl tracking-tight">System Core</h1>
       </div>
 
-      {/* Hero Status */}
-      <Card className="bg-card/40 backdrop-blur-md border border-border shadow-[0_0_50px_-12px_rgba(0,0,0,0.5)] overflow-hidden relative">
-        <div className={cn(
-          "absolute top-0 left-0 w-1 h-full",
-          data.overall === 'healthy' ? "bg-success shadow-[0_0_20px_var(--color-success)]" : "bg-destructive shadow-[0_0_20px_var(--color-destructive)]"
-        )} />
-        <CardContent className="p-8 flex flex-col md:flex-row items-center justify-between gap-6">
+      {/* Global Status Hero */}
+      <div className="rounded overflow-hidden" style={{ backgroundColor: C.card, border: `1px solid ${healthy ? "rgba(156,255,147,0.15)" : "rgba(255,113,98,0.15)"}` }}>
+        <div className="h-0.5 w-full" style={{ backgroundColor: healthy ? C.primary : C.tertiary, boxShadow: `0 0 8px ${healthy ? C.primary : C.tertiary}` }} />
+        <div className="p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div>
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-widest mb-1">Global Status</h2>
-            <div className="flex items-center gap-3">
-              <span className={cn(
-                "w-4 h-4 rounded-full animate-pulse",
-                data.overall === 'healthy' ? "bg-success" : "bg-destructive"
-              )} />
-              <span className="text-4xl font-bold uppercase tracking-tight text-foreground">
+            <MicroLabel>Global Engine Status</MicroLabel>
+            <div className="flex items-center gap-3 mt-2">
+              <span className="w-3 h-3 rounded-full animate-pulse" style={{ backgroundColor: healthy ? C.primary : C.tertiary }} />
+              <span className="font-headline font-bold text-3xl tracking-tight uppercase" style={{ color: healthy ? C.primary : C.tertiary }}>
                 {data.overall}
               </span>
             </div>
           </div>
-          
           <div className="flex gap-8">
             <div>
-              <p className="text-sm text-muted-foreground mb-1">Active Target</p>
-              <p className="text-xl font-mono-num font-bold text-primary">{data.active_instrument || "Awaiting Scan"}</p>
+              <MicroLabel>Active Target</MicroLabel>
+              <div className="font-headline font-bold text-lg mt-1" style={{ color: C.primary }}>{data.active_instrument || "Awaiting Scan"}</div>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground mb-1">Session</p>
-              <p className="text-xl font-bold">{data.active_session || "None"}</p>
+              <MicroLabel>Session</MicroLabel>
+              <div className="font-headline font-bold text-lg mt-1">{data.active_session || "None"}</div>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      {/* News Lockout Banner */}
+      {/* News Lockout */}
       {data.news_lockout_active && (
-        <div className="bg-destructive/10 border border-destructive/30 rounded-xl p-4 flex items-center gap-4 animate-pulse">
-          <div className="p-2 bg-destructive/20 rounded-full text-destructive">
-             <ShieldAlert className="w-6 h-6" />
-          </div>
+        <div className="rounded p-4 flex items-center gap-4" style={{ backgroundColor: "rgba(255,113,98,0.08)", border: "1px solid rgba(255,113,98,0.25)" }}>
+          <span className="material-symbols-outlined" style={{ color: C.tertiary }}>warning</span>
           <div>
-            <h3 className="text-destructive font-bold text-lg">NEWS LOCKOUT ACTIVE</h3>
-            <p className="text-destructive/80 text-sm">Trading disabled due to high-impact economic events.</p>
+            <div className="font-headline font-bold" style={{ color: C.tertiary, fontSize: "11px", letterSpacing: "0.1em" }}>NEWS LOCKOUT ACTIVE</div>
+            <div style={{ fontSize: "11px", color: C.muted, marginTop: "2px" }}>Trading disabled — high-impact economic event window.</div>
           </div>
         </div>
       )}
 
-      {/* Live Diagnostics */}
+      {/* Live Layer Diagnostics */}
       <div>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-xl font-bold flex items-center gap-2">
-            <Brain className="w-5 h-5 text-primary" /> Live Layer Diagnostics
-          </h3>
+          <div className="flex items-center gap-3">
+            <span className="material-symbols-outlined text-base" style={{ color: C.primary }}>monitor_heart</span>
+            <MicroLabel>Live Layer Diagnostics</MicroLabel>
+          </div>
           <button
             onClick={() => refetchDiag()}
-            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 px-3 py-1.5 rounded-lg border border-border hover:bg-white/5 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded transition-all hover:brightness-110"
+            style={{ fontSize: "9px", fontFamily: "Space Grotesk", letterSpacing: "0.15em", textTransform: "uppercase", color: C.outline, backgroundColor: C.card, border: `1px solid ${C.border}` }}
           >
-            <RefreshCcw className="w-3 h-3" /> Refresh
+            <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>refresh</span>
+            Refresh
           </button>
         </div>
 
         {diagLoading && (
-          <div className="text-center text-muted-foreground py-8"><RefreshCcw className="w-5 h-5 animate-spin mx-auto" /></div>
+          <div className="text-center py-8">
+            <span className="w-1.5 h-1.5 rounded-full animate-pulse inline-block" style={{ backgroundColor: C.primary }} />
+          </div>
         )}
 
         {diag && (
           <div className="space-y-3">
-            {/* System status summary */}
-            <div className={cn(
-              "rounded-xl px-5 py-3 flex items-center justify-between border",
-              diag.system_status === "healthy" ? "bg-emerald-500/10 border-emerald-500/30" :
-              diag.system_status === "partial" ? "bg-amber-500/10 border-amber-500/30" :
-              "bg-red-500/10 border-red-500/30"
-            )}>
+            {/* Summary bar */}
+            <div className="rounded px-4 py-3 flex items-center justify-between" style={{
+              backgroundColor: diag.system_status === "healthy" ? "rgba(156,255,147,0.05)" : diag.system_status === "partial" ? "rgba(251,191,36,0.05)" : "rgba(255,113,98,0.05)",
+              border: `1px solid ${diag.system_status === "healthy" ? "rgba(156,255,147,0.2)" : diag.system_status === "partial" ? "rgba(251,191,36,0.2)" : "rgba(255,113,98,0.2)"}`,
+            }}>
               <div className="flex items-center gap-2">
-                <StatusDot status={diag.system_status === "healthy" ? "live" : diag.system_status === "partial" ? "degraded" : "offline"} />
-                <span className="font-semibold uppercase tracking-wider text-sm">
-                  System {diag.system_status}
-                </span>
+                <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: diag.system_status === "healthy" ? C.primary : diag.system_status === "partial" ? "#fbbf24" : C.tertiary }} />
+                <span className="font-headline font-bold text-xs uppercase tracking-widest">System {diag.system_status}</span>
               </div>
-              <span className="text-xs text-muted-foreground font-mono">{new Date(diag.timestamp).toLocaleTimeString()}</span>
+              <span style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: C.outlineVar }}>
+                {new Date(diag.timestamp).toLocaleTimeString()}
+              </span>
             </div>
 
-            {/* Layer cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {Object.entries(diag.layers).map(([key, layer]) => (
-                <div
-                  key={key}
-                  className={cn(
-                    "rounded-xl p-4 border flex items-start gap-3",
-                    layer.status === "live" ? "bg-emerald-500/5 border-emerald-500/20" :
-                    layer.status === "degraded" ? "bg-amber-500/5 border-amber-500/20" :
-                    "bg-red-500/5 border-red-500/20"
-                  )}
-                >
-                  <div className={cn(
-                    "p-2 rounded-lg flex-shrink-0 mt-0.5",
-                    layer.status === "live" ? "bg-emerald-500/15 text-emerald-400" :
-                    layer.status === "degraded" ? "bg-amber-500/15 text-amber-400" :
-                    "bg-red-500/15 text-red-400"
-                  )}>
-                    {LAYER_ICONS[key] ?? <Settings2 className="w-4 h-4" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <StatusDot status={layer.status} />
-                      <span className="text-sm font-semibold">{LAYER_LABELS[key] ?? key}</span>
-                      <span className={cn(
-                        "text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded",
-                        layer.status === "live" ? "text-emerald-400 bg-emerald-400/10" :
-                        layer.status === "degraded" ? "text-amber-400 bg-amber-400/10" :
-                        "text-red-400 bg-red-400/10"
-                      )}>{layer.status}</span>
+            {/* Layer grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {Object.entries(diag.layers).map(([key, layer]) => {
+                const color = layer.status === "live" ? C.primary : layer.status === "degraded" ? "#fbbf24" : C.tertiary;
+                return (
+                  <div key={key} className="rounded p-4 flex items-start gap-3" style={{
+                    backgroundColor: C.card,
+                    border: `1px solid ${layer.status === "live" ? "rgba(156,255,147,0.1)" : layer.status === "degraded" ? "rgba(251,191,36,0.1)" : "rgba(255,113,98,0.1)"}`,
+                  }}>
+                    <div className="w-8 h-8 rounded flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${color}12` }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: "16px", color }}>{LAYER_ICONS[key] ?? "circle"}</span>
                     </div>
-                    <p className="text-xs text-muted-foreground leading-relaxed">{layer.detail}</p>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <span className="font-headline font-bold text-xs">{LAYER_LABELS[key] ?? key}</span>
+                        <StatusPill status={layer.status} />
+                      </div>
+                      <p style={{ fontSize: "10px", color: C.muted, lineHeight: "1.5" }}>{layer.detail}</p>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* Recommendations */}
             {diag.recommendations.length > 0 && (
-              <div className="bg-card border border-border rounded-xl p-4">
-                <div className="flex items-center gap-2 mb-3 text-sm font-semibold">
-                  <AlertCircle className="w-4 h-4 text-amber-400" /> Recommendations
+              <div className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid rgba(251,191,36,0.15)` }}>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="material-symbols-outlined text-sm" style={{ color: "#fbbf24" }}>tips_and_updates</span>
+                  <MicroLabel>Recommendations</MicroLabel>
                 </div>
                 <ul className="space-y-2">
                   {diag.recommendations.map((r, i) => (
-                    <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
-                      <span className="text-amber-400 mt-0.5 flex-shrink-0">→</span>
+                    <li key={i} className="flex items-start gap-2" style={{ fontSize: "11px", color: C.muted }}>
+                      <span style={{ color: "#fbbf24", marginTop: "2px" }}>›</span>
                       {r}
                     </li>
                   ))}
@@ -207,42 +211,50 @@ export default function System() {
         )}
       </div>
 
-      {/* Layer Details */}
+      {/* Pipeline Layers (from system status) */}
       <div>
-        <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-          <GitBranch className="w-5 h-5 text-primary" /> Pipeline Layers
-        </h3>
-        <div className="space-y-3">
-          {data.layers.map((layer, index) => (
-             <div key={layer.name} className="flex flex-col sm:flex-row gap-4 bg-card border border-border/50 rounded-xl p-4 hover:bg-muted/20 transition-colors group">
-               <div className="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-lg bg-background border border-border shadow-inner relative">
-                 <div className="absolute -top-2 -left-2 w-5 h-5 rounded-full bg-card border border-border flex items-center justify-center text-[10px] font-mono-num text-muted-foreground">
-                   {index + 1}
-                 </div>
-                 <div className="text-muted-foreground group-hover:text-primary transition-colors">
-                   {getLayerIcon(layer.name)}
-                 </div>
-               </div>
-               
-               <div className="flex-1 flex flex-col justify-center">
-                 <div className="flex items-center justify-between">
-                   <h4 className="font-bold text-foreground text-lg">{layer.name}</h4>
-                   <span className={cn("px-2.5 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider", getStatusColor(layer.status))}>
-                     {layer.status}
-                   </span>
-                 </div>
-                 <p className="text-sm text-muted-foreground mt-1">{layer.message}</p>
-               </div>
+        <div className="flex items-center gap-3 mb-4">
+          <span className="material-symbols-outlined text-base" style={{ color: C.secondary }}>account_tree</span>
+          <MicroLabel>Pipeline Layer Status</MicroLabel>
+        </div>
+        <div className="space-y-2">
+          {data.layers.map((layer, index) => {
+            const isActive = layer.status === "active";
+            const isWarn = layer.status === "warning";
+            const color = isActive ? C.primary : isWarn ? "#fbbf24" : C.tertiary;
+            return (
+              <div key={layer.name} className="rounded p-4 flex gap-4 items-center hover:brightness-105 transition-all" style={{ backgroundColor: C.card, border: `1px solid ${isActive ? "rgba(156,255,147,0.08)" : C.border}` }}>
+                <div className="w-8 h-8 flex items-center justify-center rounded relative flex-shrink-0" style={{ backgroundColor: "rgba(14,14,15,0.6)", border: `1px solid ${C.border}` }}>
+                  <span style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: C.outlineVar }}>{String(index + 1).padStart(2, "0")}</span>
+                </div>
+                <div className="w-7 h-7 rounded flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${color}12` }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: "16px", color }}>{PIPELINE_ICONS[index] ?? "circle"}</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-headline font-bold text-sm">{layer.name}</div>
+                  <div style={{ fontSize: "10px", color: C.muted, marginTop: "2px" }}>{layer.message}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <StatusPill status={layer.status} />
+                  {layer.last_update && (
+                    <span style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: C.outlineVar }}>
+                      {format(new Date(layer.last_update), "HH:mm:ss")}
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
-               {layer.last_update && (
-                 <div className="flex-shrink-0 flex items-end justify-end sm:justify-center">
-                   <span className="text-xs font-mono-num text-muted-foreground">
-                     Ping: {format(new Date(layer.last_update), 'HH:mm:ss.SSS')}
-                   </span>
-                 </div>
-               )}
-             </div>
-          ))}
+      {/* Footer */}
+      <div className="pt-6 border-t flex items-center justify-between" style={{ borderColor: "rgba(72,72,73,0.15)" }}>
+        <div style={{ fontSize: "9px", fontFamily: "Space Grotesk", color: C.outlineVar, letterSpacing: "0.2em", textTransform: "uppercase" }}>
+          Auth Token: GSV_CRYPTO_LIVE
+        </div>
+        <div style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: C.outlineVar }}>
+          KERNEL V2.4.0 · GODSVIEW
         </div>
       </div>
     </div>
