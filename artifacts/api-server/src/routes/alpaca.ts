@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { getBars, getBarsHistorical, getLatestBar, getLatestTrade, getAccount, getPositions, hasValidTradingKey, isBrokerKey, type AlpacaBar, type AlpacaTimeframe } from "../lib/alpaca";
+import { alpacaStream, type TickListener } from "../lib/alpaca_stream";
 import {
   buildRecallFeatures,
   detectAbsorptionReversal,
@@ -81,6 +82,37 @@ router.get("/alpaca/candles", async (req, res) => {
     req.log.error({ err }, "Failed to fetch candles");
     res.status(500).json({ error: "candle_fetch_failed", message: String(err) });
   }
+});
+
+// ─── GET /api/alpaca/stream — SSE real-time price stream (WebSocket-backed) ───
+// Uses AlpacaStreamManager: tries Alpaca WebSocket first, falls back to 500ms REST poll.
+// Start stream manager once on module load
+alpacaStream.start();
+
+router.get("/alpaca/stream", (req, res) => {
+  const symbol = String(req.query.symbol ?? "BTCUSD");
+  const timeframe = String(req.query.timeframe ?? "5Min");
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+  res.write(`: connected\n\n`);
+
+  const listener: TickListener = (payload) => {
+    try { res.write(`data: ${JSON.stringify(payload)}\n\n`); } catch { /* gone */ }
+  };
+
+  alpacaStream.subscribe(symbol, timeframe, listener);
+
+  // Heartbeat every 15s to keep proxies alive
+  const heartbeat = setInterval(() => { try { res.write(": ping\n\n"); } catch { /* gone */ } }, 15_000);
+
+  req.on("close", () => {
+    clearInterval(heartbeat);
+    alpacaStream.unsubscribe(symbol, timeframe, listener);
+  });
 });
 
 // ─── GET /api/alpaca/ticker — live prices for multiple symbols ────────────────
