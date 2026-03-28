@@ -1,37 +1,33 @@
-// Alpaca client supporting both Trading API (PK/AK keys) and Broker API (CK keys)
-// Broker API uses Basic auth; Trading API uses APCA header auth
+// Alpaca market data client
+// Crypto: free endpoint, no auth required (v1beta3/crypto/us/bars)
+// Stocks: requires Trading API keys (PK/AK prefix) with APCA header auth
+// Broker keys (CK prefix) do NOT have market data access
 
-if (!process.env.ALPACA_API_KEY || !process.env.ALPACA_SECRET_KEY) {
-  throw new Error("ALPACA_API_KEY and ALPACA_SECRET_KEY must be set");
-}
+const KEY_ID = process.env.ALPACA_API_KEY ?? "";
+const SECRET_KEY = process.env.ALPACA_SECRET_KEY ?? "";
 
-const KEY_ID = process.env.ALPACA_API_KEY!;
-const SECRET_KEY = process.env.ALPACA_SECRET_KEY!;
-
-// CK = Broker API key, PK = Paper Trading, AK = Live Trading
 const isBrokerKey = KEY_ID.startsWith("CK");
 const isPaperKey = KEY_ID.startsWith("PK");
+const hasValidTradingKey = KEY_ID.startsWith("PK") || KEY_ID.startsWith("AK");
 
-const BROKER_BASE = "https://broker-api.alpaca.markets";
-const LIVE_BASE = "https://api.alpaca.markets";
 const PAPER_BASE = "https://paper-api.alpaca.markets";
+const LIVE_BASE = "https://api.alpaca.markets";
 const DATA_BASE = "https://data.alpaca.markets";
+const CRYPTO_BASE = "https://data.alpaca.markets/v1beta3/crypto/us";
 
-function getTradeBase() {
-  if (isBrokerKey) return BROKER_BASE;
-  if (isPaperKey) return PAPER_BASE;
-  return LIVE_BASE;
+// Crypto symbol set (Alpaca uses slash format: BTC/USD)
+const CRYPTO_SYMBOLS = new Set(["BTCUSD", "ETHUSD", "BTC/USD", "ETH/USD"]);
+function isCryptoSymbol(symbol: string) {
+  return CRYPTO_SYMBOLS.has(symbol) || symbol.includes("/");
+}
+function toCryptoSlash(symbol: string) {
+  // Convert BTCUSD → BTC/USD
+  if (symbol === "BTCUSD") return "BTC/USD";
+  if (symbol === "ETHUSD") return "ETH/USD";
+  return symbol;
 }
 
-function getHeaders(): Record<string, string> {
-  if (isBrokerKey) {
-    const encoded = Buffer.from(`${KEY_ID}:${SECRET_KEY}`).toString("base64");
-    return {
-      Authorization: `Basic ${encoded}`,
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    };
-  }
+function tradingHeaders(): Record<string, string> {
   return {
     "APCA-API-KEY-ID": KEY_ID,
     "APCA-API-SECRET-KEY": SECRET_KEY,
@@ -40,11 +36,11 @@ function getHeaders(): Record<string, string> {
   };
 }
 
-async function alpacaFetch(url: string, options: RequestInit = {}): Promise<unknown> {
-  const resp = await fetch(url, {
-    ...options,
-    headers: { ...getHeaders(), ...(options.headers as Record<string, string> ?? {}) },
-  });
+async function alpacaFetch(url: string, withAuth = true): Promise<unknown> {
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (withAuth && KEY_ID) Object.assign(headers, tradingHeaders());
+
+  const resp = await fetch(url, { headers });
   if (!resp.ok) {
     const body = await resp.text();
     throw new Error(`Alpaca API ${resp.status}: ${body}`);
@@ -53,7 +49,7 @@ async function alpacaFetch(url: string, options: RequestInit = {}): Promise<unkn
 }
 
 export type AlpacaBar = {
-  t: string;   // ISO timestamp
+  t: string;
   o: number;
   h: number;
   l: number;
@@ -61,7 +57,6 @@ export type AlpacaBar = {
   v: number;
   vw?: number;
   n?: number;
-  // Normalised aliases (populated after fetch)
   Timestamp: string;
   Open: number;
   High: number;
@@ -72,6 +67,15 @@ export type AlpacaBar = {
 };
 
 export type AlpacaTimeframe = "1Min" | "5Min" | "15Min" | "1Hour" | "1Day";
+
+// Alpaca timeframe → crypto API timeframe string
+const TF_MAP: Record<AlpacaTimeframe, string> = {
+  "1Min": "1Min",
+  "5Min": "5Min",
+  "15Min": "15Min",
+  "1Hour": "1Hour",
+  "1Day": "1Day",
+};
 
 function normaliseBar(b: Record<string, unknown>): AlpacaBar {
   return {
@@ -100,9 +104,36 @@ export async function getBars(
   start?: string,
   end?: string
 ): Promise<AlpacaBar[]> {
+  const safeLimit = Math.min(limit, 1000);
+
+  if (isCryptoSymbol(symbol)) {
+    // Free crypto endpoint — no auth needed
+    const cryptoSymbol = toCryptoSlash(symbol);
+    const params = new URLSearchParams({
+      symbols: cryptoSymbol,
+      timeframe: TF_MAP[timeframe],
+      limit: String(safeLimit),
+    });
+    if (start) params.set("start", start);
+    if (end) params.set("end", end);
+
+    const url = `${CRYPTO_BASE}/bars?${params}`;
+    const data = await alpacaFetch(url, false) as { bars: Record<string, Record<string, unknown>[]> };
+    const barsArr = data.bars?.[cryptoSymbol] ?? [];
+    return barsArr.map(normaliseBar);
+  }
+
+  // Stock endpoint — requires valid Trading API keys
+  if (!hasValidTradingKey) {
+    throw new Error(
+      "Stock market data requires Trading API keys (starting with PK or AK). " +
+      "Please generate keys from app.alpaca.markets → API Keys."
+    );
+  }
+
   const params = new URLSearchParams({
     timeframe,
-    limit: String(Math.min(limit, 1000)),
+    limit: String(safeLimit),
     adjustment: "raw",
     feed: "iex",
   });
@@ -110,14 +141,24 @@ export async function getBars(
   if (end) params.set("end", end);
 
   const url = `${DATA_BASE}/v2/stocks/${symbol}/bars?${params}`;
-  const data = await alpacaFetch(url) as { bars: Record<string, unknown>[] };
+  const data = await alpacaFetch(url, true) as { bars: Record<string, unknown>[] };
   return (data.bars ?? []).map(normaliseBar);
 }
 
 export async function getLatestBar(symbol: string): Promise<AlpacaBar | null> {
   try {
+    if (isCryptoSymbol(symbol)) {
+      const cryptoSymbol = toCryptoSlash(symbol);
+      const params = new URLSearchParams({ symbols: cryptoSymbol });
+      const url = `${CRYPTO_BASE}/latest/bars?${params}`;
+      const data = await alpacaFetch(url, false) as { bars: Record<string, Record<string, unknown>> };
+      const bar = data.bars?.[cryptoSymbol];
+      return bar ? normaliseBar(bar) : null;
+    }
+
+    if (!hasValidTradingKey) return null;
     const url = `${DATA_BASE}/v2/stocks/${symbol}/bars/latest?feed=iex`;
-    const data = await alpacaFetch(url) as { bar: Record<string, unknown> };
+    const data = await alpacaFetch(url, true) as { bar: Record<string, unknown> };
     return data.bar ? normaliseBar(data.bar) : null;
   } catch {
     return null;
@@ -125,19 +166,25 @@ export async function getLatestBar(symbol: string): Promise<AlpacaBar | null> {
 }
 
 export async function getAccount(): Promise<unknown> {
-  const base = getTradeBase();
-  if (isBrokerKey) {
-    return alpacaFetch(`${base}/v1/accounts`);
+  if (!KEY_ID) {
+    return { error: "No API key configured" };
   }
-  return alpacaFetch(`${base}/v2/account`);
+  if (isBrokerKey) {
+    return {
+      error: "broker_key",
+      message: "Broker API keys (CK...) do not have trading account access. Please generate Trading API keys from app.alpaca.markets.",
+    };
+  }
+  const base = isPaperKey ? PAPER_BASE : LIVE_BASE;
+  return alpacaFetch(`${base}/v2/account`, true);
 }
 
 export async function getPositions(): Promise<unknown> {
-  const base = getTradeBase();
-  if (isBrokerKey) {
-    return { message: "Positions require a specific account_id with Broker API" };
+  if (!hasValidTradingKey) {
+    return { error: "Trading API keys required for positions" };
   }
-  return alpacaFetch(`${base}/v2/positions`);
+  const base = isPaperKey ? PAPER_BASE : LIVE_BASE;
+  return alpacaFetch(`${base}/v2/positions`, true);
 }
 
-export { isBrokerKey, isPaperKey };
+export { isBrokerKey, isPaperKey, hasValidTradingKey };

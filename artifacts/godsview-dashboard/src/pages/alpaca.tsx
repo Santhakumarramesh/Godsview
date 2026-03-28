@@ -74,7 +74,14 @@ function fmt(n: number, d = 3) {
   return n.toFixed(d);
 }
 
-const INSTRUMENTS = ["MES", "MNQ", "BTCUSDT", "ETHUSDT"];
+// Crypto instruments work with free Alpaca endpoint (no Trading API key needed)
+// Stock instruments (MES→SPY, MNQ→QQQ) require Trading API keys (PK/AK prefix)
+const INSTRUMENTS = [
+  { value: "BTCUSDT", label: "BTC/USD (Crypto · Live)", live: true },
+  { value: "ETHUSDT", label: "ETH/USD (Crypto · Live)", live: true },
+  { value: "MES", label: "MES → SPY (Needs Trading Key)", live: false },
+  { value: "MNQ", label: "MNQ → QQQ (Needs Trading Key)", live: false },
+];
 const SETUPS = ["absorption_reversal", "sweep_reclaim", "continuation_pullback"];
 
 function QualityBar({ value }: { value: number }) {
@@ -99,7 +106,7 @@ function Badge({ label, color }: { label: string; color: string }) {
 }
 
 export default function AlpacaPage() {
-  const [instrument, setInstrument] = useState("MES");
+  const [instrument, setInstrument] = useState("BTCUSDT");
   const [selectedSetup, setSelectedSetup] = useState("absorption_reversal");
   const [backtestDays, setBacktestDays] = useState(3);
   const [activeTab, setActiveTab] = useState<"live" | "backtest" | "accuracy">("live");
@@ -143,9 +150,12 @@ export default function AlpacaPage() {
             Live recall engine · Setup detection · Walk-forward accuracy learning
           </p>
         </div>
-        <div className="flex items-center gap-2 text-xs bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-3 py-1.5 rounded-full">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-          Alpaca Connected
+        <div className="flex flex-col items-end gap-1">
+          <div className="flex items-center gap-2 text-xs bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-3 py-1.5 rounded-full">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            Crypto Data Live
+          </div>
+          <span className="text-xs text-amber-400/80">Stocks: Trading API key needed</span>
         </div>
       </div>
 
@@ -159,7 +169,7 @@ export default function AlpacaPage() {
             className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground"
           >
             {INSTRUMENTS.map((i) => (
-              <option key={i} value={i}>{i}</option>
+              <option key={i.value} value={i.value}>{i.label}</option>
             ))}
           </select>
         </div>
