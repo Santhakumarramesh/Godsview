@@ -13,6 +13,13 @@ const C = {
   bg: "#0e0e0f",
 };
 
+function withOperatorToken(headers: Record<string, string>): Record<string, string> {
+  if (typeof window === "undefined") return headers;
+  const token = window.localStorage.getItem("godsview_operator_token")?.trim();
+  if (!token) return headers;
+  return { ...headers, "x-godsview-token": token };
+}
+
 function μLabel({ children }: { children: React.ReactNode }) {
   return (
     <span style={{ fontSize: "8px", fontFamily: "Space Grotesk", letterSpacing: "0.2em", textTransform: "uppercase", color: C.outline }}>
@@ -23,6 +30,8 @@ function μLabel({ children }: { children: React.ReactNode }) {
 
 type FullAccount = {
   account_number?: string;
+  is_paper?: boolean;
+  mode?: "paper" | "live";
   status?: string;
   crypto_status?: string;
   equity?: string;
@@ -65,7 +74,7 @@ export default function ExecutionPanel({
   const cash = parseFloat(account?.cash ?? "0");
 
   const isConnected = !!account && !account.error;
-  const isPaper = account?.account_number?.startsWith("PA");
+  const isPaper = account?.is_paper ?? account?.account_number?.startsWith("PA");
 
   // ATR-based position size
   const calcQty = (() => {
@@ -100,11 +109,6 @@ export default function ExecutionPanel({
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined" style={{ fontSize: "15px", color: C.secondary }}>bolt</span>
             <μLabel>Execution Engine</μLabel>
-            {account?.account_number && (
-              <span style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: C.outlineVar }}>
-                #{account.account_number}
-              </span>
-            )}
           </div>
           <div className="flex items-center gap-3">
             {account?.crypto_status === "ACTIVE" && (
@@ -324,7 +328,9 @@ function OrderTicket({
       if (tpPrice) body.take_profit_price = parseFloat(tpPrice);
 
       const r = await fetch("/api/alpaca/orders", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+        method: "POST",
+        headers: withOperatorToken({ "Content-Type": "application/json" }),
+        body: JSON.stringify(body),
       });
       const data = await r.json();
       if (!r.ok || data.error) throw new Error(data.message ?? "Order failed");

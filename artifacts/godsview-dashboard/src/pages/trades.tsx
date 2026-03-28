@@ -18,6 +18,13 @@ const C = {
   bg: "#0e0e0f",
 };
 
+function operatorHeaders(): HeadersInit | undefined {
+  if (typeof window === "undefined") return undefined;
+  const token = window.localStorage.getItem("godsview_operator_token")?.trim();
+  if (!token) return undefined;
+  return { "x-godsview-token": token };
+}
+
 function μLabel({ children }: { children: React.ReactNode }) {
   return <span style={{ fontSize: "8px", fontFamily: "Space Grotesk", letterSpacing: "0.2em", textTransform: "uppercase", color: C.outline }}>{children}</span>;
 }
@@ -182,7 +189,16 @@ function JournalTab() {
 
 // ─── Live Account Bar ─────────────────────────────────────────────────────────
 
-type AccountInfo = { equity?: string; buying_power?: string; cash?: string; account_number?: string; status?: string; error?: string };
+type AccountInfo = {
+  equity?: string;
+  buying_power?: string;
+  cash?: string;
+  account_number?: string;
+  is_paper?: boolean;
+  mode?: "paper" | "live";
+  status?: string;
+  error?: string;
+};
 
 function AccountBar() {
   const [acct, setAcct] = useState<AccountInfo | null>(null);
@@ -211,14 +227,14 @@ function AccountBar() {
 
   const equity = parseFloat(acct.equity ?? "0");
   const bp = parseFloat(acct.buying_power ?? "0");
-  const isPaper = acct.account_number?.startsWith("PA");
+  const isPaper = acct.is_paper ?? acct.account_number?.startsWith("PA");
 
   return (
     <div className="flex items-center gap-6 px-5 py-3 rounded-lg" style={{ backgroundColor: "#1a191b", border: "1px solid rgba(72,72,73,0.25)" }}>
       <div className="flex items-center gap-2">
         <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: isPaper ? "#fbbf24" : "#9cff93" }} />
         <span style={{ fontSize: "8px", fontFamily: "Space Grotesk", fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", color: isPaper ? "#fbbf24" : "#9cff93" }}>
-          {isPaper ? "Paper" : "Live"} · {acct.account_number}
+          {isPaper ? "Paper" : "Live"}
         </span>
       </div>
       <div className="w-px h-4" style={{ backgroundColor: "rgba(72,72,73,0.4)" }} />
@@ -267,7 +283,7 @@ function PositionsTab() {
     if (!confirm(`Close entire ${symbol} position?`)) return;
     setClosing(symbol);
     try {
-      await fetch(`/api/alpaca/positions/${symbol}`, { method: "DELETE" });
+      await fetch(`/api/alpaca/positions/${symbol}`, { method: "DELETE", headers: operatorHeaders() });
       await fetchPositions();
     } catch { setError("Failed to close position"); } finally { setClosing(null); }
   };
@@ -401,7 +417,7 @@ function OrdersTab() {
   const handleCancel = async (orderId: string) => {
     setCanceling(orderId);
     try {
-      await fetch(`/api/alpaca/orders/${orderId}`, { method: "DELETE" });
+      await fetch(`/api/alpaca/orders/${orderId}`, { method: "DELETE", headers: operatorHeaders() });
       await fetchOrders();
     } catch { setError("Failed to cancel order"); } finally { setCanceling(null); }
   };
@@ -410,7 +426,7 @@ function OrdersTab() {
     if (!confirm("Cancel all open orders?")) return;
     setCancelingAll(true);
     try {
-      await fetch("/api/alpaca/orders", { method: "DELETE" });
+      await fetch("/api/alpaca/orders", { method: "DELETE", headers: operatorHeaders() });
       await fetchOrders();
     } catch { setError("Failed to cancel all orders"); } finally { setCancelingAll(false); }
   };

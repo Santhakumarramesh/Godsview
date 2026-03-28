@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from "recharts";
 import TradingViewChart from "@/components/TradingViewChart";
 import SKOrderFlowPanel from "@/components/SKOrderFlowPanel";
 import ExecutionPanel from "@/components/ExecutionPanel";
@@ -52,14 +52,80 @@ type SetupResult = {
 };
 type BacktestResult = {
   instrument: string; setup_type: string; days_analyzed: number; bars_scanned: number;
+  history_range?: { start: string; end: string };
   indicator_hints?: string[];
   total_signals: number; closed_signals: number; wins: number; losses: number; win_rate: number;
   profit_factor: number; expectancy_ticks: number; expectancy_dollars: number;
   gross_pnl_dollars: number; avg_win_dollars: number; avg_loss_dollars: number;
-  avg_final_quality: number; high_conviction_signals: number; high_conviction_win_rate: number;
+  avg_final_quality: number;
+  fake_entries?: number;
+  fake_entry_rate?: number;
+  fake_entry_loss_rate?: number;
+  claude_reviewed_signals?: number;
+  claude_win_rate?: number;
+  high_conviction_signals: number; high_conviction_win_rate: number;
   equity_curve: Array<{ date: string; pnl: number; equity: number }>;
   by_regime: Array<{ regime: string; total: number; wins: number; win_rate: number }>;
-  results: Array<{ bar_time: string; entry_price: number; direction: string; structure_score: number; order_flow_score: number; recall_score: number; ml_probability: number; final_quality: number; meets_threshold: boolean; regime: string; outcome: string; tp_ticks: number; sl_ticks: number; pnl_dollars: number }>;
+  results: Array<{
+    bar_time: string;
+    entry_price: number;
+    direction: string;
+    structure_score: number;
+    order_flow_score: number;
+    recall_score: number;
+    ml_probability: number;
+    final_quality: number;
+    final_quality_with_claude?: number;
+    claude_verdict?: "APPROVED" | "VETOED" | "CAUTION";
+    claude_score?: number;
+    meets_threshold: boolean;
+    regime: string;
+    outcome: string;
+    tp_ticks: number;
+    sl_ticks: number;
+    pnl_dollars: number;
+    is_fake_entry?: boolean;
+    fake_entry_reason?: string | null;
+    adverse_move_pct?: number;
+  }>;
+  backtest_trace?: {
+    bars: Array<{ time: number; ts: string; open: number; high: number; low: number; close: number; volume: number }>;
+    order_blocks: Array<{ time: number; ts: string; side: "bullish" | "bearish"; low: number; high: number; mid: number; strength: number }>;
+    positions: Array<{
+      entry_time: string;
+      exit_time: string | null;
+      direction: "long" | "short";
+      entry_price: number;
+      stop_loss: number;
+      take_profit: number;
+      outcome: "win" | "loss" | "open";
+      pnl_dollars: number;
+      bars_to_outcome: number;
+      is_fake_entry: boolean;
+      fake_entry_reason: string | null;
+      claude_verdict?: "APPROVED" | "VETOED" | "CAUTION";
+      claude_score?: number;
+      claude_confidence?: number;
+      final_quality: number;
+      final_quality_with_claude?: number;
+      regime: string;
+      ml_probability: number;
+    }>;
+    fake_entries: Array<{ entry_time: string; direction: "long" | "short"; entry_price: number; fake_entry_reason: string | null }>;
+    claude_reviews: Array<{
+      result_index: number;
+      entry_time: string;
+      direction: "long" | "short";
+      verdict: "APPROVED" | "VETOED" | "CAUTION";
+      confidence: number;
+      claude_score: number;
+      reasoning: string;
+      key_factors: string[];
+      latency_ms: number;
+    }>;
+    claude_reviewed_signals: number;
+    claude_backtest_enabled: boolean;
+  };
 };
 type AccuracyResult = {
   total_records: number; closed: number; wins: number; losses: number; win_rate: number; profit_factor: number;
@@ -227,7 +293,14 @@ export default function AlpacaPage() {
       fetch(`${BASE}/alpaca/backtest`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ instrument: analysisInstrument, setup_type: selectedSetup, days: backtestDays, indicator_hints: tvStudies }),
+        body: JSON.stringify({
+          instrument: analysisInstrument,
+          setup_type: selectedSetup,
+          days: backtestDays,
+          indicator_hints: tvStudies,
+          include_claude_history: true,
+          claude_history_max: 40,
+        }),
       }).then((r) => {
         refetchAccuracy();
         return r.json();
@@ -263,6 +336,48 @@ export default function AlpacaPage() {
     ((analyzeData?.recall_features as Record<string, any> | undefined)?.indicator_hints as string[] | undefined) ??
     []
   ) as string[];
+  const traceOverlay = useMemo(() => {
+    const trace = btData?.backtest_trace;
+    const bars = trace?.bars ?? [];
+    const viewBars = bars.slice(-600);
+    const chartBars = viewBars.map((bar, idx) => ({
+      ...bar,
+      idx,
+      label: new Date(bar.ts).toLocaleString([], {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    }));
+    const indexByTs = new Map<string, number>();
+    for (const bar of chartBars) indexByTs.set(bar.ts, bar.idx);
+
+    const longEntries: Array<{ idx: number; price: number; label: string }> = [];
+    const shortEntries: Array<{ idx: number; price: number; label: string }> = [];
+    const fakeEntries: Array<{ idx: number; price: number; label: string }> = [];
+    const bullishBlocks: Array<{ idx: number; price: number; strength: number }> = [];
+    const bearishBlocks: Array<{ idx: number; price: number; strength: number }> = [];
+
+    for (const position of trace?.positions ?? []) {
+      const idx = indexByTs.get(position.entry_time);
+      if (idx === undefined) continue;
+      const point = { idx, price: position.entry_price, label: position.entry_time };
+      if (position.direction === "long") longEntries.push(point);
+      else shortEntries.push(point);
+      if (position.is_fake_entry) fakeEntries.push(point);
+    }
+
+    for (const block of trace?.order_blocks ?? []) {
+      const idx = indexByTs.get(block.ts);
+      if (idx === undefined) continue;
+      const point = { idx, price: block.mid, strength: block.strength };
+      if (block.side === "bullish") bullishBlocks.push(point);
+      else bearishBlocks.push(point);
+    }
+
+    return { chartBars, longEntries, shortEntries, fakeEntries, bullishBlocks, bearishBlocks };
+  }, [btData]);
 
   const TABS: { id: Tab; label: string; icon: string }[] = [
     { id: "live",    label: "Live Analysis",      icon: "sensors" },
@@ -808,6 +923,8 @@ export default function AlpacaPage() {
                   { label: "Avg Win", value: `$${btData.avg_win_dollars.toFixed(0)}`, sub: "Per winning trade", accent: C.primary },
                   { label: "Avg Loss", value: `-$${btData.avg_loss_dollars.toFixed(0)}`, sub: "Per losing trade", accent: C.tertiary },
                   { label: "Total Signals", value: String(btData.total_signals), sub: `${btData.days_analyzed}d · ${btData.bars_scanned} bars`, accent: "#ffffff" },
+                  { label: "Fake Entry Rate", value: `${((btData.fake_entry_rate ?? 0) * 100).toFixed(1)}%`, sub: `${btData.fake_entries ?? 0} flagged`, accent: (btData.fake_entry_rate ?? 0) < 0.2 ? C.primary : "#fbbf24" },
+                  { label: "Claude Reviewed", value: String(btData.claude_reviewed_signals ?? 0), sub: `WR ${((btData.claude_win_rate ?? 0) * 100).toFixed(1)}%`, accent: (btData.claude_win_rate ?? 0) > 0.55 ? C.primary : C.secondary },
                 ].map((s, i) => (
                   <div key={i} className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
                     <MicroLabel>{s.label}</MicroLabel>
@@ -816,6 +933,21 @@ export default function AlpacaPage() {
                   </div>
                 ))}
               </div>
+
+              {btData.history_range && (
+                <div className="rounded p-3 flex flex-wrap items-center justify-between gap-2" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined" style={{ fontSize: "13px", color: C.secondary }}>schedule</span>
+                    <MicroLabel>Historical Window</MicroLabel>
+                  </div>
+                  <span style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: C.muted }}>
+                    {new Date(btData.history_range.start).toLocaleDateString()} → {new Date(btData.history_range.end).toLocaleDateString()}
+                  </span>
+                  <span style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: C.outlineVar }}>
+                    {btData.backtest_trace?.bars?.length ?? 0} bars · {btData.backtest_trace?.order_blocks?.length ?? 0} order blocks
+                  </span>
+                </div>
+              )}
 
               {/* Equity Curve Sparkline */}
               {btData.equity_curve && btData.equity_curve.length > 1 && (
@@ -845,6 +977,65 @@ export default function AlpacaPage() {
                         <Area type="monotone" dataKey="equity" stroke={btData.gross_pnl_dollars >= 0 ? "#9cff93" : "#ff7162"} strokeWidth={1.5} fillOpacity={1} fill="url(#btEqGrad)" />
                       </AreaChart>
                     </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
+
+              {traceOverlay.chartBars.length > 20 && (
+                <div className="rounded p-5 space-y-3" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined" style={{ fontSize: "14px", color: C.secondary }}>insights</span>
+                      <MicroLabel>Backtest Trace · Price + Order Blocks + Positions + Fake Entries</MicroLabel>
+                    </div>
+                    <div className="flex items-center gap-3" style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: C.outlineVar }}>
+                      <span>{traceOverlay.chartBars.length} plotted bars</span>
+                      <span>{traceOverlay.fakeEntries.length} fake entries</span>
+                      <span>{btData.backtest_trace?.claude_reviews?.length ?? 0} Claude reviews</span>
+                    </div>
+                  </div>
+                  <div style={{ height: "300px" }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <ComposedChart data={traceOverlay.chartBars} margin={{ top: 6, right: 6, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="2 4" stroke="rgba(72,72,73,0.3)" vertical={false} />
+                        <XAxis
+                          type="number"
+                          dataKey="idx"
+                          tickCount={8}
+                          stroke="#484849"
+                          fontSize={8}
+                          tickLine={false}
+                          axisLine={false}
+                          fontFamily="Space Grotesk"
+                          tickFormatter={(value) => traceOverlay.chartBars[Math.round(Number(value))]?.label?.slice(0, 12) ?? ""}
+                        />
+                        <YAxis
+                          stroke="#484849"
+                          fontSize={8}
+                          tickLine={false}
+                          axisLine={false}
+                          fontFamily="JetBrains Mono, monospace"
+                        />
+                        <Tooltip
+                          contentStyle={{ backgroundColor: "#201f21", borderColor: "rgba(72,72,73,0.4)", borderRadius: "4px", fontSize: "10px" }}
+                          labelFormatter={(value) => traceOverlay.chartBars[Math.round(Number(value))]?.label ?? String(value)}
+                          formatter={(value: number | string, name) => [typeof value === "number" ? value.toFixed(2) : value, name]}
+                        />
+                        <Line type="monotone" dataKey="close" stroke="#cfd3d8" strokeWidth={1.3} dot={false} name="Price" />
+                        <Scatter data={traceOverlay.longEntries} fill={C.primary} name="Long Entry" />
+                        <Scatter data={traceOverlay.shortEntries} fill={C.tertiary} name="Short Entry" />
+                        <Scatter data={traceOverlay.fakeEntries} fill="#fbbf24" name="Fake Entry" />
+                        <Scatter data={traceOverlay.bullishBlocks} fill="#34d399" name="Bullish Order Block" />
+                        <Scatter data={traceOverlay.bearishBlocks} fill="#fb7185" name="Bearish Order Block" />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="flex flex-wrap gap-3" style={{ fontSize: "8px", fontFamily: "Space Grotesk", color: C.outlineVar, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                    <span style={{ color: C.primary }}>Long entries</span>
+                    <span style={{ color: C.tertiary }}>Short entries</span>
+                    <span style={{ color: "#fbbf24" }}>Fake entries</span>
+                    <span style={{ color: "#34d399" }}>Bullish order blocks</span>
+                    <span style={{ color: "#fb7185" }}>Bearish order blocks</span>
                   </div>
                 </div>
               )}
@@ -888,7 +1079,7 @@ export default function AlpacaPage() {
                   <table className="w-full">
                     <thead>
                       <tr style={{ borderBottom: "1px solid rgba(72,72,73,0.2)" }}>
-                        {["Time", "Dir", "Entry", "ML Prob", "Quality", "Regime", "P&L $", "Outcome"].map((h) => (
+                        {["Time", "Dir", "Entry", "ML Prob", "Quality", "Regime", "Fake", "Claude", "P&L $", "Outcome"].map((h) => (
                           <th key={h} className="px-4 py-2 text-left" style={{ fontSize: "8px", fontFamily: "Space Grotesk", letterSpacing: "0.15em", textTransform: "uppercase", color: C.outlineVar }}>{h}</th>
                         ))}
                       </tr>
@@ -900,8 +1091,28 @@ export default function AlpacaPage() {
                           <td className="px-4 py-2"><span style={{ fontSize: "9px", fontFamily: "Space Grotesk", fontWeight: 700, color: r.direction === "long" ? C.primary : C.tertiary }}>{r.direction.toUpperCase()}</span></td>
                           <td className="px-4 py-2" style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace" }}>{r.entry_price > 1000 ? r.entry_price.toFixed(2) : r.entry_price.toFixed(4)}</td>
                           <td className="px-4 py-2" style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: (r.ml_probability ?? 0) > 0.6 ? C.primary : C.muted }}>{r.ml_probability ? `${(r.ml_probability * 100).toFixed(0)}%` : "—"}</td>
-                          <td className="px-4 py-2" style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: r.final_quality > 0.65 ? C.primary : C.muted }}>{(r.final_quality * 100).toFixed(0)}%</td>
+                          <td className="px-4 py-2" style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: (r.final_quality_with_claude ?? r.final_quality) > 0.65 ? C.primary : C.muted }}>
+                            {((r.final_quality_with_claude ?? r.final_quality) * 100).toFixed(0)}%
+                          </td>
                           <td className="px-4 py-2"><RegimeBadge regime={r.regime} /></td>
+                          <td className="px-4 py-2">
+                            {r.is_fake_entry ? (
+                              <span className="px-2 py-0.5 rounded" style={{ fontSize: "8px", fontFamily: "Space Grotesk", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", backgroundColor: "rgba(251,191,36,0.12)", color: "#fbbf24", border: "1px solid rgba(251,191,36,0.2)" }}>
+                                Fake
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: "9px", color: C.outlineVar }}>—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2">
+                            {r.claude_verdict ? (
+                              <span style={{ fontSize: "8px", fontFamily: "Space Grotesk", fontWeight: 700, color: r.claude_verdict === "APPROVED" ? C.primary : r.claude_verdict === "VETOED" ? C.tertiary : "#fbbf24" }}>
+                                {r.claude_verdict}
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: "9px", color: C.outlineVar }}>—</span>
+                            )}
+                          </td>
                           <td className="px-4 py-2 font-bold" style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: (r.pnl_dollars ?? 0) > 0 ? C.primary : (r.pnl_dollars ?? 0) < 0 ? C.tertiary : C.muted }}>
                             {r.pnl_dollars != null ? `${r.pnl_dollars >= 0 ? "+" : ""}$${r.pnl_dollars.toFixed(0)}` : "—"}
                           </td>

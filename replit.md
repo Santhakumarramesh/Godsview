@@ -133,6 +133,13 @@ The execution stack enables real order placement, live position monitoring, and 
 - `DELETE /api/alpaca/positions/:symbol` — close a position
 - `GET /api/alpaca/size` — position size calculator endpoint
 
+**Execution security controls (server env):**
+- `GODSVIEW_ENABLE_LIVE_TRADING=true` is required for order/position write routes.
+- `GODSVIEW_OPERATOR_TOKEN=<secret>` is required for write routes when trading is enabled.
+- Provide token via `x-godsview-token` header (or `Authorization: Bearer <token>`).
+- Dashboard write actions read token from browser localStorage key `godsview_operator_token`.
+- `CORS_ORIGIN=https://your-frontend.example.com` (comma-separated list supported) restricts browser cross-origin access.
+
 **ExecutionPanel (`artifacts/godsview-dashboard/src/components/ExecutionPanel.tsx`):**
 - Account equity, buying power, cash stats (live from Alpaca)
 - Signal context display (entry/SL/TP pre-filled from pipeline output)
@@ -189,6 +196,25 @@ The execution stack enables real order placement, live position monitoring, and 
 | 6 | Per-candle bookmap metadata | Pending |
 | 7 | Replay mode | Pending |
 | 8 | Polish & production | Pending |
+
+## Phase 9 — Historical Intelligence Upgrade (Completed)
+
+- Backtest now fetches paginated full-history bars via `getBarsHistorical` (1m + 5m), not just a 1000-bar snapshot.
+- Added `backtest_trace` payload in `POST /api/alpaca/backtest` with:
+  - full bar trace (`bars`)
+  - detected order blocks (`order_blocks`)
+  - position trace (`positions`)
+  - fake entry subset (`fake_entries`)
+  - Claude historical reviews (`claude_reviews`)
+- Added fake-entry labeling and fake-entry rate metrics (`fake_entry_rate`, `fake_entry_loss_rate`) to improve training feedback quality.
+- Added optional Claude backtest review controls (`include_claude_history`, `claude_history_max`) and response metrics (`claude_reviewed_signals`, `claude_win_rate`).
+
+## Phase 10 — Dashboard Core Robustness (Completed)
+
+- Dashboard now reads `/api/system/diagnostics` continuously and computes a Core Robustness score.
+- Added degraded/fallback UX on partial data failures (`Partial Data Mode` + live fallback polling).
+- Added robust System Core summary panel (live/degraded/offline layer counts + top remediation action).
+- Upgraded `/api/system/status` layer statuses from static-all-active to dynamic health states with key/Claude checks.
 
 ## Phase 1 & 2 Frontend Modules
 

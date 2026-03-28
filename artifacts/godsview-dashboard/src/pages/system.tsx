@@ -251,7 +251,7 @@ export default function System() {
       {/* Footer */}
       <div className="pt-6 border-t flex items-center justify-between" style={{ borderColor: "rgba(72,72,73,0.15)" }}>
         <div style={{ fontSize: "9px", fontFamily: "Space Grotesk", color: C.outlineVar, letterSpacing: "0.2em", textTransform: "uppercase" }}>
-          Auth Token: GSV_CRYPTO_LIVE
+          Auth Profile: Redacted
         </div>
         <div style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: C.outlineVar }}>
           KERNEL V2.4.0 · GODSVIEW

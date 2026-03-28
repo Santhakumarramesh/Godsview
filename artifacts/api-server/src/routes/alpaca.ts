@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { claudeVeto, isClaudeAvailable, type ClaudeVetoResult } from "../lib/claude";
+import { claudeVeto, isClaudeAvailable, type ClaudeVetoResult, type SetupContext } from "../lib/claude";
 import { getBars, getBarsHistorical, getLatestBar, getLatestTrade, getAccount, getPositions, hasValidTradingKey, isBrokerKey, placeOrder, getOrders, cancelOrder, cancelAllOrders, closePosition, getTypedPositions, calcPositionSize, type AlpacaBar, type AlpacaTimeframe, type PlaceOrderRequest } from "../lib/alpaca";
 import { alpacaStream, type TickListener } from "../lib/alpaca_stream";
 import {
@@ -139,6 +139,160 @@ function ensureTradingWriteAccess(req: Request, res: Response): boolean {
   }
 
   return true;
+}
+
+type BacktestTraceBar = {
+  time: number;
+  ts: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+};
+
+type OrderBlockTrace = {
+  time: number;
+  ts: string;
+  side: "bullish" | "bearish";
+  low: number;
+  high: number;
+  mid: number;
+  strength: number;
+};
+
+type PositionTrace = {
+  entry_time: string;
+  exit_time: string | null;
+  direction: "long" | "short";
+  entry_price: number;
+  stop_loss: number;
+  take_profit: number;
+  outcome: "win" | "loss" | "open";
+  pnl_dollars: number;
+  bars_to_outcome: number;
+  is_fake_entry: boolean;
+  fake_entry_reason: string | null;
+  claude_verdict?: "APPROVED" | "VETOED" | "CAUTION";
+  claude_score?: number;
+  claude_confidence?: number;
+  final_quality: number;
+  final_quality_with_claude?: number;
+  regime: string;
+  ml_probability: number;
+};
+
+type ClaudeHistoricalReview = {
+  result_index: number;
+  entry_time: string;
+  direction: "long" | "short";
+  verdict: "APPROVED" | "VETOED" | "CAUTION";
+  confidence: number;
+  claude_score: number;
+  reasoning: string;
+  key_factors: string[];
+  latency_ms: number;
+};
+
+function toTraceBars(bars: AlpacaBar[]): BacktestTraceBar[] {
+  return bars.map((bar) => ({
+    time: Math.floor(new Date(bar.Timestamp).getTime() / 1000),
+    ts: bar.Timestamp,
+    open: Number(bar.Open),
+    high: Number(bar.High),
+    low: Number(bar.Low),
+    close: Number(bar.Close),
+    volume: Number(bar.Volume),
+  }));
+}
+
+function detectOrderBlocks(bars: AlpacaBar[]): OrderBlockTrace[] {
+  if (bars.length < 8) return [];
+
+  const avgVolume = bars.reduce((sum, bar) => sum + bar.Volume, 0) / bars.length;
+  const blocks: OrderBlockTrace[] = [];
+
+  for (let i = 2; i < bars.length - 2; i++) {
+    const prev = bars[i - 1];
+    const bar = bars[i];
+    const next = bars[i + 1];
+    const next2 = bars[i + 2];
+
+    const barRange = Math.max(bar.High - bar.Low, 0.000001);
+    const bodySize = Math.abs(bar.Close - bar.Open);
+    const bodyRatio = bodySize / barRange;
+    const volStrength = avgVolume > 0 ? bar.Volume / avgVolume : 1;
+
+    const isBullishBlock =
+      bar.Close < bar.Open &&
+      next.Close > next.Open &&
+      next2.Close > next2.Open &&
+      next.Close > bar.High &&
+      volStrength > 1.05;
+
+    const isBearishBlock =
+      bar.Close > bar.Open &&
+      next.Close < next.Open &&
+      next2.Close < next2.Open &&
+      next.Close < bar.Low &&
+      volStrength > 1.05;
+
+    if (!isBullishBlock && !isBearishBlock) continue;
+
+    const low = Math.min(bar.Low, prev.Low);
+    const high = Math.max(bar.High, prev.High);
+    const strength = Math.min(1, volStrength * 0.5 + (1 - bodyRatio) * 0.5);
+
+    blocks.push({
+      time: Math.floor(new Date(bar.Timestamp).getTime() / 1000),
+      ts: bar.Timestamp,
+      side: isBullishBlock ? "bullish" : "bearish",
+      low,
+      high,
+      mid: (low + high) / 2,
+      strength: Math.round(strength * 1000) / 1000,
+    });
+  }
+
+  return blocks.slice(-250);
+}
+
+function detectFakeEntry(
+  direction: "long" | "short",
+  entryPrice: number,
+  atr: number,
+  forwardBars: AlpacaBar[]
+): { isFakeEntry: boolean; reason: string | null; adverseMovePct: number } {
+  if (forwardBars.length === 0 || entryPrice <= 0) {
+    return { isFakeEntry: false, reason: null, adverseMovePct: 0 };
+  }
+
+  const earlyBars = forwardBars.slice(0, 4);
+  const adverseMoves = earlyBars.map((bar) =>
+    direction === "long"
+      ? Math.max(0, entryPrice - bar.Low)
+      : Math.max(0, bar.High - entryPrice)
+  );
+
+  const bestFavorable = earlyBars.map((bar) =>
+    direction === "long"
+      ? Math.max(0, bar.High - entryPrice)
+      : Math.max(0, entryPrice - bar.Low)
+  );
+
+  const maxAdverse = Math.max(...adverseMoves);
+  const maxFavorable = Math.max(...bestFavorable);
+  const adversePct = entryPrice > 0 ? (maxAdverse / entryPrice) * 100 : 0;
+  const atrRatio = atr > 0 ? maxAdverse / atr : 0;
+
+  if (atrRatio > 0.8 && maxFavorable < maxAdverse * 0.35) {
+    return { isFakeEntry: true, reason: "early_adverse_move", adverseMovePct: adversePct };
+  }
+  if (atrRatio > 0.55 && maxFavorable < maxAdverse * 0.25) {
+    return { isFakeEntry: true, reason: "no_follow_through", adverseMovePct: adversePct };
+  }
+
+  return { isFakeEntry: false, reason: null, adverseMovePct: adversePct };
 }
 
 // ─── In-memory cache for candle data (reduces Alpaca API calls) ──────────────
@@ -662,7 +816,6 @@ router.post("/alpaca/analyze", async (req, res) => {
       alpaca_symbol: alpacaSymbol,
       indicator_hints: recall.indicator_hints,
       analyzed_at: new Date().toISOString(),
-      analyzed_at:      new Date().toISOString(),
       regime,
       regime_label:     regime.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
       bars_analyzed:    { "1m": bars1m.length, "5m": bars5m.length, "15m": bars15m.length },
@@ -698,30 +851,83 @@ router.post("/alpaca/backtest", async (req, res) => {
     const instrument = String(req.body.instrument ?? "BTCUSDT");
     const indicatorHints = parseIndicatorHints(req.body);
     const setup: SetupType = req.body.setup_type ?? "absorption_reversal";
-    const days = Math.min(Number(req.body.days ?? 5), 30);
+    const days = Math.min(Math.max(Number(req.body.days ?? 5), 1), 60);
+    const includeClaudeHistory = String(req.body.include_claude_history ?? "true").toLowerCase() !== "false";
+    const claudeHistoryMax = Math.min(Math.max(Number(req.body.claude_history_max ?? 40), 0), 120);
+    const forwardBarsSetting = Math.min(Math.max(Number(req.body.forward_bars ?? 20), 10), 80);
     const alpacaSymbol = toAlpacaSymbol(instrument);
 
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
+    const endDate = new Date().toISOString();
+    const maxBars1m = Math.min(Math.max(Number(req.body.max_bars_1m ?? days * 24 * 60 + 500), 2000), 50000);
+    const maxBars5m = Math.min(Math.max(Number(req.body.max_bars_5m ?? days * 24 * 12 + 200), 600), 20000);
 
-    const [bars1m, bars5m] = await Promise.all([
-      getBars(alpacaSymbol, "1Min", Math.min(days * 390, 1000), startDate.toISOString()),
-      getBars(alpacaSymbol, "5Min", Math.min(days * 78, 1000), startDate.toISOString()),
+    const [bars1mRaw, bars5mRaw] = await Promise.all([
+      getBarsHistorical(alpacaSymbol, "1Min", startDate.toISOString(), endDate, maxBars1m),
+      getBarsHistorical(alpacaSymbol, "5Min", startDate.toISOString(), endDate, maxBars5m),
     ]);
+    const bars1m = [...bars1mRaw].sort((a, b) => new Date(a.Timestamp).getTime() - new Date(b.Timestamp).getTime());
+    const bars5m = [...bars5mRaw].sort((a, b) => new Date(a.Timestamp).getTime() - new Date(b.Timestamp).getTime());
 
     if (bars1m.length < 40) {
       res.status(400).json({ error: "insufficient_data", message: "Not enough historical data." });
       return;
     }
 
-    const results = [];
+    const traceBars = toTraceBars(bars1m);
+    const orderBlocks = detectOrderBlocks(bars1m);
+    const results: Array<{
+      bar_time: string;
+      entry_price: number;
+      direction: "long" | "short";
+      structure_score: number;
+      order_flow_score: number;
+      recall_score: number;
+      ml_probability: number;
+      final_quality: number;
+      final_quality_with_claude?: number;
+      claude_verdict?: "APPROVED" | "VETOED" | "CAUTION";
+      claude_score?: number;
+      claude_confidence?: number;
+      quality_threshold: number;
+      meets_threshold: boolean;
+      regime: string;
+      tp: number;
+      sl: number;
+      tp_ticks: number;
+      sl_ticks: number;
+      outcome: "win" | "loss" | "open";
+      hit_tp: boolean;
+      bars_to_outcome: number;
+      pnl_dollars: number;
+      is_fake_entry: boolean;
+      fake_entry_reason: string | null;
+      adverse_move_pct: number;
+    }> = [];
+    const positionTrace: PositionTrace[] = [];
+    const claudeCandidates: Array<{
+      result_index: number;
+      entry_time: string;
+      direction: "long" | "short";
+      context: SetupContext;
+      rank_score: number;
+    }> = [];
     const WINDOW_1M = 30;
-    const FORWARD_BARS = 20;
+    const FORWARD_BARS = forwardBarsSetting;
+    const bars1mTimes = bars1m.map((bar) => new Date(bar.Timestamp).getTime());
+    const bars5mTimes = bars5m.map((bar) => new Date(bar.Timestamp).getTime());
+    let bars5mCursor = -1;
 
     for (let i = WINDOW_1M; i < bars1m.length - FORWARD_BARS; i++) {
       const window1m = bars1m.slice(i - WINDOW_1M, i);
-      const windowTime = new Date(bars1m[i].Timestamp).getTime();
-      const closest5m = bars5m.filter((b) => new Date(b.Timestamp).getTime() <= windowTime).slice(-20);
+      const windowTime = bars1mTimes[i];
+      while (bars5mCursor + 1 < bars5mTimes.length && bars5mTimes[bars5mCursor + 1] <= windowTime) {
+        bars5mCursor++;
+      }
+      if (bars5mCursor < 4) continue;
+      const start5m = Math.max(0, bars5mCursor - 19);
+      const closest5m = bars5m.slice(start5m, bars5mCursor + 1);
       if (closest5m.length < 5) continue;
 
       const recall = buildRecallFeatures(window1m, closest5m, indicatorHints);
@@ -739,8 +945,9 @@ router.post("/alpaca/backtest", async (req, res) => {
       const atr = computeATR(window1m);
       const { takeProfit, stopLoss, tpTicks, slTicks } = computeTPSL(entryPrice, detected.direction, atr, recall.regime);
 
-      const forwardBars = bars1m.slice(i, i + FORWARD_BARS);
+      const forwardBars = bars1m.slice(i + 1, i + 1 + FORWARD_BARS);
       const outcome = checkForwardOutcome(entryPrice, detected.direction, takeProfit, stopLoss, forwardBars);
+      const fakeEntry = detectFakeEntry(detected.direction, entryPrice, atr, forwardBars);
 
       const recallScore = scoreRecall(recall, setup, detected.direction);
       const finalQuality = computeFinalQuality(detected.structure, detected.orderFlow, recallScore);
@@ -754,7 +961,10 @@ router.post("/alpaca/backtest", async (req, res) => {
         : outcome.outcome === "loss"
         ? -(slTicks * tickValue)
         : 0;
-
+      const exitIndex = outcome.outcome === "open"
+        ? null
+        : Math.min(i + Math.max(outcome.barsChecked, 1), bars1m.length - 1);
+      const resultIndex = results.length;
       results.push({
         bar_time: entryBar.Timestamp,
         entry_price: entryPrice,
@@ -775,7 +985,101 @@ router.post("/alpaca/backtest", async (req, res) => {
         hit_tp: outcome.hitTP,
         bars_to_outcome: outcome.barsChecked,
         pnl_dollars: pnlDollars,
+        is_fake_entry: fakeEntry.isFakeEntry,
+        fake_entry_reason: fakeEntry.reason,
+        adverse_move_pct: fakeEntry.adverseMovePct,
       });
+      positionTrace.push({
+        entry_time: entryBar.Timestamp,
+        exit_time: exitIndex === null ? null : bars1m[exitIndex]?.Timestamp ?? null,
+        direction: detected.direction,
+        entry_price: entryPrice,
+        stop_loss: stopLoss,
+        take_profit: takeProfit,
+        outcome: outcome.outcome,
+        pnl_dollars: pnlDollars,
+        bars_to_outcome: outcome.barsChecked,
+        is_fake_entry: fakeEntry.isFakeEntry,
+        fake_entry_reason: fakeEntry.reason,
+        final_quality: finalQuality,
+        regime: recall.regime,
+        ml_probability: mlProbability,
+      });
+      if (includeClaudeHistory) {
+        claudeCandidates.push({
+          result_index: resultIndex,
+          entry_time: entryBar.Timestamp,
+          direction: detected.direction,
+          rank_score: finalQuality * 0.65 + recallScore * 0.2 + (1 - Math.min(fakeEntry.adverseMovePct / 3, 1)) * 0.15,
+          context: {
+            instrument,
+            setup_type: setup,
+            direction: detected.direction,
+            structure_score: detected.structure,
+            order_flow_score: detected.orderFlow,
+            recall_score: recallScore,
+            final_quality: finalQuality,
+            quality_threshold: threshold,
+            entry_price: entryPrice,
+            stop_loss: stopLoss,
+            take_profit: takeProfit,
+            regime: recall.regime,
+            sk_bias: recall.sk.bias,
+            sk_in_zone: recall.sk.in_zone,
+            sk_sequence_stage: recall.sk.sequence_stage,
+            sk_correction_complete: recall.sk.correction_complete,
+            cvd_slope: recall.cvd.cvd_slope,
+            cvd_divergence: recall.cvd.cvd_divergence,
+            buy_volume_ratio: recall.cvd.buy_volume_ratio,
+            wick_ratio: recall.wick_ratio_5m,
+            momentum_1m: recall.momentum_1m,
+            trend_slope_5m: recall.trend_slope_5m,
+            atr_pct: recall.atr_pct,
+            consec_bullish: recall.consec_bullish,
+            consec_bearish: recall.consec_bearish,
+          },
+        });
+      }
+    }
+
+    const claudeReviews: ClaudeHistoricalReview[] = [];
+    if (includeClaudeHistory && claudeCandidates.length > 0 && claudeHistoryMax > 0) {
+      const reviewTargets = [...claudeCandidates]
+        .sort((a, b) => b.rank_score - a.rank_score)
+        .slice(0, claudeHistoryMax);
+      const reviewed = await Promise.all(
+        reviewTargets.map(async (candidate) => ({
+          candidate,
+          review: await claudeVeto(candidate.context),
+        }))
+      );
+      for (const item of reviewed) {
+        const target = results[item.candidate.result_index];
+        const position = positionTrace[item.candidate.result_index];
+        if (target) {
+          target.claude_verdict = item.review.verdict;
+          target.claude_score = item.review.claude_score;
+          target.claude_confidence = item.review.confidence;
+          target.final_quality_with_claude = Math.min(0.9999, target.final_quality * 0.90 + item.review.claude_score * 0.10);
+        }
+        if (position) {
+          position.claude_verdict = item.review.verdict;
+          position.claude_score = item.review.claude_score;
+          position.claude_confidence = item.review.confidence;
+          position.final_quality_with_claude = Math.min(0.9999, position.final_quality * 0.90 + item.review.claude_score * 0.10);
+        }
+        claudeReviews.push({
+          result_index: item.candidate.result_index,
+          entry_time: item.candidate.entry_time,
+          direction: item.candidate.direction,
+          verdict: item.review.verdict,
+          confidence: item.review.confidence,
+          claude_score: item.review.claude_score,
+          reasoning: item.review.reasoning,
+          key_factors: item.review.key_factors,
+          latency_ms: item.review.latency_ms,
+        });
+      }
     }
 
     if (results.length > 0) {
@@ -826,6 +1130,13 @@ router.post("/alpaca/backtest", async (req, res) => {
       cumulativePnl += r.pnl_dollars;
       return { date: r.bar_time.slice(0, 10), pnl: r.pnl_dollars, equity: Math.round(cumulativePnl * 100) / 100 };
     });
+    const fakeEntries = results.filter((r) => r.is_fake_entry);
+    const fakeClosed = fakeEntries.filter((r) => r.outcome !== "open");
+    const fakeLosses = fakeClosed.filter((r) => r.outcome === "loss");
+    const claudeReviewed = results.filter((r) => r.claude_verdict);
+    const claudeClosed = claudeReviewed.filter((r) => r.outcome !== "open");
+    const claudeWins = claudeClosed.filter((r) => r.outcome === "win");
+    const traceFakeEntries = positionTrace.filter((p) => p.is_fake_entry);
 
     const hq = results.filter((r) => r.meets_threshold);
     const hqClosed = hq.filter((r) => r.outcome !== "open");
@@ -851,6 +1162,7 @@ router.post("/alpaca/backtest", async (req, res) => {
       wins: wins.length,
       losses: losses.length,
       win_rate: winRate,
+      history_range: { start: startDate.toISOString(), end: endDate },
       profit_factor: profitFactor,
       expectancy_ticks: expectancy,
       expectancy_dollars: Math.round(expectancyDollars * 100) / 100,
@@ -858,6 +1170,11 @@ router.post("/alpaca/backtest", async (req, res) => {
       avg_win_dollars: Math.round(avgWinDollars * 100) / 100,
       avg_loss_dollars: Math.round(avgLossDollars * 100) / 100,
       avg_final_quality: avgQuality,
+      fake_entries: fakeEntries.length,
+      fake_entry_rate: results.length > 0 ? fakeEntries.length / results.length : 0,
+      fake_entry_loss_rate: fakeClosed.length > 0 ? fakeLosses.length / fakeClosed.length : 0,
+      claude_reviewed_signals: claudeReviewed.length,
+      claude_win_rate: claudeClosed.length > 0 ? claudeWins.length / claudeClosed.length : 0,
       high_conviction_signals: hq.length,
       high_conviction_win_rate: hqClosed.length > 0 ? hqWins.length / hqClosed.length : 0,
       equity_curve: equityCurve,
@@ -867,7 +1184,16 @@ router.post("/alpaca/backtest", async (req, res) => {
         wins: d.wins,
         win_rate: d.total > 0 ? d.wins / d.total : 0,
       })),
-      results: results.slice(0, 100),
+      results: results.slice(-200).reverse(),
+      backtest_trace: {
+        bars: traceBars,
+        order_blocks: orderBlocks,
+        positions: positionTrace,
+        fake_entries: traceFakeEntries,
+        claude_reviews: claudeReviews,
+        claude_reviewed_signals: claudeReviews.length,
+        claude_backtest_enabled: includeClaudeHistory,
+      },
       saved_to_db: results.length,
     });
   } catch (err) {

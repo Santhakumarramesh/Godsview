@@ -47,7 +47,7 @@ signalsRouter.get("/", async (req: Request, res: Response) => {
 
 signalsRouter.post("/", async (req: Request, res: Response) => {
   try {
-    const body = CreateSignalBody.parse(req.body);
+    const body = CreateSignalBody.parse(req.body) as any; // extra fields (direction, sk_bias, cvd_slope, etc.) used for SetupContext (Claude veto)
 
     const structure  = Number(body.structure_score   ?? 0);
     const orderFlow  = Number(body.order_flow_score  ?? 0);
@@ -163,9 +163,11 @@ signalsRouter.get("/:id", async (req: Request, res: Response) => {
       return res.status(404).json({ error: "Signal not found" });
     }
 
-    res.json({ signal });
+    return res.json({ signal });
   } catch (err) {
     logger.error({ err }, "[signals] GET /:id error");
-    res.status(500).json({ error: "Failed to fetch signal" });
+    return res.status(500).json({ error: "Failed to fetch signal" });
   }
 });
+
+export default signalsRouter;

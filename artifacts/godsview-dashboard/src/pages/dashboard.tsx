@@ -3,6 +3,7 @@ import { formatCurrency, formatNumber, formatPercent } from "@/lib/utils";
 import { format } from "date-fns";
 import { Link } from "wouter";
 import { useEffect, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 import TradingViewChart from "@/components/TradingViewChart";
 
 const C = {
@@ -26,17 +27,32 @@ function MicroLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
+type DiagnosticsLayer = { status: "live" | "degraded" | "offline"; detail: string };
+type DiagnosticsPayload = {
+  system_status: "healthy" | "partial" | "degraded";
+  timestamp: string;
+  layers: Record<string, DiagnosticsLayer>;
+  recommendations: string[];
+};
+
 export default function Dashboard() {
 
   // ── Data hooks — 5 s auto-refresh ────────────────────────────────────────
-  const { data: systemStatus, isLoading: sysLoading, refetch: refetchStatus } =
-    useGetSystemStatus({ query: { refetchInterval: 5000, staleTime: 4000 } });
+  const { data: systemStatus, isLoading: sysLoading, isError: sysError, refetch: refetchStatus } =
+    useGetSystemStatus();
 
-  const { data: performance, isLoading: perfLoading, refetch: refetchPerf } =
-    useGetPerformance({ days: 1 }, { query: { refetchInterval: 5000, staleTime: 4000 } });
+  const { data: performance, isLoading: perfLoading, isError: perfError, refetch: refetchPerf } =
+    useGetPerformance({ days: 1 });
 
-  const { data: signals, isLoading: sigLoading, refetch: refetchSigs } =
-    useGetSignals({ limit: 5 }, { query: { refetchInterval: 10000, staleTime: 9000 } });
+  const { data: signals, isLoading: sigLoading, isError: sigError, refetch: refetchSigs } =
+    useGetSignals({ limit: 5 });
+  const { data: diagnostics, isError: diagError, refetch: refetchDiag } = useQuery<DiagnosticsPayload>({
+    queryKey: ["system-diagnostics"],
+    queryFn: () => fetch("/api/system/diagnostics").then((r) => r.json()),
+    refetchInterval: 15000,
+    staleTime: 10000,
+    retry: 2,
+  });
 
   // Fallback manual interval (belt & braces)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -45,11 +61,17 @@ export default function Dashboard() {
       refetchStatus();
       refetchPerf();
       refetchSigs();
+      refetchDiag();
     }, 5000);
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [refetchStatus, refetchPerf, refetchSigs]);
+  }, [refetchStatus, refetchPerf, refetchSigs, refetchDiag]);
 
-  if (sysLoading || perfLoading || sigLoading) {
+  const isInitialLoading =
+    (sysLoading && !systemStatus) ||
+    (perfLoading && !performance) ||
+    (sigLoading && !signals);
+
+  if (isInitialLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="flex flex-col items-center gap-3">
@@ -62,6 +84,15 @@ export default function Dashboard() {
 
   const layers = systemStatus?.layers ?? [];
   const sigs = signals?.signals ?? [];
+  const hasDataIssue = sysError || perfError || sigError || diagError;
+  const diagnosticLayers = diagnostics ? Object.values(diagnostics.layers) : [];
+  const liveLayerCount = diagnosticLayers.filter((layer) => layer.status === "live").length;
+  const degradedLayerCount = diagnosticLayers.filter((layer) => layer.status === "degraded").length;
+  const offlineLayerCount = diagnosticLayers.filter((layer) => layer.status === "offline").length;
+  const coreScore = diagnosticLayers.length > 0
+    ? Math.round(((liveLayerCount + degradedLayerCount * 0.5) / diagnosticLayers.length) * 100)
+    : null;
+  const coreStatus = diagnostics?.system_status ?? (offlineLayerCount > 0 ? "degraded" : degradedLayerCount > 0 ? "partial" : "healthy");
 
   // ── P&L calculations ──────────────────────────────────────────────────────
   const realizedPnl = performance?.total_pnl ?? 0;
@@ -113,6 +144,20 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {hasDataIssue && (
+        <div className="rounded p-3 flex items-center justify-between gap-2" style={{ backgroundColor: "rgba(251,191,36,0.06)", border: "1px solid rgba(251,191,36,0.2)" }}>
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined" style={{ fontSize: "14px", color: "#fbbf24" }}>warning</span>
+            <span style={{ fontSize: "10px", fontFamily: "Space Grotesk", color: "#fbbf24", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+              Partial Data Mode
+            </span>
+          </div>
+          <span style={{ fontSize: "9px", color: C.muted, fontFamily: "Space Grotesk" }}>
+            Some endpoints are degraded. Dashboard is running with live fallbacks.
+          </span>
+        </div>
+      )}
+
       {/* ── Top Metrics ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {/* Today's P&L */}
@@ -163,6 +208,37 @@ export default function Dashboard() {
             {systemStatus?.trades_today || 0} executed · {livePositions} positions live
           </div>
         </div>
+      </div>
+
+      <div className="rounded p-4 space-y-3" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined" style={{ fontSize: "14px", color: C.secondary }}>monitoring</span>
+            <MicroLabel>System Core Robustness</MicroLabel>
+          </div>
+          <span style={{ fontSize: "11px", fontFamily: "JetBrains Mono, monospace", color: coreScore == null ? C.muted : coreScore >= 80 ? C.primary : coreScore >= 60 ? "#fbbf24" : C.tertiary }}>
+            {coreScore == null ? "N/A" : `${coreScore}%`} · {String(coreStatus).toUpperCase()}
+          </span>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          <div className="rounded p-2.5" style={{ backgroundColor: "#0e0e0f" }}>
+            <MicroLabel>Live Layers</MicroLabel>
+            <div style={{ marginTop: "4px", fontFamily: "JetBrains Mono, monospace", fontSize: "12px", color: C.primary }}>{liveLayerCount}</div>
+          </div>
+          <div className="rounded p-2.5" style={{ backgroundColor: "#0e0e0f" }}>
+            <MicroLabel>Degraded</MicroLabel>
+            <div style={{ marginTop: "4px", fontFamily: "JetBrains Mono, monospace", fontSize: "12px", color: "#fbbf24" }}>{degradedLayerCount}</div>
+          </div>
+          <div className="rounded p-2.5" style={{ backgroundColor: "#0e0e0f" }}>
+            <MicroLabel>Offline</MicroLabel>
+            <div style={{ marginTop: "4px", fontFamily: "JetBrains Mono, monospace", fontSize: "12px", color: C.tertiary }}>{offlineLayerCount}</div>
+          </div>
+        </div>
+        {diagnostics?.recommendations?.length ? (
+          <p style={{ fontSize: "9px", color: C.muted, fontFamily: "Space Grotesk" }}>
+            Next action: {diagnostics.recommendations[0]}
+          </p>
+        ) : null}
       </div>
 
       {/* ── Live Chart — TradingView (Coinbase real-time) ── */}
@@ -248,6 +324,7 @@ export default function Dashboard() {
               {sigs.map((sig) => {
                 const q = sig.final_quality;
                 const qColor = q > 75 ? C.primary : q > 50 ? "#fbbf24" : C.tertiary;
+                const isActiveSignal = sig.status === "approved" || sig.status === "executed";
                 return (
                   <tr key={sig.id} className="hover:brightness-105 transition-all" style={{ borderBottom: `1px solid rgba(72,72,73,0.15)` }}>
                     <td className="px-4 py-2.5" style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: C.muted }}>
@@ -277,9 +354,9 @@ export default function Dashboard() {
                         fontWeight: 700,
                         letterSpacing: "0.1em",
                         textTransform: "uppercase",
-                        backgroundColor: sig.status === "active" ? "rgba(156,255,147,0.1)" : "rgba(72,72,73,0.2)",
-                        color: sig.status === "active" ? C.primary : C.muted,
-                        border: `1px solid ${sig.status === "active" ? "rgba(156,255,147,0.2)" : "rgba(72,72,73,0.3)"}`,
+                        backgroundColor: isActiveSignal ? "rgba(156,255,147,0.1)" : "rgba(72,72,73,0.2)",
+                        color: isActiveSignal ? C.primary : C.muted,
+                        border: `1px solid ${isActiveSignal ? "rgba(156,255,147,0.2)" : "rgba(72,72,73,0.3)"}`,
                       }}>
                         {sig.status}
                       </span>
@@ -305,7 +382,7 @@ export default function Dashboard() {
           <div>
             <MicroLabel>Global Engine Status</MicroLabel>
             <div style={{ fontSize: "10px", fontFamily: "Space Grotesk", fontWeight: 700, color: C.primary, marginTop: "2px" }}>
-              {systemStatus?.overall?.toUpperCase() ?? "NOMINAL"}
+              {String(coreStatus ?? systemStatus?.overall ?? "nominal").toUpperCase()}
             </div>
           </div>
           <div>
