@@ -7,6 +7,7 @@ import ExecutionPanel from "@/components/ExecutionPanel";
 import PriceLatencyPanel from "@/components/PriceLatencyPanel";
 import ReversalCloudPanel from "@/components/ReversalCloudPanel";
 import BookmapPanel from "@/components/BookmapPanel";
+import CVDPanel from "@/components/CVDPanel";
 import VolumeProfilePanel from "@/components/VolumeProfilePanel";
 import CandleIntelligencePanel from "@/components/CandleIntelligencePanel";
 import ReplayEngine from "@/components/ReplayEngine";
@@ -505,6 +506,17 @@ export default function AlpacaPage() {
               </span>
             </div>
             <BookmapPanel symbol={alpacaSymbol} />
+          </div>
+
+          {/* CVD Panel */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="material-symbols-outlined" style={{ fontSize: "14px", color: C.secondary }}>show_chart</span>
+              <span style={{ fontSize: "9px", fontFamily: "Space Grotesk", fontWeight: 700, color: C.muted, letterSpacing: "0.15em", textTransform: "uppercase" }}>
+                Phase 8 · CVD · Cumulative Volume Delta · Regime Detection
+              </span>
+            </div>
+            <CVDPanel symbol={alpacaSymbol} timeframe="5Min" bars={100} autoRefresh={30} />
           </div>
         </div>
       )}

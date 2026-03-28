@@ -396,4 +396,95 @@ router.get("/market/candle-intelligence", async (req, res) => {
   }
 });
 
+// ─── GET /api/market/cvd — Cumulative Volume Delta ──────────────────────────
+router.get("/market/cvd", async (req, res) => {
+  const symbol    = validateSymbol(String(req.query.symbol ?? "BTCUSD"));
+  const timeframe = ["1Min","5Min","15Min","1H"].includes(String(req.query.timeframe))
+    ? String(req.query.timeframe) : "5Min";
+  const bars      = Math.min(Math.max(parseInt(String(req.query.bars ?? "100"), 10), 20), 300);
+
+  try {
+    const rawBars = await getBars(symbol, timeframe, bars);
+
+    if (!rawBars?.length) {
+      return res.json({ symbol, timeframe, bars: [], regime: "unknown", cvd_total: 0 });
+    }
+
+    // Sort ascending (oldest → newest)
+    const sorted = [...rawBars].sort(
+      (a, b) => new Date(a.Timestamp).getTime() - new Date(b.Timestamp).getTime()
+    );
+
+    // Running stats for z-score
+    const ranges  = sorted.map((b) => b.High - b.Low);
+    const avgRange = ranges.reduce((s, r) => s + r, 0) / ranges.length || 1;
+    const avgVol   = sorted.reduce((s, b) => s + b.Volume, 0) / sorted.length || 1;
+
+    // Per-bar delta: signed volume based on close position within H-L range
+    // More nuanced than just bull/bear — uses close position in range
+    let cumDelta = 0;
+    const annotated = sorted.map((bar) => {
+      const range = bar.High - bar.Low || 0.001;
+      // Buying pressure = proportion of range bar closed in upper half
+      const closePct = (bar.Close - bar.Low) / range; // 0→1
+      const delta    = bar.Volume * (closePct * 2 - 1); // -vol → +vol
+      cumDelta += delta;
+      const relVol   = bar.Volume / avgVol;
+      const relRange = (bar.High - bar.Low) / avgRange;
+      return {
+        time:      Math.floor(new Date(bar.Timestamp).getTime() / 1000),
+        open:      bar.Open,
+        close:     bar.Close,
+        high:      bar.High,
+        low:       bar.Low,
+        volume:    bar.Volume,
+        delta:     Math.round(delta * 10000) / 10000,
+        cum_delta: Math.round(cumDelta * 10000) / 10000,
+        rel_vol:   Math.round(relVol * 100) / 100,
+        rel_range: Math.round(relRange * 100) / 100,
+        direction: bar.Close >= bar.Open ? "bull" : "bear",
+      };
+    });
+
+    // Regime detection from CVD slope over last N bars
+    const lookback = Math.min(20, annotated.length);
+    const recent   = annotated.slice(-lookback);
+    const cdStart  = recent[0].cum_delta;
+    const cdEnd    = recent[recent.length - 1].cum_delta;
+    const cdSlope  = cdEnd - cdStart;
+
+    // Bull/bear proportion in recent window
+    const bullBars = recent.filter((b) => b.direction === "bull").length;
+    const bullPct  = bullBars / recent.length;
+
+    let regime: string;
+    const normSlope = cdSlope / (avgVol * lookback + 0.001);
+    if (normSlope > 0.15 && bullPct > 0.55)        regime = "bull_trend";
+    else if (normSlope < -0.15 && bullPct < 0.45)   regime = "bear_trend";
+    else if (Math.abs(normSlope) < 0.05)             regime = "ranging";
+    else if (normSlope > 0 && bullPct < 0.5)         regime = "bull_exhaustion";
+    else if (normSlope < 0 && bullPct > 0.5)         regime = "bear_exhaustion";
+    else                                             regime = "transitioning";
+
+    // Delta divergence: price making HH/LL but CVD not confirming
+    const priceUp   = annotated[annotated.length - 1].close > annotated[0].close;
+    const cvdUp     = cdEnd > cdStart;
+    const divergence = priceUp !== cvdUp ? (priceUp ? "bearish_divergence" : "bullish_divergence") : null;
+
+    res.json({
+      symbol,
+      timeframe,
+      bars:         annotated,
+      regime,
+      divergence,
+      cvd_total:    Math.round(cumDelta * 10000) / 10000,
+      cvd_slope_20: Math.round(cdSlope * 10000) / 10000,
+      bull_pct_20:  Math.round(bullPct * 100),
+      avg_volume:   Math.round(avgVol * 10000) / 10000,
+    });
+  } catch (err) {
+    res.status(500).json({ error: "cvd_failed", message: String(err) });
+  }
+});
+
 export default router;
