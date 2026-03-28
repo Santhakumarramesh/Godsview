@@ -24,11 +24,12 @@ export function formatNumber(value: number | undefined | null, decimals = 2) {
 
 export function formatPercent(value: number | undefined | null) {
   if (value === undefined || value === null) return "-";
+  // value is a decimal (0.0–1.0), Intl 'percent' multiplies by 100 internally
   return new Intl.NumberFormat('en-US', {
     style: 'percent',
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
-  }).format(value / 100);
+  }).format(value);
 }
 
 export function getStatusColor(status: string) {

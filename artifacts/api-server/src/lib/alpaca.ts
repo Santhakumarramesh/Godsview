@@ -408,6 +408,119 @@ export async function getTypedPositions(): Promise<AlpacaPosition[]> {
   return (data as AlpacaPosition[]) ?? [];
 }
 
+// ── Portfolio history ────────────────────────────────────────────────────────
+export type AlpacaPortfolioHistory = {
+  timestamp: number[];
+  equity: number[];
+  profit_loss: number[];
+  profit_loss_pct: number[];
+  base_value: number;
+  base_value_asof: string;
+  timeframe: string;
+};
+
+export async function getPortfolioHistory(
+  period = "1D",
+  timeframe = "5Min"
+): Promise<AlpacaPortfolioHistory | null> {
+  if (!hasValidTradingKey) return null;
+  const base = isPaperKey ? PAPER_BASE : LIVE_BASE;
+  const params = new URLSearchParams({ period, timeframe });
+  try {
+    const data = await alpacaFetch(`${base}/v2/account/portfolio/history?${params}`, true);
+    return data as AlpacaPortfolioHistory;
+  } catch {
+    return null;
+  }
+}
+
+// ── Account activities (fills) ───────────────────────────────────────────────
+export type AlpacaFillActivity = {
+  id: string;
+  activity_type: "FILL";
+  transaction_time: string;
+  type: string;
+  price: string;
+  qty: string;
+  side: "buy" | "sell";
+  symbol: string;
+  leaves_qty: string;
+  order_id: string;
+  cum_qty: string;
+  order_status: string;
+};
+
+/** Returns fill events for a given date (YYYY-MM-DD) or today if omitted. */
+export async function getTodayFills(dateStr?: string): Promise<AlpacaFillActivity[]> {
+  if (!hasValidTradingKey) return [];
+  const base = isPaperKey ? PAPER_BASE : LIVE_BASE;
+  const date = dateStr ?? new Date().toISOString().split("T")[0];
+  const params = new URLSearchParams({ activity_type: "FILL", date });
+  try {
+    const data = await alpacaFetch(`${base}/v2/account/activities?${params}`, true);
+    return (Array.isArray(data) ? data : []) as AlpacaFillActivity[];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * From a list of fill events, compute completed round-trips using FIFO.
+ * Returns: { trades, totalPnl, wins, losses }
+ */
+export function computeRoundTrips(fills: AlpacaFillActivity[]): {
+  trades: number;
+  totalPnl: number;
+  wins: number;
+  losses: number;
+  avgWin: number;
+  avgLoss: number;
+} {
+  // Group fills by symbol, sort by time
+  const bySymbol: Record<string, AlpacaFillActivity[]> = {};
+  for (const f of fills) {
+    const sym = f.symbol;
+    if (!bySymbol[sym]) bySymbol[sym] = [];
+    bySymbol[sym].push(f);
+  }
+
+  let trades = 0, totalPnl = 0, wins = 0, losses = 0;
+  const winPnls: number[] = [], lossPnls: number[] = [];
+
+  for (const symFills of Object.values(bySymbol)) {
+    // FIFO queue: { price, qty }
+    const queue: { price: number; qty: number }[] = [];
+    symFills.sort((a, b) => a.transaction_time.localeCompare(b.transaction_time));
+
+    for (const f of symFills) {
+      const price = parseFloat(f.price);
+      let qty = parseFloat(f.qty);
+
+      if (f.side === "buy") {
+        queue.push({ price, qty });
+      } else {
+        // Sell — match against FIFO queue
+        while (qty > 1e-10 && queue.length > 0) {
+          const lot = queue[0];
+          const matched = Math.min(qty, lot.qty);
+          const pnl = (price - lot.price) * matched;
+          totalPnl += pnl;
+          trades++;
+          if (pnl >= 0) { wins++; winPnls.push(pnl); }
+          else { losses++; lossPnls.push(Math.abs(pnl)); }
+          lot.qty -= matched;
+          qty -= matched;
+          if (lot.qty <= 1e-10) queue.shift();
+        }
+      }
+    }
+  }
+
+  const avgWin = winPnls.length > 0 ? winPnls.reduce((a, b) => a + b, 0) / winPnls.length : 0;
+  const avgLoss = lossPnls.length > 0 ? lossPnls.reduce((a, b) => a + b, 0) / lossPnls.length : 0;
+  return { trades, totalPnl, wins, losses, avgWin, avgLoss };
+}
+
 /**
  * Calculate position size based on risk parameters.
  * @param equity   - Account equity in dollars

@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, tradesTable } from "@workspace/db";
 import { eq, and, sql, gte } from "drizzle-orm";
 import { GetPerformanceQueryParams } from "@workspace/api-zod";
+import { getTodayFills, computeRoundTrips, getPortfolioHistory } from "../lib/alpaca.js";
 
 const router: IRouter = Router();
 
@@ -10,6 +11,7 @@ router.get("/performance", async (req, res) => {
     const query = GetPerformanceQueryParams.parse(req.query);
     const days = query.days ?? 30;
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const isToday = days <= 1;
 
     const conditions: ReturnType<typeof eq>[] = [gte(tradesTable.created_at, since) as ReturnType<typeof eq>];
     if (query.instrument) conditions.push(eq(tradesTable.instrument, query.instrument));
@@ -24,15 +26,51 @@ router.get("/performance", async (req, res) => {
     const wins = closedTrades.filter((t) => t.outcome === "win");
     const losses = closedTrades.filter((t) => t.outcome === "loss");
 
-    const totalTrades = closedTrades.length;
-    const winRate = totalTrades > 0 ? wins.length / totalTrades : 0;
-    const totalPnl = closedTrades.reduce((sum, t) => sum + Number(t.pnl ?? 0), 0);
-    const avgWin = wins.length > 0 ? wins.reduce((s, t) => s + Number(t.pnl ?? 0), 0) / wins.length : 0;
-    const avgLoss = losses.length > 0 ? Math.abs(losses.reduce((s, t) => s + Number(t.pnl ?? 0), 0) / losses.length) : 0;
+    let totalTrades = closedTrades.length;
+    let winRate = totalTrades > 0 ? wins.length / totalTrades : 0;
+    let totalPnl = closedTrades.reduce((sum, t) => sum + Number(t.pnl ?? 0), 0);
+    let avgWin = wins.length > 0 ? wins.reduce((s, t) => s + Number(t.pnl ?? 0), 0) / wins.length : 0;
+    let avgLoss = losses.length > 0 ? Math.abs(losses.reduce((s, t) => s + Number(t.pnl ?? 0), 0) / losses.length) : 0;
+
+    // ── Alpaca live source: fills + portfolio history ─────────────────────────
+    // When querying today (days<=1), always enrich with real Alpaca data so the
+    // dashboard shows live numbers even when the local DB journal is empty.
+    let alpacaSource = false;
+    if (isToday) {
+      const [fills, portfolio] = await Promise.all([
+        getTodayFills(),
+        getPortfolioHistory("1D", "5Min"),
+      ]);
+
+      const rt = computeRoundTrips(fills);
+
+      // If Alpaca has more closed trades than local DB, prefer Alpaca for counts + P&L
+      if (rt.trades > totalTrades) {
+        totalTrades = rt.trades;
+        winRate = rt.trades > 0 ? rt.wins / rt.trades : 0;
+        avgWin = rt.avgWin;
+        avgLoss = rt.avgLoss;
+        totalPnl = rt.totalPnl;  // FIFO fill P&L is the baseline
+        alpacaSource = true;
+      }
+
+      // Portfolio history: only override fill P&L if it returns a non-zero value.
+      // Crypto paper trading often returns all-zero profit_loss arrays, so we
+      // skip the override in that case and keep the FIFO-computed P&L.
+      if (portfolio && portfolio.profit_loss && portfolio.profit_loss.length > 0) {
+        const lastNonZero = [...portfolio.profit_loss].reverse().find((x) => x !== null && x !== 0);
+        if (lastNonZero !== undefined && Math.abs(lastNonZero) > 0.0001) {
+          totalPnl = lastNonZero;
+          alpacaSource = true;
+        }
+      }
+    }
+
     const grossProfit = wins.reduce((s, t) => s + Number(t.pnl ?? 0), 0);
     const grossLoss = Math.abs(losses.reduce((s, t) => s + Number(t.pnl ?? 0), 0));
     const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? 999 : 0;
     const expectancy = winRate * avgWin - (1 - winRate) * avgLoss;
+
     const avgMfe = closedTrades.length > 0 ? closedTrades.reduce((s, t) => s + Number(t.mfe ?? 0), 0) / closedTrades.length : 0;
     const avgMae = closedTrades.length > 0 ? closedTrades.reduce((s, t) => s + Number(t.mae ?? 0), 0) / closedTrades.length : 0;
     const avgSlippage = closedTrades.length > 0 ? closedTrades.reduce((s, t) => s + Number(t.slippage ?? 0), 0) / closedTrades.length : 0;
@@ -126,6 +164,7 @@ router.get("/performance", async (req, res) => {
       by_session,
       by_regime,
       equity_curve,
+      alpaca_source: alpacaSource,
     });
   } catch (err) {
     req.log.error({ err }, "Failed to get performance");
