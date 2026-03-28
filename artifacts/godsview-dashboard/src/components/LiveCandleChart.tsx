@@ -15,6 +15,14 @@ const C = {
   outlineVar: "#484849",
 };
 
+const TF_SECONDS: Record<Timeframe, number> = {
+  "1Min": 60,
+  "5Min": 300,
+  "15Min": 900,
+  "1Hour": 3600,
+  "1Day": 86400,
+};
+
 const TIMEFRAMES: { label: string; value: Timeframe }[] = [
   { label: "1m", value: "1Min" },
   { label: "5m", value: "5Min" },
@@ -25,12 +33,20 @@ const TIMEFRAMES: { label: string; value: Timeframe }[] = [
 
 const SYMBOLS = ["BTCUSD", "ETHUSD"];
 
+/** Format seconds remaining as m:ss or h:mm:ss */
+function formatCountdown(seconds: number): string {
+  if (seconds <= 0) return "0:00";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
 type Props = {
   defaultSymbol?: string;
   defaultTimeframe?: Timeframe;
-  /** Called on every SSE tick with the live price and symbol */
   onPriceUpdate?: (price: number, symbol: string) => void;
-  /** Chart canvas height in px (default 360) */
   height?: number;
 };
 
@@ -46,7 +62,6 @@ export default function LiveCandleChart({
   const volRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   const esRef = useRef<EventSource | null>(null);
   const lastPriceRef = useRef<number | null>(null);
-  // Stable ref so connectStream never needs to re-create when callback changes
   const onPriceUpdateRef = useRef(onPriceUpdate);
   useEffect(() => { onPriceUpdateRef.current = onPriceUpdate; }, [onPriceUpdate]);
 
@@ -58,11 +73,37 @@ export default function LiveCandleChart({
     if (defaultSymbol && defaultSymbol !== symbol) setSymbol(defaultSymbol);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [defaultSymbol]);
+
   const [livePrice, setLivePrice] = useState<number | null>(null);
   const [liveCandle, setLiveCandle] = useState<Candle | null>(null);
   const [loading, setLoading] = useState(true);
   const [streamStatus, setStreamStatus] = useState<"connecting" | "live" | "error">("connecting");
   const [tickCount, setTickCount] = useState(0);
+
+  // ── Candle countdown timer — updates every second ─────────────────────────
+  const [countdown, setCountdown] = useState<string | null>(null);
+  const liveCandleRef = useRef<Candle | null>(null);
+  const timeframeRef = useRef<Timeframe>(timeframe);
+
+  // Keep refs in sync
+  useEffect(() => { liveCandleRef.current = liveCandle; }, [liveCandle]);
+  useEffect(() => { timeframeRef.current = timeframe; }, [timeframe]);
+
+  useEffect(() => {
+    const tick = () => {
+      const tf = timeframeRef.current;
+      const tfSec = TF_SECONDS[tf] ?? 300;
+      // Always compute from CURRENT wall-clock bucket — independent of last bar
+      const nowSec = Math.floor(Date.now() / 1000);
+      const currentBucketStart = Math.floor(nowSec / tfSec) * tfSec;
+      const bucketEnd = currentBucketStart + tfSec;
+      const remaining = bucketEnd - nowSec;
+      setCountdown(remaining > 0 ? formatCountdown(remaining) : "0:00");
+    };
+    tick(); // immediate — sets countdown right away
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []); // single interval, reads timeframe from ref
 
   // ── Build chart once ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -159,7 +200,6 @@ export default function LiveCandleChart({
         const c = msg.candle as Candle;
         const price = msg.price as number;
 
-        // Update last candle on chart with zero-redraw update()
         if (candleRef.current) {
           candleRef.current.update({ time: c.time as Time, open: c.open, high: c.high, low: c.low, close: c.close });
         }
@@ -168,8 +208,6 @@ export default function LiveCandleChart({
         setLiveCandle(c);
         lastPriceRef.current = price;
         setTickCount((n) => n + 1);
-
-        // Notify parent (e.g. dashboard) of live price via stable ref
         onPriceUpdateRef.current?.(price, symbol);
       } catch { /* ignore parse errors */ }
     };
@@ -178,34 +216,30 @@ export default function LiveCandleChart({
       setStreamStatus("error");
       es.close();
       esRef.current = null;
-      // Auto-reconnect after 3s
       setTimeout(connectStream, 3000);
     };
   }, [symbol, timeframe]);
 
   // ── Supplement SSE: poll /ticker every 3s for true current price ──────────
-  // Uses latest-trade price so the chart always shows the real current price
-  // even when Alpaca WS tick rate is low. SSE ticks override this when faster.
   useEffect(() => {
     let cancelled = false;
     const poll = async () => {
       if (cancelled) return;
       try {
-        const alpacaSym = symbol; // e.g. BTCUSD
-        const res = await fetch(`/api/alpaca/ticker?symbols=${alpacaSym}`);
+        const res = await fetch(`/api/alpaca/ticker?symbols=${symbol}`);
         if (!res.ok || cancelled) return;
-        const data = await res.json() as { tickers?: Array<{ symbol: string; price: number; high: number; low: number; volume: number }> };
-        const row = (data.tickers ?? []).find((r) => r.symbol === alpacaSym);
+        const data = await res.json() as { tickers?: Array<{ symbol: string; price: number }> };
+        const row = (data.tickers ?? []).find((r) => r.symbol === symbol);
         if (!row || cancelled) return;
         const price = row.price;
 
-        // Apply to the live forming candle (update close + high/low if needed)
-        if (liveCandle && candleRef.current) {
+        if (liveCandleRef.current && candleRef.current) {
+          const c = liveCandleRef.current;
           const updated: Candle = {
-            ...liveCandle,
+            ...c,
             close: price,
-            high: Math.max(liveCandle.high, price),
-            low: Math.min(liveCandle.low, price),
+            high: Math.max(c.high, price),
+            low: Math.min(c.low, price),
           };
           if (price !== lastPriceRef.current) {
             candleRef.current.update({ time: updated.time as Time, open: updated.open, high: updated.high, low: updated.low, close: updated.close });
@@ -223,7 +257,7 @@ export default function LiveCandleChart({
     };
 
     const interval = setInterval(poll, 3000);
-    poll(); // immediate first poll
+    poll();
     return () => { cancelled = true; clearInterval(interval); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symbol]);
@@ -296,7 +330,7 @@ export default function LiveCandleChart({
         </div>
       </div>
 
-      {/* Chart */}
+      {/* Chart canvas area */}
       <div style={{ position: "relative", height: `${height}px` }}>
         {loading && (
           <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: C.card, zIndex: 10 }}>
@@ -306,7 +340,52 @@ export default function LiveCandleChart({
             </div>
           </div>
         )}
+
         <div ref={containerRef} style={{ width: "100%", height: "100%" }} />
+
+        {/* ── Candle countdown badge — TradingView-style ────────────────────
+            Positioned just above the time axis, right before the price scale.
+            Shows time remaining until the current candle closes. ────────── */}
+        {countdown !== null && (
+          <div
+            style={{
+              position: "absolute",
+              // Right-align so it sits just left of the price scale (~65px wide)
+              right: "68px",
+              // Sit just above the time axis (~24px tall) — so 28px from bottom
+              bottom: "28px",
+              display: "flex",
+              alignItems: "center",
+              gap: "4px",
+              backgroundColor: "rgba(14,14,15,0.85)",
+              border: `1px solid ${isUp ? "rgba(156,255,147,0.25)" : "rgba(255,113,98,0.25)"}`,
+              borderRadius: "3px",
+              padding: "2px 6px 2px 5px",
+              pointerEvents: "none",
+              zIndex: 5,
+              backdropFilter: "blur(4px)",
+            }}
+          >
+            {/* Small clock icon */}
+            <svg width="9" height="9" viewBox="0 0 12 12" fill="none" style={{ flexShrink: 0, opacity: 0.7 }}>
+              <circle cx="6" cy="6" r="5" stroke={isUp ? C.primary : C.tertiary} strokeWidth="1.5" />
+              <path d="M6 3.5V6.5L8 8" stroke={isUp ? C.primary : C.tertiary} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            {/* Countdown text */}
+            <span
+              style={{
+                fontFamily: "JetBrains Mono, monospace",
+                fontSize: "10px",
+                fontWeight: 600,
+                color: isUp ? C.primary : C.tertiary,
+                letterSpacing: "0.04em",
+                lineHeight: 1,
+              }}
+            >
+              {countdown}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );
