@@ -7,6 +7,9 @@ import ExecutionPanel from "@/components/ExecutionPanel";
 import PriceLatencyPanel from "@/components/PriceLatencyPanel";
 import ReversalCloudPanel from "@/components/ReversalCloudPanel";
 import BookmapPanel from "@/components/BookmapPanel";
+import VolumeProfilePanel from "@/components/VolumeProfilePanel";
+import CandleIntelligencePanel from "@/components/CandleIntelligencePanel";
+import ReplayEngine from "@/components/ReplayEngine";
 
 const BASE = "/api";
 
@@ -136,7 +139,7 @@ function ActionBtn({ onClick, pending, pendingLabel, label, color, icon }: { onC
   );
 }
 
-type Tab = "live" | "backtest" | "accuracy" | "recall";
+type Tab = "live" | "backtest" | "accuracy" | "recall" | "heatmap" | "replay";
 
 export default function AlpacaPage() {
   const [instrument, setInstrument] = useState("BTCUSDT");
@@ -179,10 +182,12 @@ export default function AlpacaPage() {
   const displaySetups = analyzeData ? (showAllSetups ? analyzeData.setups : analyzeData.high_conviction) : [];
 
   const TABS: { id: Tab; label: string; icon: string }[] = [
-    { id: "live", label: "Live Analysis", icon: "sensors" },
-    { id: "backtest", label: "Backtest", icon: "history" },
-    { id: "accuracy", label: "Accuracy DB", icon: "database" },
-    { id: "recall", label: "Recall Build", icon: "psychology" },
+    { id: "live",    label: "Live Analysis",      icon: "sensors" },
+    { id: "backtest",label: "Backtest",            icon: "history" },
+    { id: "heatmap", label: "Volume Profile",      icon: "area_chart" },
+    { id: "replay",  label: "Replay · Phase 7",   icon: "play_circle" },
+    { id: "accuracy",label: "Accuracy DB",         icon: "database" },
+    { id: "recall",  label: "Recall Build",        icon: "psychology" },
   ];
 
   return (
@@ -643,6 +648,70 @@ export default function AlpacaPage() {
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {/* ── VOLUME PROFILE / HEATMAP ── */}
+      {activeTab === "heatmap" && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="font-headline font-bold text-lg">Volume Profile · Market Heatmap</h2>
+              <p style={{ fontSize: "10px", color: C.muted, marginTop: "4px" }}>POC · VAH · VAL · HVN/LVN zones · Per-candle microstructure intelligence</p>
+            </div>
+          </div>
+
+          {/* Volume Profile */}
+          <VolumeProfilePanel symbol={alpacaSymbol} timeframe="1Min" bars={200} height={400} />
+
+          {/* Candle Intelligence */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="material-symbols-outlined" style={{ fontSize: "14px", color: "#e879f9" }}>auto_graph</span>
+              <span style={{ fontSize: "9px", fontFamily: "Space Grotesk", fontWeight: 700, color: C.muted, letterSpacing: "0.15em", textTransform: "uppercase" }}>
+                Candle Microstructure Intelligence · {alpacaSymbol} 5m
+              </span>
+            </div>
+            <CandleIntelligencePanel symbol={alpacaSymbol} timeframe="5Min" bars={80} />
+          </div>
+
+          {/* 15m candle intelligence */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="material-symbols-outlined" style={{ fontSize: "14px", color: "#e879f9" }}>auto_graph</span>
+              <span style={{ fontSize: "9px", fontFamily: "Space Grotesk", fontWeight: 700, color: C.muted, letterSpacing: "0.15em", textTransform: "uppercase" }}>
+                Candle Microstructure Intelligence · {alpacaSymbol} 15m
+              </span>
+            </div>
+            <CandleIntelligencePanel symbol={alpacaSymbol} timeframe="15Min" bars={60} />
+          </div>
+        </div>
+      )}
+
+      {/* ── REPLAY ENGINE ── */}
+      {activeTab === "replay" && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="font-headline font-bold text-lg">Replay Engine · Phase 7</h2>
+              <p style={{ fontSize: "10px", color: C.muted, marginTop: "4px" }}>Step through historical bars · Per-candle intelligence · Train your pattern recognition</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <ReplayEngine symbol={alpacaSymbol} timeframe="5Min"  barCount={100} />
+            <ReplayEngine symbol={alpacaSymbol} timeframe="15Min" barCount={60}  />
+          </div>
+
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="material-symbols-outlined" style={{ fontSize: "14px", color: C.secondary }}>area_chart</span>
+              <span style={{ fontSize: "9px", fontFamily: "Space Grotesk", fontWeight: 700, color: C.muted, letterSpacing: "0.15em", textTransform: "uppercase" }}>
+                1m Volume Profile · Replay Context
+              </span>
+            </div>
+            <VolumeProfilePanel symbol={alpacaSymbol} timeframe="1Min" bars={200} height={280} />
+          </div>
         </div>
       )}
 

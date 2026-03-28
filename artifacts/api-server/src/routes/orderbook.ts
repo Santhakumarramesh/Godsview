@@ -19,6 +19,7 @@
 import { Router } from "express";
 import { orderBookManager } from "../lib/market/orderbook";
 import { computeLiquidityZones, computeMicrostructure } from "../lib/market/liquidityMap";
+import { getBars } from "../lib/alpaca";
 
 const router = Router();
 
@@ -170,6 +171,228 @@ router.get("/market/liquidity-zones", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to compute liquidity zones");
     res.status(500).json({ error: "liquidity_zones_failed", message: String(err) });
+  }
+});
+
+// ─── GET /api/market/volume-profile ──────────────────────────────────────────
+// Computes a Market Profile / Volume Profile from recent OHLCV bars.
+// Returns price levels with volume, POC (Point of Control), VAH, VAL.
+router.get("/market/volume-profile", async (req, res) => {
+  const symbol    = validateSymbol(String(req.query.symbol ?? "BTCUSD"));
+  const timeframe = (["1Min", "5Min", "15Min", "1Hour"] as const).includes(String(req.query.timeframe) as any)
+    ? (String(req.query.timeframe) as "1Min" | "5Min" | "15Min" | "1Hour")
+    : "1Min";
+  const barsCount = Math.min(parseInt(String(req.query.bars ?? "200"), 10), 500);
+
+  try {
+    const bars = await getBars(symbol, timeframe, barsCount);
+    if (bars.length < 5) {
+      res.status(400).json({ error: "insufficient_data", message: "Not enough bars for volume profile" });
+      return;
+    }
+
+    // ── 1. Determine price range ──────────────────────────────────────────
+    let rangeHigh = -Infinity, rangeLow = Infinity;
+    for (const b of bars) {
+      if (b.High > rangeHigh) rangeHigh = b.High;
+      if (b.Low  < rangeLow)  rangeLow  = b.Low;
+    }
+    const priceRange = rangeHigh - rangeLow;
+
+    // ── 2. Choose bucket size (targeting ~60 levels) ─────────────────────
+    const targetBuckets = 60;
+    const rawBucket     = priceRange / targetBuckets;
+    const magnitude     = Math.pow(10, Math.floor(Math.log10(rawBucket)));
+    const bucketSize    = Math.ceil(rawBucket / magnitude) * magnitude;
+
+    // ── 3. Distribute bar volume proportionally across its high-low range ─
+    const volumeMap = new Map<number, number>();
+    for (const bar of bars) {
+      const levelsInBar = Math.max(1, Math.round((bar.High - bar.Low) / bucketSize));
+      const volPerLevel = bar.Volume / levelsInBar;
+      for (let price = bar.Low; price <= bar.High + bucketSize * 0.01; price += bucketSize) {
+        const bucket = Math.round(Math.floor(price / bucketSize) * bucketSize * 100) / 100;
+        volumeMap.set(bucket, (volumeMap.get(bucket) ?? 0) + volPerLevel);
+      }
+    }
+
+    // ── 4. Sort high → low, compute stats ────────────────────────────────
+    const sorted = [...volumeMap.entries()]
+      .sort((a, b) => b[0] - a[0])
+      .map(([price, volume]) => ({ price, volume }));
+
+    const totalVolume = sorted.reduce((s, l) => s + l.volume, 0);
+    const maxVolume   = sorted.reduce((m, l) => Math.max(m, l.volume), 1);
+    const avgVolume   = totalVolume / sorted.length;
+
+    // ── 5. Find POC ───────────────────────────────────────────────────────
+    const poc = sorted.reduce((best, l) => l.volume > best.volume ? l : best, sorted[0]);
+
+    // ── 6. Expand value area to cover 70% of total volume ────────────────
+    const targetVA = totalVolume * 0.70;
+    const pocIdx   = sorted.findIndex((l) => l.price === poc.price);
+    let   upIdx    = pocIdx;
+    let   downIdx  = pocIdx;
+    let   vaVol    = poc.volume;
+
+    while (vaVol < targetVA && (upIdx > 0 || downIdx < sorted.length - 1)) {
+      const upVol   = upIdx   > 0                ? sorted[upIdx   - 1].volume : 0;
+      const downVol = downIdx < sorted.length - 1 ? sorted[downIdx + 1].volume : 0;
+      if (upVol >= downVol && upIdx > 0) {
+        upIdx--;
+        vaVol += upVol;
+      } else if (downIdx < sorted.length - 1) {
+        downIdx++;
+        vaVol += downVol;
+      } else break;
+    }
+
+    const vah = sorted[upIdx].price;
+    const val = sorted[downIdx].price;
+
+    // ── 7. Classify each level ────────────────────────────────────────────
+    const levels = sorted.map((l) => ({
+      price:  l.price,
+      volume: Math.round(l.volume * 1000) / 1000,
+      pct:    Math.round((l.volume / maxVolume) * 100),
+      type: (
+        l.price === poc.price            ? "poc" :
+        Math.abs(l.price - vah) < bucketSize * 0.5 ? "vah" :
+        Math.abs(l.price - val) < bucketSize * 0.5 ? "val" :
+        l.volume > avgVolume * 1.5       ? "hvn" :
+        l.volume < avgVolume * 0.5       ? "lvn" : "normal"
+      ) as "poc" | "vah" | "val" | "hvn" | "lvn" | "normal",
+    }));
+
+    // ── 8. Latest price for current-bar highlight ─────────────────────────
+    const lastBar     = bars[bars.length - 1];
+    const currentPrice = lastBar ? (lastBar.Close) : null;
+
+    res.json({
+      symbol,
+      timeframe,
+      bars:          bars.length,
+      levels,
+      poc:           { price: poc.price, volume: Math.round(poc.volume * 1000) / 1000 },
+      vah:           Math.round(vah * 100) / 100,
+      val:           Math.round(val * 100) / 100,
+      total_volume:  Math.round(totalVolume * 1000) / 1000,
+      bucket_size:   bucketSize,
+      current_price: currentPrice,
+      computed_at:   new Date().toISOString(),
+    });
+  } catch (err) {
+    res.status(500).json({ error: "volume_profile_failed", message: String(err) });
+  }
+});
+
+// ─── GET /api/market/candle-intelligence ─────────────────────────────────────
+// Returns OHLCV bars enriched with per-candle microstructure intelligence:
+// imbalance, absorption, liquidity_strength, reversal_score, wick ratios.
+router.get("/market/candle-intelligence", async (req, res) => {
+  const symbol    = validateSymbol(String(req.query.symbol ?? "BTCUSD"));
+  const timeframe = (["1Min", "5Min", "15Min", "1Hour"] as const).includes(String(req.query.timeframe) as any)
+    ? (String(req.query.timeframe) as "1Min" | "5Min" | "15Min" | "1Hour")
+    : "5Min";
+  const barsCount = Math.min(parseInt(String(req.query.bars ?? "100"), 10), 300);
+
+  try {
+    const bars = await getBars(symbol, timeframe, barsCount);
+    if (bars.length < 3) {
+      res.status(400).json({ error: "insufficient_data" });
+      return;
+    }
+
+    // Compute average volume for relative strength
+    const avgVolume = bars.reduce((s, b) => s + b.Volume, 0) / bars.length;
+    const avgRange  = bars.reduce((s, b) => s + (b.High - b.Low), 0) / bars.length;
+
+    const annotated = bars.map((bar, i) => {
+      const range      = bar.High - bar.Low || 0.0001;
+      const body       = Math.abs(bar.Close - bar.Open);
+      const bodyRatio  = body / range;                                             // 0=doji, 1=marubozu
+
+      // Imbalance: +1 = full bull, -1 = full bear, 0 = doji
+      const imbalance  = (bar.Close - bar.Open) / range;
+
+      // Absorption: candle has large wicks absorbing pressure (small body, large range)
+      const absorption = 1 - bodyRatio;
+
+      // Liquidity strength: relative volume vs session average
+      const liquidity_strength = bar.Volume / (avgVolume || 1);
+
+      // Wick ratios
+      const upperWick  = bar.High - Math.max(bar.Open, bar.Close);
+      const lowerWick  = Math.min(bar.Open, bar.Close) - bar.Low;
+      const wick_top   = upperWick / range;
+      const wick_bot   = lowerWick / range;
+
+      // Reversal score: high when conditions look like a turning point
+      // Inputs: absorption, wick imbalance, relative volume, direction change
+      const dojiScore    = 1 - Math.min(bodyRatio / 0.25, 1);      // 0..1
+      const wickImbal    = Math.abs(wick_top - wick_bot);            // 0..1
+      const relVolScore  = Math.min(liquidity_strength / 2, 1);     // 0..1
+      const prevBar      = i > 0 ? bars[i - 1] : null;
+      const dirChange    = prevBar ? (
+        (bar.Close > bar.Open && prevBar.Close < prevBar.Open) ||
+        (bar.Close < bar.Open && prevBar.Close > prevBar.Open) ? 1 : 0
+      ) : 0;
+
+      const reversal_score =
+        0.35 * dojiScore +
+        0.25 * absorption +
+        0.20 * relVolScore +
+        0.20 * dirChange;
+
+      return {
+        time:              Math.floor(new Date(bar.Timestamp).getTime() / 1000),
+        open:              bar.Open,
+        high:              bar.High,
+        low:               bar.Low,
+        close:             bar.Close,
+        volume:            bar.Volume,
+        vwap:              bar.VWAP ?? null,
+        // Intelligence annotations
+        imbalance:         Math.round(imbalance * 1000) / 1000,
+        absorption:        Math.round(absorption * 1000) / 1000,
+        liquidity_strength: Math.round(liquidity_strength * 1000) / 1000,
+        reversal_score:    Math.round(reversal_score * 1000) / 1000,
+        wick_top:          Math.round(wick_top * 1000) / 1000,
+        wick_bot:          Math.round(wick_bot * 1000) / 1000,
+        body_ratio:        Math.round(bodyRatio * 1000) / 1000,
+        direction:         bar.Close >= bar.Open ? "bull" : "bear",
+        is_doji:           bodyRatio < 0.1,
+        is_high_vol:       liquidity_strength > 1.5,
+        is_absorption:     absorption > 0.65 && liquidity_strength > 1.2,
+        is_reversal_signal: reversal_score > 0.55,
+      };
+    });
+
+    // Summary stats
+    const reversalBars = annotated.filter((b) => b.is_reversal_signal);
+    const absorptionBars = annotated.filter((b) => b.is_absorption);
+    const highVolBars  = annotated.filter((b) => b.is_high_vol);
+
+    res.json({
+      symbol,
+      timeframe,
+      bars: annotated,
+      summary: {
+        total_bars:       annotated.length,
+        avg_volume:       Math.round(avgVolume * 1000) / 1000,
+        avg_range:        Math.round(avgRange * 100) / 100,
+        reversal_signals: reversalBars.length,
+        absorption_zones: absorptionBars.length,
+        high_vol_events:  highVolBars.length,
+        // Most significant candles by reversal score
+        top_reversals:    annotated
+          .sort((a, b) => b.reversal_score - a.reversal_score)
+          .slice(0, 5)
+          .map((b) => ({ time: b.time, price: b.close, score: b.reversal_score, direction: b.direction })),
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: "candle_intelligence_failed", message: String(err) });
   }
 });
 
