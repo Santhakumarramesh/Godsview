@@ -4,10 +4,13 @@ if (!process.env.ALPACA_API_KEY || !process.env.ALPACA_SECRET_KEY) {
   throw new Error("ALPACA_API_KEY and ALPACA_SECRET_KEY must be set");
 }
 
+// Paper keys start with "PK", live keys start with "AK" or "CK"
+const isPaperKey = process.env.ALPACA_API_KEY?.startsWith("PK");
+
 export const alpaca = new Alpaca({
   keyId: process.env.ALPACA_API_KEY,
   secretKey: process.env.ALPACA_SECRET_KEY,
-  paper: true,
+  paper: isPaperKey ?? true,
   feed: "iex",
 });
 
