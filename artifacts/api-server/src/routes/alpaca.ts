@@ -21,8 +21,8 @@ import {
   type SetupCooldowns,
   type RecallFeatures,
 } from "../lib/strategy_engine";
-import { db, accuracyResultsTable, marketBarsTable } from "@workspace/db";
-import { eq, desc, and, count, sql } from "drizzle-orm";
+import { db, accuracyResultsTable, marketBarsTable, signalsTable } from "@workspace/db";
+import { eq, desc, and, count, sql, inArray } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -346,11 +346,25 @@ router.post("/alpaca/analyze", async (req, res) => {
     const cooldowns: SetupCooldowns = req.body.cooldowns ?? {};
     const alpacaSymbol = toAlpacaSymbol(instrument);
 
+    // Fetch deeper bar history for better recall engine context
+    // 200 × 1m = 3h 20m · 100 × 5m = 8h 20m · 60 × 15m = 15h
     const [bars1m, bars5m, bars15m] = await Promise.all([
-      getBars(alpacaSymbol, "1Min", 100),
-      getBars(alpacaSymbol, "5Min", 60),
-      getBars(alpacaSymbol, "15Min", 40),
+      getBars(alpacaSymbol, "1Min", 200),
+      getBars(alpacaSymbol, "5Min", 100),
+      getBars(alpacaSymbol, "15Min", 60),
     ]);
+
+    // Asynchronously cache bars to DB (fire-and-forget — never blocks the scan)
+    setImmediate(async () => {
+      try {
+        const toInsert = [
+          ...bars1m.slice(-50).map((b) => ({ symbol: alpacaSymbol, timeframe: "1Min", bar_time: new Date(b.Timestamp), open: String(b.Open), high: String(b.High), low: String(b.Low), close: String(b.Close), volume: String(b.Volume), vwap: b.VWAP ? String(b.VWAP) : null })),
+          ...bars5m.slice(-20).map((b) => ({ symbol: alpacaSymbol, timeframe: "5Min", bar_time: new Date(b.Timestamp), open: String(b.Open), high: String(b.High), low: String(b.Low), close: String(b.Close), volume: String(b.Volume), vwap: b.VWAP ? String(b.VWAP) : null })),
+          ...bars15m.slice(-10).map((b) => ({ symbol: alpacaSymbol, timeframe: "15Min", bar_time: new Date(b.Timestamp), open: String(b.Open), high: String(b.High), low: String(b.Low), close: String(b.Close), volume: String(b.Volume), vwap: b.VWAP ? String(b.VWAP) : null })),
+        ];
+        await db.insert(marketBarsTable).values(toInsert).onConflictDoNothing();
+      } catch { /* non-fatal — caching only */ }
+    });
 
     if (bars1m.length < 20) {
       res.status(400).json({ error: "insufficient_data", message: "Not enough bars. Market may be closed." });

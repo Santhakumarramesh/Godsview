@@ -184,7 +184,7 @@ The execution stack enables real order placement, live position monitoring, and 
 | 1 | Harden live price & candle updates | ✅ Done |
 | 2 | Timeframe countdown timers | ✅ Done |
 | 3 | Backend order book & microstructure | ✅ Done |
-| 4 | Frontend heatmap overlay | Pending |
+| 4 | TradingView embed + SK/CVD overlay + historical caching | ✅ Done |
 | 5 | Reversal cloud | Pending |
 | 6 | Per-candle bookmap metadata | Pending |
 | 7 | Replay mode | Pending |

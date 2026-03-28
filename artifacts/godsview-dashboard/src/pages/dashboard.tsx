@@ -2,8 +2,8 @@ import { useGetSystemStatus, useGetPerformance, useGetSignals } from "@workspace
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/utils";
 import { format } from "date-fns";
 import { Link } from "wouter";
-import { useEffect, useRef, useState, useCallback } from "react";
-import LiveCandleChart from "@/components/LiveCandleChart";
+import { useEffect, useRef } from "react";
+import TradingViewChart from "@/components/TradingViewChart";
 
 const C = {
   bg: "#0e0e0f",
@@ -27,13 +27,6 @@ function MicroLabel({ children }: { children: React.ReactNode }) {
 }
 
 export default function Dashboard() {
-  // ── Live chart price feed ────────────────────────────────────────────────
-  const [chartLivePrice, setChartLivePrice] = useState<number | null>(null);
-  const [chartSymbol, setChartSymbol] = useState<string>("BTCUSD");
-  const onPriceUpdate = useCallback((price: number, symbol: string) => {
-    setChartLivePrice(price);
-    setChartSymbol(symbol);
-  }, []);
 
   // ── Data hooks — 5 s auto-refresh ────────────────────────────────────────
   const { data: systemStatus, isLoading: sysLoading, refetch: refetchStatus } =
@@ -172,7 +165,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── Live Chart — synced to active instrument ── */}
+      {/* ── Live Chart — TradingView (Coinbase real-time) ── */}
       <div>
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-3">
@@ -180,29 +173,20 @@ export default function Dashboard() {
             <span style={{ fontSize: "9px", color: C.outline, fontFamily: "Space Grotesk", letterSpacing: "0.2em", textTransform: "uppercase" }}>
               Live Market Chart
             </span>
+            <span style={{ fontSize: "8px", color: C.outlineVar, fontFamily: "Space Grotesk" }}>Coinbase · Real-Time</span>
           </div>
-          <div className="flex items-center gap-3">
-            {chartLivePrice && (
-              <span className="flex items-center gap-2">
-                <span style={{ fontSize: "12px", fontFamily: "JetBrains Mono", color: "#fff", fontWeight: 700 }}>
-                  {chartSymbol === "BTCUSD" ? "BTC" : "ETH"}{" "}
-                  ${chartLivePrice.toLocaleString("en-US", { maximumFractionDigits: 0 })}
-                </span>
-                <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: C.primary }} />
-              </span>
-            )}
-            <Link href="/alpaca">
-              <span style={{ fontSize: "9px", color: C.secondary, fontFamily: "Space Grotesk", letterSpacing: "0.1em", cursor: "pointer" }}>
-                FULL ANALYSIS →
-              </span>
-            </Link>
-          </div>
+          <Link href="/alpaca">
+            <span style={{ fontSize: "9px", color: C.secondary, fontFamily: "Space Grotesk", letterSpacing: "0.1em", cursor: "pointer" }}>
+              FULL ANALYSIS →
+            </span>
+          </Link>
         </div>
-        <LiveCandleChart
-          defaultSymbol={activeChartSymbol}
-          defaultTimeframe="5Min"
-          onPriceUpdate={onPriceUpdate}
-          height={320}
+        <TradingViewChart
+          symbol={activeChartSymbol}
+          timeframe="5"
+          height={380}
+          showToolbar={true}
+          studies={["Volume@tv-basicstudies"]}
         />
       </div>
 

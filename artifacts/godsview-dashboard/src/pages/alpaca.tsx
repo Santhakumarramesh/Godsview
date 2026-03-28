@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import LiveCandleChart from "@/components/LiveCandleChart";
+import TradingViewChart from "@/components/TradingViewChart";
+import SKOrderFlowPanel from "@/components/SKOrderFlowPanel";
 import ExecutionPanel from "@/components/ExecutionPanel";
 
 const BASE = "/api";
@@ -142,10 +143,21 @@ export default function AlpacaPage() {
   const [recallYears, setRecallYears] = useState(1);
   const [showAllSetups, setShowAllSetups] = useState(false);
   const [executingSetup, setExecutingSetup] = useState<SetupResult | null>(null);
+  const [chartTimeframe, setChartTimeframe] = useState<"1" | "5" | "15" | "60" | "D">("5");
+
+  const alpacaSymbol = instrument === "ETHUSDT" ? "ETHUSD" : "BTCUSD";
+  const tvSymbol     = instrument === "ETHUSDT" ? "ETHUSD" : "BTCUSD";
 
   const { data: accuracy, refetch: refetchAccuracy } = useQuery<AccuracyResult>({
     queryKey: ["alpaca-accuracy"],
     queryFn: () => fetch(`${BASE}/alpaca/accuracy`).then((r) => r.json()),
+  });
+
+  const { data: microstructure } = useQuery({
+    queryKey: ["microstructure", alpacaSymbol],
+    queryFn: () => fetch(`${BASE}/market/microstructure?symbol=${alpacaSymbol}`).then((r) => r.json()),
+    refetchInterval: 8000,
+    staleTime: 7000,
   });
 
   const analyzeMutation = useMutation<AnalyzeResult>({
@@ -234,8 +246,34 @@ export default function AlpacaPage() {
       {/* ── LIVE ANALYSIS ── */}
       {activeTab === "live" && (
         <div className="space-y-4">
-          {/* Live Candlestick Chart — always visible */}
-          <LiveCandleChart defaultSymbol={instrument === "ETHUSDT" ? "ETHUSD" : "BTCUSD"} defaultTimeframe="5Min" />
+          {/* TradingView Chart — live prices matching TradingView.com */}
+          <div className="rounded overflow-hidden" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+            <div className="flex items-center justify-between px-4 py-2.5" style={{ borderBottom: `1px solid rgba(72,72,73,0.15)` }}>
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined" style={{ fontSize: "14px", color: C.secondary }}>candlestick_chart</span>
+                <span style={{ fontSize: "9px", fontFamily: "Space Grotesk", fontWeight: 700, color: C.muted, letterSpacing: "0.15em", textTransform: "uppercase" }}>
+                  {tvSymbol} · Live Chart
+                </span>
+                <span style={{ fontSize: "8px", fontFamily: "Space Grotesk", color: C.outlineVar }}>Coinbase · Real-Time</span>
+              </div>
+              {/* Timeframe switcher */}
+              <div className="flex gap-1">
+                {(["1","5","15","60","D"] as const).map((tf) => (
+                  <button key={tf} onClick={() => setChartTimeframe(tf)}
+                    style={{
+                      fontSize: "8px", fontFamily: "Space Grotesk", fontWeight: 700, padding: "3px 8px", borderRadius: "3px",
+                      backgroundColor: chartTimeframe === tf ? "rgba(156,255,147,0.12)" : "transparent",
+                      color: chartTimeframe === tf ? C.primary : C.outline,
+                      border: `1px solid ${chartTimeframe === tf ? "rgba(156,255,147,0.25)" : "transparent"}`,
+                      cursor: "pointer", letterSpacing: "0.05em",
+                    }}>
+                    {tf === "60" ? "1H" : tf === "D" ? "1D" : `${tf}M`}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <TradingViewChart symbol={tvSymbol} timeframe={chartTimeframe} height={480} showToolbar={true} studies={["Volume@tv-basicstudies", "RSI@tv-basicstudies"]} />
+          </div>
 
           {analyzeMutation.isPending && (
             <div className="rounded p-10 text-center" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
@@ -405,60 +443,20 @@ export default function AlpacaPage() {
                 </div>
               ))}
 
-              {/* SK Structure Panel */}
-              {analyzeData.recall_features?.sk && (
-                <div className="rounded p-5" style={{ backgroundColor: C.card, border: "1px solid rgba(102,157,255,0.2)" }}>
-                  <div className="flex items-center gap-2 mb-4">
-                    <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: C.secondary }} />
-                    <span className="font-headline font-bold text-xs" style={{ color: C.secondary }}>SK Structure Intelligence</span>
-                    <MicroLabel>Price-action location filter</MicroLabel>
+              {/* ── SK Structure + CVD Order Flow + Microstructure overlay ── */}
+              {analyzeData.recall_features?.sk && analyzeData.recall_features?.cvd && (
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="material-symbols-outlined" style={{ fontSize: "14px", color: C.secondary }}>stacked_bar_chart</span>
+                    <span style={{ fontSize: "9px", fontFamily: "Space Grotesk", fontWeight: 700, color: C.muted, letterSpacing: "0.15em", textTransform: "uppercase" }}>
+                      Recall Engine · SK Structure + Order Flow + Microstructure
+                    </span>
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                    {[
-                      { label: "HTF Bias", value: (analyzeData.recall_features.sk.bias ?? "—").toUpperCase(), color: analyzeData.recall_features.sk.bias === "bull" ? C.primary : analyzeData.recall_features.sk.bias === "bear" ? C.tertiary : C.muted },
-                      { label: "Sequence Stage", value: (analyzeData.recall_features.sk.sequence_stage ?? "—").replace(/_/g, " "), color: analyzeData.recall_features.sk.sequence_stage === "completion" ? C.primary : "#ffffff" },
-                      { label: "Zone Distance", value: analyzeData.recall_features.sk.zone_distance_pct != null ? `${(analyzeData.recall_features.sk.zone_distance_pct * 100).toFixed(1)}%` : "—", color: (analyzeData.recall_features.sk.zone_distance_pct ?? 1) < 0.15 ? C.primary : C.muted },
-                      { label: "In SK Zone", value: analyzeData.recall_features.sk.in_zone ? "YES" : "NO", color: analyzeData.recall_features.sk.in_zone ? C.primary : C.muted },
-                      { label: "R:R Quality", value: analyzeData.recall_features.sk.rr_quality != null ? analyzeData.recall_features.sk.rr_quality.toFixed(2) : "—", color: (analyzeData.recall_features.sk.rr_quality ?? 0) >= 0.5 ? C.primary : C.muted },
-                    ].map((f) => (
-                      <div key={f.label} className="rounded p-3" style={{ backgroundColor: "#0e0e0f" }}>
-                        <MicroLabel>{f.label}</MicroLabel>
-                        <div className="mt-1 font-headline font-bold text-sm" style={{ color: f.color ?? "#ffffff" }}>{f.value}</div>
-                      </div>
-                    ))}
-                  </div>
-                  {analyzeData.recall_features.sk.correction_complete && (
-                    <div className="mt-3 px-3 py-2 rounded" style={{ backgroundColor: "rgba(156,255,147,0.06)", border: "1px solid rgba(156,255,147,0.15)" }}>
-                      <span style={{ fontSize: "9px", fontFamily: "Space Grotesk", color: C.primary, fontWeight: 700, letterSpacing: "0.1em" }}>
-                        ✓ CORRECTION COMPLETE — SK entry zone active
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* CVD Order Flow Panel */}
-              {analyzeData.recall_features?.cvd && (
-                <div className="rounded p-5" style={{ backgroundColor: C.card, border: "1px solid rgba(255,113,98,0.15)" }}>
-                  <div className="flex items-center gap-2 mb-4">
-                    <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: C.tertiary }} />
-                    <span className="font-headline font-bold text-xs" style={{ color: C.tertiary }}>CVD Order Flow Analysis</span>
-                    <MicroLabel>Buy/sell pressure detection</MicroLabel>
-                  </div>
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                    {[
-                      { label: "Buy Volume %", value: analyzeData.recall_features.cvd.buy_volume_ratio != null ? `${(analyzeData.recall_features.cvd.buy_volume_ratio * 100).toFixed(1)}%` : "—", color: (analyzeData.recall_features.cvd.buy_volume_ratio ?? 0.5) > 0.55 ? C.primary : (analyzeData.recall_features.cvd.buy_volume_ratio ?? 0.5) < 0.45 ? C.tertiary : C.muted },
-                      { label: "CVD Slope", value: analyzeData.recall_features.cvd.cvd_slope != null ? (analyzeData.recall_features.cvd.cvd_slope > 0 ? "+" : "") + analyzeData.recall_features.cvd.cvd_slope.toFixed(4) : "—", color: (analyzeData.recall_features.cvd.cvd_slope ?? 0) > 0 ? C.primary : C.tertiary },
-                      { label: "CVD Value", value: analyzeData.recall_features.cvd.cvd_value != null ? analyzeData.recall_features.cvd.cvd_value.toFixed(0) : "—" },
-                      { label: "Price-Delta Div", value: analyzeData.recall_features.cvd.cvd_divergence ? "YES" : "NO", color: analyzeData.recall_features.cvd.cvd_divergence ? C.primary : C.muted },
-                      { label: "Delta Spike", value: analyzeData.recall_features.cvd.large_delta_bar ? "DETECTED" : "NONE", color: analyzeData.recall_features.cvd.large_delta_bar ? "#fbbf24" : C.muted },
-                    ].map((f) => (
-                      <div key={f.label} className="rounded p-3" style={{ backgroundColor: "#0e0e0f" }}>
-                        <MicroLabel>{f.label}</MicroLabel>
-                        <div className="mt-1 font-headline font-bold text-sm" style={{ color: f.color ?? "#ffffff" }}>{f.value}</div>
-                      </div>
-                    ))}
-                  </div>
+                  <SKOrderFlowPanel
+                    recall={analyzeData.recall_features as Parameters<typeof SKOrderFlowPanel>[0]["recall"]}
+                    microstructure={(microstructure as Parameters<typeof SKOrderFlowPanel>[0]["microstructure"]) ?? null}
+                    entryPrice={displaySetups[0]?.entry_price}
+                  />
                 </div>
               )}
             </>
