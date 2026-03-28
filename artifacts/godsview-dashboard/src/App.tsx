@@ -10,6 +10,7 @@ import Signals from "@/pages/signals";
 import Trades from "@/pages/trades";
 import Performance from "@/pages/performance";
 import System from "@/pages/system";
+import AlpacaPage from "@/pages/alpaca";
 
 const queryClient = new QueryClient();
 
@@ -22,6 +23,7 @@ function Router() {
         <Route path="/trades" component={Trades} />
         <Route path="/performance" component={Performance} />
         <Route path="/system" component={System} />
+        <Route path="/alpaca" component={AlpacaPage} />
         <Route component={NotFound} />
       </Switch>
     </Shell>

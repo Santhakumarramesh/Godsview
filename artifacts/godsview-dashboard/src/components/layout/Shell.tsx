@@ -6,13 +6,15 @@ import {
   Cpu, 
   LayoutDashboard, 
   Menu,
-  TerminalSquare
+  TerminalSquare,
+  TrendingUp
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/alpaca", label: "Live Analysis", icon: TrendingUp },
   { href: "/signals", label: "Signals Feed", icon: Activity },
   { href: "/trades", label: "Trade Journal", icon: Briefcase },
   { href: "/performance", label: "Analytics", icon: BarChart2 },
