@@ -1,8 +1,9 @@
 import { useGetTrades, useCreateTrade, useUpdateTrade, type CreateTradeRequest, type UpdateTradeRequest } from "@workspace/api-client-react";
-import { formatCurrency, formatNumber, cn } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
 import { format } from "date-fns";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import ExecutionPanel from "@/components/ExecutionPanel";
 
 const C = {
   card: "#1a191b",
@@ -175,6 +176,63 @@ function JournalTab() {
           </table>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Live Account Bar ─────────────────────────────────────────────────────────
+
+type AccountInfo = { equity?: string; buying_power?: string; cash?: string; account_number?: string; status?: string; error?: string };
+
+function AccountBar() {
+  const [acct, setAcct] = useState<AccountInfo | null>(null);
+  const [posCount, setPosCount] = useState(0);
+  const [openOrderCount, setOpenOrderCount] = useState(0);
+
+  useEffect(() => {
+    const fetchAll = async () => {
+      try {
+        const [aRes, pRes, oRes] = await Promise.all([
+          fetch("/api/alpaca/account").then(r => r.json()),
+          fetch("/api/alpaca/positions/live").then(r => r.json()),
+          fetch("/api/alpaca/orders?status=open&limit=50").then(r => r.json()),
+        ]);
+        setAcct(aRes);
+        setPosCount(pRes.positions?.length ?? 0);
+        setOpenOrderCount(oRes.orders?.filter((o: { status: string }) => ["new","accepted","pending_new","partially_filled"].includes(o.status)).length ?? 0);
+      } catch { /* silent */ }
+    };
+    fetchAll();
+    const id = setInterval(fetchAll, 10000);
+    return () => clearInterval(id);
+  }, []);
+
+  if (!acct || acct.error) return null;
+
+  const equity = parseFloat(acct.equity ?? "0");
+  const bp = parseFloat(acct.buying_power ?? "0");
+  const isPaper = acct.account_number?.startsWith("PA");
+
+  return (
+    <div className="flex items-center gap-6 px-5 py-3 rounded-lg" style={{ backgroundColor: "#1a191b", border: "1px solid rgba(72,72,73,0.25)" }}>
+      <div className="flex items-center gap-2">
+        <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: isPaper ? "#fbbf24" : "#9cff93" }} />
+        <span style={{ fontSize: "8px", fontFamily: "Space Grotesk", fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", color: isPaper ? "#fbbf24" : "#9cff93" }}>
+          {isPaper ? "Paper" : "Live"} · {acct.account_number}
+        </span>
+      </div>
+      <div className="w-px h-4" style={{ backgroundColor: "rgba(72,72,73,0.4)" }} />
+      {[
+        { label: "Equity", value: `$${equity.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`, color: "#9cff93" },
+        { label: "Buying Power", value: `$${bp.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`, color: "#fff" },
+        { label: "Positions", value: String(posCount), color: posCount > 0 ? "#669dff" : "#767576" },
+        { label: "Open Orders", value: String(openOrderCount), color: openOrderCount > 0 ? "#fbbf24" : "#767576" },
+      ].map(({ label, value, color }) => (
+        <div key={label} className="flex items-center gap-2">
+          <span style={{ fontSize: "8px", fontFamily: "Space Grotesk", letterSpacing: "0.15em", textTransform: "uppercase", color: "#767576" }}>{label}</span>
+          <span style={{ fontSize: "12px", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, color }}>{value}</span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -458,7 +516,8 @@ function OrdersTab() {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function Trades() {
-  const [activeTab, setActiveTab] = useState<"journal" | "positions" | "orders">("journal");
+  const [activeTab, setActiveTab] = useState<"journal" | "positions" | "orders">("positions");
+  const [showQuickTrade, setShowQuickTrade] = useState(false);
 
   const tabs: { id: "journal" | "positions" | "orders"; label: string; icon: string }[] = [
     { id: "journal", label: "Trade Journal", icon: "menu_book" },
@@ -467,17 +526,30 @@ export default function Trades() {
   ];
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Header */}
-      <div>
-        <div style={{ fontSize: "9px", color: C.outline, fontFamily: "Space Grotesk", letterSpacing: "0.25em", textTransform: "uppercase", marginBottom: "6px" }}>
-          Godsview · Execution Log
+      <div className="flex items-start justify-between">
+        <div>
+          <div style={{ fontSize: "9px", color: C.outline, fontFamily: "Space Grotesk", letterSpacing: "0.25em", textTransform: "uppercase", marginBottom: "6px" }}>
+            Godsview · Execution Log
+          </div>
+          <h1 className="font-headline font-bold text-2xl tracking-tight">Execution Center</h1>
+          <p style={{ fontSize: "11px", fontFamily: "Space Grotesk", color: C.muted, marginTop: "4px" }}>
+            Trade journal · Live positions · Order management
+          </p>
         </div>
-        <h1 className="font-headline font-bold text-2xl tracking-tight">Execution Center</h1>
-        <p style={{ fontSize: "11px", fontFamily: "Space Grotesk", color: C.muted, marginTop: "4px" }}>
-          Trade journal · Live positions · Order management
-        </p>
+        <button
+          onClick={() => setShowQuickTrade(true)}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-lg font-bold transition-all hover:brightness-110 active:scale-95 mt-1"
+          style={{ backgroundColor: "rgba(156,255,147,0.1)", border: "1px solid rgba(156,255,147,0.3)", color: C.primary, fontSize: "9px", fontFamily: "Space Grotesk", letterSpacing: "0.15em", textTransform: "uppercase" }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: "15px" }}>add</span>
+          Quick Trade
+        </button>
       </div>
+
+      {/* Live account bar */}
+      <AccountBar />
 
       {/* Tab bar */}
       <div className="flex gap-1 p-1 rounded" style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, width: "fit-content" }}>
@@ -503,6 +575,25 @@ export default function Trades() {
       {activeTab === "journal" && <JournalTab />}
       {activeTab === "positions" && <PositionsTab />}
       {activeTab === "orders" && <OrdersTab />}
+
+      {/* Quick Trade overlay */}
+      {showQuickTrade && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)" }}>
+          <div className="w-full max-w-sm relative">
+            <button
+              onClick={() => setShowQuickTrade(false)}
+              className="absolute -top-3 -right-3 z-10 w-7 h-7 rounded-full flex items-center justify-center"
+              style={{ backgroundColor: "#1a191b", border: "1px solid rgba(72,72,73,0.4)" }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: "14px", color: "#767576" }}>close</span>
+            </button>
+            <ExecutionPanel
+              symbol="BTCUSD"
+              onOrderPlaced={() => { setShowQuickTrade(false); setActiveTab("positions"); }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
