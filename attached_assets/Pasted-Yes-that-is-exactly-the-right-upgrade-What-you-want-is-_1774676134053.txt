@@ -1,0 +1,387 @@
+Yes — that is exactly the right upgrade.
+
+What you want is for the bot to **draw its findings directly on the live price feed at the exact candle/price where the event happened**, so you can see:
+
+* where a setup was detected
+* where order flow confirmed or failed
+* where Claude vetoed or approved
+* where risk rejected
+* where entry, SL, and TP were placed
+
+That makes Godsview feel like a real trading intelligence system instead of just logs.
+
+## What to plot on the live feed
+
+You should plot these as overlays on the chart:
+
+**1. Setup markers**
+
+* `absorption_reversal`
+* `sweep_reclaim`
+* `continuation`
+* `cvd_divergence`
+* `breakout_failure`
+
+Use a marker on the exact bar where the setup fired.
+
+**2. Direction**
+
+* long = upward marker below candle
+* short = downward marker above candle
+
+**3. Decision state**
+
+* detected
+* approved
+* rejected
+* no-trade
+
+**4. Score labels**
+Show compact badges:
+
+* OF: 0.71
+* ML: 0.78
+* Claude: veto / 0.74
+* Final: 0.76
+
+**5. Trade bracket**
+When approved:
+
+* entry line
+* stop-loss line
+* take-profit line
+
+**6. Reason tags**
+Small tags like:
+
+* `news_lockout`
+* `spread_wide`
+* `regime_gate`
+* `claude_veto`
+* `risk_ok`
+
+---
+
+## Best architecture for Godsview
+
+Your current pipeline already returns a `TradingDecision` per bar, which is perfect. The right move is:
+
+### Flow
+
+`live feed bar` → `TradingPipeline.process_bar_async()` → `TradingDecision` → `chart event object` → `frontend overlay renderer`
+
+So do **not** make the chart compute findings itself.
+Let the backend pipeline stay the source of truth.
+
+---
+
+## What to add in backend
+
+Create a normalized chart overlay payload from each `TradingDecision`.
+
+Example payload:
+
+```json
+{
+  "ts": "2026-03-28T14:31:00Z",
+  "instrument": "MES",
+  "bar_index": 1523,
+  "setup_type": "sweep_reclaim",
+  "direction": "long",
+  "decision_type": "TRADE",
+  "scores": {
+    "of_score": 0.74,
+    "ml_prob": 0.79,
+    "claude_prob": 0.76,
+    "final_score": 0.77
+  },
+  "entry_price": 5291.25,
+  "sl_price": 5288.75,
+  "tp_price": 5296.25,
+  "labels": ["risk_ok", "ny_open", "trend"],
+  "reason": "approved"
+}
+```
+
+---
+
+## Add a converter function
+
+In your repo, the cleanest place is near the pipeline/session runner side.
+
+Create something like:
+
+```python
+def decision_to_chart_event(decision) -> dict:
+    return {
+        "ts": decision.bar_ts.isoformat(),
+        "instrument": decision.instrument,
+        "setup_type": decision.setup_type,
+        "direction": decision.direction,
+        "decision_type": decision.decision_type.value,
+        "scores": decision.scores.to_dict() if decision.scores else {},
+        "entry_price": decision.entry_price,
+        "sl_price": decision.sl_price,
+        "tp_price": decision.tp_price,
+        "labels": _extract_labels(decision),
+        "reason": decision.error or "",
+    }
+```
+
+And:
+
+```python
+def _extract_labels(decision) -> list[str]:
+    labels = []
+    if decision.claude_verdict:
+        if not decision.claude_verdict.get("trade", True):
+            labels.append("claude_veto")
+    if decision.risk_decision:
+        if decision.risk_decision.get("approved"):
+            labels.append("risk_ok")
+        elif decision.risk_decision.get("reason"):
+            labels.append(decision.risk_decision["reason"])
+    return labels
+```
+
+---
+
+## What to change in the live runner
+
+Wherever `session_runner.on_bar(bar)` handles the pipeline decision, also emit the chart event.
+
+Conceptually:
+
+```python
+decision = await pipeline.process_bar_async(bar)
+chart_event = decision_to_chart_event(decision)
+await overlay_publisher.publish(chart_event)
+```
+
+You can publish through:
+
+* WebSocket
+* SSE
+* local queue
+* saved JSONL if replay mode
+
+For live UI, **WebSocket** is best.
+
+---
+
+## Frontend chart behavior
+
+If you build the UI in React or Streamlit-like format, the chart should support:
+
+### On each new candle
+
+* append candle
+* append overlay marker if event exists
+
+### Marker style rules
+
+* `TRADE` → bright strong marker
+* `REJECTED` → muted red/orange marker
+* `PASS` → usually do not plot unless user toggles it on
+* `ERROR` → purple or warning icon
+
+### Bracket drawing
+
+If trade approved:
+
+* draw horizontal lines from current bar onward
+* Entry = solid
+* SL = dashed
+* TP = dashed
+
+### Tooltip on hover
+
+Show:
+
+* setup
+* direction
+* scores
+* regime
+* session
+* reason
+* Claude reasoning snippet
+
+That tooltip becomes one of the best parts of Godsview.
+
+---
+
+## What should be visible directly on chart
+
+Minimal but powerful version:
+
+For a detected setup:
+
+* one icon
+* one short label
+* one color state
+
+Example:
+
+* `SR L 0.77` = sweep reclaim, long, final score 0.77
+* `AR S VETO` = absorption reversal, short, Claude veto
+* `CT L RISK` = continuation, long, risk rejected
+
+That keeps the chart readable.
+
+---
+
+## Very important: do not overplot everything
+
+If you plot every pass/fail/note, the chart becomes useless.
+
+Best rule:
+
+* default: plot only `REJECTED` and `TRADE`
+* optional toggles:
+
+  * show detections
+  * show Claude decisions
+  * show risk reasons
+  * show all candidates
+
+---
+
+## Strong upgrade idea for you
+
+Use **three overlay layers**:
+
+### Layer 1 — Setup detection
+
+Small marker at bar high/low
+
+### Layer 2 — Decision badge
+
+Final outcome badge near candle
+
+### Layer 3 — Trade structure
+
+Entry / SL / TP lines when approved
+
+This gives clarity without clutter.
+
+---
+
+## Best visual mapping
+
+Use these colors carefully:
+
+* approved trade → green
+* rejected by risk → amber
+* Claude veto → violet
+* setup detected only → blue
+* error / degraded → red
+* no-trade → gray
+
+And shapes:
+
+* triangle up = long
+* triangle down = short
+* circle = detection
+* square = rejection
+* diamond = approved
+
+---
+
+## If you want this inside Godsview UI
+
+Your ideal main page should have:
+
+### Left
+
+Live candlestick chart with overlays
+
+### Right
+
+AI reasoning panel:
+
+* setup
+* OF score
+* ML score
+* Claude verdict
+* risk decision
+* final score
+* entry/SL/TP
+
+### Bottom
+
+decision history table
+
+That would look extremely strong.
+
+---
+
+## Recommended implementation order
+
+### Step 1
+
+Backend emits chart events from `TradingDecision`
+
+### Step 2
+
+Store events in session JSONL for replay/debugging
+
+### Step 3
+
+Frontend renders markers on chart
+
+### Step 4
+
+Add entry/SL/TP lines
+
+### Step 5
+
+Add hover tooltip with reasoning
+
+### Step 6
+
+Add toggles for overlay filters
+
+---
+
+## Simple event classes you can add
+
+```python
+from dataclasses import dataclass, asdict
+from typing import Optional
+
+@dataclass
+class ChartOverlayEvent:
+    ts: str
+    instrument: str
+    setup_type: Optional[str]
+    direction: Optional[str]
+    decision_type: str
+    price: Optional[float]
+    entry_price: float = 0.0
+    sl_price: float = 0.0
+    tp_price: float = 0.0
+    of_score: float = 0.0
+    ml_prob: float = 0.0
+    claude_prob: float = 0.0
+    final_score: float = 0.0
+    reason: str = ""
+
+    def to_dict(self):
+        return asdict(self)
+```
+
+And build it from decision.
+
+---
+
+## My recommendation for Godsview specifically
+
+For your product, this is one of the **highest-value UI upgrades** you can make because it turns the bot into something visually explainable.
+
+The most important thing is:
+**plot the finding exactly where it happened, and show why it was taken or rejected.**
+
+That is what makes the chart intelligent.
+
+I can give you the next step as actual code:
+**backend Python code to generate chart overlay events from your `TradingDecision` objects**.

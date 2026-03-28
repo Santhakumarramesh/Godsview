@@ -18,14 +18,15 @@ A professional trading bot dashboard for the Godsview hybrid AI trading pipeline
 - **Charts**: Recharts (equity curve, performance breakdowns)
 - **Build**: esbuild (API server bundle)
 
-## Architecture — 6-Layer Pipeline
+## Architecture — 6-Layer Pipeline + SK + CVD
 
-The dashboard monitors a 6-layer hybrid AI trading system:
+The dashboard monitors a 6-layer hybrid AI trading system with SK structure pre-filter and CVD order flow:
 
 | Layer | Tool | Weight | Role |
 |-------|------|--------|------|
+| 0 | SK Structure Engine | pre-filter | HTF bias, swing zones, sequence detection, corrective completion |
 | 1 | TradingView Structure | 30% | Order blocks, S/R, VWAP, session highs/lows |
-| 2 | Order Flow | 25% | Absorption, delta, sweeps, CVD divergence |
+| 2 | CVD Order Flow | 25% | Absorption, delta, sweeps, CVD divergence, buy/sell ratio |
 | 3 | Recall Engine | 20% | 1m/5m/15m/1h multi-timeframe memory |
 | 4 | ML Model | 15% | XGBoost per-setup probability |
 | 5 | Claude Reasoning | 10% | Context-aware final filter |
@@ -35,9 +36,32 @@ The dashboard monitors a 6-layer hybrid AI trading system:
 
 ## Setup Types
 
-- `absorption_reversal` — Price reaches S/R, aggressor absorbed, reclaim confirmed
-- `sweep_reclaim` — Liquidity sweep fails, opposite-side aggression appears
-- `continuation_pullback` — Trend established, liquidity thins, delta aligned
+**Original setups:**
+- `absorption_reversal` — Price reaches S/R, aggressor absorbed, reclaim confirmed. SK zone alignment adds up to +0.20 to structure score.
+- `sweep_reclaim` — Liquidity sweep fails, opposite-side aggression appears. Most powerful when sweeping an SK structural zone.
+- `continuation_pullback` — Trend established, liquidity thins, delta aligned. Requires SK sequence completion for highest scores.
+
+**SK-powered new setups:**
+- `cvd_divergence` — Price and CVD moving in opposite directions (hidden buying/selling pressure). Requires confirmed CVD divergence flag.
+- `breakout_failure` — False break beyond SK swing high/low with immediate snap-back. Requires price to be in_zone. The core SK setup: tight stop, high R:R.
+
+**SK Structure Engine (`computeSKFeatures`):**
+- HTF bias from pivot HH/HL vs LH/LL pattern detection on 5m bars
+- Sequence detection: impulse → correction → completion stages
+- SK zones: areas within 15% of structure range from swing high/low
+- R:R quality scored against structural targets
+- Pre-filters: `sk_zone_miss` (blocks if zone_distance_pct > 0.35) and `sk_bias_conflict`
+
+**CVD Engine (`computeCVDFeatures`):**
+- Estimates buy vs sell volume per bar from close position within range
+- CVD divergence: price slope vs CVD slope conflict detection
+- Buy/sell ratio, delta momentum, large delta bar detection
+- Pre-filter: `cvd_not_ready` (blocks cvd_divergence setup if no divergence)
+
+**Chart Overlay Events (`buildChartOverlay`):**
+- Each detection produces a normalized `ChartOverlayEvent` payload
+- Contains: ts, setup_type, direction, decision_type (TRADE/REJECTED/PASS), all scores, entry/SL/TP, labels, regime, sk_bias
+- Ready for WebSocket emission to a live chart renderer
 
 ## Instruments
 

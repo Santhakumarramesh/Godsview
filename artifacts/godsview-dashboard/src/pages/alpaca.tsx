@@ -109,7 +109,13 @@ const INSTRUMENTS = [
   { value: "MNQ", label: "MNQ → QQQ (Trading Key)", live: false },
 ];
 
-const SETUPS = ["absorption_reversal", "sweep_reclaim", "continuation_pullback"];
+const SETUPS = [
+  "absorption_reversal",
+  "sweep_reclaim",
+  "continuation_pullback",
+  "cvd_divergence",
+  "breakout_failure",
+];
 
 const REGIME_COLORS: Record<string, string> = {
   trending_bull: "text-emerald-400 bg-emerald-400/10 border-emerald-400/30",
@@ -262,7 +268,13 @@ export default function AlpacaPage() {
             className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground"
           >
             {SETUPS.map((s) => (
-              <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
+              <option key={s} value={s}>
+                {s === "absorption_reversal" ? "Absorption Reversal" :
+                 s === "sweep_reclaim" ? "Sweep Reclaim" :
+                 s === "continuation_pullback" ? "Continuation Pullback" :
+                 s === "cvd_divergence" ? "CVD Divergence ★" :
+                 s === "breakout_failure" ? "Breakout Failure ★" : s}
+              </option>
             ))}
           </select>
         </div>
@@ -495,6 +507,102 @@ export default function AlpacaPage() {
                   </div>
                 </div>
               ))}
+
+              {/* SK Structure Intelligence Panel */}
+              {analyzeData.recall_features?.sk && (
+                <div className="bg-card border border-blue-500/20 rounded-xl p-5">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-2 h-2 rounded-full bg-blue-400" />
+                    <span className="text-sm font-bold text-blue-400">SK Structure Intelligence</span>
+                    <span className="text-xs text-muted-foreground ml-auto">Price-action location filter</span>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="bg-background/40 rounded-lg p-3">
+                      <div className="text-xs text-muted-foreground mb-1">HTF Bias</div>
+                      <div className={`font-bold text-sm ${
+                        analyzeData.recall_features.sk.bias === "bull" ? "text-emerald-400" :
+                        analyzeData.recall_features.sk.bias === "bear" ? "text-red-400" : "text-slate-400"
+                      }`}>
+                        {analyzeData.recall_features.sk.bias === "bull" ? "▲ Bullish" :
+                         analyzeData.recall_features.sk.bias === "bear" ? "▼ Bearish" : "→ Neutral"}
+                      </div>
+                    </div>
+                    <div className="bg-background/40 rounded-lg p-3">
+                      <div className="text-xs text-muted-foreground mb-1">Sequence Stage</div>
+                      <div className={`font-bold text-sm capitalize ${
+                        analyzeData.recall_features.sk.sequence_stage === "completion" ? "text-emerald-400" :
+                        analyzeData.recall_features.sk.sequence_stage === "correction" ? "text-amber-400" :
+                        analyzeData.recall_features.sk.sequence_stage === "impulse" ? "text-blue-400" : "text-slate-400"
+                      }`}>
+                        {analyzeData.recall_features.sk.sequence_stage === "none" ? "No pattern" : analyzeData.recall_features.sk.sequence_stage}
+                        {analyzeData.recall_features.sk.correction_complete && " ✓"}
+                      </div>
+                    </div>
+                    <div className="bg-background/40 rounded-lg p-3">
+                      <div className="text-xs text-muted-foreground mb-1">SK Zone</div>
+                      <div className={`font-bold text-sm ${analyzeData.recall_features.sk.in_zone ? "text-emerald-400" : "text-slate-400"}`}>
+                        {analyzeData.recall_features.sk.in_zone ? "✓ In Zone" : `${(analyzeData.recall_features.sk.zone_distance_pct * 100).toFixed(1)}% away`}
+                      </div>
+                    </div>
+                    <div className="bg-background/40 rounded-lg p-3">
+                      <div className="text-xs text-muted-foreground mb-1">R:R Quality</div>
+                      <QualityBar value={analyzeData.recall_features.sk.rr_quality} />
+                    </div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-3">
+                    <div className="bg-background/40 rounded-lg p-3">
+                      <div className="text-xs text-muted-foreground mb-1">Sequence Score</div>
+                      <QualityBar value={analyzeData.recall_features.sk.sequence_score} />
+                    </div>
+                    <div className="bg-background/40 rounded-lg p-3 text-xs text-muted-foreground">
+                      <div className="mb-1 font-medium text-foreground">Structural Zones</div>
+                      <div>High: <span className="font-mono text-emerald-400">{price(analyzeData.recall_features.sk.swing_high)}</span></div>
+                      <div>Low: <span className="font-mono text-red-400">{price(analyzeData.recall_features.sk.swing_low)}</span></div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* CVD Order Flow Panel */}
+              {analyzeData.recall_features?.cvd && (
+                <div className="bg-card border border-violet-500/20 rounded-xl p-5">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-2 h-2 rounded-full bg-violet-400" />
+                    <span className="text-sm font-bold text-violet-400">CVD Order Flow</span>
+                    <span className="text-xs text-muted-foreground ml-auto">Cumulative Volume Delta</span>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="bg-background/40 rounded-lg p-3">
+                      <div className="text-xs text-muted-foreground mb-1">CVD Direction</div>
+                      <div className={`font-bold text-sm ${
+                        analyzeData.recall_features.cvd.cvd_slope > 0 ? "text-emerald-400" : "text-red-400"
+                      }`}>
+                        {analyzeData.recall_features.cvd.cvd_slope > 0 ? "▲ Buying" : "▼ Selling"}
+                      </div>
+                    </div>
+                    <div className="bg-background/40 rounded-lg p-3">
+                      <div className="text-xs text-muted-foreground mb-1">Buy/Sell Ratio</div>
+                      <div className="font-bold text-sm font-mono">
+                        <span className="text-emerald-400">{(analyzeData.recall_features.cvd.buy_volume_ratio * 100).toFixed(0)}%</span>
+                        <span className="text-muted-foreground"> / </span>
+                        <span className="text-red-400">{((1 - analyzeData.recall_features.cvd.buy_volume_ratio) * 100).toFixed(0)}%</span>
+                      </div>
+                    </div>
+                    <div className="bg-background/40 rounded-lg p-3">
+                      <div className="text-xs text-muted-foreground mb-1">Divergence</div>
+                      <div className={`font-bold text-sm ${analyzeData.recall_features.cvd.cvd_divergence ? "text-amber-400" : "text-slate-400"}`}>
+                        {analyzeData.recall_features.cvd.cvd_divergence ? "⚡ Active" : "None"}
+                      </div>
+                    </div>
+                    <div className="bg-background/40 rounded-lg p-3">
+                      <div className="text-xs text-muted-foreground mb-1">Delta Spike</div>
+                      <div className={`font-bold text-sm ${analyzeData.recall_features.cvd.large_delta_bar ? "text-amber-400" : "text-slate-400"}`}>
+                        {analyzeData.recall_features.cvd.large_delta_bar ? "⚡ Yes" : "Normal"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Recall Features */}
               <details className="bg-card border border-border rounded-xl">

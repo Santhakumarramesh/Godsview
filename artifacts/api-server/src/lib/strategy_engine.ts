@@ -1,7 +1,41 @@
 import type { AlpacaBar } from "./alpaca";
 
-export type SetupType = "absorption_reversal" | "sweep_reclaim" | "continuation_pullback";
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export type SetupType =
+  | "absorption_reversal"
+  | "sweep_reclaim"
+  | "continuation_pullback"
+  | "cvd_divergence"
+  | "breakout_failure";
+
 export type Regime = "trending_bull" | "trending_bear" | "ranging" | "volatile" | "chop";
+
+export type SKBias = "bull" | "bear" | "neutral";
+
+/** SK Trading System — Market Structure Features */
+export type SKFeatures = {
+  bias: SKBias;                  // higher-timeframe directional bias
+  sequence_stage: "impulse" | "correction" | "completion" | "none";
+  correction_complete: boolean;  // corrective move appears to be finishing
+  zone_distance_pct: number;     // % distance to nearest SK structural zone
+  swing_high: number;            // nearest significant swing high
+  swing_low: number;             // nearest significant swing low
+  impulse_strength: number;      // 0–1 strength of the last impulsive leg
+  sequence_score: number;        // 0–1 overall SK setup quality
+  rr_quality: number;            // 0–1 estimated R:R potential from current price
+  in_zone: boolean;              // price is within an actionable SK zone
+};
+
+/** Cumulative Volume Delta — estimated from OHLCV */
+export type CVDFeatures = {
+  cvd_value: number;             // raw estimated CVD over window
+  cvd_slope: number;             // positive = buying pressure growing
+  cvd_divergence: boolean;       // price vs CVD diverging
+  buy_volume_ratio: number;      // estimated % of volume that is buying
+  delta_momentum: number;        // rate of CVD change
+  large_delta_bar: boolean;      // last bar has outsized delta
+};
 
 export type RecallFeatures = {
   trend_slope_1m: number;
@@ -21,6 +55,8 @@ export type RecallFeatures = {
   regime: Regime;
   atr_pct: number;
   directional_persistence: number;
+  sk: SKFeatures;
+  cvd: CVDFeatures;
 };
 
 export type SetupCandidate = {
@@ -44,17 +80,43 @@ export type NoTradeReason =
   | "low_volatility"
   | "high_volatility_extreme"
   | "conflicting_flow"
+  | "sk_zone_miss"
+  | "sk_bias_conflict"
+  | "cvd_not_ready"
   | "none";
 
-export type SetupCooldowns = Record<string, number>; // setup_type → consecutive_failures
+export type SetupCooldowns = Record<string, number>;
 
-// ─── Utility ─────────────────────────────────────────────────────────────────
+/** Normalized chart overlay event emitted per detection */
+export type ChartOverlayEvent = {
+  ts: string;
+  instrument: string;
+  setup_type: SetupType;
+  direction: "long" | "short";
+  decision_type: "TRADE" | "REJECTED" | "PASS";
+  scores: {
+    structure: number;
+    order_flow: number;
+    recall: number;
+    final: number;
+    sk_sequence: number;
+    cvd_slope: number;
+  };
+  entry_price: number;
+  sl_price: number;
+  tp_price: number;
+  labels: string[];
+  regime: Regime;
+  sk_bias: SKBias;
+  meets_threshold: boolean;
+  reason: string;
+};
+
+// ─── Utilities ────────────────────────────────────────────────────────────────
 
 function slope(bars: AlpacaBar[]): number {
   if (bars.length < 2) return 0;
-  const first = bars[0].Close;
-  const last = bars[bars.length - 1].Close;
-  return (last - first) / first;
+  return (bars[bars.length - 1].Close - bars[0].Close) / bars[0].Close;
 }
 
 function avgRange(bars: AlpacaBar[]): number {
@@ -66,8 +128,8 @@ function wickRatio(bars: AlpacaBar[]): number {
   if (bars.length === 0) return 0;
   const ratios = bars.map((b) => {
     const body = Math.abs(b.Close - b.Open);
-    const totalRange = b.High - b.Low;
-    return totalRange > 0 ? (totalRange - body) / totalRange : 0;
+    const range = b.High - b.Low;
+    return range > 0 ? (range - body) / range : 0;
   });
   return ratios.reduce((s, r) => s + r, 0) / ratios.length;
 }
@@ -91,7 +153,237 @@ function countConsec(bars: AlpacaBar[], dir: "bull" | "bear"): number {
   return count;
 }
 
-// ─── Regime Detection ────────────────────────────────────────────────────────
+/** Estimate per-bar buying volume using close position within range */
+function estimateBuyVolume(bar: AlpacaBar): number {
+  const range = bar.High - bar.Low;
+  if (range === 0) return bar.Volume * 0.5;
+  const closeRatio = (bar.Close - bar.Low) / range;
+  return bar.Volume * closeRatio;
+}
+
+/** Estimate per-bar selling volume */
+function estimateSellVolume(bar: AlpacaBar): number {
+  return bar.Volume - estimateBuyVolume(bar);
+}
+
+// ─── Swing High / Low Detection ───────────────────────────────────────────────
+
+function findSwingHigh(bars: AlpacaBar[], lookback = 20): number {
+  const window = bars.slice(-Math.min(lookback, bars.length));
+  return Math.max(...window.map((b) => b.High));
+}
+
+function findSwingLow(bars: AlpacaBar[], lookback = 20): number {
+  const window = bars.slice(-Math.min(lookback, bars.length));
+  return Math.min(...window.map((b) => b.Low));
+}
+
+/** Find significant swing highs/lows using pivot point method */
+function findPivots(bars: AlpacaBar[], n = 3): { highs: number[]; lows: number[] } {
+  const highs: number[] = [];
+  const lows: number[] = [];
+  for (let i = n; i < bars.length - n; i++) {
+    const isHigh = bars.slice(i - n, i + n + 1).every((b, j) => j === n || b.High <= bars[i].High);
+    const isLow = bars.slice(i - n, i + n + 1).every((b, j) => j === n || b.Low >= bars[i].Low);
+    if (isHigh) highs.push(bars[i].High);
+    if (isLow) lows.push(bars[i].Low);
+  }
+  return { highs, lows };
+}
+
+// ─── SK Trading System — Structure Engine ────────────────────────────────────
+// Based on the SK System philosophy: trade at the END of corrective moves
+// into structural zones, keeping stops tight and maximizing R:R.
+// Reference: https://sktradingsystem.framer.website/sksystem
+
+export function computeSKFeatures(bars1m: AlpacaBar[], bars5m: AlpacaBar[]): SKFeatures {
+  if (bars5m.length < 15) {
+    return {
+      bias: "neutral", sequence_stage: "none", correction_complete: false,
+      zone_distance_pct: 1, swing_high: 0, swing_low: 0, impulse_strength: 0,
+      sequence_score: 0, rr_quality: 0, in_zone: false,
+    };
+  }
+
+  const last30_5m = bars5m.slice(-30);
+  const last15_5m = bars5m.slice(-15);
+  const lastClose = bars5m[bars5m.length - 1].Close;
+
+  // ── HTF Bias: Higher High / Higher Low vs Lower High / Lower Low ──────────
+  const { highs: pivotHighs, lows: pivotLows } = findPivots(last30_5m, 3);
+
+  let bias: SKBias = "neutral";
+  if (pivotHighs.length >= 2 && pivotLows.length >= 2) {
+    const hhPattern = pivotHighs[pivotHighs.length - 1] > pivotHighs[pivotHighs.length - 2];
+    const hlPattern = pivotLows[pivotLows.length - 1] > pivotLows[pivotLows.length - 2];
+    const lhPattern = pivotHighs[pivotHighs.length - 1] < pivotHighs[pivotHighs.length - 2];
+    const llPattern = pivotLows[pivotLows.length - 1] < pivotLows[pivotLows.length - 2];
+    if (hhPattern && hlPattern) bias = "bull";
+    else if (lhPattern && llPattern) bias = "bear";
+  } else {
+    // Fallback: simple 5m slope
+    const s = slope(last30_5m);
+    if (s > 0.005) bias = "bull";
+    else if (s < -0.005) bias = "bear";
+  }
+
+  // ── Swing Structure Zones ─────────────────────────────────────────────────
+  const swingHigh = findSwingHigh(last30_5m, 30);
+  const swingLow = findSwingLow(last30_5m, 30);
+  const midZone = (swingHigh + swingLow) / 2;
+  const structureRange = swingHigh - swingLow;
+
+  // SK zone: areas near swing extremes (within 15% of structure range)
+  const zoneThreshold = structureRange * 0.15;
+  const nearHigh = Math.abs(lastClose - swingHigh) < zoneThreshold;
+  const nearLow = Math.abs(lastClose - swingLow) < zoneThreshold;
+  const in_zone = nearHigh || nearLow;
+  const zone_distance_pct = structureRange > 0
+    ? Math.min(Math.abs(lastClose - swingHigh), Math.abs(lastClose - swingLow)) / structureRange
+    : 1;
+
+  // ── Sequence Detection: Impulse → Correction → Completion ────────────────
+  // Impulse: 3+ consecutive directional bars with above-avg range
+  const avgR = avgRange(last15_5m);
+  let impulseLen = 0;
+  let impulseDir: "up" | "down" | null = null;
+  for (let i = last15_5m.length - 1; i >= 0; i--) {
+    const b = last15_5m[i];
+    const range = b.High - b.Low;
+    const isUp = b.Close > b.Open;
+    if (i === last15_5m.length - 1) {
+      impulseDir = isUp ? "up" : "down";
+    }
+    if (
+      (impulseDir === "up" && isUp && range >= avgR * 0.8) ||
+      (impulseDir === "down" && !isUp && range >= avgR * 0.8)
+    ) {
+      impulseLen++;
+    } else {
+      break;
+    }
+  }
+
+  const impulse_strength = clamp(impulseLen / 5);
+
+  // Corrective phase: after an impulse, look for counter-move (2-5 bars, smaller)
+  const recentBars = last15_5m.slice(-8);
+  let corrLen = 0;
+  let postImpulse = false;
+  for (let i = recentBars.length - 1; i >= 0; i--) {
+    const b = recentBars[i];
+    const range = b.High - b.Low;
+    const isOpposite =
+      impulseDir === "up"
+        ? b.Close < b.Open
+        : b.Close > b.Open;
+    if (isOpposite && range < avgR * 1.2) {
+      corrLen++;
+      if (corrLen >= 2) postImpulse = true;
+    } else if (corrLen > 0) break;
+  }
+
+  // Completion: correction ending — last 1-2 bars slowing down (smaller range)
+  const lastBar = last15_5m[last15_5m.length - 1];
+  const prevBar = last15_5m[last15_5m.length - 2];
+  const corrSlowing = lastBar && prevBar &&
+    (lastBar.High - lastBar.Low) < (prevBar.High - prevBar.Low) * 0.75;
+  const correctionComplete = postImpulse && corrSlowing && corrLen >= 2 && corrLen <= 6;
+
+  let sequence_stage: SKFeatures["sequence_stage"] = "none";
+  if (impulseLen >= 3 && !postImpulse) sequence_stage = "impulse";
+  else if (postImpulse && !correctionComplete) sequence_stage = "correction";
+  else if (correctionComplete) sequence_stage = "completion";
+
+  // ── R:R Quality from SK Zone ──────────────────────────────────────────────
+  // If near low and bias is bull: potential move = lastClose → swingHigh, risk = to swingLow
+  const potentialReward = nearLow
+    ? swingHigh - lastClose
+    : lastClose - swingLow;
+  const potentialRisk = nearLow
+    ? lastClose - swingLow
+    : swingHigh - lastClose;
+  const rr = potentialRisk > 0 ? potentialReward / potentialRisk : 0;
+  const rr_quality = clamp(rr / 4); // normalize: 4:1 R:R = perfect score
+
+  // ── Sequence Score ────────────────────────────────────────────────────────
+  const sequence_score = clamp(
+    (in_zone ? 0.3 : 0) +
+    (correctionComplete ? 0.3 : postImpulse ? 0.15 : 0) +
+    (impulse_strength * 0.2) +
+    (rr_quality * 0.2)
+  );
+
+  return {
+    bias,
+    sequence_stage,
+    correction_complete: correctionComplete,
+    zone_distance_pct,
+    swing_high: swingHigh,
+    swing_low: swingLow,
+    impulse_strength,
+    sequence_score,
+    rr_quality,
+    in_zone,
+  };
+}
+
+// ─── CVD Engine — Cumulative Volume Delta ─────────────────────────────────────
+// Estimates buying vs selling pressure from OHLCV without tick data.
+// Higher-accuracy approximation: uses close position within bar range.
+
+export function computeCVDFeatures(bars: AlpacaBar[]): CVDFeatures {
+  if (bars.length < 10) {
+    return {
+      cvd_value: 0, cvd_slope: 0, cvd_divergence: false,
+      buy_volume_ratio: 0.5, delta_momentum: 0, large_delta_bar: false,
+    };
+  }
+
+  const window = bars.slice(-30);
+  const deltas = window.map((b) => estimateBuyVolume(b) - estimateSellVolume(b));
+
+  // Cumulative sum
+  let cumulative = 0;
+  const cvdSeries = deltas.map((d) => (cumulative += d));
+
+  const cvd_value = cvdSeries[cvdSeries.length - 1];
+  const cvd_slope = slope(cvdSeries.map((v, i) => ({ Close: v, Open: v, High: v, Low: v, Volume: 0, Timestamp: String(i) })));
+
+  // Price slope vs CVD slope — divergence detection
+  const priceSlope = slope(window);
+  const cvdDivergence =
+    (priceSlope > 0.001 && cvd_slope < -0.001) || // price rising, CVD falling = bearish divergence
+    (priceSlope < -0.001 && cvd_slope > 0.001);    // price falling, CVD rising = bullish divergence
+
+  const totalVol = window.reduce((s, b) => s + b.Volume, 0);
+  const buyVol = window.reduce((s, b) => s + estimateBuyVolume(b), 0);
+  const buy_volume_ratio = totalVol > 0 ? buyVol / totalVol : 0.5;
+
+  // Delta momentum: recent 5 bar CVD slope vs full window
+  const recentDeltas = deltas.slice(-5);
+  let recentCum = 0;
+  const recentCVD = recentDeltas.map((d) => (recentCum += d));
+  const delta_momentum = recentCVD.length >= 2
+    ? (recentCVD[recentCVD.length - 1] - recentCVD[0]) / (Math.abs(cvd_value) || 1)
+    : 0;
+
+  // Large delta bar: last bar's delta is 2x avg
+  const lastDelta = Math.abs(deltas[deltas.length - 1]);
+  const avgDelta = deltas.reduce((s, d) => s + Math.abs(d), 0) / deltas.length;
+  const large_delta_bar = avgDelta > 0 && lastDelta > avgDelta * 2;
+
+  return {
+    cvd_value,
+    cvd_slope,
+    cvd_divergence: cvdDivergence,
+    buy_volume_ratio,
+    delta_momentum,
+    large_delta_bar,
+  };
+}
+
+// ─── Regime Detection ─────────────────────────────────────────────────────────
 
 export function detectRegime(bars: AlpacaBar[]): Regime {
   if (bars.length < 20) return "ranging";
@@ -103,25 +395,19 @@ export function detectRegime(bars: AlpacaBar[]): Regime {
   const atr = avgRange(last20);
   const midPrice = (high + low) / 2;
 
-  // Directional persistence: how many bars moved in same direction as overall trend
   const overallSlope = slope(last20);
   const directionMatches = last20.filter((b) =>
     overallSlope > 0 ? b.Close > b.Open : b.Close < b.Open
   ).length;
   const directionalPersistence = directionMatches / last20.length;
-
-  // Range as % of price — volatility measure
   const rangeAsPct = midPrice > 0 ? (high - low) / midPrice : 0;
 
-  // Chop: high range oscillation, low directional persistence
   if (directionalPersistence < 0.45 && rangeAsPct < 0.03) return "chop";
 
-  // Volatile: very wide bars, large ATR
   const avgClose = closes.reduce((s, c) => s + c, 0) / closes.length;
   const atrPct = avgClose > 0 ? atr / avgClose : 0;
   if (atrPct > 0.025) return "volatile";
 
-  // Trending: strong directional persistence + slope
   if (directionalPersistence > 0.6 && Math.abs(overallSlope) > 0.008) {
     return overallSlope > 0 ? "trending_bull" : "trending_bear";
   }
@@ -129,7 +415,7 @@ export function detectRegime(bars: AlpacaBar[]): Regime {
   return "ranging";
 }
 
-// ─── No-Trade Filters ────────────────────────────────────────────────────────
+// ─── No-Trade Filters ─────────────────────────────────────────────────────────
 
 export function applyNoTradeFilters(
   bars: AlpacaBar[],
@@ -137,68 +423,83 @@ export function applyNoTradeFilters(
   setup: SetupType,
   cooldowns: SetupCooldowns = {}
 ): { blocked: boolean; reason: NoTradeReason } {
-  // Block all trading in chop regime
-  if (recall.regime === "chop") {
-    return { blocked: true, reason: "chop_regime" };
-  }
+  if (recall.regime === "chop") return { blocked: true, reason: "chop_regime" };
+  if (recall.atr_pct > 0.035) return { blocked: true, reason: "high_volatility_extreme" };
+  if (recall.atr_pct < 0.001 && recall.avg_range_1m < 0.5) return { blocked: true, reason: "low_volatility" };
 
-  // Block in extreme volatile conditions (ATR > 3% of price)
-  if (recall.atr_pct > 0.035) {
-    return { blocked: true, reason: "high_volatility_extreme" };
-  }
-
-  // Block if extremely low volatility (market asleep)
-  if (recall.atr_pct < 0.001 && recall.avg_range_1m < 0.5) {
-    return { blocked: true, reason: "low_volatility" };
-  }
-
-  // Setup cooldown: block if this setup has failed 3+ consecutive times
   const failures = cooldowns[setup] ?? 0;
-  if (failures >= 3) {
-    return { blocked: true, reason: "setup_cooldown" };
-  }
+  if (failures >= 3) return { blocked: true, reason: "setup_cooldown" };
 
-  // Conflicting flow: trend and momentum pointing opposite directions strongly
+  // Conflicting flow: trend and momentum point opposite directions
   const trendUp = recall.trend_slope_5m > 0.003;
   const trendDown = recall.trend_slope_5m < -0.003;
   const momentumDown = recall.momentum_1m < -0.003;
   const momentumUp = recall.momentum_1m > 0.003;
   if ((trendUp && momentumDown) || (trendDown && momentumUp)) {
+    if (setup === "continuation_pullback") return { blocked: true, reason: "conflicting_flow" };
+  }
+
+  // SK-gated filters: setups that need SK zone alignment
+  const skGatedSetups: SetupType[] = ["absorption_reversal", "sweep_reclaim", "breakout_failure"];
+  if (skGatedSetups.includes(setup) && recall.sk.zone_distance_pct > 0.35) {
+    return { blocked: true, reason: "sk_zone_miss" };
+  }
+
+  // SK bias conflict: don't take a long when SK says bear and no corrective completion
+  if (recall.sk.bias !== "neutral" && !recall.sk.correction_complete) {
     if (setup === "continuation_pullback") {
-      return { blocked: true, reason: "conflicting_flow" };
+      // continuation must agree with SK bias
+      const slopeUp = recall.trend_slope_5m > 0;
+      if (recall.sk.bias === "bear" && slopeUp) return { blocked: true, reason: "sk_bias_conflict" };
+      if (recall.sk.bias === "bull" && !slopeUp) return { blocked: true, reason: "sk_bias_conflict" };
     }
+  }
+
+  // CVD divergence setup: only allow when CVD divergence is confirmed
+  if (setup === "cvd_divergence" && !recall.cvd.cvd_divergence) {
+    return { blocked: true, reason: "cvd_not_ready" };
   }
 
   return { blocked: false, reason: "none" };
 }
 
-// ─── Per-Setup, Per-Regime Thresholds ────────────────────────────────────────
+// ─── Per-Setup Per-Regime Thresholds ─────────────────────────────────────────
 
 const REGIME_THRESHOLDS: Record<Regime, Record<SetupType, number>> = {
   trending_bull: {
     continuation_pullback: 0.55,
     sweep_reclaim: 0.60,
     absorption_reversal: 0.72,
+    cvd_divergence: 0.65,
+    breakout_failure: 0.68,
   },
   trending_bear: {
     continuation_pullback: 0.55,
     sweep_reclaim: 0.60,
     absorption_reversal: 0.72,
+    cvd_divergence: 0.65,
+    breakout_failure: 0.68,
   },
   ranging: {
     absorption_reversal: 0.60,
     sweep_reclaim: 0.65,
     continuation_pullback: 0.70,
+    cvd_divergence: 0.60,
+    breakout_failure: 0.62,
   },
   volatile: {
     sweep_reclaim: 0.70,
     absorption_reversal: 0.75,
     continuation_pullback: 0.78,
+    cvd_divergence: 0.72,
+    breakout_failure: 0.75,
   },
   chop: {
     absorption_reversal: 1.0,
     sweep_reclaim: 1.0,
     continuation_pullback: 1.0,
+    cvd_divergence: 1.0,
+    breakout_failure: 1.0,
   },
 };
 
@@ -206,7 +507,7 @@ export function getQualityThreshold(regime: Regime, setup: SetupType): number {
   return REGIME_THRESHOLDS[regime]?.[setup] ?? 0.65;
 }
 
-// ─── Recall Features ─────────────────────────────────────────────────────────
+// ─── Recall Features Builder ──────────────────────────────────────────────────
 
 export function buildRecallFeatures(
   bars1m: AlpacaBar[],
@@ -221,13 +522,16 @@ export function buildRecallFeatures(
   const lastVol = last20_1m[last20_1m.length - 1]?.Volume ?? 0;
   const atr = computeATR(last20_1m);
   const atrPct = lastClose > 0 ? atr / lastClose : 0;
-
   const regime = detectRegime(bars1m);
 
   const directionMatches = last20_1m.filter((b) =>
     slope(last20_1m) > 0 ? b.Close > b.Open : b.Close < b.Open
   ).length;
   const directionalPersistence = directionMatches / (last20_1m.length || 1);
+
+  // SK and CVD features
+  const sk = computeSKFeatures(bars1m, bars5m);
+  const cvd = computeCVDFeatures(bars1m);
 
   return {
     trend_slope_1m: slope(last20_1m),
@@ -247,10 +551,12 @@ export function buildRecallFeatures(
     regime,
     atr_pct: atrPct,
     directional_persistence: directionalPersistence,
+    sk,
+    cvd,
   };
 }
 
-// ─── Setup Detectors ─────────────────────────────────────────────────────────
+// ─── Setup Detectors ──────────────────────────────────────────────────────────
 
 export function detectAbsorptionReversal(
   bars1m: AlpacaBar[],
@@ -289,22 +595,42 @@ export function detectAbsorptionReversal(
 
   const direction = bullSetup ? "long" : "short";
 
-  // Regime alignment bonus: absorption works best in ranging/volatile
+  // SK alignment: absorption reversals work best AT SK zones where correction is completing
+  const skBonus =
+    recall.sk.in_zone && recall.sk.correction_complete ? 0.20 :
+    recall.sk.in_zone ? 0.10 :
+    recall.sk.zone_distance_pct < 0.2 ? 0.05 : 0;
+
+  // SK bias alignment
+  const skBiasAligned =
+    (direction === "long" && recall.sk.bias === "bull") ||
+    (direction === "short" && recall.sk.bias === "bear");
+  const skBiasBonus = skBiasAligned ? 0.08 : recall.sk.bias === "neutral" ? 0 : -0.05;
+
   const regimeBonus =
-    recall.regime === "ranging" ? 0.15 :
+    recall.regime === "ranging" ? 0.12 :
     recall.regime === "volatile" ? 0.05 :
     recall.regime === "chop" ? -0.2 : 0;
 
   const structure = clamp(
     0.4 +
-    (recall.distance_from_low < 0.01 ? 0.2 : 0.1) +
-    (recall.wick_ratio_5m > 0.4 ? 0.2 : 0.1) +
-    (recall.trend_slope_5m > 0 ? 0.1 : 0) +
-    regimeBonus
+    (recall.distance_from_low < 0.01 ? 0.15 : 0.08) +
+    (recall.wick_ratio_5m > 0.4 ? 0.15 : 0.08) +
+    (recall.trend_slope_5m > 0 ? 0.08 : 0) +
+    regimeBonus + skBonus + skBiasBonus
   );
 
+  // CVD order flow confirmation
+  const cvdConfirm =
+    direction === "long"
+      ? recall.cvd.cvd_slope > 0 || recall.cvd.buy_volume_ratio > 0.55
+      : recall.cvd.cvd_slope < 0 || recall.cvd.buy_volume_ratio < 0.45;
+  const cvdBonus = cvdConfirm ? 0.12 : 0;
+
   const orderFlow = clamp(
-    0.3 + Math.min(volSpike - 1, 0.5) + (recall.vol_relative > 1.5 ? 0.15 : 0.05)
+    0.3 + Math.min(volSpike - 1, 0.5) +
+    (recall.vol_relative > 1.5 ? 0.12 : 0.04) +
+    cvdBonus
   );
 
   return { detected: true, direction, structure, orderFlow };
@@ -323,6 +649,7 @@ export function detectSweepReclaim(
   const lastBar = last10[last10.length - 1];
   const prevBar = last10[last10.length - 2];
 
+  // Sweep: price briefly breaks a level then quickly reclaims it
   const bullSweep =
     prevBar.Low < low10 * 1.001 &&
     lastBar.Close > prevBar.Low &&
@@ -342,20 +669,43 @@ export function detectSweepReclaim(
     ? (prevBar.Close - prevBar.Low) / (prevBar.High - prevBar.Low + 0.0001)
     : (prevBar.High - prevBar.Close) / (prevBar.High - prevBar.Low + 0.0001);
 
-  // Sweep reclaim works in all regimes except chop; bonus in ranging
+  // SK alignment: sweeps are most powerful when they sweep an SK structural zone
+  const skZoneSweep = recall.sk.in_zone;
+  const skBonus =
+    skZoneSweep && recall.sk.correction_complete ? 0.18 :
+    skZoneSweep ? 0.10 : 0;
+
+  const skBiasAligned =
+    (direction === "long" && recall.sk.bias === "bull") ||
+    (direction === "short" && recall.sk.bias === "bear");
+  const skBiasBonus = skBiasAligned ? 0.08 : recall.sk.bias === "neutral" ? 0 : -0.05;
+
   const regimeBonus =
-    recall.regime === "ranging" ? 0.1 :
+    recall.regime === "ranging" ? 0.10 :
     recall.regime === "volatile" ? 0.08 :
     recall.regime === "chop" ? -0.25 : 0.05;
 
   const structure = clamp(
-    0.5 + wickSize * 0.3 +
-    (recall.trend_slope_15m * (bullSweep ? 1 : -1) > 0 ? 0.15 : 0) +
-    regimeBonus
+    0.5 + wickSize * 0.25 +
+    (recall.trend_slope_15m * (bullSweep ? 1 : -1) > 0 ? 0.12 : 0) +
+    regimeBonus + skBonus + skBiasBonus
   );
+
   const avgVol = avgVolume(last10.slice(0, -1));
   const volSpike = avgVol > 0 ? lastBar.Volume / avgVol : 1;
-  const orderFlow = clamp(0.35 + Math.min(volSpike - 1, 0.4) + (recall.vol_relative > 1.2 ? 0.1 : 0));
+
+  // CVD confirmation: sweep reclaim should show delta flip
+  const cvdFlip =
+    direction === "long"
+      ? recall.cvd.cvd_slope > 0 && recall.cvd.large_delta_bar
+      : recall.cvd.cvd_slope < 0 && recall.cvd.large_delta_bar;
+  const cvdBonus = cvdFlip ? 0.15 : recall.cvd.cvd_divergence ? 0.08 : 0;
+
+  const orderFlow = clamp(
+    0.35 + Math.min(volSpike - 1, 0.40) +
+    (recall.vol_relative > 1.2 ? 0.08 : 0) +
+    cvdBonus
+  );
 
   return { detected: true, direction, structure, orderFlow };
 }
@@ -369,7 +719,6 @@ export function detectContinuationPullback(
 
   const trendUp = recall.trend_slope_5m > 0.002 && recall.trend_slope_15m > 0;
   const trendDown = recall.trend_slope_5m < -0.002 && recall.trend_slope_15m < 0;
-
   if (!trendUp && !trendDown) return { detected: false, direction: "long", structure: 0, orderFlow: 0 };
 
   const last5_1m = bars1m.slice(-5);
@@ -390,29 +739,178 @@ export function detectContinuationPullback(
   if (!bullCont && !bearCont) return { detected: false, direction: "long", structure: 0, orderFlow: 0 };
 
   const direction = bullCont ? "long" : "short";
-  const trendStrength = Math.min(Math.abs(recall.trend_slope_5m) * 100, 0.4);
+  const trendStrength = Math.min(Math.abs(recall.trend_slope_5m) * 100, 0.40);
 
-  // Continuation only makes sense in trending regimes
+  // SK: continuation is BEST when it aligns with SK bias AND
+  // the correction is completing within the SK sequence
+  const skAligned =
+    (direction === "long" && recall.sk.bias === "bull") ||
+    (direction === "short" && recall.sk.bias === "bear");
+  const skSeqBonus =
+    skAligned && recall.sk.correction_complete ? 0.25 :
+    skAligned && recall.sk.sequence_stage === "correction" ? 0.15 :
+    skAligned ? 0.08 : -0.05;
+
   const regimeBonus =
     recall.regime === "trending_bull" || recall.regime === "trending_bear" ? 0.15 :
-    recall.regime === "ranging" ? -0.1 :
-    recall.regime === "chop" ? -0.3 : 0;
+    recall.regime === "ranging" ? -0.10 :
+    recall.regime === "chop" ? -0.30 : 0;
 
   const structure = clamp(
     0.5 + trendStrength +
-    (recall.wick_ratio_1m < 0.3 ? 0.1 : 0) +
-    regimeBonus
+    (recall.wick_ratio_1m < 0.3 ? 0.08 : 0) +
+    regimeBonus + skSeqBonus
   );
+
+  // CVD: delta should confirm continuation direction
+  const cvdAligned =
+    direction === "long" ? recall.cvd.cvd_slope > 0 : recall.cvd.cvd_slope < 0;
+  const cvdBonus = cvdAligned ? 0.12 : recall.cvd.cvd_divergence ? -0.08 : 0;
+
   const orderFlow = clamp(
-    0.4 +
-    (recall.vol_relative > 1.0 ? 0.15 : 0) +
-    (Math.abs(recall.momentum_1m) > 0.001 ? 0.1 : 0)
+    0.40 +
+    (recall.vol_relative > 1.0 ? 0.12 : 0) +
+    (Math.abs(recall.momentum_1m) > 0.001 ? 0.10 : 0) +
+    cvdBonus
   );
 
   return { detected: true, direction, structure, orderFlow };
 }
 
-// ─── Scoring ─────────────────────────────────────────────────────────────────
+/** CVD Divergence — price and volume delta disagree, signaling reversal */
+export function detectCVDDivergence(
+  bars1m: AlpacaBar[],
+  bars5m: AlpacaBar[],
+  recall: RecallFeatures
+): { detected: boolean; direction: "long" | "short"; structure: number; orderFlow: number } {
+  if (bars1m.length < 15) return { detected: false, direction: "long", structure: 0, orderFlow: 0 };
+
+  // Requires confirmed CVD divergence from the CVD engine
+  if (!recall.cvd.cvd_divergence) return { detected: false, direction: "long", structure: 0, orderFlow: 0 };
+
+  const last10 = bars1m.slice(-10);
+  const priceSlope = slope(last10);
+  const cvd = recall.cvd;
+
+  // Bullish divergence: price falling but CVD rising (buying pressure hidden)
+  const bullDiv = priceSlope < -0.001 && cvd.cvd_slope > 0;
+  // Bearish divergence: price rising but CVD falling (selling pressure hidden)
+  const bearDiv = priceSlope > 0.001 && cvd.cvd_slope < 0;
+
+  if (!bullDiv && !bearDiv) return { detected: false, direction: "long", structure: 0, orderFlow: 0 };
+
+  const direction = bullDiv ? "long" : "short";
+
+  // SK alignment: CVD divergence is most powerful at SK structural zones
+  const skZoneBonus = recall.sk.in_zone ? 0.18 : 0;
+  const skBiasAligned =
+    (direction === "long" && recall.sk.bias === "bull") ||
+    (direction === "short" && recall.sk.bias === "bear");
+  const skBiasBonus = skBiasAligned ? 0.10 : recall.sk.bias === "neutral" ? 0 : -0.05;
+
+  const regimeBonus =
+    recall.regime === "ranging" ? 0.12 :
+    recall.regime === "volatile" ? 0.08 :
+    recall.regime === "chop" ? -0.20 : 0.05;
+
+  const structure = clamp(
+    0.45 +
+    (Math.abs(priceSlope) * 30) +
+    skZoneBonus + skBiasBonus + regimeBonus
+  );
+
+  // Order flow: magnitude of CVD divergence + volume
+  const deltaStrength = clamp(Math.abs(cvd.delta_momentum));
+  const orderFlow = clamp(
+    0.40 +
+    deltaStrength * 0.30 +
+    (cvd.large_delta_bar ? 0.12 : 0) +
+    (cvd.buy_volume_ratio > 0.60 && bullDiv ? 0.10 : 0) +
+    (cvd.buy_volume_ratio < 0.40 && bearDiv ? 0.10 : 0)
+  );
+
+  return { detected: true, direction, structure, orderFlow };
+}
+
+/** Breakout Failure — false breakout beyond SK structural zone, price snaps back */
+export function detectBreakoutFailure(
+  bars1m: AlpacaBar[],
+  bars5m: AlpacaBar[],
+  recall: RecallFeatures
+): { detected: boolean; direction: "long" | "short"; structure: number; orderFlow: number } {
+  if (bars1m.length < 12) return { detected: false, direction: "long", structure: 0, orderFlow: 0 };
+
+  const last12 = bars1m.slice(-12);
+  const lastBar = last12[last12.length - 1];
+  const prevBar = last12[last12.length - 2];
+
+  // Need to be near an SK structural zone for breakout failure to be valid
+  if (!recall.sk.in_zone) return { detected: false, direction: "long", structure: 0, orderFlow: 0 };
+
+  const swingHigh = recall.sk.swing_high;
+  const swingLow = recall.sk.swing_low;
+  const breakPct = 0.003; // 0.3% beyond level = fake breakout territory
+
+  // Bullish breakout failure: price briefly went below swingLow then snapped back above
+  const bullBOF =
+    prevBar.Low < swingLow * (1 - breakPct) &&
+    lastBar.Close > swingLow &&
+    lastBar.Close > lastBar.Open &&
+    recall.wick_ratio_1m > 0.40;
+
+  // Bearish breakout failure: price briefly went above swingHigh then snapped back below
+  const bearBOF =
+    prevBar.High > swingHigh * (1 + breakPct) &&
+    lastBar.Close < swingHigh &&
+    lastBar.Close < lastBar.Open &&
+    recall.wick_ratio_1m > 0.40;
+
+  if (!bullBOF && !bearBOF) return { detected: false, direction: "long", structure: 0, orderFlow: 0 };
+
+  const direction = bullBOF ? "long" : "short";
+
+  // The breakout failure is an SK core concept: false break at a zone
+  const skBonus =
+    recall.sk.correction_complete ? 0.20 :
+    recall.sk.sequence_stage === "correction" ? 0.12 : 0.05;
+
+  const skBiasAligned =
+    (direction === "long" && recall.sk.bias !== "bear") ||
+    (direction === "short" && recall.sk.bias !== "bull");
+  const skBiasBonus = skBiasAligned ? 0.10 : -0.10;
+
+  const regimeBonus =
+    recall.regime === "ranging" ? 0.15 :
+    recall.regime === "volatile" ? 0.05 :
+    recall.regime === "chop" ? -0.20 : 0;
+
+  const structure = clamp(
+    0.50 +
+    (recall.wick_ratio_1m > 0.50 ? 0.10 : 0.05) +
+    skBonus + skBiasBonus + regimeBonus
+  );
+
+  // Volume on the snap-back bar is key
+  const avgVol = avgVolume(last12.slice(0, -1));
+  const volSpike = avgVol > 0 ? lastBar.Volume / avgVol : 1;
+
+  // CVD: a breakout failure should show delta reversal
+  const cvdReversed =
+    direction === "long"
+      ? recall.cvd.cvd_slope > 0 || recall.cvd.buy_volume_ratio > 0.55
+      : recall.cvd.cvd_slope < 0 || recall.cvd.buy_volume_ratio < 0.45;
+  const cvdBonus = cvdReversed ? 0.12 : 0;
+
+  const orderFlow = clamp(
+    0.35 + Math.min(volSpike - 1, 0.40) +
+    (recall.vol_relative > 1.3 ? 0.10 : 0) +
+    cvdBonus
+  );
+
+  return { detected: true, direction, structure, orderFlow };
+}
+
+// ─── Scoring ──────────────────────────────────────────────────────────────────
 
 export function scoreRecall(
   recall: RecallFeatures,
@@ -427,21 +925,31 @@ export function scoreRecall(
   const momentumAligned =
     direction === "long" ? recall.momentum_1m > 0 : recall.momentum_1m < 0;
 
-  let score = 0.4;
-  if (trendAligned) score += 0.2;
-  if (momentumAligned) score += 0.15;
-  if (recall.vol_relative > 1.2) score += 0.1;
-  if (recall.wick_ratio_5m > 0.35) score += 0.1;
+  let score = 0.40;
+  if (trendAligned) score += 0.15;
+  if (momentumAligned) score += 0.12;
+  if (recall.vol_relative > 1.2) score += 0.08;
+  if (recall.wick_ratio_5m > 0.35) score += 0.08;
   if (setup === "absorption_reversal" && !trendAligned) score += 0.05;
 
-  // Regime alignment bonus
+  // Regime alignment
   if (
     (setup === "continuation_pullback" && (recall.regime === "trending_bull" || recall.regime === "trending_bear")) ||
     (setup === "absorption_reversal" && recall.regime === "ranging") ||
-    (setup === "sweep_reclaim" && (recall.regime === "ranging" || recall.regime === "volatile"))
+    (setup === "sweep_reclaim" && (recall.regime === "ranging" || recall.regime === "volatile")) ||
+    (setup === "cvd_divergence" && recall.regime === "ranging") ||
+    (setup === "breakout_failure" && recall.regime === "ranging")
   ) {
-    score += 0.1;
+    score += 0.10;
   }
+
+  // SK sequence score bonus
+  score += recall.sk.sequence_score * 0.12;
+
+  // CVD alignment bonus
+  const cvdAligned =
+    direction === "long" ? recall.cvd.buy_volume_ratio > 0.52 : recall.cvd.buy_volume_ratio < 0.48;
+  if (cvdAligned) score += 0.06;
 
   return clamp(score);
 }
@@ -451,12 +959,67 @@ export function computeFinalQuality(
   orderFlow: number,
   recall: number
 ): number {
-  const ml = 0.5 + recall * 0.3;
-  const claude = 0.5 + (structure + orderFlow) * 0.25;
-  return clamp(0.3 * structure + 0.25 * orderFlow + 0.2 * recall + 0.15 * ml + 0.1 * claude);
+  // Layer weights: 0.30 structure · 0.25 order_flow · 0.20 recall · 0.15 ml · 0.10 claude
+  const ml = 0.50 + recall * 0.30;
+  const claude = 0.50 + (structure + orderFlow) * 0.25;
+  return clamp(0.30 * structure + 0.25 * orderFlow + 0.20 * recall + 0.15 * ml + 0.10 * claude);
 }
 
-// ─── Execution ───────────────────────────────────────────────────────────────
+// ─── Chart Overlay Events ─────────────────────────────────────────────────────
+// Normalized payload for future chart rendering / WebSocket emission
+
+export function buildChartOverlay(
+  setup: SetupType,
+  instrument: string,
+  direction: "long" | "short",
+  structure: number,
+  orderFlow: number,
+  recall: RecallFeatures,
+  finalQuality: number,
+  threshold: number,
+  entry: number,
+  sl: number,
+  tp: number,
+  barTime: string
+): ChartOverlayEvent {
+  const meetsThreshold = finalQuality >= threshold;
+  const labels: string[] = [];
+
+  if (recall.sk.in_zone) labels.push("sk_zone");
+  if (recall.sk.correction_complete) labels.push("sk_completion");
+  if (recall.cvd.cvd_divergence) labels.push("cvd_div");
+  if (recall.cvd.large_delta_bar) labels.push("delta_spike");
+  if (recall.regime === "chop") labels.push("chop");
+  if (recall.atr_pct > 0.025) labels.push("high_vol");
+  if (meetsThreshold) labels.push("risk_ok");
+  else labels.push("below_threshold");
+
+  return {
+    ts: barTime,
+    instrument,
+    setup_type: setup,
+    direction,
+    decision_type: meetsThreshold ? "TRADE" : finalQuality > 0.45 ? "REJECTED" : "PASS",
+    scores: {
+      structure,
+      order_flow: orderFlow,
+      recall: scoreRecall(recall, setup, direction),
+      final: finalQuality,
+      sk_sequence: recall.sk.sequence_score,
+      cvd_slope: recall.cvd.cvd_slope,
+    },
+    entry_price: entry,
+    sl_price: sl,
+    tp_price: tp,
+    labels,
+    regime: recall.regime,
+    sk_bias: recall.sk.bias,
+    meets_threshold: meetsThreshold,
+    reason: meetsThreshold ? "approved" : `quality_${finalQuality.toFixed(2)}_below_${threshold.toFixed(2)}`,
+  };
+}
+
+// ─── Execution Utilities ──────────────────────────────────────────────────────
 
 export function computeTPSL(
   entryPrice: number,
@@ -464,7 +1027,6 @@ export function computeTPSL(
   atr: number,
   regime: Regime = "ranging"
 ): { takeProfit: number; stopLoss: number; tpTicks: number; slTicks: number } {
-  // Tighter targets in ranging, wider in trending
   const tpMult = regime === "trending_bull" || regime === "trending_bear" ? 2.5 : 2.0;
   const slMult = regime === "volatile" ? 1.5 : 1.0;
   const tickSize = entryPrice > 10000 ? 5 : entryPrice > 1000 ? 1 : 0.25;

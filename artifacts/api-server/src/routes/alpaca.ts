@@ -1,10 +1,12 @@
 import { Router, type IRouter } from "express";
-import { getBars, getBarsHistorical, getLatestBar, getAccount, getPositions, hasValidTradingKey, isBrokerKey } from "../lib/alpaca";
+import { getBars, getBarsHistorical, getLatestBar, getAccount, getPositions, hasValidTradingKey, isBrokerKey, type AlpacaBar } from "../lib/alpaca";
 import {
   buildRecallFeatures,
   detectAbsorptionReversal,
   detectSweepReclaim,
   detectContinuationPullback,
+  detectCVDDivergence,
+  detectBreakoutFailure,
   scoreRecall,
   computeFinalQuality,
   computeTPSL,
@@ -13,8 +15,10 @@ import {
   applyNoTradeFilters,
   getQualityThreshold,
   detectRegime,
+  buildChartOverlay,
   type SetupType,
   type SetupCooldowns,
+  type RecallFeatures,
 } from "../lib/strategy_engine";
 import { db, accuracyResultsTable, marketBarsTable } from "@workspace/db";
 import { eq, desc, and, count, sql } from "drizzle-orm";
@@ -72,7 +76,13 @@ router.get("/alpaca/bars", async (req, res) => {
 router.post("/alpaca/analyze", async (req, res) => {
   try {
     const instrument = String(req.body.instrument ?? "BTCUSDT");
-    const setups: SetupType[] = req.body.setups ?? ["absorption_reversal", "sweep_reclaim", "continuation_pullback"];
+    const setups: SetupType[] = req.body.setups ?? [
+      "absorption_reversal",
+      "sweep_reclaim",
+      "continuation_pullback",
+      "cvd_divergence",
+      "breakout_failure",
+    ];
     const cooldowns: SetupCooldowns = req.body.cooldowns ?? {};
     const alpacaSymbol = toAlpacaSymbol(instrument);
 
@@ -109,6 +119,10 @@ router.post("/alpaca/analyze", async (req, res) => {
         result = detectAbsorptionReversal(bars1m, bars5m, recall);
       } else if (setup === "sweep_reclaim") {
         result = detectSweepReclaim(bars1m, bars5m, recall);
+      } else if (setup === "cvd_divergence") {
+        result = detectCVDDivergence(bars1m, bars5m, recall);
+      } else if (setup === "breakout_failure") {
+        result = detectBreakoutFailure(bars1m, bars5m, recall);
       } else {
         result = detectContinuationPullback(bars1m, bars5m, recall);
       }
@@ -118,11 +132,14 @@ router.post("/alpaca/analyze", async (req, res) => {
       const recallScore = scoreRecall(recall, setup, result.direction);
       const finalQuality = computeFinalQuality(result.structure, result.orderFlow, recallScore);
       const threshold = getQualityThreshold(regime, setup);
-
-      // Meta-labeling gate: only include high-conviction setups
       const meetsThreshold = finalQuality >= threshold;
 
       const { takeProfit, stopLoss, tpTicks, slTicks } = computeTPSL(entryPrice, result.direction, atr, regime);
+
+      const overlay = buildChartOverlay(
+        setup, instrument, result.direction, result.structure, result.orderFlow,
+        recall, finalQuality, threshold, entryPrice, stopLoss, takeProfit, lastBar.Timestamp
+      );
 
       detectedSetups.push({
         instrument,
@@ -141,7 +158,10 @@ router.post("/alpaca/analyze", async (req, res) => {
         take_profit: takeProfit,
         tp_ticks: tpTicks,
         sl_ticks: slTicks,
+        sk: recall.sk,
+        cvd: recall.cvd,
         recall_features: recall,
+        overlay,
         last_bar: lastBar,
         atr,
       });
@@ -165,6 +185,19 @@ router.post("/alpaca/analyze", async (req, res) => {
     res.status(500).json({ error: "analysis_error", message: String(err) });
   }
 });
+
+function runSetupDetector(
+  setup: SetupType,
+  bars1m: AlpacaBar[],
+  bars5m: AlpacaBar[],
+  recall: RecallFeatures
+): { detected: boolean; direction: "long" | "short"; structure: number; orderFlow: number } {
+  if (setup === "absorption_reversal") return detectAbsorptionReversal(bars1m, bars5m, recall);
+  if (setup === "sweep_reclaim") return detectSweepReclaim(bars1m, bars5m, recall);
+  if (setup === "cvd_divergence") return detectCVDDivergence(bars1m, bars5m, recall);
+  if (setup === "breakout_failure") return detectBreakoutFailure(bars1m, bars5m, recall);
+  return detectContinuationPullback(bars1m, bars5m, recall);
+}
 
 // ─── POST /api/alpaca/backtest — walk-forward on recent bars ──────────────────
 router.post("/alpaca/backtest", async (req, res) => {
@@ -201,10 +234,7 @@ router.post("/alpaca/backtest", async (req, res) => {
       const noTrade = applyNoTradeFilters(window1m, recall, setup);
       if (noTrade.blocked) continue;
 
-      let detected: { detected: boolean; direction: "long" | "short"; structure: number; orderFlow: number };
-      if (setup === "absorption_reversal") detected = detectAbsorptionReversal(window1m, closest5m, recall);
-      else if (setup === "sweep_reclaim") detected = detectSweepReclaim(window1m, closest5m, recall);
-      else detected = detectContinuationPullback(window1m, closest5m, recall);
+      const detected = runSetupDetector(setup, window1m, closest5m, recall);
 
       if (!detected.detected) continue;
 
@@ -326,7 +356,13 @@ router.post("/alpaca/recall-build", async (req, res) => {
     const symbols: string[] = req.body.symbols ?? ["BTCUSD", "ETHUSD"];
     const timeframe = (req.body.timeframe ?? "15Min") as "5Min" | "15Min" | "1Hour";
     const yearsBack = Math.min(Number(req.body.years ?? 1), 2);
-    const setupTypes: SetupType[] = ["absorption_reversal", "sweep_reclaim", "continuation_pullback"];
+    const setupTypes: SetupType[] = [
+      "absorption_reversal",
+      "sweep_reclaim",
+      "continuation_pullback",
+      "cvd_divergence",
+      "breakout_failure",
+    ];
 
     const end = new Date().toISOString();
     const start = new Date();
@@ -367,10 +403,7 @@ router.post("/alpaca/recall-build", async (req, res) => {
           const noTrade = applyNoTradeFilters(window, recall, setup);
           if (noTrade.blocked) continue;
 
-          let detected: { detected: boolean; direction: "long" | "short"; structure: number; orderFlow: number };
-          if (setup === "absorption_reversal") detected = detectAbsorptionReversal(window, slowContext, recall);
-          else if (setup === "sweep_reclaim") detected = detectSweepReclaim(window, slowContext, recall);
-          else detected = detectContinuationPullback(window, slowContext, recall);
+          const detected = runSetupDetector(setup, window, slowContext, recall);
 
           if (!detected.detected) continue;
 
