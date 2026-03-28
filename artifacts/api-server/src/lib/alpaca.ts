@@ -107,7 +107,6 @@ export async function getBars(
   const safeLimit = Math.min(limit, 1000);
 
   if (isCryptoSymbol(symbol)) {
-    // Free crypto endpoint — no auth needed
     const cryptoSymbol = toCryptoSlash(symbol);
     const params = new URLSearchParams({
       symbols: cryptoSymbol,
@@ -123,7 +122,6 @@ export async function getBars(
     return barsArr.map(normaliseBar);
   }
 
-  // Stock endpoint — requires valid Trading API keys
   if (!hasValidTradingKey) {
     throw new Error(
       "Stock market data requires Trading API keys (starting with PK or AK). " +
@@ -143,6 +141,57 @@ export async function getBars(
   const url = `${DATA_BASE}/v2/stocks/${symbol}/bars?${params}`;
   const data = await alpacaFetch(url, true) as { bars: Record<string, unknown>[] };
   return (data.bars ?? []).map(normaliseBar);
+}
+
+// Paginated historical fetch — collects ALL bars across multiple API pages
+// Used for multi-year recall building
+export async function getBarsHistorical(
+  symbol: string,
+  timeframe: AlpacaTimeframe,
+  start: string,
+  end: string,
+  maxBars: number = 50000
+): Promise<AlpacaBar[]> {
+  const allBars: AlpacaBar[] = [];
+  let pageToken: string | null = null;
+  const PAGE_SIZE = 1000;
+
+  if (!isCryptoSymbol(symbol)) {
+    // For stocks: single page call (limited by Trading key availability)
+    return getBars(symbol, timeframe, Math.min(maxBars, 10000), start, end);
+  }
+
+  const cryptoSymbol = toCryptoSlash(symbol);
+
+  while (allBars.length < maxBars) {
+    const params = new URLSearchParams({
+      symbols: cryptoSymbol,
+      timeframe: TF_MAP[timeframe],
+      limit: String(PAGE_SIZE),
+      start,
+      end,
+    });
+    if (pageToken) params.set("page_token", pageToken);
+
+    const url = `${CRYPTO_BASE}/bars?${params}`;
+    const data = await alpacaFetch(url, false) as {
+      bars: Record<string, Record<string, unknown>[]>;
+      next_page_token: string | null;
+    };
+
+    const page = (data.bars?.[cryptoSymbol] ?? []).map(normaliseBar);
+    allBars.push(...page);
+
+    if (!data.next_page_token || page.length === 0) break;
+    pageToken = data.next_page_token;
+
+    // Small delay to avoid rate limiting
+    await new Promise((r) => setTimeout(r, 120));
+  }
+
+  // Sort chronologically
+  allBars.sort((a, b) => new Date(a.Timestamp).getTime() - new Date(b.Timestamp).getTime());
+  return allBars;
 }
 
 export async function getLatestBar(symbol: string): Promise<AlpacaBar | null> {
