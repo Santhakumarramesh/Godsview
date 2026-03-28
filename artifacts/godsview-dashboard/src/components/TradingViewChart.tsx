@@ -5,9 +5,7 @@
  * — Full-screen toggle (Fullscreen API)
  * — One-click refresh (reloads the iframe to jump to present candles)
  * — Live price / latency overlay from our Alpaca SSE stream
- *
- * Data source: Coinbase (BTCUSD, ETHUSD) — IDENTICAL to TradingView.com prices.
- * Free for personal/non-commercial use per TradingView's embed policy.
+ * This approach requires no JavaScript library download and renders immediately.
  */
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
@@ -15,56 +13,84 @@ import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 type Timeframe = "1" | "5" | "15" | "60" | "D";
 
 interface Props {
-  symbol?:      string;
-  timeframe?:   Timeframe;
-  height?:      number;
+  symbol?: string;
+  timeframe?: Timeframe;
+  height?: number;
   showToolbar?: boolean;
-  studies?:     string[];
   showLatency?: boolean;
+  allowSymbolChange?: boolean;
+  studies?: string[];
 }
 
 const SYMBOL_MAP: Record<string, string> = {
-  BTCUSD:  "COINBASE:BTCUSD",
-  ETHUSD:  "COINBASE:ETHUSD",
+  BTCUSD: "COINBASE:BTCUSD",
+  ETHUSD: "COINBASE:ETHUSD",
   BTCUSDT: "COINBASE:BTCUSD",
   ETHUSDT: "COINBASE:ETHUSD",
   BINANCE_BTCUSDT: "BINANCE:BTCUSDT",
+  BINANCE_ETHUSDT: "BINANCE:ETHUSDT",
+  MES: "CME_MINI:MES1!",
+  MNQ: "CME_MINI:MNQ1!",
 };
 
 const TF_MAP: Record<string, string> = {
-  "1": "1", "5": "5", "15": "15", "60": "60", "D": "D",
-  "1Min": "1", "5Min": "5", "15Min": "15", "1Hour": "60", "1Day": "D",
+  "1": "1",
+  "5": "5",
+  "15": "15",
+  "60": "60",
+  "D": "D",
+  "1Min": "1",
+  "5Min": "5",
+  "15Min": "15",
+  "1Hour": "60",
+  "1Day": "D",
 };
 
 const C = {
-  card: "#1a191b", border: "rgba(72,72,73,0.25)",
-  primary: "#9cff93", secondary: "#669dff", tertiary: "#ff7162", outline: "#767576", muted: "#adaaab",
+  card: "#1a191b",
+  border: "rgba(72,72,73,0.25)",
+  primary: "#9cff93",
+  secondary: "#669dff",
+  tertiary: "#ff7162",
+  outline: "#767576",
+  muted: "#adaaab",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
 export default function TradingViewChart({
-  symbol      = "BTCUSD",
-  timeframe   = "5",
-  height      = 480,
+  symbol = "BTCUSD",
+  timeframe = "5",
+  height = 480,
   showToolbar = true,
   showLatency = true,
+  allowSymbolChange = true,
+  studies = ["Volume@tv-basicstudies", "RSI@tv-basicstudies"],
 }: Props) {
-  const tvSymbol = SYMBOL_MAP[symbol] ?? `COINBASE:${symbol}`;
-  const tvTf     = TF_MAP[timeframe] ?? timeframe;
+  const normalizedInput = symbol.trim().toUpperCase();
+  const tvSymbol =
+    SYMBOL_MAP[normalizedInput] ??
+    (normalizedInput.includes(":") ? normalizedInput : normalizedInput);
+  const tvTf = TF_MAP[timeframe] ?? timeframe;
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const [iframeKey,   setIframeKey]   = useState(0);
+  const [iframeKey, setIframeKey] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Live Alpaca SSE price + latency tracking
-  const [livePrice,  setLivePrice]  = useState<number | null>(null);
-  const [latencyMs,  setLatencyMs]  = useState<number | null>(null);
+  const [livePrice, setLivePrice] = useState<number | null>(null);
+  const [latencyMs, setLatencyMs] = useState<number | null>(null);
   const [lastTickAt, setLastTickAt] = useState<number | null>(null);
-  const [feedAge,    setFeedAge]    = useState<number>(0);   // seconds since last tick
+  const [feedAge, setFeedAge] = useState<number>(0);
   const esRef = useRef<EventSource | null>(null);
 
   // ── SSE subscription ──────────────────────────────────────────────────────
-  const alpacaSymbol = symbol.replace("USDT", "USD").replace("USDC", "USD");
+  const alpacaSymbol = normalizedInput
+    .split(":")
+    .pop()
+    ?.replace(/[^A-Z0-9]/g, "")
+    .replace("USDT", "USD")
+    .replace("USDC", "USD") ?? "BTCUSD";
+
   useEffect(() => {
     if (!showLatency) return;
     const es = new EventSource(`/api/alpaca/stream?symbol=${alpacaSymbol}`);
@@ -79,9 +105,14 @@ export default function TradingViewChart({
           setLatencyMs(now - tickTs);
           setLastTickAt(now);
         }
-      } catch { /* ignore malformed frames */ }
+      } catch {
+        // ignore malformed frames
+      }
     };
-    return () => { es.close(); esRef.current = null; };
+    return () => {
+      es.close();
+      esRef.current = null;
+    };
   }, [alpacaSymbol, showLatency]);
 
   // ── Feed-age counter (ticks up every second since last tick) ─────────────
@@ -113,39 +144,39 @@ export default function TradingViewChart({
   // ── Build TradingView URL ────────────────────────────────────────────────
   const iframeSrc = useMemo(() => {
     const base = "https://www.tradingview.com/widgetembed/";
-    const p = [
-      `symbol=${encodeURIComponent(tvSymbol)}`,
-      `interval=${tvTf}`,
-      `theme=dark`,
-      `style=1`,
-      `locale=en`,
-      `toolbar_bg=%231a191b`,
-      `enable_publishing=0`,
-      `hide_top_toolbar=${showToolbar ? "0" : "1"}`,
-      `hide_legend=0`,
-      `save_image=0`,
-      `hide_side_toolbar=0`,
-      `allow_symbol_change=0`,
-      `withdateranges=1`,
-      `calendar=0`,
-      `studies=Volume%40tv-basicstudies`,
-      `studies=RSI%40tv-basicstudies`,
-      `backgroundColor=rgba%2814%2C14%2C15%2C1%29`,
-      `details=1`,          // show detailed price info
-      `hotlist=0`,
-      `news=0`,
-    ];
-    return `${base}?${p.join("&")}`;
-  }, [tvSymbol, tvTf, showToolbar]);
+    const params = new URLSearchParams();
+    const normalizedStudies = studies.map((s) => s.trim()).filter(Boolean);
 
-  // Latency quality colour
+    params.set("symbol", tvSymbol);
+    params.set("interval", tvTf);
+    params.set("theme", "dark");
+    params.set("style", "1");
+    params.set("locale", "en");
+    params.set("toolbar_bg", "#1a191b");
+    params.set("enable_publishing", "0");
+    params.set("hide_top_toolbar", showToolbar ? "0" : "1");
+    params.set("hide_legend", "0");
+    params.set("save_image", "0");
+    params.set("hide_side_toolbar", "0");
+    params.set("allow_symbol_change", allowSymbolChange ? "1" : "0");
+    params.set("withdateranges", "1");
+    params.set("calendar", "0");
+    params.set("backgroundColor", "rgba(14,14,15,1)");
+    params.set("details", "1");
+    params.set("hotlist", "0");
+    params.set("news", "0");
+    params.set("studies", JSON.stringify(normalizedStudies));
+
+    return `${base}?${params.toString()}`;
+  }, [tvSymbol, tvTf, showToolbar, allowSymbolChange, studies]);
+
   const latencyColor =
     latencyMs === null ? C.outline :
-    latencyMs < 300    ? C.primary :
-    latencyMs < 1000   ? "#fbbf24" : C.tertiary;
+    latencyMs < 300 ? C.primary :
+    latencyMs < 1000 ? "#fbbf24" : C.tertiary;
 
   const feedAgeColor =
-    feedAge < 5  ? C.primary :
+    feedAge < 5 ? C.primary :
     feedAge < 30 ? "#fbbf24" : C.tertiary;
 
   const effectiveHeight = isFullscreen ? "100vh" : `${height}px`;
@@ -188,7 +219,6 @@ export default function TradingViewChart({
               backdropFilter: "blur(4px)",
             }}
           >
-            {/* Feed age dot */}
             <span
               style={{
                 width: "5px",
@@ -229,8 +259,14 @@ export default function TradingViewChart({
             color: C.muted,
             transition: "color 0.15s, border-color 0.15s",
           }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = C.secondary; (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(102,157,255,0.4)"; }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = C.muted; (e.currentTarget as HTMLButtonElement).style.borderColor = C.border; }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.color = C.secondary;
+            (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(102,157,255,0.4)";
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.color = C.muted;
+            (e.currentTarget as HTMLButtonElement).style.borderColor = C.border;
+          }}
         >
           <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>refresh</span>
         </button>
@@ -253,7 +289,10 @@ export default function TradingViewChart({
             color: isFullscreen ? C.primary : C.muted,
             transition: "color 0.15s, border-color 0.15s",
           }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = C.primary; (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(156,255,147,0.4)"; }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.color = C.primary;
+            (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(156,255,147,0.4)";
+          }}
           onMouseLeave={(e) => {
             (e.currentTarget as HTMLButtonElement).style.color = isFullscreen ? C.primary : C.muted;
             (e.currentTarget as HTMLButtonElement).style.borderColor = isFullscreen ? "rgba(156,255,147,0.35)" : C.border;
@@ -269,7 +308,7 @@ export default function TradingViewChart({
       <iframe
         key={iframeKey}
         src={iframeSrc}
-        title={`TradingView chart — ${tvSymbol}`}
+        title={`TradingView chart - ${tvSymbol}`}
         width="100%"
         height="100%"
         frameBorder="0"
@@ -280,7 +319,7 @@ export default function TradingViewChart({
   );
 }
 
-/** Utility: convert "5Min" → "5" for the TradingView timeframe prop */
+/** Utility: convert "5Min" -> "5" for the TradingView timeframe prop */
 export function toTVInterval(tf: string): Timeframe {
   return (TF_MAP[tf] ?? tf) as Timeframe;
 }

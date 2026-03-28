@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { claudeVeto, isClaudeAvailable, type ClaudeVetoResult } from "../lib/claude";
 import { getBars, getBarsHistorical, getLatestBar, getLatestTrade, getAccount, getPositions, hasValidTradingKey, isBrokerKey, placeOrder, getOrders, cancelOrder, cancelAllOrders, closePosition, getTypedPositions, calcPositionSize, type AlpacaBar, type AlpacaTimeframe, type PlaceOrderRequest } from "../lib/alpaca";
 import { alpacaStream, type TickListener } from "../lib/alpaca_stream";
@@ -26,16 +26,119 @@ import { db, accuracyResultsTable, marketBarsTable, signalsTable } from "@worksp
 import { eq, desc, and, count, sql, inArray } from "drizzle-orm";
 
 const router: IRouter = Router();
+const LIVE_TRADING_ENABLED = String(process.env.GODSVIEW_ENABLE_LIVE_TRADING ?? "").toLowerCase() === "true";
+const OPERATOR_TOKEN = (process.env.GODSVIEW_OPERATOR_TOKEN ?? "").trim();
 
 const SUPPORTED_SYMBOLS: Record<string, string> = {
   MES: "SPY",
   MNQ: "QQQ",
+  MES1: "SPY",
+  MNQ1: "QQQ",
   BTCUSDT: "BTCUSD",
   ETHUSDT: "ETHUSD",
 };
 
 function toAlpacaSymbol(instrument: string): string {
-  return SUPPORTED_SYMBOLS[instrument] ?? instrument;
+  const normalized = instrument
+    .trim()
+    .toUpperCase()
+    .split(":")
+    .pop()
+    ?.replace(/[^A-Z0-9]/g, "") ?? "";
+
+  if (!normalized) return "BTCUSD";
+  if (SUPPORTED_SYMBOLS[normalized]) return SUPPORTED_SYMBOLS[normalized];
+  const rootSymbol = normalized.replace(/[0-9]+$/g, "");
+  if (rootSymbol && SUPPORTED_SYMBOLS[rootSymbol]) return SUPPORTED_SYMBOLS[rootSymbol];
+  if (normalized.endsWith("USDT")) return `${normalized.slice(0, -4)}USD`;
+  return normalized;
+}
+
+function normalizeIndicatorHint(raw: string): string {
+  const normalized = raw
+    .toLowerCase()
+    .replace(/@.*$/, "")
+    .replace(/\([^)]*\)/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  if (!normalized) return "";
+  if (normalized.includes("macd")) return "macd";
+  if (normalized.includes("rsi")) return "rsi";
+  if (normalized.includes("bollinger") || normalized === "bb" || normalized.startsWith("bb_")) return "bollinger";
+  if (normalized.includes("ema") || normalized.includes("moving_average")) return "ema";
+  if (normalized.includes("stoch")) return "stoch";
+  if (normalized.includes("supertrend")) return "supertrend";
+  if (normalized.includes("volume")) return "volume";
+  return normalized;
+}
+
+function parseIndicatorHints(payload: unknown): string[] {
+  if (!payload || typeof payload !== "object") return [];
+  const body = payload as Record<string, unknown>;
+  const candidates = [body.indicators, body.indicator_hints, body.studies];
+  const rawHints: string[] = [];
+
+  for (const value of candidates) {
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (typeof item === "string") rawHints.push(item);
+      }
+      continue;
+    }
+    if (typeof value === "string") {
+      rawHints.push(...value.split(",").map((v) => v.trim()).filter(Boolean));
+    }
+  }
+
+  const deduped = new Set<string>();
+  for (const hint of rawHints) {
+    const normalized = normalizeIndicatorHint(hint);
+    if (normalized) deduped.add(normalized);
+  }
+  return Array.from(deduped).slice(0, 32);
+}
+
+function getProvidedOperatorToken(req: Request): string | null {
+  const fromHeader = req.header("x-godsview-token")?.trim();
+  if (fromHeader) return fromHeader;
+
+  const authHeader = req.header("authorization")?.trim();
+  if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
+    const bearer = authHeader.slice("bearer ".length).trim();
+    return bearer || null;
+  }
+  return null;
+}
+
+function ensureTradingWriteAccess(req: Request, res: Response): boolean {
+  if (!LIVE_TRADING_ENABLED) {
+    res.status(403).json({
+      error: "trading_disabled",
+      message: "Trading write actions are disabled by server policy. Set GODSVIEW_ENABLE_LIVE_TRADING=true to enable.",
+    });
+    return false;
+  }
+
+  if (!OPERATOR_TOKEN) {
+    req.log.error("Trading write attempted but GODSVIEW_OPERATOR_TOKEN is not configured");
+    res.status(503).json({
+      error: "operator_token_not_configured",
+      message: "Server is missing GODSVIEW_OPERATOR_TOKEN; refusing trading write actions.",
+    });
+    return false;
+  }
+
+  const provided = getProvidedOperatorToken(req);
+  if (!provided || provided !== OPERATOR_TOKEN) {
+    res.status(401).json({
+      error: "unauthorized",
+      message: "Missing or invalid operator token.",
+    });
+    return false;
+  }
+
+  return true;
 }
 
 // ─── In-memory cache for candle data (reduces Alpaca API calls) ──────────────
@@ -54,7 +157,8 @@ router.get("/alpaca/candles", async (req, res) => {
   const cached = candleCache.get(cacheKey);
   if (cached && Date.now() - cached.fetchedAt < CANDLE_CACHE_TTL) {
     res.setHeader("X-Cache", "HIT");
-    return res.json({ symbol, timeframe, bars: cached.bars, fetched_at: new Date(cached.fetchedAt).toISOString() });
+    res.json({ symbol, timeframe, bars: cached.bars, fetched_at: new Date(cached.fetchedAt).toISOString() });
+    return;
   }
 
   try {
@@ -190,8 +294,25 @@ router.get("/alpaca/ticker", async (req, res) => {
 // ─── GET /api/alpaca/account ──────────────────────────────────────────────────
 router.get("/alpaca/account", async (req, res) => {
   try {
-    const account = await getAccount();
-    res.json(account);
+    const account = await getAccount() as Record<string, string | number | boolean | null>;
+    const accountNumber = String(account.account_number ?? "");
+    const isPaper = accountNumber.startsWith("PA");
+
+    res.json({
+      status: account.status ?? null,
+      crypto_status: account.crypto_status ?? null,
+      currency: account.currency ?? "USD",
+      buying_power: String(account.buying_power ?? "0"),
+      cash: String(account.cash ?? "0"),
+      portfolio_value: String(account.portfolio_value ?? account.equity ?? "0"),
+      equity: String(account.equity ?? "0"),
+      trading_blocked: Boolean(account.trading_blocked),
+      account_blocked: Boolean(account.account_blocked),
+      shorting_enabled: Boolean(account.shorting_enabled),
+      options_trading_level: account.options_trading_level ?? null,
+      is_paper: isPaper,
+      mode: isPaper ? "paper" : "live",
+    });
   } catch (err) {
     req.log.error({ err }, "Failed to get Alpaca account");
     res.status(500).json({ error: "alpaca_error", message: "Failed to fetch account" });
@@ -212,6 +333,7 @@ router.get("/alpaca/positions", async (req, res) => {
 // ─── POST /api/alpaca/orders — place a new order ─────────────────────────────
 router.post("/alpaca/orders", async (req, res) => {
   try {
+    if (!ensureTradingWriteAccess(req, res)) return;
     if (!hasValidTradingKey) {
       res.status(403).json({ error: "no_trading_key", message: "Trading API keys (PK/AK) required. Paper keys from app.alpaca.markets." });
       return;
@@ -258,6 +380,7 @@ router.get("/alpaca/orders", async (req, res) => {
 // ─── DELETE /api/alpaca/orders/:id — cancel a specific order ─────────────────
 router.delete("/alpaca/orders/:id", async (req, res) => {
   try {
+    if (!ensureTradingWriteAccess(req, res)) return;
     if (!hasValidTradingKey) { res.status(403).json({ error: "no_trading_key" }); return; }
     const result = await cancelOrder(req.params.id);
     res.json({ success: true, result });
@@ -270,6 +393,7 @@ router.delete("/alpaca/orders/:id", async (req, res) => {
 // ─── DELETE /api/alpaca/orders — cancel all open orders ──────────────────────
 router.delete("/alpaca/orders", async (req, res) => {
   try {
+    if (!ensureTradingWriteAccess(req, res)) return;
     if (!hasValidTradingKey) { res.status(403).json({ error: "no_trading_key" }); return; }
     const result = await cancelAllOrders();
     res.json({ success: true, result });
@@ -291,6 +415,7 @@ router.get("/alpaca/positions/live", async (req, res) => {
 // ─── DELETE /api/alpaca/positions/:symbol — close a position ─────────────────
 router.delete("/alpaca/positions/:symbol", async (req, res) => {
   try {
+    if (!ensureTradingWriteAccess(req, res)) return;
     if (!hasValidTradingKey) { res.status(403).json({ error: "no_trading_key" }); return; }
     const result = await closePosition(req.params.symbol);
     res.json({ success: true, result });
@@ -337,6 +462,7 @@ router.get("/alpaca/bars", async (req, res) => {
 router.post("/alpaca/analyze", async (req, res) => {
   try {
     const instrument = String(req.body.instrument ?? "BTCUSDT");
+    const indicatorHints = parseIndicatorHints(req.body);
     const setups: SetupType[] = req.body.setups ?? [
       "absorption_reversal",
       "sweep_reclaim",
@@ -372,7 +498,7 @@ router.post("/alpaca/analyze", async (req, res) => {
       return;
     }
 
-    const recall = buildRecallFeatures(bars1m, bars5m);
+    const recall = buildRecallFeatures(bars1m, bars5m, indicatorHints);
     const lastBar = bars1m[bars1m.length - 1];
     const atr = computeATR(bars1m);
     const entryPrice = Number(lastBar.Close);
@@ -533,7 +659,9 @@ router.post("/alpaca/analyze", async (req, res) => {
 
     res.json({
       instrument,
-      alpaca_symbol:    alpacaSymbol,
+      alpaca_symbol: alpacaSymbol,
+      indicator_hints: recall.indicator_hints,
+      analyzed_at: new Date().toISOString(),
       analyzed_at:      new Date().toISOString(),
       regime,
       regime_label:     regime.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
@@ -568,6 +696,7 @@ function runSetupDetector(
 router.post("/alpaca/backtest", async (req, res) => {
   try {
     const instrument = String(req.body.instrument ?? "BTCUSDT");
+    const indicatorHints = parseIndicatorHints(req.body);
     const setup: SetupType = req.body.setup_type ?? "absorption_reversal";
     const days = Math.min(Number(req.body.days ?? 5), 30);
     const alpacaSymbol = toAlpacaSymbol(instrument);
@@ -595,7 +724,7 @@ router.post("/alpaca/backtest", async (req, res) => {
       const closest5m = bars5m.filter((b) => new Date(b.Timestamp).getTime() <= windowTime).slice(-20);
       if (closest5m.length < 5) continue;
 
-      const recall = buildRecallFeatures(window1m, closest5m);
+      const recall = buildRecallFeatures(window1m, closest5m, indicatorHints);
       // replayMode: true — permissive backtest (no session/cooldown/spread gates, wide ATR cap)
       // Equivalent to RiskConfig replay overrides: max_spread_atr=99, require_session_active=False
       const noTrade = applyNoTradeFilters(window1m, recall, setup, { replayMode: true });
@@ -713,6 +842,7 @@ router.post("/alpaca/backtest", async (req, res) => {
     res.json({
       instrument,
       alpaca_symbol: alpacaSymbol,
+      indicator_hints: indicatorHints,
       setup_type: setup,
       days_analyzed: days,
       bars_scanned: bars1m.length,
@@ -751,9 +881,17 @@ router.post("/alpaca/backtest", async (req, res) => {
 // to build the accuracy recall database.
 router.post("/alpaca/recall-build", async (req, res) => {
   try {
-    const symbols: string[] = req.body.symbols ?? ["BTCUSD", "ETHUSD"];
+    const rawSymbols: string[] = req.body.symbols ?? ["BTCUSD", "ETHUSD"];
+    const symbols = Array.from(
+      new Set(
+        rawSymbols
+          .map((symbol) => toAlpacaSymbol(String(symbol ?? "")))
+          .filter((symbol) => symbol.length > 0)
+      )
+    );
     const timeframe = (req.body.timeframe ?? "15Min") as "5Min" | "15Min" | "1Hour";
     const yearsBack = Math.min(Number(req.body.years ?? 1), 2);
+    const indicatorHints = parseIndicatorHints(req.body);
     const setupTypes: SetupType[] = [
       "absorption_reversal",
       "sweep_reclaim",
@@ -792,7 +930,7 @@ router.post("/alpaca/recall-build", async (req, res) => {
         const slowContext = slowBars.filter((b) => new Date(b.Timestamp).getTime() <= windowTime).slice(-20);
         if (slowContext.length < 5) continue;
 
-        const recall = buildRecallFeatures(window, slowContext);
+        const recall = buildRecallFeatures(window, slowContext, indicatorHints);
         const atr = computeATR(window);
         const entryBar = bars[i];
         const entryPrice = entryBar.Close;
@@ -872,6 +1010,7 @@ router.post("/alpaca/recall-build", async (req, res) => {
       symbols_processed: symbols.length,
       total_records_saved: totalSaved,
       years_back: yearsBack,
+      indicator_hints: indicatorHints,
       summary,
     });
   } catch (err) {

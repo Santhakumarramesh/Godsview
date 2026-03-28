@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import TradingViewChart from "@/components/TradingViewChart";
@@ -30,6 +30,7 @@ const C = {
 
 type AnalyzeResult = {
   instrument: string; alpaca_symbol: string; analyzed_at: string; regime: string; regime_label: string;
+  indicator_hints?: string[];
   bars_analyzed: Record<string, number>; recall_features: Record<string, any>;
   setups_detected: number; setups_blocked: Array<{ setup_type: string; reason: string }>;
   high_conviction: Array<SetupResult>; setups: Array<SetupResult>;
@@ -51,6 +52,7 @@ type SetupResult = {
 };
 type BacktestResult = {
   instrument: string; setup_type: string; days_analyzed: number; bars_scanned: number;
+  indicator_hints?: string[];
   total_signals: number; closed_signals: number; wins: number; losses: number; win_rate: number;
   profit_factor: number; expectancy_ticks: number; expectancy_dollars: number;
   gross_pnl_dollars: number; avg_win_dollars: number; avg_loss_dollars: number;
@@ -68,6 +70,7 @@ type AccuracyResult = {
 };
 type RecallBuildResult = {
   status: string; symbols_processed: number; total_records_saved: number; years_back: number;
+  indicator_hints?: string[];
   summary: Record<string, { bars_fetched?: number; signals_detected?: number; closed?: number; wins?: number; win_rate?: string; by_setup?: Array<{ setup: string; total: number; wins: number; win_rate: string }>; date_range?: { start: string; end: string }; timeframe?: string; error?: string }>;
 };
 
@@ -76,6 +79,25 @@ const INSTRUMENTS = [
   { value: "ETHUSDT", label: "ETH/USD · Live", live: true },
   { value: "MES", label: "MES → SPY", live: false },
   { value: "MNQ", label: "MNQ → QQQ", live: false },
+];
+
+const ALPACA_SYMBOL_BY_INSTRUMENT: Record<string, string> = {
+  BTCUSDT: "BTCUSD",
+  ETHUSDT: "ETHUSD",
+  MES: "SPY",
+  MNQ: "QQQ",
+};
+
+const TV_SYMBOL_BY_INSTRUMENT: Record<string, string> = {
+  BTCUSDT: "COINBASE:BTCUSD",
+  ETHUSDT: "COINBASE:ETHUSD",
+  MES: "CME_MINI:MES1!",
+  MNQ: "CME_MINI:MNQ1!",
+};
+
+const DEFAULT_TV_STUDIES = [
+  "Volume@tv-basicstudies",
+  "RSI@tv-basicstudies",
 ];
 
 const SETUPS = ["absorption_reversal", "sweep_reclaim", "continuation_pullback", "cvd_divergence", "breakout_failure"];
@@ -149,6 +171,13 @@ function ActionBtn({ onClick, pending, pendingLabel, label, color, icon }: { onC
   );
 }
 
+function parseStudies(value: string): string[] {
+  return value
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 type Tab = "live" | "backtest" | "accuracy" | "recall" | "heatmap" | "replay";
 
 export default function AlpacaPage() {
@@ -160,9 +189,18 @@ export default function AlpacaPage() {
   const [showAllSetups, setShowAllSetups] = useState(false);
   const [executingSetup, setExecutingSetup] = useState<SetupResult | null>(null);
   const [chartTimeframe, setChartTimeframe] = useState<"1" | "5" | "15" | "60" | "D">("5");
+  const [tvSymbolInput, setTvSymbolInput] = useState("COINBASE:BTCUSD");
+  const [tvStudiesInput, setTvStudiesInput] = useState(DEFAULT_TV_STUDIES.join(", "));
+  const [useChartSymbolForAnalysis, setUseChartSymbolForAnalysis] = useState(true);
 
-  const alpacaSymbol = instrument === "ETHUSDT" ? "ETHUSD" : "BTCUSD";
-  const tvSymbol     = instrument === "ETHUSDT" ? "ETHUSD" : "BTCUSD";
+  const fallbackTvSymbol = TV_SYMBOL_BY_INSTRUMENT[instrument] ?? "COINBASE:BTCUSD";
+  const tvSymbol = tvSymbolInput.trim() || fallbackTvSymbol;
+  const alpacaSymbol = ALPACA_SYMBOL_BY_INSTRUMENT[instrument] ?? "BTCUSD";
+  const analysisInstrument = useChartSymbolForAnalysis ? tvSymbol : instrument;
+  const tvStudies = useMemo(() => {
+    const parsed = parseStudies(tvStudiesInput);
+    return parsed.length > 0 ? parsed : DEFAULT_TV_STUDIES;
+  }, [tvStudiesInput]);
 
   const { data: accuracy, refetch: refetchAccuracy } = useQuery<AccuracyResult>({
     queryKey: ["alpaca-accuracy"],
@@ -177,19 +215,54 @@ export default function AlpacaPage() {
   });
 
   const analyzeMutation = useMutation<AnalyzeResult>({
-    mutationFn: () => fetch(`${BASE}/alpaca/analyze`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ instrument, setups: SETUPS }) }).then((r) => r.json()),
+    mutationFn: () =>
+      fetch(`${BASE}/alpaca/analyze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ instrument: analysisInstrument, setups: SETUPS, indicator_hints: tvStudies }),
+      }).then((r) => r.json()),
   });
   const backtestMutation = useMutation<BacktestResult>({
-    mutationFn: () => fetch(`${BASE}/alpaca/backtest`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ instrument, setup_type: selectedSetup, days: backtestDays }) }).then((r) => { refetchAccuracy(); return r.json(); }),
+    mutationFn: () =>
+      fetch(`${BASE}/alpaca/backtest`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ instrument: analysisInstrument, setup_type: selectedSetup, days: backtestDays, indicator_hints: tvStudies }),
+      }).then((r) => {
+        refetchAccuracy();
+        return r.json();
+      }),
   });
   const recallBuildMutation = useMutation<RecallBuildResult>({
-    mutationFn: () => fetch(`${BASE}/alpaca/recall-build`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ symbols: ["BTCUSD", "ETHUSD"], timeframe: "15Min", years: recallYears }) }).then((r) => { refetchAccuracy(); return r.json(); }),
+    mutationFn: () =>
+      fetch(`${BASE}/alpaca/recall-build`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbols: [analysisInstrument], timeframe: "15Min", years: recallYears, indicator_hints: tvStudies }),
+      }).then((r) => {
+        refetchAccuracy();
+        return r.json();
+      }),
   });
 
   const analyzeData = analyzeMutation.data;
   const btData = backtestMutation.data;
   const recallData = recallBuildMutation.data;
   const displaySetups = analyzeData ? (showAllSetups ? analyzeData.setups : analyzeData.high_conviction) : [];
+  const indicatorFeatures = (analyzeData?.recall_features as Record<string, any> | undefined)?.indicators as
+    | {
+        rsi_14?: number;
+        macd_hist?: number;
+        ema_spread_pct?: number;
+        bb_width?: number;
+        indicator_bias?: string;
+      }
+    | undefined;
+  const indicatorHints = (
+    analyzeData?.indicator_hints ??
+    ((analyzeData?.recall_features as Record<string, any> | undefined)?.indicator_hints as string[] | undefined) ??
+    []
+  ) as string[];
 
   const TABS: { id: Tab; label: string; icon: string }[] = [
     { id: "live",    label: "Live Analysis",      icon: "sensors" },
@@ -277,31 +350,109 @@ export default function AlpacaPage() {
 
           {/* TradingView Chart — live prices matching TradingView.com */}
           <div className="rounded overflow-hidden" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
-            <div className="flex items-center justify-between px-4 py-2.5" style={{ borderBottom: `1px solid rgba(72,72,73,0.15)` }}>
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined" style={{ fontSize: "14px", color: C.secondary }}>candlestick_chart</span>
-                <span style={{ fontSize: "9px", fontFamily: "Space Grotesk", fontWeight: 700, color: C.muted, letterSpacing: "0.15em", textTransform: "uppercase" }}>
-                  {tvSymbol} · Live Chart
-                </span>
-                <span style={{ fontSize: "8px", fontFamily: "Space Grotesk", color: C.outlineVar }}>Coinbase · Real-Time</span>
+            <div className="px-4 py-2.5 space-y-2" style={{ borderBottom: `1px solid rgba(72,72,73,0.15)` }}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined" style={{ fontSize: "14px", color: C.secondary }}>candlestick_chart</span>
+                  <span style={{ fontSize: "9px", fontFamily: "Space Grotesk", fontWeight: 700, color: C.muted, letterSpacing: "0.15em", textTransform: "uppercase" }}>
+                    {tvSymbol} · TradingView
+                  </span>
+                  <span style={{ fontSize: "8px", fontFamily: "Space Grotesk", color: C.outlineVar }}>
+                    Any symbol via EXCHANGE:TICKER
+                  </span>
+                </div>
+                <div className="flex gap-1">
+                  {(["1","5","15","60","D"] as const).map((tf) => (
+                    <button key={tf} onClick={() => setChartTimeframe(tf)}
+                      style={{
+                        fontSize: "8px", fontFamily: "Space Grotesk", fontWeight: 700, padding: "3px 8px", borderRadius: "3px",
+                        backgroundColor: chartTimeframe === tf ? "rgba(156,255,147,0.12)" : "transparent",
+                        color: chartTimeframe === tf ? C.primary : C.outline,
+                        border: `1px solid ${chartTimeframe === tf ? "rgba(156,255,147,0.25)" : "transparent"}`,
+                        cursor: "pointer", letterSpacing: "0.05em",
+                      }}>
+                      {tf === "60" ? "1H" : tf === "D" ? "1D" : `${tf}M`}
+                    </button>
+                  ))}
+                </div>
               </div>
-              {/* Timeframe switcher */}
-              <div className="flex gap-1">
-                {(["1","5","15","60","D"] as const).map((tf) => (
-                  <button key={tf} onClick={() => setChartTimeframe(tf)}
-                    style={{
-                      fontSize: "8px", fontFamily: "Space Grotesk", fontWeight: 700, padding: "3px 8px", borderRadius: "3px",
-                      backgroundColor: chartTimeframe === tf ? "rgba(156,255,147,0.12)" : "transparent",
-                      color: chartTimeframe === tf ? C.primary : C.outline,
-                      border: `1px solid ${chartTimeframe === tf ? "rgba(156,255,147,0.25)" : "transparent"}`,
-                      cursor: "pointer", letterSpacing: "0.05em",
-                    }}>
-                    {tf === "60" ? "1H" : tf === "D" ? "1D" : `${tf}M`}
-                  </button>
-                ))}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <div>
+                  <MicroLabel>Chart Symbol (EXCHANGE:TICKER)</MicroLabel>
+                  <input
+                    value={tvSymbolInput}
+                    onChange={(e) => setTvSymbolInput(e.target.value.toUpperCase())}
+                    placeholder="NASDAQ:AAPL or BINANCE:SOLUSDT"
+                    className="mt-1.5 w-full rounded px-3 py-2 outline-none text-xs"
+                    style={{ backgroundColor: "#0e0e0f", border: `1px solid ${C.border}`, color: "#ffffff", fontFamily: "JetBrains Mono, monospace" }}
+                  />
+                </div>
+                <div>
+                  <MicroLabel>Indicators (comma-separated)</MicroLabel>
+                  <input
+                    value={tvStudiesInput}
+                    onChange={(e) => setTvStudiesInput(e.target.value)}
+                    placeholder="Volume@tv-basicstudies, RSI@tv-basicstudies"
+                    className="mt-1.5 w-full rounded px-3 py-2 outline-none text-xs"
+                    style={{ backgroundColor: "#0e0e0f", border: `1px solid ${C.border}`, color: "#ffffff", fontFamily: "JetBrains Mono, monospace" }}
+                  />
+                </div>
               </div>
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  onClick={() => setTvSymbolInput(fallbackTvSymbol)}
+                  className="px-2 py-1 rounded"
+                  style={{ fontSize: "8px", fontFamily: "Space Grotesk", letterSpacing: "0.1em", textTransform: "uppercase", color: C.secondary, border: "1px solid rgba(102,157,255,0.25)", backgroundColor: "rgba(102,157,255,0.08)" }}
+                >
+                  Sync Symbol To Instrument
+                </button>
+                <button
+                  onClick={() => setTvStudiesInput(DEFAULT_TV_STUDIES.join(", "))}
+                  className="px-2 py-1 rounded"
+                  style={{ fontSize: "8px", fontFamily: "Space Grotesk", letterSpacing: "0.1em", textTransform: "uppercase", color: C.muted, border: `1px solid ${C.border}`, backgroundColor: "rgba(72,72,73,0.08)" }}
+                >
+                  Default Indicators
+                </button>
+                <button
+                  onClick={() => setTvStudiesInput("Volume@tv-basicstudies, RSI@tv-basicstudies, MACD@tv-basicstudies, BB@tv-basicstudies")}
+                  className="px-2 py-1 rounded"
+                  style={{ fontSize: "8px", fontFamily: "Space Grotesk", letterSpacing: "0.1em", textTransform: "uppercase", color: C.primary, border: "1px solid rgba(156,255,147,0.25)", backgroundColor: "rgba(156,255,147,0.08)" }}
+                >
+                  Momentum Bundle
+                </button>
+                <button
+                  onClick={() => setUseChartSymbolForAnalysis((prev) => !prev)}
+                  className="px-2 py-1 rounded"
+                  style={{
+                    fontSize: "8px",
+                    fontFamily: "Space Grotesk",
+                    letterSpacing: "0.1em",
+                    textTransform: "uppercase",
+                    color: useChartSymbolForAnalysis ? C.secondary : C.outline,
+                    border: `1px solid ${useChartSymbolForAnalysis ? "rgba(102,157,255,0.25)" : "rgba(118,117,118,0.25)"}`,
+                    backgroundColor: useChartSymbolForAnalysis ? "rgba(102,157,255,0.08)" : "rgba(72,72,73,0.08)",
+                  }}
+                >
+                  {useChartSymbolForAnalysis ? "Model Uses Chart Symbol" : "Model Uses Instrument"}
+                </button>
+              </div>
+              <p style={{ fontSize: "8px", color: C.secondary, fontFamily: "Space Grotesk" }}>
+                Analysis target: {analysisInstrument}
+              </p>
+              <p style={{ fontSize: "8px", color: C.outlineVar, fontFamily: "Space Grotesk" }}>
+                Premium-only TradingView indicators depend on your TradingView account/session and licensing.
+              </p>
             </div>
-            <TradingViewChart symbol={tvSymbol} timeframe={chartTimeframe} height={480} showToolbar={true} studies={["Volume@tv-basicstudies", "RSI@tv-basicstudies"]} />
+            <TradingViewChart
+              symbol={tvSymbol}
+              timeframe={chartTimeframe}
+              height={480}
+              showToolbar={true}
+              allowSymbolChange={true}
+              studies={tvStudies}
+            />
           </div>
 
           {analyzeMutation.isPending && (
@@ -338,6 +489,52 @@ export default function AlpacaPage() {
                   </div>
                 ))}
               </div>
+
+              {indicatorFeatures && (
+                <div className="rounded p-4 space-y-3" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+                  <div className="flex items-center justify-between">
+                    <MicroLabel>Indicator Inputs Applied To Recall Score</MicroLabel>
+                    <span style={{ fontSize: "9px", fontFamily: "Space Grotesk", color: indicatorFeatures.indicator_bias === "bull" ? C.primary : indicatorFeatures.indicator_bias === "bear" ? C.tertiary : C.muted }}>
+                      Bias: {(indicatorFeatures.indicator_bias ?? "neutral").toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    <div className="rounded p-2.5" style={{ backgroundColor: "#0e0e0f" }}>
+                      <MicroLabel>RSI 14</MicroLabel>
+                      <div style={{ marginTop: "4px", fontFamily: "JetBrains Mono, monospace", fontSize: "11px", color: "#ffffff" }}>
+                        {(indicatorFeatures.rsi_14 ?? 0).toFixed(2)}
+                      </div>
+                    </div>
+                    <div className="rounded p-2.5" style={{ backgroundColor: "#0e0e0f" }}>
+                      <MicroLabel>MACD Hist</MicroLabel>
+                      <div style={{ marginTop: "4px", fontFamily: "JetBrains Mono, monospace", fontSize: "11px", color: (indicatorFeatures.macd_hist ?? 0) >= 0 ? C.primary : C.tertiary }}>
+                        {(indicatorFeatures.macd_hist ?? 0).toFixed(5)}
+                      </div>
+                    </div>
+                    <div className="rounded p-2.5" style={{ backgroundColor: "#0e0e0f" }}>
+                      <MicroLabel>EMA Spread %</MicroLabel>
+                      <div style={{ marginTop: "4px", fontFamily: "JetBrains Mono, monospace", fontSize: "11px", color: (indicatorFeatures.ema_spread_pct ?? 0) >= 0 ? C.primary : C.tertiary }}>
+                        {((indicatorFeatures.ema_spread_pct ?? 0) * 100).toFixed(3)}%
+                      </div>
+                    </div>
+                    <div className="rounded p-2.5" style={{ backgroundColor: "#0e0e0f" }}>
+                      <MicroLabel>BB Width</MicroLabel>
+                      <div style={{ marginTop: "4px", fontFamily: "JetBrains Mono, monospace", fontSize: "11px", color: "#ffffff" }}>
+                        {(indicatorFeatures.bb_width ?? 0).toFixed(4)}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {indicatorHints.length > 0 ? indicatorHints.map((hint) => (
+                      <span key={hint} className="px-2 py-0.5 rounded" style={{ fontSize: "8px", fontFamily: "Space Grotesk", color: C.secondary, border: "1px solid rgba(102,157,255,0.25)", backgroundColor: "rgba(102,157,255,0.08)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                        {hint}
+                      </span>
+                    )) : (
+                      <span style={{ fontSize: "9px", color: C.outlineVar }}>No indicator hints sent.</span>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Blocked setups */}
               {analyzeData.setups_blocked.length > 0 && (
@@ -511,7 +708,7 @@ export default function AlpacaPage() {
                   {/* Inline execution panel for this setup */}
                   {executingSetup?.setup_type === setup.setup_type && executingSetup?.direction === setup.direction && (
                     <ExecutionPanel
-                      symbol={instrument === "ETHUSDT" ? "ETHUSD" : "BTCUSD"}
+                      symbol={analyzeData?.alpaca_symbol ?? alpacaSymbol}
                       direction={setup.direction as "long" | "short"}
                       entryPrice={setup.entry_price}
                       stopLossPrice={setup.stop_loss}

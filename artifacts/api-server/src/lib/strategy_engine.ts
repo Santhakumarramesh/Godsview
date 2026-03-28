@@ -37,6 +37,19 @@ export type CVDFeatures = {
   large_delta_bar: boolean;      // last bar has outsized delta
 };
 
+export type IndicatorFeatures = {
+  rsi_14: number;
+  macd_line: number;
+  macd_signal: number;
+  macd_hist: number;
+  ema_fast: number;
+  ema_slow: number;
+  ema_spread_pct: number;
+  bb_width: number;
+  bb_position: number;
+  indicator_bias: "bull" | "bear" | "neutral";
+};
+
 export type RecallFeatures = {
   trend_slope_1m: number;
   trend_slope_5m: number;
@@ -57,6 +70,8 @@ export type RecallFeatures = {
   directional_persistence: number;
   sk: SKFeatures;
   cvd: CVDFeatures;
+  indicators: IndicatorFeatures;
+  indicator_hints: string[];
 };
 
 export type SetupCandidate = {
@@ -141,6 +156,158 @@ function avgVolume(bars: AlpacaBar[]): number {
 
 function clamp(val: number): number {
   return Math.max(0, Math.min(1, val));
+}
+
+function average(values: number[]): number {
+  if (values.length === 0) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function closesOf(bars: AlpacaBar[]): number[] {
+  return bars.map((bar) => Number(bar.Close)).filter((value) => Number.isFinite(value));
+}
+
+function computeEMASeries(values: number[], period: number): number[] {
+  if (values.length === 0 || period <= 0) return [];
+  const smoothing = 2 / (period + 1);
+  const result: number[] = [values[0]];
+  for (let i = 1; i < values.length; i++) {
+    const prev = result[i - 1];
+    result.push((values[i] - prev) * smoothing + prev);
+  }
+  return result;
+}
+
+function computeEMA(values: number[], period: number): number {
+  const series = computeEMASeries(values, period);
+  return series.length > 0 ? series[series.length - 1] : 0;
+}
+
+function computeRSI(values: number[], period = 14): number {
+  if (values.length < period + 1) return 50;
+
+  let gains = 0;
+  let losses = 0;
+  for (let i = 1; i <= period; i++) {
+    const change = values[i] - values[i - 1];
+    if (change >= 0) gains += change;
+    else losses -= change;
+  }
+
+  let avgGain = gains / period;
+  let avgLoss = losses / period;
+
+  for (let i = period + 1; i < values.length; i++) {
+    const change = values[i] - values[i - 1];
+    const gain = change > 0 ? change : 0;
+    const loss = change < 0 ? -change : 0;
+    avgGain = (avgGain * (period - 1) + gain) / period;
+    avgLoss = (avgLoss * (period - 1) + loss) / period;
+  }
+
+  if (avgLoss === 0) return 100;
+  if (avgGain === 0) return 0;
+  const rs = avgGain / avgLoss;
+  return 100 - 100 / (1 + rs);
+}
+
+function computeMACD(values: number[]): { line: number; signal: number; hist: number } {
+  if (values.length < 2) return { line: 0, signal: 0, hist: 0 };
+  const fast = computeEMASeries(values, 12);
+  const slow = computeEMASeries(values, 26);
+  if (fast.length === 0 || slow.length === 0) return { line: 0, signal: 0, hist: 0 };
+
+  const macdSeries = values.map((_, index) => fast[index] - slow[index]);
+  const signalSeries = computeEMASeries(macdSeries, 9);
+  const line = macdSeries[macdSeries.length - 1] ?? 0;
+  const signal = signalSeries[signalSeries.length - 1] ?? 0;
+
+  return {
+    line,
+    signal,
+    hist: line - signal,
+  };
+}
+
+function computeBollinger(values: number[]): { width: number; position: number } {
+  if (values.length < 20) return { width: 0, position: 0.5 };
+  const window = values.slice(-20);
+  const mean = average(window);
+  const variance = average(window.map((value) => (value - mean) ** 2));
+  const stdev = Math.sqrt(Math.max(variance, 0));
+  const upper = mean + stdev * 2;
+  const lower = mean - stdev * 2;
+  const last = window[window.length - 1] ?? mean;
+  const width = mean !== 0 ? (upper - lower) / Math.abs(mean) : 0;
+  const denominator = upper - lower;
+  const position = denominator > 0 ? clamp((last - lower) / denominator) : 0.5;
+  return { width, position };
+}
+
+function sanitizeIndicatorHints(indicatorHints: string[]): string[] {
+  const canonical = new Set<string>();
+  for (const rawHint of indicatorHints) {
+    const base = rawHint
+      .toLowerCase()
+      .replace(/@.*$/, "")
+      .replace(/\([^)]*\)/g, "")
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+    if (!base) continue;
+    if (base.includes("macd")) canonical.add("macd");
+    else if (base.includes("rsi")) canonical.add("rsi");
+    else if (base.includes("bollinger") || base === "bb" || base.startsWith("bb_")) canonical.add("bollinger");
+    else if (base.includes("ema") || base.includes("moving_average")) canonical.add("ema");
+    else if (base.includes("stoch")) canonical.add("stoch");
+    else if (base.includes("supertrend")) canonical.add("supertrend");
+    else canonical.add(base);
+  }
+  return Array.from(canonical);
+}
+
+function computeIndicatorFeatures(
+  bars1m: AlpacaBar[],
+  indicatorHints: string[]
+): { indicators: IndicatorFeatures; normalizedHints: string[] } {
+  const closes = closesOf(bars1m);
+  const rsi = computeRSI(closes, 14);
+  const emaFast = computeEMA(closes, 12);
+  const emaSlow = computeEMA(closes, 26);
+  const macd = computeMACD(closes);
+  const bollinger = computeBollinger(closes);
+  const lastClose = closes[closes.length - 1] ?? 0;
+  const emaSpreadPct = lastClose > 0 ? (emaFast - emaSlow) / lastClose : 0;
+  const normalizedHints = sanitizeIndicatorHints(indicatorHints);
+
+  let indicatorScore = 0;
+  indicatorScore += rsi > 55 ? 1 : rsi < 45 ? -1 : 0;
+  indicatorScore += macd.hist > 0 ? 1 : macd.hist < 0 ? -1 : 0;
+  indicatorScore += emaSpreadPct > 0 ? 1 : emaSpreadPct < 0 ? -1 : 0;
+  indicatorScore += bollinger.position > 0.55 ? 1 : bollinger.position < 0.45 ? -1 : 0;
+
+  if (normalizedHints.includes("rsi")) indicatorScore += rsi > 52 ? 0.5 : rsi < 48 ? -0.5 : 0;
+  if (normalizedHints.includes("macd")) indicatorScore += macd.hist > 0 ? 0.5 : macd.hist < 0 ? -0.5 : 0;
+  if (normalizedHints.includes("ema")) indicatorScore += emaSpreadPct > 0 ? 0.4 : emaSpreadPct < 0 ? -0.4 : 0;
+  if (normalizedHints.includes("bollinger")) indicatorScore += bollinger.position > 0.55 ? 0.3 : bollinger.position < 0.45 ? -0.3 : 0;
+
+  const indicator_bias: IndicatorFeatures["indicator_bias"] =
+    indicatorScore > 0.75 ? "bull" : indicatorScore < -0.75 ? "bear" : "neutral";
+
+  return {
+    indicators: {
+      rsi_14: rsi,
+      macd_line: macd.line,
+      macd_signal: macd.signal,
+      macd_hist: macd.hist,
+      ema_fast: emaFast,
+      ema_slow: emaSlow,
+      ema_spread_pct: emaSpreadPct,
+      bb_width: bollinger.width,
+      bb_position: bollinger.position,
+      indicator_bias,
+    },
+    normalizedHints,
+  };
 }
 
 function countConsec(bars: AlpacaBar[], dir: "bull" | "bear"): number {
@@ -357,7 +524,22 @@ export function computeCVDFeatures(bars: AlpacaBar[]): CVDFeatures {
   const cvdSeries = deltas.map((d) => (cumulative += d));
 
   const cvd_value = cvdSeries[cvdSeries.length - 1];
-  const cvd_slope = slope(cvdSeries.map((v, i) => ({ Close: v, Open: v, High: v, Low: v, Volume: 0, Timestamp: String(i) })));
+  const cvd_slope = slope(
+    cvdSeries.map((value, index) => ({
+      t: String(index),
+      o: value,
+      h: value,
+      l: value,
+      c: value,
+      v: 0,
+      Timestamp: String(index),
+      Open: value,
+      High: value,
+      Low: value,
+      Close: value,
+      Volume: 0,
+    }))
+  );
 
   // Price slope vs CVD slope — divergence detection
   const priceSlope = slope(window);
@@ -550,12 +732,13 @@ export function getQualityThreshold(regime: Regime, setup: SetupType): number {
 
 export function buildRecallFeatures(
   bars1m: AlpacaBar[],
-  bars5m: AlpacaBar[]
+  bars5m: AlpacaBar[],
+  indicatorHints: string[] = []
 ): RecallFeatures {
   const last20_1m = bars1m.slice(-20);
   const last20_5m = bars5m.slice(-20);
-  const high = Math.max(...last20_1m.map((b) => b.High));
-  const low = Math.min(...last20_1m.map((b) => b.Low));
+  const high = last20_1m.length > 0 ? Math.max(...last20_1m.map((b) => b.High)) : 0;
+  const low = last20_1m.length > 0 ? Math.min(...last20_1m.map((b) => b.Low)) : 0;
   const lastClose = last20_1m[last20_1m.length - 1]?.Close ?? 0;
   const avgVol1m = avgVolume(last20_1m.slice(0, -1));
   const lastVol = last20_1m[last20_1m.length - 1]?.Volume ?? 0;
@@ -571,6 +754,7 @@ export function buildRecallFeatures(
   // SK and CVD features
   const sk = computeSKFeatures(bars1m, bars5m);
   const cvd = computeCVDFeatures(bars1m);
+  const { indicators, normalizedHints } = computeIndicatorFeatures(bars1m, indicatorHints);
 
   return {
     trend_slope_1m: slope(last20_1m),
@@ -592,6 +776,8 @@ export function buildRecallFeatures(
     directional_persistence: directionalPersistence,
     sk,
     cvd,
+    indicators,
+    indicator_hints: normalizedHints,
   };
 }
 
@@ -951,6 +1137,33 @@ export function detectBreakoutFailure(
 
 // ─── Scoring ──────────────────────────────────────────────────────────────────
 
+function indicatorDirectionalConfidence(
+  recall: RecallFeatures,
+  direction: "long" | "short"
+): number {
+  const hints = new Set(recall.indicator_hints);
+  let weighted = 0;
+  let total = 0;
+
+  const scoreSignal = (weight: number, bull: boolean, bear: boolean) => {
+    total += weight;
+    if ((direction === "long" && bull) || (direction === "short" && bear)) {
+      weighted += weight;
+    } else if ((direction === "long" && bear) || (direction === "short" && bull)) {
+      weighted -= weight * 0.7;
+    }
+  };
+
+  scoreSignal(hints.has("rsi") ? 1.5 : 1, recall.indicators.rsi_14 >= 52, recall.indicators.rsi_14 <= 48);
+  scoreSignal(hints.has("macd") ? 1.5 : 1, recall.indicators.macd_hist >= 0, recall.indicators.macd_hist <= 0);
+  scoreSignal(hints.has("ema") ? 1.4 : 1, recall.indicators.ema_spread_pct >= 0, recall.indicators.ema_spread_pct <= 0);
+  scoreSignal(hints.has("bollinger") ? 1.2 : 0.8, recall.indicators.bb_position >= 0.52, recall.indicators.bb_position <= 0.48);
+
+  if (total === 0) return 0.5;
+  const normalized = weighted / total; // roughly -1..1
+  return clamp((normalized + 1) / 2);
+}
+
 export function scoreRecall(
   recall: RecallFeatures,
   setup: SetupType,
@@ -992,6 +1205,25 @@ export function scoreRecall(
   const cvdAligned =
     direction === "long" ? recall.cvd.buy_volume_ratio > 0.52 : recall.cvd.buy_volume_ratio < 0.48;
   if (cvdAligned) score += 0.06;
+
+  // Indicator alignment and hint-aware confirmation
+  const indicatorConfidence = indicatorDirectionalConfidence(recall, direction);
+  score += (indicatorConfidence - 0.5) * 0.14;
+
+  if (recall.indicators.indicator_bias !== "neutral") {
+    const indicatorBiasAligned =
+      (direction === "long" && recall.indicators.indicator_bias === "bull") ||
+      (direction === "short" && recall.indicators.indicator_bias === "bear");
+    score += indicatorBiasAligned ? 0.04 : -0.04;
+  }
+
+  // Setup-specific indicator context
+  const rsi = recall.indicators.rsi_14;
+  if (setup === "continuation_pullback") {
+    if ((direction === "long" && rsi >= 50) || (direction === "short" && rsi <= 50)) score += 0.03;
+  } else if (setup === "absorption_reversal" || setup === "sweep_reclaim" || setup === "breakout_failure") {
+    if ((direction === "long" && rsi <= 45) || (direction === "short" && rsi >= 55)) score += 0.03;
+  }
 
   return clamp(score);
 }
