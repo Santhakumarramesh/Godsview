@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 const BASE = "/api";
 
@@ -32,10 +33,12 @@ type SetupResult = {
 type BacktestResult = {
   instrument: string; setup_type: string; days_analyzed: number; bars_scanned: number;
   total_signals: number; closed_signals: number; wins: number; losses: number; win_rate: number;
-  profit_factor: number; expectancy_ticks: number; avg_final_quality: number;
-  high_conviction_signals: number; high_conviction_win_rate: number;
+  profit_factor: number; expectancy_ticks: number; expectancy_dollars: number;
+  gross_pnl_dollars: number; avg_win_dollars: number; avg_loss_dollars: number;
+  avg_final_quality: number; high_conviction_signals: number; high_conviction_win_rate: number;
+  equity_curve: Array<{ date: string; pnl: number; equity: number }>;
   by_regime: Array<{ regime: string; total: number; wins: number; win_rate: number }>;
-  results: Array<{ bar_time: string; entry_price: number; direction: string; structure_score: number; order_flow_score: number; recall_score: number; final_quality: number; meets_threshold: boolean; regime: string; outcome: string; tp_ticks: number; sl_ticks: number }>;
+  results: Array<{ bar_time: string; entry_price: number; direction: string; structure_score: number; order_flow_score: number; recall_score: number; ml_probability: number; final_quality: number; meets_threshold: boolean; regime: string; outcome: string; tp_ticks: number; sl_ticks: number; pnl_dollars: number }>;
 };
 type AccuracyResult = {
   total_records: number; closed: number; wins: number; losses: number; win_rate: number; profit_factor: number;
@@ -435,17 +438,54 @@ export default function AlpacaPage() {
             <>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 {[
-                  { label: "Win Rate", value: `${(btData.win_rate * 100).toFixed(1)}%`, accent: btData.win_rate > 0.5 ? C.primary : C.tertiary },
-                  { label: "Profit Factor", value: btData.profit_factor.toFixed(2), accent: btData.profit_factor > 1 ? C.primary : C.tertiary },
-                  { label: "Total Signals", value: String(btData.total_signals) },
-                  { label: "High Conv. WR", value: `${(btData.high_conviction_win_rate * 100).toFixed(1)}%`, accent: btData.high_conviction_win_rate > 0.6 ? C.primary : C.muted },
+                  { label: "Win Rate", value: `${(btData.win_rate * 100).toFixed(1)}%`, sub: `${btData.wins}W · ${btData.losses}L`, accent: btData.win_rate > 0.5 ? C.primary : C.tertiary },
+                  { label: "Gross P&L", value: `$${btData.gross_pnl_dollars >= 0 ? "+" : ""}${btData.gross_pnl_dollars.toFixed(0)}`, sub: `${btData.closed_signals} closed`, accent: btData.gross_pnl_dollars >= 0 ? C.primary : C.tertiary },
+                  { label: "Expectancy / Trade", value: `$${btData.expectancy_dollars >= 0 ? "+" : ""}${btData.expectancy_dollars.toFixed(2)}`, sub: `${btData.expectancy_ticks.toFixed(1)} ticks`, accent: btData.expectancy_dollars > 0 ? C.primary : C.tertiary },
+                  { label: "High Conv. WR", value: `${(btData.high_conviction_win_rate * 100).toFixed(1)}%`, sub: `${btData.high_conviction_signals} signals`, accent: btData.high_conviction_win_rate > 0.6 ? C.primary : C.muted },
+                  { label: "Profit Factor", value: btData.profit_factor.toFixed(2), sub: "Gross win ÷ loss", accent: btData.profit_factor > 1 ? C.primary : C.tertiary },
+                  { label: "Avg Win", value: `$${btData.avg_win_dollars.toFixed(0)}`, sub: "Per winning trade", accent: C.primary },
+                  { label: "Avg Loss", value: `-$${btData.avg_loss_dollars.toFixed(0)}`, sub: "Per losing trade", accent: C.tertiary },
+                  { label: "Total Signals", value: String(btData.total_signals), sub: `${btData.days_analyzed}d · ${btData.bars_scanned} bars`, accent: "#ffffff" },
                 ].map((s, i) => (
                   <div key={i} className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
                     <MicroLabel>{s.label}</MicroLabel>
                     <div className="mt-2 font-headline font-bold text-xl" style={{ color: s.accent ?? "#ffffff" }}>{s.value}</div>
+                    {s.sub && <div style={{ fontSize: "9px", color: C.outlineVar, marginTop: "3px", fontFamily: "Space Grotesk" }}>{s.sub}</div>}
                   </div>
                 ))}
               </div>
+
+              {/* Equity Curve Sparkline */}
+              {btData.equity_curve && btData.equity_curve.length > 1 && (
+                <div className="rounded p-5" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-base" style={{ color: C.primary }}>show_chart</span>
+                      <MicroLabel>Equity Curve · {btData.closed_signals} trades · Real P&L</MicroLabel>
+                    </div>
+                    <span style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: btData.gross_pnl_dollars >= 0 ? C.primary : C.tertiary, fontWeight: 700 }}>
+                      {btData.gross_pnl_dollars >= 0 ? "+" : ""}${btData.gross_pnl_dollars.toFixed(0)}
+                    </span>
+                  </div>
+                  <div style={{ height: "160px" }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={btData.equity_curve} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="btEqGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor={btData.gross_pnl_dollars >= 0 ? "#9cff93" : "#ff7162"} stopOpacity={0.25} />
+                            <stop offset="95%" stopColor={btData.gross_pnl_dollars >= 0 ? "#9cff93" : "#ff7162"} stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="2 4" stroke="rgba(72,72,73,0.3)" vertical={false} />
+                        <XAxis dataKey="date" stroke="#484849" fontSize={8} tickLine={false} axisLine={false} fontFamily="Space Grotesk" />
+                        <YAxis stroke="#484849" fontSize={8} tickLine={false} axisLine={false} tickFormatter={(v) => `$${v}`} fontFamily="JetBrains Mono, monospace" />
+                        <Tooltip contentStyle={{ backgroundColor: "#201f21", borderColor: "rgba(72,72,73,0.4)", borderRadius: "4px", fontSize: "10px" }} itemStyle={{ color: "#9cff93", fontFamily: "JetBrains Mono, monospace" }} />
+                        <Area type="monotone" dataKey="equity" stroke={btData.gross_pnl_dollars >= 0 ? "#9cff93" : "#ff7162"} strokeWidth={1.5} fillOpacity={1} fill="url(#btEqGrad)" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
 
               {/* Regime breakdown */}
               {btData.by_regime.length > 0 && (
@@ -486,19 +526,23 @@ export default function AlpacaPage() {
                   <table className="w-full">
                     <thead>
                       <tr style={{ borderBottom: "1px solid rgba(72,72,73,0.2)" }}>
-                        {["Time", "Dir", "Entry", "Quality", "Regime", "Outcome"].map((h) => (
+                        {["Time", "Dir", "Entry", "ML Prob", "Quality", "Regime", "P&L $", "Outcome"].map((h) => (
                           <th key={h} className="px-4 py-2 text-left" style={{ fontSize: "8px", fontFamily: "Space Grotesk", letterSpacing: "0.15em", textTransform: "uppercase", color: C.outlineVar }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {btData.results.slice(0, 30).map((r, i) => (
+                      {btData.results.slice(0, 100).map((r, i) => (
                         <tr key={i} className="hover:brightness-105 transition-all" style={{ borderBottom: "1px solid rgba(72,72,73,0.1)" }}>
                           <td className="px-4 py-2" style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: C.muted }}>{new Date(r.bar_time).toLocaleDateString()}</td>
                           <td className="px-4 py-2"><span style={{ fontSize: "9px", fontFamily: "Space Grotesk", fontWeight: 700, color: r.direction === "long" ? C.primary : C.tertiary }}>{r.direction.toUpperCase()}</span></td>
                           <td className="px-4 py-2" style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace" }}>{r.entry_price > 1000 ? r.entry_price.toFixed(2) : r.entry_price.toFixed(4)}</td>
+                          <td className="px-4 py-2" style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: (r.ml_probability ?? 0) > 0.6 ? C.primary : C.muted }}>{r.ml_probability ? `${(r.ml_probability * 100).toFixed(0)}%` : "—"}</td>
                           <td className="px-4 py-2" style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: r.final_quality > 0.65 ? C.primary : C.muted }}>{(r.final_quality * 100).toFixed(0)}%</td>
                           <td className="px-4 py-2"><RegimeBadge regime={r.regime} /></td>
+                          <td className="px-4 py-2 font-bold" style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: (r.pnl_dollars ?? 0) > 0 ? C.primary : (r.pnl_dollars ?? 0) < 0 ? C.tertiary : C.muted }}>
+                            {r.pnl_dollars != null ? `${r.pnl_dollars >= 0 ? "+" : ""}$${r.pnl_dollars.toFixed(0)}` : "—"}
+                          </td>
                           <td className="px-4 py-2">
                             <span className="px-2 py-0.5 rounded" style={{ fontSize: "8px", fontFamily: "Space Grotesk", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", backgroundColor: r.outcome === "win" ? "rgba(156,255,147,0.1)" : r.outcome === "loss" ? "rgba(255,113,98,0.1)" : "rgba(72,72,73,0.2)", color: r.outcome === "win" ? C.primary : r.outcome === "loss" ? C.tertiary : C.muted }}>
                               {r.outcome}

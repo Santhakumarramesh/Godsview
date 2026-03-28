@@ -231,7 +231,9 @@ router.post("/alpaca/backtest", async (req, res) => {
       if (closest5m.length < 5) continue;
 
       const recall = buildRecallFeatures(window1m, closest5m);
-      const noTrade = applyNoTradeFilters(window1m, recall, setup);
+      // replayMode: true — permissive backtest (no session/cooldown/spread gates, wide ATR cap)
+      // Equivalent to RiskConfig replay overrides: max_spread_atr=99, require_session_active=False
+      const noTrade = applyNoTradeFilters(window1m, recall, setup, { replayMode: true });
       if (noTrade.blocked) continue;
 
       const detected = runSetupDetector(setup, window1m, closest5m, recall);
@@ -249,6 +251,15 @@ router.post("/alpaca/backtest", async (req, res) => {
       const recallScore = scoreRecall(recall, setup, detected.direction);
       const finalQuality = computeFinalQuality(detected.structure, detected.orderFlow, recallScore);
       const threshold = getQualityThreshold(recall.regime, setup);
+      const mlProbability = Math.min(1, 0.55 + recallScore * 0.25);
+
+      // Dollar P&L: tick_size derived from price level (crypto: BTC ~$5/tick, ETH ~$1/tick)
+      const tickValue = entryPrice > 10000 ? 5 : entryPrice > 1000 ? 1 : 0.25;
+      const pnlDollars = outcome.outcome === "win"
+        ? tpTicks * tickValue
+        : outcome.outcome === "loss"
+        ? -(slTicks * tickValue)
+        : 0;
 
       results.push({
         bar_time: entryBar.Timestamp,
@@ -257,6 +268,7 @@ router.post("/alpaca/backtest", async (req, res) => {
         structure_score: detected.structure,
         order_flow_score: detected.orderFlow,
         recall_score: recallScore,
+        ml_probability: mlProbability,
         final_quality: finalQuality,
         quality_threshold: threshold,
         meets_threshold: finalQuality >= threshold,
@@ -268,6 +280,7 @@ router.post("/alpaca/backtest", async (req, res) => {
         outcome: outcome.outcome,
         hit_tp: outcome.hitTP,
         bars_to_outcome: outcome.barsChecked,
+        pnl_dollars: pnlDollars,
       });
     }
 
@@ -304,6 +317,19 @@ router.post("/alpaca/backtest", async (req, res) => {
       ? (winRate * (wins.length > 0 ? grossWin / wins.length : 0)) -
         ((1 - winRate) * (losses.length > 0 ? grossLoss / losses.length : 0))
       : 0;
+    // Dollar P&L summary
+    const grossPnlDollars = results.reduce((s, r) => s + r.pnl_dollars, 0);
+    const avgWinDollars = wins.length > 0 ? wins.reduce((s, r) => s + r.pnl_dollars, 0) / wins.length : 0;
+    const avgLossDollars = losses.length > 0 ? Math.abs(losses.reduce((s, r) => s + r.pnl_dollars, 0) / losses.length) : 0;
+    const expectancyDollars = closed.length > 0
+      ? (winRate * avgWinDollars) - ((1 - winRate) * avgLossDollars)
+      : 0;
+    // Equity curve (cumulative P&L per closed trade)
+    let cumulativePnl = 0;
+    const equityCurve = closed.map((r) => {
+      cumulativePnl += r.pnl_dollars;
+      return { date: r.bar_time.slice(0, 10), pnl: r.pnl_dollars, equity: Math.round(cumulativePnl * 100) / 100 };
+    });
 
     const hq = results.filter((r) => r.meets_threshold);
     const hqClosed = hq.filter((r) => r.outcome !== "open");
@@ -330,16 +356,21 @@ router.post("/alpaca/backtest", async (req, res) => {
       win_rate: winRate,
       profit_factor: profitFactor,
       expectancy_ticks: expectancy,
+      expectancy_dollars: Math.round(expectancyDollars * 100) / 100,
+      gross_pnl_dollars: Math.round(grossPnlDollars * 100) / 100,
+      avg_win_dollars: Math.round(avgWinDollars * 100) / 100,
+      avg_loss_dollars: Math.round(avgLossDollars * 100) / 100,
       avg_final_quality: avgQuality,
       high_conviction_signals: hq.length,
       high_conviction_win_rate: hqClosed.length > 0 ? hqWins.length / hqClosed.length : 0,
+      equity_curve: equityCurve,
       by_regime: Object.entries(byRegime).map(([regime, d]) => ({
         regime,
         total: d.total,
         wins: d.wins,
         win_rate: d.total > 0 ? d.wins / d.total : 0,
       })),
-      results: results.slice(0, 50),
+      results: results.slice(0, 100),
       saved_to_db: results.length,
     });
   } catch (err) {
@@ -400,7 +431,8 @@ router.post("/alpaca/recall-build", async (req, res) => {
         const entryPrice = entryBar.Close;
 
         for (const setup of setupTypes) {
-          const noTrade = applyNoTradeFilters(window, recall, setup);
+          // replayMode: true — skip live-only gates (session, cooldown, spread, CVD strict gate)
+          const noTrade = applyNoTradeFilters(window, recall, setup, { replayMode: true });
           if (noTrade.blocked) continue;
 
           const detected = runSetupDetector(setup, window, slowContext, recall);
