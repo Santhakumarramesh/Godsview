@@ -171,6 +171,50 @@ The execution stack enables real order placement, live position monitoring, and 
 - `GET /api/alpaca/positions/live` — live positions with P&L
 - `DELETE /api/alpaca/positions/:symbol` — close position
 
+### Phase 3 — Order Book & Microstructure (real Alpaca data)
+- `GET /api/orderbook/snapshot?symbol=BTCUSD&depth=25` — full order book snapshot (asks + bids, sorted)
+- `GET /api/orderbook/stream?symbol=BTCUSD` — SSE stream of live order book updates (polls every 5s)
+- `GET /api/market/microstructure?symbol=BTCUSD` — top-of-book metrics: spread, spreadBps, imbalance, absorption flags
+- `GET /api/market/liquidity-zones?symbol=BTCUSD&bucket_pct=0.1&top_n=20` — clustered zones with strength 0–1
+
+## Roadmap Implementation Status
+
+| Phase | Title | Status |
+|-------|-------|--------|
+| 1 | Harden live price & candle updates | ✅ Done |
+| 2 | Timeframe countdown timers | ✅ Done |
+| 3 | Backend order book & microstructure | ✅ Done |
+| 4 | Frontend heatmap overlay | Pending |
+| 5 | Reversal cloud | Pending |
+| 6 | Per-candle bookmap metadata | Pending |
+| 7 | Replay mode | Pending |
+| 8 | Polish & production | Pending |
+
+## Phase 1 & 2 Frontend Modules
+
+- `artifacts/godsview-dashboard/src/lib/market/clock.ts` — candle boundary math (UTC, zero drift)
+- `artifacts/godsview-dashboard/src/hooks/useCandleCountdown.ts` — React hook: `{ countdown, remaining, bucketStart, bucketEnd }`
+- `artifacts/godsview-dashboard/src/components/LiveCandleChart.tsx` — Phase 1 hardened + Phase 2 countdown badge
+
+### Phase 1 Hardening Summary
+- SSE reconnect always calls latest `connectStream` via ref (no stale symbol/timeframe)
+- `loadHistory` always clears spinner via `finally` block
+- Supplement poll detects candle bucket roll-overs → opens new bar (not stale mutation)
+- Per-session guard ID prevents messages from superseded ES connections
+
+### Phase 2 Countdown Timer
+- Placed at `right:68px, bottom:28px` — identical position to TradingView
+- Colour-matched to live candle direction (green/red)
+- Flashes when ≤ 10 s remain
+- Driven by `useCandleCountdown` hook — pure wall-clock math, no drift
+
+## Phase 3 Backend Modules
+
+- `artifacts/api-server/src/lib/market/types.ts` — shared typed contracts (PriceLevel, OrderBookSnapshot, LiquidityZone, MicrostructureSnapshot)
+- `artifacts/api-server/src/lib/market/orderbook.ts` — `OrderBookManager` singleton: REST polling + SSE broadcast
+- `artifacts/api-server/src/lib/market/liquidityMap.ts` — `computeLiquidityZones`, `computeMicrostructure`, `computeDepthCurve`
+- `artifacts/api-server/src/routes/orderbook.ts` — all four Phase 3 endpoints
+
 ## Packages
 
 ### `artifacts/api-server` (`@workspace/api-server`)
