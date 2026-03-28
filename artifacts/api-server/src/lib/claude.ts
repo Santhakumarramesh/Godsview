@@ -1,18 +1,18 @@
 /**
  * claude.ts — Claude Reasoning Veto Layer
  *
- * Uses Anthropic claude-3-5-haiku to evaluate trading setups and issue
+ * Uses Anthropic claude-haiku-4-5 to evaluate trading setups and issue
  * APPROVED / VETOED verdicts with structured reasoning.
  *
  * This is Layer 6 in the 6-layer hybrid AI pipeline.
  * It acts as a final contextual gate before a setup is marked high-conviction.
  *
  * Veto triggers:
- *  - Setup scores are borderline (0.55–0.70) but signals conflict
- *  - CVD diverges from price direction
- *  - SK bias opposes the setup direction
- *  - Regime is unfavourable for the setup type
- *  - Multiple no-trade signals are present simultaneously
+ * - Setup scores are borderline (0.55–0.70) but signals conflict
+ * - CVD diverges from price direction
+ * - SK bias opposes the setup direction
+ * - Regime is unfavourable for the setup type
+ * - Multiple no-trade signals are present simultaneously
  */
 
 import Anthropic from "@anthropic-ai/sdk";
@@ -20,45 +20,46 @@ import Anthropic from "@anthropic-ai/sdk";
 export type ClaudeVerdict = "APPROVED" | "VETOED" | "CAUTION";
 
 export interface ClaudeVetoResult {
-  verdict:      ClaudeVerdict;
-  confidence:   number;          // 0–1
-  claude_score: number;          // 0–1 (used in final_quality weighting)
-  reasoning:    string;          // 2-3 sentence explanation
-  key_factors:  string[];        // up to 4 bullet points
-  latency_ms:   number;
+  verdict: ClaudeVerdict;
+  confidence: number; // 0–1
+  claude_score: number; // 0–1 (used in final_quality weighting)
+  reasoning: string; // 2-3 sentence explanation
+  key_factors: string[]; // up to 4 bullet points
+  latency_ms: number;
 }
 
 export interface SetupContext {
-  instrument:       string;
-  setup_type:       string;
-  direction:        "long" | "short";
-  structure_score:  number;
+  instrument: string;
+  setup_type: string;
+  direction: "long" | "short";
+  structure_score: number;
   order_flow_score: number;
-  recall_score:     number;
-  final_quality:    number;
-  quality_threshold:number;
-  entry_price:      number;
-  stop_loss:        number;
-  take_profit:      number;
-  regime:           string;
-  sk_bias:          string;
-  sk_in_zone:       boolean;
-  sk_sequence_stage:string;
+  recall_score: number;
+  final_quality: number;
+  quality_threshold: number;
+  entry_price: number;
+  stop_loss: number;
+  take_profit: number;
+  regime: string;
+  sk_bias: string;
+  sk_in_zone: boolean;
+  sk_sequence_stage: string;
   sk_correction_complete: boolean;
-  cvd_slope:        number;
-  cvd_divergence:   boolean;
+  cvd_slope: number;
+  cvd_divergence: boolean;
   buy_volume_ratio: number;
-  wick_ratio:       number;
-  momentum_1m:      number;
-  trend_slope_5m:   number;
-  atr_pct:          number;
-  consec_bullish:   number;
-  consec_bearish:   number;
+  wick_ratio: number;
+  momentum_1m: number;
+  trend_slope_5m: number;
+  atr_pct: number;
+  consec_bullish: number;
+  consec_bearish: number;
 }
 
 const SYSTEM_PROMPT = `You are the Claude Reasoning Veto Layer in a professional crypto trading system (Godsview — SK System).
 
 Your role is Layer 6: final contextual gate before a setup is approved for execution.
+
 You receive structured market analysis and must issue one of three verdicts:
 - APPROVED: setup has genuine edge, signals are aligned, execute
 - CAUTION: setup has merit but one conflicting factor — reduce size
@@ -101,21 +102,26 @@ export async function claudeVeto(ctx: SetupContext): Promise<ClaudeVetoResult> {
   if (!claude) {
     // Passthrough when no key — use final_quality as claude_score
     return {
-      verdict:      ctx.final_quality >= ctx.quality_threshold ? "APPROVED" : "CAUTION",
-      confidence:   ctx.final_quality,
+      verdict: ctx.final_quality >= ctx.quality_threshold ? "APPROVED" : "CAUTION",
+      confidence: ctx.final_quality,
       claude_score: ctx.final_quality,
-      reasoning:    "Claude reasoning layer inactive — ANTHROPIC_API_KEY not configured.",
-      key_factors:  [],
-      latency_ms:   0,
+      reasoning: "Claude reasoning layer inactive — ANTHROPIC_API_KEY not configured.",
+      key_factors: [],
+      latency_ms: 0,
     };
   }
+
+  const rr =
+    ctx.stop_loss > 0
+      ? Math.abs((ctx.take_profit - ctx.entry_price) / (ctx.entry_price - ctx.stop_loss)).toFixed(2)
+      : "N/A";
 
   const userPrompt = `
 Evaluate this ${ctx.instrument} ${ctx.direction.toUpperCase()} setup:
 
 SETUP: ${ctx.setup_type.replace(/_/g, " ").toUpperCase()}
 Entry: $${ctx.entry_price.toFixed(2)} | SL: $${ctx.stop_loss.toFixed(2)} | TP: $${ctx.take_profit.toFixed(2)}
-R:R: ${ctx.stop_loss > 0 ? Math.abs((ctx.take_profit - ctx.entry_price) / (ctx.entry_price - ctx.stop_loss)).toFixed(2) : "N/A"}
+R:R: ${rr}
 
 SCORES:
 - Structure: ${(ctx.structure_score * 100).toFixed(0)}%
@@ -137,42 +143,45 @@ Issue your verdict.`.trim();
 
   try {
     const msg = await claude.messages.create({
-      model:      "claude-3-5-haiku-20241022",
+      model: "claude-haiku-4-5-20251001", // ← upgraded from claude-3-5-haiku-20241022
       max_tokens: 300,
-      messages:   [{ role: "user", content: userPrompt }],
-      system:     SYSTEM_PROMPT,
+      messages: [{ role: "user", content: userPrompt }],
+      system: SYSTEM_PROMPT,
     });
 
     const raw = (msg.content[0] as { type: string; text: string }).text.trim();
 
     // Strip markdown fences if present
-    const jsonStr = raw.replace(/^```(?:json)?\n?/i, "").replace(/\n?```$/i, "").trim();
+    const jsonStr = raw
+      .replace(/^```(?:json)?\n?/i, "")
+      .replace(/\n?```$/i, "")
+      .trim();
     const parsed = JSON.parse(jsonStr) as {
-      verdict:      ClaudeVerdict;
-      confidence:   number;
+      verdict: ClaudeVerdict;
+      confidence: number;
       claude_score: number;
-      reasoning:    string;
-      key_factors:  string[];
+      reasoning: string;
+      key_factors: string[];
     };
 
     return {
-      verdict:      parsed.verdict ?? "CAUTION",
-      confidence:   Math.min(1, Math.max(0, Number(parsed.confidence ?? 0.5))),
+      verdict: parsed.verdict ?? "CAUTION",
+      confidence: Math.min(1, Math.max(0, Number(parsed.confidence ?? 0.5))),
       claude_score: Math.min(1, Math.max(0, Number(parsed.claude_score ?? 0.5))),
-      reasoning:    String(parsed.reasoning ?? ""),
-      key_factors:  (parsed.key_factors ?? []).slice(0, 4),
-      latency_ms:   Date.now() - t0,
+      reasoning: String(parsed.reasoning ?? ""),
+      key_factors: (parsed.key_factors ?? []).slice(0, 4),
+      latency_ms: Date.now() - t0,
     };
   } catch (err) {
     // Graceful fallback — never block the pipeline
     console.error("[claude] veto error:", err);
     return {
-      verdict:      "CAUTION",
-      confidence:   0.5,
+      verdict: "CAUTION",
+      confidence: 0.5,
       claude_score: ctx.final_quality * 0.9,
-      reasoning:    `Claude reasoning error: ${String(err).slice(0, 120)}`,
-      key_factors:  [],
-      latency_ms:   Date.now() - t0,
+      reasoning: `Claude reasoning error: ${String(err).slice(0, 120)}`,
+      key_factors: [],
+      latency_ms: Date.now() - t0,
     };
   }
 }
