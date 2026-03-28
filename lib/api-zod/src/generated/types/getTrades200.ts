@@ -5,7 +5,9 @@
  * Godsview Trading Bot API
  * OpenAPI spec version: 0.1.0
  */
+import type { Trade } from "./trade";
 
-export interface HealthStatus {
-  status: string;
-}
+export type GetTrades200 = {
+  trades: Trade[];
+  total: number;
+};

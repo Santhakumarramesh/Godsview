@@ -1,22 +1,28 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Godsview Trading Bot API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: signals
+    description: Trading signal operations
+  - name: trades
+    description: Trade journal operations
+  - name: performance
+    description: Performance analytics
+  - name: system
+    description: System status
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +30,205 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /signals:
+    get:
+      operationId: getSignals
+      tags: [signals]
+      summary: Get recent trading signals
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: setup_type
+          in: query
+          schema:
+            type: string
+        - name: instrument
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of signals
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  signals:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Signal"
+                  total:
+                    type: integer
+                required: [signals, total]
+    post:
+      operationId: createSignal
+      tags: [signals]
+      summary: Create a new signal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSignalRequest"
+      responses:
+        "201":
+          description: Signal created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Signal"
+
+  /signals/{id}:
+    get:
+      operationId: getSignal
+      tags: [signals]
+      summary: Get a signal by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Signal details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Signal"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /trades:
+    get:
+      operationId: getTrades
+      tags: [trades]
+      summary: Get trade journal
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: instrument
+          in: query
+          schema:
+            type: string
+        - name: setup_type
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of trades
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  trades:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Trade"
+                  total:
+                    type: integer
+                required: [trades, total]
+    post:
+      operationId: createTrade
+      tags: [trades]
+      summary: Record a trade
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTradeRequest"
+      responses:
+        "201":
+          description: Trade recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Trade"
+
+  /trades/{id}:
+    put:
+      operationId: updateTrade
+      tags: [trades]
+      summary: Update trade outcome
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTradeRequest"
+      responses:
+        "200":
+          description: Trade updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Trade"
+
+  /performance:
+    get:
+      operationId: getPerformance
+      tags: [performance]
+      summary: Get performance analytics
+      parameters:
+        - name: instrument
+          in: query
+          schema:
+            type: string
+        - name: setup_type
+          in: query
+          schema:
+            type: string
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 30
+      responses:
+        "200":
+          description: Performance metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PerformanceMetrics"
+
+  /system/status:
+    get:
+      operationId: getSystemStatus
+      tags: [system]
+      summary: Get pipeline layer statuses
+      responses:
+        "200":
+          description: System status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemStatus"
+
 components:
   schemas:
     HealthStatus:
@@ -31,6 +236,381 @@ components:
       properties:
         status:
           type: string
-      required:
-        - status
+      required: [status]
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+      required: [error, message]
+
+    Signal:
+      type: object
+      properties:
+        id:
+          type: integer
+        instrument:
+          type: string
+        setup_type:
+          type: string
+        status:
+          type: string
+          enum: [pending, approved, rejected, executed, expired]
+        structure_score:
+          type: number
+        order_flow_score:
+          type: number
+        recall_score:
+          type: number
+        ml_probability:
+          type: number
+        claude_score:
+          type: number
+        final_quality:
+          type: number
+        claude_reasoning:
+          type: string
+        entry_price:
+          type: number
+        stop_loss:
+          type: number
+        take_profit:
+          type: number
+        session:
+          type: string
+        regime:
+          type: string
+        news_lockout:
+          type: boolean
+        created_at:
+          type: string
+      required:
+        - id
+        - instrument
+        - setup_type
+        - status
+        - structure_score
+        - order_flow_score
+        - recall_score
+        - ml_probability
+        - claude_score
+        - final_quality
+        - news_lockout
+        - created_at
+
+    CreateSignalRequest:
+      type: object
+      properties:
+        instrument:
+          type: string
+        setup_type:
+          type: string
+        structure_score:
+          type: number
+        order_flow_score:
+          type: number
+        recall_score:
+          type: number
+        ml_probability:
+          type: number
+        claude_score:
+          type: number
+        claude_reasoning:
+          type: string
+        entry_price:
+          type: number
+        stop_loss:
+          type: number
+        take_profit:
+          type: number
+        session:
+          type: string
+        regime:
+          type: string
+        news_lockout:
+          type: boolean
+      required:
+        - instrument
+        - setup_type
+        - structure_score
+        - order_flow_score
+        - recall_score
+        - ml_probability
+        - claude_score
+        - news_lockout
+
+    Trade:
+      type: object
+      properties:
+        id:
+          type: integer
+        signal_id:
+          type: integer
+        instrument:
+          type: string
+        setup_type:
+          type: string
+        direction:
+          type: string
+          enum: [long, short]
+        entry_price:
+          type: number
+        exit_price:
+          type: number
+        stop_loss:
+          type: number
+        take_profit:
+          type: number
+        quantity:
+          type: number
+        pnl:
+          type: number
+        pnl_pct:
+          type: number
+        outcome:
+          type: string
+          enum: [win, loss, breakeven, open]
+        mfe:
+          type: number
+        mae:
+          type: number
+        slippage:
+          type: number
+        session:
+          type: string
+        regime:
+          type: string
+        notes:
+          type: string
+        entry_time:
+          type: string
+        exit_time:
+          type: string
+        created_at:
+          type: string
+      required:
+        - id
+        - instrument
+        - setup_type
+        - direction
+        - entry_price
+        - stop_loss
+        - take_profit
+        - quantity
+        - outcome
+        - created_at
+
+    CreateTradeRequest:
+      type: object
+      properties:
+        signal_id:
+          type: integer
+        instrument:
+          type: string
+        setup_type:
+          type: string
+        direction:
+          type: string
+          enum: [long, short]
+        entry_price:
+          type: number
+        stop_loss:
+          type: number
+        take_profit:
+          type: number
+        quantity:
+          type: number
+        session:
+          type: string
+        regime:
+          type: string
+        notes:
+          type: string
+      required:
+        - instrument
+        - setup_type
+        - direction
+        - entry_price
+        - stop_loss
+        - take_profit
+        - quantity
+
+    UpdateTradeRequest:
+      type: object
+      properties:
+        exit_price:
+          type: number
+        pnl:
+          type: number
+        pnl_pct:
+          type: number
+        outcome:
+          type: string
+          enum: [win, loss, breakeven, open]
+        mfe:
+          type: number
+        mae:
+          type: number
+        slippage:
+          type: number
+        notes:
+          type: string
+        exit_time:
+          type: string
+
+    PerformanceMetrics:
+      type: object
+      properties:
+        total_trades:
+          type: integer
+        win_rate:
+          type: number
+        profit_factor:
+          type: number
+        expectancy:
+          type: number
+        total_pnl:
+          type: number
+        avg_win:
+          type: number
+        avg_loss:
+          type: number
+        max_drawdown:
+          type: number
+        avg_mfe:
+          type: number
+        avg_mae:
+          type: number
+        avg_slippage:
+          type: number
+        by_setup:
+          type: array
+          items:
+            $ref: "#/components/schemas/SetupPerformance"
+        by_session:
+          type: array
+          items:
+            $ref: "#/components/schemas/SessionPerformance"
+        by_regime:
+          type: array
+          items:
+            $ref: "#/components/schemas/RegimePerformance"
+        equity_curve:
+          type: array
+          items:
+            $ref: "#/components/schemas/EquityPoint"
+      required:
+        - total_trades
+        - win_rate
+        - profit_factor
+        - expectancy
+        - total_pnl
+        - avg_win
+        - avg_loss
+        - max_drawdown
+        - by_setup
+        - by_session
+        - by_regime
+        - equity_curve
+
+    SetupPerformance:
+      type: object
+      properties:
+        setup_type:
+          type: string
+        total_trades:
+          type: integer
+        win_rate:
+          type: number
+        profit_factor:
+          type: number
+        expectancy:
+          type: number
+        total_pnl:
+          type: number
+      required: [setup_type, total_trades, win_rate, profit_factor, expectancy, total_pnl]
+
+    SessionPerformance:
+      type: object
+      properties:
+        session:
+          type: string
+        total_trades:
+          type: integer
+        win_rate:
+          type: number
+        profit_factor:
+          type: number
+        total_pnl:
+          type: number
+      required: [session, total_trades, win_rate, profit_factor, total_pnl]
+
+    RegimePerformance:
+      type: object
+      properties:
+        regime:
+          type: string
+        total_trades:
+          type: integer
+        win_rate:
+          type: number
+        profit_factor:
+          type: number
+        total_pnl:
+          type: number
+      required: [regime, total_trades, win_rate, profit_factor, total_pnl]
+
+    EquityPoint:
+      type: object
+      properties:
+        date:
+          type: string
+        equity:
+          type: number
+        drawdown:
+          type: number
+      required: [date, equity, drawdown]
+
+    LayerStatus:
+      type: object
+      properties:
+        name:
+          type: string
+        status:
+          type: string
+          enum: [active, inactive, error, warning]
+        message:
+          type: string
+        last_update:
+          type: string
+      required: [name, status, message]
+
+    SystemStatus:
+      type: object
+      properties:
+        overall:
+          type: string
+          enum: [healthy, degraded, offline]
+        layers:
+          type: array
+          items:
+            $ref: "#/components/schemas/LayerStatus"
+        news_lockout_active:
+          type: boolean
+        active_instrument:
+          type: string
+        active_session:
+          type: string
+        signals_today:
+          type: integer
+        trades_today:
+          type: integer
+      required:
+        - overall
+        - layers
+        - news_lockout_active
+        - signals_today
+        - trades_today

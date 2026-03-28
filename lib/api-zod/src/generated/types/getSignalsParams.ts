@@ -6,6 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface HealthStatus {
-  status: string;
-}
+export type GetSignalsParams = {
+  limit?: number;
+  setup_type?: string;
+  instrument?: string;
+  status?: string;
+};
