@@ -1,7 +1,8 @@
 import { useGetSystemStatus, useGetPerformance, useGetSignals } from "@workspace/api-client-react";
-import { formatCurrency, formatNumber, formatPercent, cn } from "@/lib/utils";
+import { formatCurrency, formatNumber, formatPercent } from "@/lib/utils";
 import { format } from "date-fns";
 import { Link } from "wouter";
+import { useEffect, useRef } from "react";
 
 const C = {
   bg: "#0e0e0f",
@@ -35,9 +36,16 @@ function StatCard({ label, value, sub, accent }: { label: string; value: React.R
 }
 
 export default function Dashboard() {
-  const { data: systemStatus, isLoading: sysLoading } = useGetSystemStatus();
-  const { data: performance, isLoading: perfLoading } = useGetPerformance({ days: 1 });
+  const { data: systemStatus, isLoading: sysLoading, refetch: refetchStatus } = useGetSystemStatus();
+  const { data: performance, isLoading: perfLoading, refetch: refetchPerf } = useGetPerformance({ days: 1 });
   const { data: signals, isLoading: sigLoading } = useGetSignals({ limit: 5 });
+
+  // Auto-refresh every 30 seconds
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    intervalRef.current = setInterval(() => { refetchStatus(); refetchPerf(); }, 30_000);
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, [refetchStatus, refetchPerf]);
 
   if (sysLoading || perfLoading || sigLoading) {
     return (
@@ -52,6 +60,23 @@ export default function Dashboard() {
 
   const layers = systemStatus?.layers ?? [];
   const sigs = signals?.signals ?? [];
+
+  // Combined P&L: realized (closed trades in DB) + unrealized (live Alpaca positions)
+  const realizedPnl = performance?.total_pnl ?? 0;
+  const unrealizedPnl = (systemStatus as Record<string, number> | undefined)?.unrealized_pnl ?? 0;
+  const totalPnl = realizedPnl + unrealizedPnl;
+  const livePositions = (systemStatus as Record<string, number> | undefined)?.live_positions ?? 0;
+  const closedTrades = performance?.total_trades ?? 0;
+
+  const pnlSub = (() => {
+    const parts = [];
+    if (closedTrades > 0) parts.push(`${closedTrades} closed`);
+    if (livePositions > 0) parts.push(`${livePositions} open`);
+    return parts.length > 0 ? parts.join(" · ") : "No trades yet";
+  })();
+
+  const winRate = performance?.win_rate ?? 0;
+  const expectancy = performance?.expectancy ?? 0;
 
   return (
     <div className="space-y-8">
@@ -81,29 +106,54 @@ export default function Dashboard() {
 
       {/* Top Metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard
-          label="Today's P&L"
-          value={formatCurrency(performance?.total_pnl)}
-          sub={`${performance?.total_trades || 0} trades recorded`}
-          accent={(performance?.total_pnl ?? 0) >= 0 ? C.primary : C.tertiary}
-        />
-        <StatCard
-          label="Win Rate (24h)"
-          value={formatPercent(performance?.win_rate)}
-          sub="Target › 60%"
-          accent={(performance?.win_rate ?? 0) > 60 ? C.primary : C.muted}
-        />
-        <StatCard
-          label="Expectancy"
-          value={formatCurrency(performance?.expectancy)}
-          sub="Per trade average"
-          accent={(performance?.expectancy ?? 0) > 0 ? C.primary : C.tertiary}
-        />
-        <StatCard
-          label="Signals Today"
-          value={systemStatus?.signals_today ?? 0}
-          sub={`${systemStatus?.trades_today || 0} executed`}
-        />
+        {/* Today's P&L — realized + unrealized */}
+        <div className="rounded p-4 transition-all hover:brightness-110" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+          <MicroLabel>Today&apos;s P&amp;L</MicroLabel>
+          <div className="mt-2 font-headline font-bold text-xl" style={{ color: totalPnl >= 0 ? C.primary : C.tertiary }}>
+            {formatCurrency(totalPnl)}
+          </div>
+          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+            <span style={{ fontSize: "9px", color: C.outline, fontFamily: "Space Grotesk" }}>{pnlSub}</span>
+            {livePositions > 0 && unrealizedPnl !== 0 && (
+              <span className="px-1.5 py-0.5 rounded" style={{ fontSize: "7px", fontFamily: "Space Grotesk", fontWeight: 700, letterSpacing: "0.1em", backgroundColor: "rgba(102,157,255,0.1)", border: "1px solid rgba(102,157,255,0.2)", color: "#669dff" }}>
+                {unrealizedPnl >= 0 ? "+" : ""}{formatCurrency(unrealizedPnl)} LIVE
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Win Rate */}
+        <div className="rounded p-4 transition-all hover:brightness-110" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+          <MicroLabel>Win Rate (24h)</MicroLabel>
+          <div className="mt-2 font-headline font-bold text-xl" style={{ color: closedTrades === 0 ? C.muted : winRate > 0.6 ? C.primary : C.muted }}>
+            {closedTrades === 0 ? "—" : formatPercent(winRate)}
+          </div>
+          <div style={{ fontSize: "9px", color: C.outline, fontFamily: "Space Grotesk", marginTop: "4px" }}>
+            {closedTrades === 0 ? "Close trades to track" : "Target › 60%"}
+          </div>
+        </div>
+
+        {/* Expectancy */}
+        <div className="rounded p-4 transition-all hover:brightness-110" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+          <MicroLabel>Expectancy</MicroLabel>
+          <div className="mt-2 font-headline font-bold text-xl" style={{ color: closedTrades === 0 ? C.muted : expectancy > 0 ? C.primary : C.tertiary }}>
+            {closedTrades === 0 ? "—" : formatCurrency(expectancy)}
+          </div>
+          <div style={{ fontSize: "9px", color: C.outline, fontFamily: "Space Grotesk", marginTop: "4px" }}>
+            {closedTrades === 0 ? "Per trade average" : "Per trade average"}
+          </div>
+        </div>
+
+        {/* Signals Today */}
+        <div className="rounded p-4 transition-all hover:brightness-110" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+          <MicroLabel>Signals Today</MicroLabel>
+          <div className="mt-2 font-headline font-bold text-xl" style={{ color: (systemStatus?.signals_today ?? 0) > 0 ? C.secondary : "#ffffff" }}>
+            {systemStatus?.signals_today ?? 0}
+          </div>
+          <div style={{ fontSize: "9px", color: C.outline, fontFamily: "Space Grotesk", marginTop: "4px" }}>
+            {systemStatus?.trades_today || 0} executed · {livePositions} positions live
+          </div>
+        </div>
       </div>
 
       {/* 6-Layer Pipeline */}

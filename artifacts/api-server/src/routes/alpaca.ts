@@ -409,6 +409,37 @@ router.post("/alpaca/analyze", async (req, res) => {
       });
     }
 
+    // Persist detected setups to signals table so Mission Control can count them
+    if (detectedSetups.length > 0) {
+      const hour = new Date().getUTCHours();
+      const session = hour >= 13 && hour < 22 ? "NY" : hour >= 7 && hour < 13 ? "London" : "Asian";
+      try {
+        await db.insert(signalsTable).values(
+          detectedSetups.map((s) => {
+            const mlProb = Math.min(0.9999, 0.55 + s.recall_score * 0.25);
+            return {
+              instrument: s.instrument,
+              setup_type: s.setup_type,
+              status: s.meets_threshold ? "active" : "pending",
+              structure_score: s.structure_score.toFixed(4),
+              order_flow_score: s.order_flow_score.toFixed(4),
+              recall_score: s.recall_score.toFixed(4),
+              ml_probability: mlProb.toFixed(4),
+              claude_score: s.final_quality.toFixed(4),
+              final_quality: s.final_quality.toFixed(4),
+              entry_price: s.entry_price.toFixed(4),
+              stop_loss: s.stop_loss.toFixed(4),
+              take_profit: s.take_profit.toFixed(4),
+              regime: s.recall_features.regime,
+              session,
+            };
+          })
+        );
+      } catch (dbErr) {
+        req.log.warn({ dbErr }, "Failed to persist signals to DB (non-fatal)");
+      }
+    }
+
     res.json({
       instrument,
       alpaca_symbol: alpacaSymbol,
