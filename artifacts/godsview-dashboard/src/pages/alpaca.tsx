@@ -34,11 +34,20 @@ type AnalyzeResult = {
   setups_detected: number; setups_blocked: Array<{ setup_type: string; reason: string }>;
   high_conviction: Array<SetupResult>; setups: Array<SetupResult>;
 };
+type ClaudeVeto = {
+  verdict: "APPROVED" | "VETOED" | "CAUTION";
+  confidence: number;
+  claude_score: number;
+  reasoning: string;
+  key_factors: string[];
+  latency_ms: number;
+};
 type SetupResult = {
   setup_type: string; direction: string; structure_score: number; order_flow_score: number;
-  recall_score: number; final_quality: number; quality_threshold: number; meets_threshold: boolean;
+  recall_score: number; final_quality: number; final_quality_with_claude: number;
+  quality_threshold: number; meets_threshold: boolean;
   entry_price: number; stop_loss: number; take_profit: number; tp_ticks: number; sl_ticks: number;
-  bar_time: string; atr: number;
+  bar_time: string; atr: number; claude?: ClaudeVeto;
 };
 type BacktestResult = {
   instrument: string; setup_type: string; days_analyzed: number; bars_scanned: number;
@@ -409,11 +418,63 @@ export default function AlpacaPage() {
 
                   <div className="rounded p-3" style={{ backgroundColor: "#0e0e0f" }}>
                     <div className="flex justify-between mb-2">
-                      <MicroLabel>Final Quality</MicroLabel>
+                      <MicroLabel>Final Quality{setup.claude ? " (w/ Claude)" : ""}</MicroLabel>
                       <MicroLabel>Threshold: {Math.round(setup.quality_threshold * 100)}%</MicroLabel>
                     </div>
-                    <QualityBar value={setup.final_quality} threshold={setup.quality_threshold} />
+                    <QualityBar value={setup.final_quality_with_claude ?? setup.final_quality} threshold={setup.quality_threshold} />
                   </div>
+
+                  {/* Claude Reasoning Veto Panel */}
+                  {setup.claude && (
+                    <div className="rounded p-4 space-y-2.5" style={{
+                      backgroundColor: setup.claude.verdict === "APPROVED"
+                        ? "rgba(156,255,147,0.04)"
+                        : setup.claude.verdict === "VETOED"
+                        ? "rgba(255,113,98,0.05)"
+                        : "rgba(251,191,36,0.04)",
+                      border: `1px solid ${setup.claude.verdict === "APPROVED" ? "rgba(156,255,147,0.15)" : setup.claude.verdict === "VETOED" ? "rgba(255,113,98,0.2)" : "rgba(251,191,36,0.15)"}`,
+                    }}>
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="material-symbols-outlined" style={{ fontSize: "13px", color: "#9cff93" }}>psychology</span>
+                          <span style={{ fontSize: "8px", fontFamily: "Space Grotesk", fontWeight: 700, letterSpacing: "0.12em", color: "#adaaab", textTransform: "uppercase" }}>Claude Reasoning Layer</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-0.5 rounded font-bold" style={{
+                            fontSize: "8px", fontFamily: "Space Grotesk", letterSpacing: "0.12em", textTransform: "uppercase",
+                            color: setup.claude.verdict === "APPROVED" ? "#9cff93" : setup.claude.verdict === "VETOED" ? "#ff7162" : "#fbbf24",
+                            backgroundColor: setup.claude.verdict === "APPROVED" ? "rgba(156,255,147,0.12)" : setup.claude.verdict === "VETOED" ? "rgba(255,113,98,0.12)" : "rgba(251,191,36,0.12)",
+                            border: `1px solid ${setup.claude.verdict === "APPROVED" ? "rgba(156,255,147,0.3)" : setup.claude.verdict === "VETOED" ? "rgba(255,113,98,0.3)" : "rgba(251,191,36,0.3)"}`,
+                          }}>
+                            {setup.claude.verdict === "APPROVED" ? "✓ APPROVED" : setup.claude.verdict === "VETOED" ? "✗ VETOED" : "⚠ CAUTION"}
+                          </span>
+                          <span style={{ fontSize: "8px", fontFamily: "JetBrains Mono, monospace", color: "#adaaab" }}>
+                            {Math.round(setup.claude.confidence * 100)}% conf · {setup.claude.latency_ms}ms
+                          </span>
+                        </div>
+                      </div>
+
+                      {setup.claude.reasoning && (
+                        <p style={{ fontSize: "10px", fontFamily: "Space Grotesk", color: "#d0cfd0", lineHeight: "1.5", margin: 0 }}>
+                          {setup.claude.reasoning}
+                        </p>
+                      )}
+
+                      {setup.claude.key_factors && setup.claude.key_factors.length > 0 && (
+                        <ul className="space-y-1" style={{ margin: 0, paddingLeft: "12px" }}>
+                          {setup.claude.key_factors.map((f, fi) => (
+                            <li key={fi} style={{ fontSize: "9px", fontFamily: "Space Grotesk", color: "#adaaab", listStyleType: "disc" }}>
+                              {f}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+
+                      <div style={{ fontSize: "8px", fontFamily: "JetBrains Mono, monospace", color: "#adaaab" }}>
+                        Claude Score: <span style={{ color: setup.claude.verdict === "APPROVED" ? "#9cff93" : setup.claude.verdict === "VETOED" ? "#ff7162" : "#fbbf24" }}>{Math.round(setup.claude.claude_score * 100)}%</span>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-3 gap-3">
                     {[

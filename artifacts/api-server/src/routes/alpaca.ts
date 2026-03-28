@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { claudeVeto, isClaudeAvailable, type ClaudeVetoResult } from "../lib/claude";
 import { getBars, getBarsHistorical, getLatestBar, getLatestTrade, getAccount, getPositions, hasValidTradingKey, isBrokerKey, placeOrder, getOrders, cancelOrder, cancelAllOrders, closePosition, getTypedPositions, calcPositionSize, type AlpacaBar, type AlpacaTimeframe, type PlaceOrderRequest } from "../lib/alpaca";
 import { alpacaStream, type TickListener } from "../lib/alpaca_stream";
 import {
@@ -441,28 +442,86 @@ router.post("/alpaca/analyze", async (req, res) => {
       });
     }
 
+    // ── Claude Reasoning Veto Layer (Layer 6) ────────────────────────────────
+    // Run all veto calls in parallel — never blocks if key is absent
+    const claudeResults: ClaudeVetoResult[] = await Promise.all(
+      detectedSetups.map((s) =>
+        claudeVeto({
+          instrument:            s.instrument,
+          setup_type:            s.setup_type,
+          direction:             s.direction,
+          structure_score:       s.structure_score,
+          order_flow_score:      s.order_flow_score,
+          recall_score:          s.recall_score,
+          final_quality:         s.final_quality,
+          quality_threshold:     s.quality_threshold,
+          entry_price:           s.entry_price,
+          stop_loss:             s.stop_loss,
+          take_profit:           s.take_profit,
+          regime:                s.recall_features.regime,
+          sk_bias:               s.recall_features.sk.bias,
+          sk_in_zone:            s.recall_features.sk.in_zone,
+          sk_sequence_stage:     s.recall_features.sk.sequence_stage,
+          sk_correction_complete:s.recall_features.sk.correction_complete,
+          cvd_slope:             s.recall_features.cvd.cvd_slope,
+          cvd_divergence:        s.recall_features.cvd.cvd_divergence,
+          buy_volume_ratio:      s.recall_features.cvd.buy_volume_ratio,
+          wick_ratio:            s.recall_features.wick_ratio_5m,
+          momentum_1m:           s.recall_features.momentum_1m,
+          trend_slope_5m:        s.recall_features.trend_slope_5m,
+          atr_pct:               s.recall_features.atr_pct,
+          consec_bullish:        s.recall_features.consec_bullish,
+          consec_bearish:        s.recall_features.consec_bearish,
+        })
+      )
+    );
+
+    // Enrich detected setups with Claude verdicts
+    const enrichedSetups = detectedSetups.map((s, i) => {
+      const cv = claudeResults[i];
+      // Claude can escalate or downgrade meets_threshold
+      const claudeApproved = cv.verdict === "APPROVED" || cv.verdict === "CAUTION";
+      return {
+        ...s,
+        claude: {
+          verdict:      cv.verdict,
+          confidence:   cv.confidence,
+          claude_score: cv.claude_score,
+          reasoning:    cv.reasoning,
+          key_factors:  cv.key_factors,
+          latency_ms:   cv.latency_ms,
+        },
+        // Re-weight final quality with Claude score (10% weight)
+        final_quality_with_claude: Math.min(0.9999,
+          s.final_quality * 0.90 + cv.claude_score * 0.10
+        ),
+        // A setup is high-conviction only if it passes ALL layers including Claude
+        meets_threshold: s.meets_threshold && claudeApproved,
+      };
+    });
+
     // Persist detected setups to signals table so Mission Control can count them
-    if (detectedSetups.length > 0) {
+    if (enrichedSetups.length > 0) {
       const hour = new Date().getUTCHours();
       const session = hour >= 13 && hour < 22 ? "NY" : hour >= 7 && hour < 13 ? "London" : "Asian";
       try {
         await db.insert(signalsTable).values(
-          detectedSetups.map((s) => {
+          enrichedSetups.map((s) => {
             const mlProb = Math.min(0.9999, 0.55 + s.recall_score * 0.25);
             return {
-              instrument: s.instrument,
-              setup_type: s.setup_type,
-              status: s.meets_threshold ? "active" : "pending",
-              structure_score: s.structure_score.toFixed(4),
-              order_flow_score: s.order_flow_score.toFixed(4),
-              recall_score: s.recall_score.toFixed(4),
-              ml_probability: mlProb.toFixed(4),
-              claude_score: s.final_quality.toFixed(4),
-              final_quality: s.final_quality.toFixed(4),
-              entry_price: s.entry_price.toFixed(4),
-              stop_loss: s.stop_loss.toFixed(4),
-              take_profit: s.take_profit.toFixed(4),
-              regime: s.recall_features.regime,
+              instrument:    s.instrument,
+              setup_type:    s.setup_type,
+              status:        s.meets_threshold ? "active" : "pending",
+              structure_score:   s.structure_score.toFixed(4),
+              order_flow_score:  s.order_flow_score.toFixed(4),
+              recall_score:      s.recall_score.toFixed(4),
+              ml_probability:    mlProb.toFixed(4),
+              claude_score:      s.claude.claude_score.toFixed(4),
+              final_quality:     s.final_quality_with_claude.toFixed(4),
+              entry_price:       s.entry_price.toFixed(4),
+              stop_loss:         s.stop_loss.toFixed(4),
+              take_profit:       s.take_profit.toFixed(4),
+              regime:            s.recall_features.regime,
               session,
             };
           })
@@ -474,16 +533,17 @@ router.post("/alpaca/analyze", async (req, res) => {
 
     res.json({
       instrument,
-      alpaca_symbol: alpacaSymbol,
-      analyzed_at: new Date().toISOString(),
+      alpaca_symbol:    alpacaSymbol,
+      analyzed_at:      new Date().toISOString(),
       regime,
-      regime_label: regime.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-      bars_analyzed: { "1m": bars1m.length, "5m": bars5m.length, "15m": bars15m.length },
-      recall_features: recall,
-      setups_detected: detectedSetups.length,
-      setups_blocked: blockedSetups,
-      setups: detectedSetups,
-      high_conviction: detectedSetups.filter((s) => s.meets_threshold),
+      regime_label:     regime.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+      bars_analyzed:    { "1m": bars1m.length, "5m": bars5m.length, "15m": bars15m.length },
+      recall_features:  recall,
+      setups_detected:  enrichedSetups.length,
+      setups_blocked:   blockedSetups,
+      setups:           enrichedSetups,
+      high_conviction:  enrichedSetups.filter((s) => s.meets_threshold),
+      claude_active:    isClaudeAvailable(),
     });
   } catch (err) {
     req.log.error({ err }, "Failed to analyze market");
@@ -994,10 +1054,15 @@ router.get("/system/diagnostics", async (req, res) => {
     detail: "ML layer using heuristic scoring — train a model to upgrade",
   };
 
-  layers.claude_reasoning = {
-    status: "degraded",
-    detail: "Claude layer inactive — integrate Anthropic key to enable contextual veto",
-  };
+  layers.claude_reasoning = isClaudeAvailable()
+    ? {
+        status: "live",
+        detail: "Claude 3.5 Haiku — contextual veto active · Reasoning all high-conviction setups",
+      }
+    : {
+        status: "degraded",
+        detail: "Claude layer inactive — integrate Anthropic key to enable contextual veto",
+      };
 
   const allStatuses = Object.values(layers).map((l) => l.status);
   const systemStatus =
