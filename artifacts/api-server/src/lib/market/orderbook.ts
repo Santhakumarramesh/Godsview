@@ -96,17 +96,28 @@ class OrderBookManager {
 
   // ── Internal ─────────────────────────────────────────────────────────────
 
-  /** Apply a WS incremental update to the in-memory book (called externally) */
+  /** Apply a WS orderbook update.
+   *  - If no REST snapshot exists yet, treats this as the first full snapshot.
+   *  - Otherwise merges incrementally (size=0 means remove that level).
+   */
   applyUpdate(symbol: string, asks: PriceLevel[], bids: PriceLevel[], timestamp: string): void {
     const existing = this.snapshots.get(symbol);
-    if (!existing) return; // No base snapshot yet — wait for next REST poll
 
-    // Merge: a size of 0 means remove; otherwise insert/update at that price
-    const mergedAsks = mergeLevels(existing.asks, asks, "asc");
-    const mergedBids = mergeLevels(existing.bids, bids, "desc");
+    let mergedAsks: PriceLevel[];
+    let mergedBids: PriceLevel[];
+
+    if (!existing) {
+      // First update from WS — Alpaca sends a full snapshot on subscribe, use it directly
+      mergedAsks = [...asks].sort((a, b) => a.price - b.price);
+      mergedBids = [...bids].sort((a, b) => b.price - a.price);
+    } else {
+      // Incremental merge: size=0 means remove the level
+      mergedAsks = mergeLevels(existing.asks, asks, "asc");
+      mergedBids = mergeLevels(existing.bids, bids, "desc");
+    }
 
     const updated: OrderBookSnapshot = {
-      ...existing,
+      symbol,
       asks:       mergedAsks,
       bids:       mergedBids,
       timestamp,

@@ -3,6 +3,7 @@
 // Streams live trade ticks + quotes → aggregates into candles → broadcasts to SSE clients
 
 import WebSocket from "ws";
+import { orderBookManager } from "./market/orderbook";
 
 const WS_URL = "wss://stream.data.alpaca.markets/v1beta3/crypto/us";
 const KEY_ID = process.env.ALPACA_API_KEY ?? "";
@@ -73,6 +74,17 @@ class AlpacaStreamManager {
     this.ws = null;
     for (const t of this.pollTimers.values()) clearInterval(t);
     this.pollTimers.clear();
+  }
+
+  /** Subscribe to orderbook WS updates for a symbol (no listener needed — goes to orderBookManager) */
+  subscribeOrderbook(symbol: string) {
+    const alpacaSym = toAlpacaSlash(symbol);
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.authenticated) {
+      // Will be sent automatically after auth via the default symbols set below
+      return;
+    }
+    this.ws.send(JSON.stringify({ action: "subscribe", orderbooks: [alpacaSym] }));
+    console.log(`[stream] orderbook subscribe sent for ${alpacaSym}`);
   }
 
   subscribe(symbol: string, timeframe: string, listener: TickListener) {
@@ -149,17 +161,15 @@ class AlpacaStreamManager {
       this.pollingMode = false;
       console.log("[stream] authenticated OK");
 
-      // Subscribe to all symbols currently tracked
-      const symbols = new Set<string>();
+      // Always subscribe to default crypto symbols for orderbooks, trades & quotes
+      const defaultSymbols = ["BTC/USD", "ETH/USD"];
+      const listenerSymbols = new Set<string>();
       for (const key of this.listeners.keys()) {
-        symbols.add(toAlpacaSlash(key.split(":")[0]));
+        listenerSymbols.add(toAlpacaSlash(key.split(":")[0]));
       }
-      if (symbols.size > 0) {
-        console.log(`[stream] re-subscribing after auth: ${[...symbols].join(", ")}`);
-        this.sendSubscribe([...symbols]);
-      } else {
-        console.log("[stream] no listeners to subscribe yet");
-      }
+      const allSymbols = [...new Set([...defaultSymbols, ...listenerSymbols])];
+      console.log(`[stream] subscribing after auth: ${allSymbols.join(", ")}`);
+      this.sendSubscribe(allSymbols);
       return;
     }
 
@@ -209,6 +219,20 @@ class AlpacaStreamManager {
       }
 
       this.broadcastPrice(symbol, price, volume, timestamp);
+    }
+
+    if (T === "o") {
+      // Orderbook update: { T: "o", S: "BTC/USD", t: "...", b: [{p,s}...], a: [{p,s}...] }
+      // Forward to orderBookManager so SSE clients receive WS-speed order book updates
+      try {
+        const alpacaSym = String(msg.S ?? "");
+        const symbol    = fromAlpacaSlash(alpacaSym);
+        const bids = ((msg.b ?? []) as Array<{ p: number; s: number }>).map((l) => ({ price: l.p, size: l.s }));
+        const asks = ((msg.a ?? []) as Array<{ p: number; s: number }>).map((l) => ({ price: l.p, size: l.s }));
+        const timestamp = String(msg.t ?? new Date().toISOString());
+        orderBookManager.applyUpdate(symbol, asks, bids, timestamp);
+      } catch { /* ignore */ }
+      return;
     }
 
     if (T === "q") {
@@ -273,8 +297,13 @@ class AlpacaStreamManager {
       console.warn("[stream] sendSubscribe called but WS not open");
       return;
     }
-    // Subscribe to both trades AND quotes for minimum latency
-    const msg = { action: "subscribe", trades: alpacaSymbols, quotes: alpacaSymbols };
+    // Subscribe to trades, quotes AND orderbooks on the same single connection
+    const msg = {
+      action:     "subscribe",
+      trades:     alpacaSymbols,
+      quotes:     alpacaSymbols,
+      orderbooks: alpacaSymbols,
+    };
     console.log("[stream] sending subscribe:", JSON.stringify(msg));
     this.ws.send(JSON.stringify(msg));
   }

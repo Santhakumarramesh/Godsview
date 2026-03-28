@@ -80,14 +80,22 @@ router.get("/orderbook/stream", (req, res) => {
   send(`: connected symbol=${symbol}\n\n`);
 
   const listener = (snap: import("../lib/market/types").OrderBookSnapshot) => {
+    const bids = snap.bids.slice(0, depth);
+    const asks = snap.asks.slice(0, depth);
+    const bestBid = bids[0] ?? null;
+    const bestAsk = asks[0] ?? null;
     const payload = {
-      type:       "orderbook",
       symbol:     snap.symbol,
       timestamp:  snap.timestamp,
       receivedAt: snap.receivedAt,
       source:     snap.source,
-      asks:       snap.asks.slice(0, depth),
-      bids:       snap.bids.slice(0, depth),
+      asks,
+      bids,
+      bestBid,
+      bestAsk,
+      spread:     bestBid && bestAsk ? bestAsk.price - bestBid.price : null,
+      totalBids:  snap.bids.length,
+      totalAsks:  snap.asks.length,
     };
     send(`data: ${JSON.stringify(payload)}\n\n`);
   };

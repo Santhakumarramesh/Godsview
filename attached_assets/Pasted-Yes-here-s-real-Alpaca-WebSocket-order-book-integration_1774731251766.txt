@@ -1,0 +1,653 @@
+Yes — here’s **real Alpaca WebSocket order book integration code** you can drop into Godsview’s **Express + TypeScript** backend.
+
+The key constraint is this: Alpaca’s real-time **crypto** stream supports `orderbooks` over WebSocket on `wss://stream.data.alpaca.markets/v1beta3/crypto/{loc}`. Stocks use different feeds, and the docs page for crypto explicitly lists `orderbooks` as a supported stream type. Alpaca also notes that most plans allow only **one active connection per endpoint**, so your backend should open one upstream socket and fan it out to your frontend clients. ([Alpaca API Docs][1])
+
+## What this gives you
+
+This implementation adds:
+
+* one backend Alpaca WebSocket client
+* in-memory latest order book state
+* SSE stream for your frontend
+* REST snapshot endpoint
+* normalized heatmap-friendly price levels
+
+It is built for **crypto pairs** like `BTC/USD` and `ETH/USD`, because that is where Alpaca exposes order book streaming in the docs. ([Alpaca API Docs][1])
+
+---
+
+## 1) Install deps
+
+```bash
+pnpm add ws
+pnpm add -D @types/ws
+```
+
+---
+
+## 2) Environment variables
+
+Add these to your backend `.env`:
+
+```env
+APCA_API_KEY_ID=your_key_here
+APCA_API_SECRET_KEY=your_secret_here
+
+# use paper for trading, but market data stream is this:
+ALPACA_CRYPTO_STREAM_URL=wss://stream.data.alpaca.markets/v1beta3/crypto/us
+```
+
+Alpaca’s docs show the crypto stream URL format as `wss://stream.data.alpaca.markets/v1beta3/crypto/{loc}`, with `us` as a valid location. ([Alpaca API Docs][1])
+
+---
+
+## 3) Create `artifacts/api-server/src/lib/alpacaOrderbook.ts`
+
+```ts
+import WebSocket from "ws";
+import { EventEmitter } from "events";
+
+export type OrderbookLevel = {
+  price: number;
+  size: number;
+};
+
+export type NormalizedOrderbook = {
+  symbol: string;
+  ts: string;
+  bids: OrderbookLevel[];
+  asks: OrderbookLevel[];
+  spread: number | null;
+  mid: number | null;
+  bestBid: number | null;
+  bestAsk: number | null;
+};
+
+type AlpacaOrderbookMessage = {
+  T: "o";
+  S: string; // symbol
+  x?: string; // exchange
+  t: string; // timestamp
+  b: Array<{ p: number; s: number }>; // bids
+  a: Array<{ p: number; s: number }>; // asks
+};
+
+type ControlMessage = {
+  T: "success" | "error" | "subscription";
+  msg?: string;
+  code?: number;
+};
+
+function safeNumber(v: unknown): number | null {
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+
+export class AlpacaOrderbookService extends EventEmitter {
+  private ws: WebSocket | null = null;
+  private reconnectTimer: NodeJS.Timeout | null = null;
+  private readonly url: string;
+  private readonly key: string;
+  private readonly secret: string;
+
+  private subscribedSymbols = new Set<string>();
+  private latestBooks = new Map<string, NormalizedOrderbook>();
+  private isConnecting = false;
+  private manuallyClosed = false;
+
+  constructor(opts?: {
+    url?: string;
+    key?: string;
+    secret?: string;
+  }) {
+    super();
+
+    this.url =
+      opts?.url ??
+      process.env.ALPACA_CRYPTO_STREAM_URL ??
+      "wss://stream.data.alpaca.markets/v1beta3/crypto/us";
+
+    this.key = opts?.key ?? process.env.APCA_API_KEY_ID ?? "";
+    this.secret = opts?.secret ?? process.env.APCA_API_SECRET_KEY ?? "";
+
+    if (!this.key || !this.secret) {
+      throw new Error("Missing Alpaca credentials");
+    }
+  }
+
+  connect() {
+    if (this.ws || this.isConnecting) return;
+
+    this.isConnecting = true;
+    this.manuallyClosed = false;
+
+    const ws = new WebSocket(this.url);
+    this.ws = ws;
+
+    ws.on("open", () => {
+      this.isConnecting = false;
+
+      ws.send(
+        JSON.stringify({
+          action: "auth",
+          key: this.key,
+          secret: this.secret,
+        }),
+      );
+    });
+
+    ws.on("message", (raw: WebSocket.RawData) => {
+      try {
+        const parsed = JSON.parse(raw.toString()) as Array<
+          AlpacaOrderbookMessage | ControlMessage
+        >;
+
+        for (const msg of parsed) {
+          if (msg.T === "success" || msg.T === "subscription" || msg.T === "error") {
+            this.emit("control", msg);
+            continue;
+          }
+
+          if (msg.T === "o") {
+            const normalized = this.normalizeOrderbook(msg);
+            this.latestBooks.set(normalized.symbol, normalized);
+            this.emit("orderbook", normalized);
+          }
+        }
+      } catch (err) {
+        this.emit("parse_error", err);
+      }
+    });
+
+    ws.on("close", () => {
+      this.cleanupSocket();
+      if (!this.manuallyClosed) this.scheduleReconnect();
+    });
+
+    ws.on("error", (err) => {
+      this.emit("error", err);
+    });
+  }
+
+  disconnect() {
+    this.manuallyClosed = true;
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = null;
+
+    if (this.ws) {
+      this.ws.close();
+    }
+    this.cleanupSocket();
+  }
+
+  subscribe(symbols: string[]) {
+    for (const symbol of symbols) {
+      this.subscribedSymbols.add(symbol);
+    }
+
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+
+    this.ws.send(
+      JSON.stringify({
+        action: "subscribe",
+        orderbooks: Array.from(this.subscribedSymbols),
+      }),
+    );
+  }
+
+  unsubscribe(symbols: string[]) {
+    for (const symbol of symbols) {
+      this.subscribedSymbols.delete(symbol);
+    }
+
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+
+    this.ws.send(
+      JSON.stringify({
+        action: "unsubscribe",
+        orderbooks: symbols,
+      }),
+    );
+  }
+
+  getSnapshot(symbol: string): NormalizedOrderbook | null {
+    return this.latestBooks.get(symbol) ?? null;
+  }
+
+  getAllSnapshots(): NormalizedOrderbook[] {
+    return Array.from(this.latestBooks.values());
+  }
+
+  private scheduleReconnect() {
+    if (this.reconnectTimer) return;
+
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.connect();
+
+      const symbols = Array.from(this.subscribedSymbols);
+      const onReady = (msg: ControlMessage) => {
+        if (msg.T === "success" && msg.msg === "authenticated") {
+          if (symbols.length > 0) this.subscribe(symbols);
+          this.off("control", onReady);
+        }
+      };
+
+      this.on("control", onReady);
+    }, 3000);
+  }
+
+  private cleanupSocket() {
+    this.isConnecting = false;
+    if (this.ws) {
+      this.ws.removeAllListeners();
+      this.ws = null;
+    }
+  }
+
+  private normalizeOrderbook(msg: AlpacaOrderbookMessage): NormalizedOrderbook {
+    const bids = (msg.b ?? [])
+      .map((x) => ({
+        price: safeNumber(x.p),
+        size: safeNumber(x.s),
+      }))
+      .filter((x): x is { price: number; size: number } => x.price !== null && x.size !== null)
+      .sort((a, b) => b.price - a.price);
+
+    const asks = (msg.a ?? [])
+      .map((x) => ({
+        price: safeNumber(x.p),
+        size: safeNumber(x.s),
+      }))
+      .filter((x): x is { price: number; size: number } => x.price !== null && x.size !== null)
+      .sort((a, b) => a.price - b.price);
+
+    const bestBid = bids[0]?.price ?? null;
+    const bestAsk = asks[0]?.price ?? null;
+    const spread =
+      bestBid !== null && bestAsk !== null ? bestAsk - bestBid : null;
+    const mid =
+      bestBid !== null && bestAsk !== null ? (bestBid + bestAsk) / 2 : null;
+
+    return {
+      symbol: msg.S,
+      ts: msg.t,
+      bids,
+      asks,
+      bestBid,
+      bestAsk,
+      spread,
+      mid,
+    };
+  }
+}
+```
+
+---
+
+## 4) Create `artifacts/api-server/src/routes/orderbook.ts`
+
+This gives you:
+
+* `GET /api/orderbook/snapshot?symbol=BTC/USD`
+* `GET /api/orderbook/stream?symbol=BTC/USD`
+
+```ts
+import { Router, type Request, type Response } from "express";
+import type { AlpacaOrderbookService, NormalizedOrderbook } from "../lib/alpacaOrderbook";
+
+export function createOrderbookRouter(orderbookService: AlpacaOrderbookService) {
+  const router = Router();
+
+  router.get("/orderbook/snapshot", (req: Request, res: Response) => {
+    const symbol = String(req.query.symbol ?? "BTC/USD");
+    const snapshot = orderbookService.getSnapshot(symbol);
+
+    if (!snapshot) {
+      res.status(404).json({
+        error: "not_found",
+        message: `No order book snapshot available for ${symbol}`,
+      });
+      return;
+    }
+
+    res.json(snapshot);
+  });
+
+  router.get("/orderbook/all", (_req: Request, res: Response) => {
+    res.json({ books: orderbookService.getAllSnapshots() });
+  });
+
+  router.get("/orderbook/stream", (req: Request, res: Response) => {
+    const symbol = String(req.query.symbol ?? "BTC/USD");
+
+    orderbookService.subscribe([symbol]);
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders?.();
+
+    const write = (payload: NormalizedOrderbook) => {
+      if (payload.symbol !== symbol) return;
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    };
+
+    const ping = setInterval(() => {
+      res.write(": ping\n\n");
+    }, 15000);
+
+    const onBook = (payload: NormalizedOrderbook) => write(payload);
+
+    orderbookService.on("orderbook", onBook);
+
+    const latest = orderbookService.getSnapshot(symbol);
+    if (latest) write(latest);
+
+    req.on("close", () => {
+      clearInterval(ping);
+      orderbookService.off("orderbook", onBook);
+      res.end();
+    });
+  });
+
+  return router;
+}
+```
+
+---
+
+## 5) Wire it into your server
+
+In your server bootstrap, create the singleton once and subscribe to your default symbols.
+
+Example:
+
+```ts
+import express from "express";
+import { AlpacaOrderbookService } from "./lib/alpacaOrderbook";
+import { createOrderbookRouter } from "./routes/orderbook";
+
+const app = express();
+
+const orderbookService = new AlpacaOrderbookService();
+orderbookService.connect();
+orderbookService.subscribe(["BTC/USD", "ETH/USD"]);
+
+orderbookService.on("control", (msg) => {
+  console.log("[alpaca-control]", msg);
+});
+
+orderbookService.on("error", (err) => {
+  console.error("[alpaca-error]", err);
+});
+
+app.use("/api", createOrderbookRouter(orderbookService));
+```
+
+This “single upstream socket + internal fanout” pattern matters because Alpaca warns that many users only get one active connection per endpoint. ([Alpaca API Docs][2])
+
+---
+
+## 6) Frontend hook: `artifacts/godsview-dashboard/src/hooks/useOrderbook.ts`
+
+```ts
+import { useEffect, useRef, useState } from "react";
+
+export type OrderbookLevel = {
+  price: number;
+  size: number;
+};
+
+export type OrderbookSnapshot = {
+  symbol: string;
+  ts: string;
+  bids: OrderbookLevel[];
+  asks: OrderbookLevel[];
+  spread: number | null;
+  mid: number | null;
+  bestBid: number | null;
+  bestAsk: number | null;
+};
+
+export function useOrderbook(symbol: string) {
+  const [data, setData] = useState<OrderbookSnapshot | null>(null);
+  const [status, setStatus] = useState<"connecting" | "live" | "error">("connecting");
+  const esRef = useRef<EventSource | null>(null);
+
+  useEffect(() => {
+    const es = new EventSource(`/api/orderbook/stream?symbol=${encodeURIComponent(symbol)}`);
+    esRef.current = es;
+
+    es.onopen = () => setStatus("live");
+
+    es.onmessage = (evt) => {
+      try {
+        const payload = JSON.parse(evt.data) as OrderbookSnapshot;
+        setData(payload);
+      } catch {
+        // ignore
+      }
+    };
+
+    es.onerror = () => {
+      setStatus("error");
+      es.close();
+    };
+
+    return () => {
+      es.close();
+      esRef.current = null;
+    };
+  }, [symbol]);
+
+  return { data, status };
+}
+```
+
+---
+
+## 7) Simple depth panel component
+
+Create `artifacts/godsview-dashboard/src/components/OrderbookPanel.tsx`
+
+```tsx
+import { useMemo } from "react";
+import { useOrderbook } from "@/hooks/useOrderbook";
+
+type Props = {
+  symbol: string;
+  levels?: number;
+};
+
+function sumSizes(rows: Array<{ size: number }>) {
+  return rows.reduce((acc, row) => acc + row.size, 0);
+}
+
+export default function OrderbookPanel({ symbol, levels = 12 }: Props) {
+  const { data, status } = useOrderbook(symbol);
+
+  const { bids, asks, maxSize } = useMemo(() => {
+    const bidRows = (data?.bids ?? []).slice(0, levels);
+    const askRows = (data?.asks ?? []).slice(0, levels);
+    const max = Math.max(
+      1,
+      ...bidRows.map((x) => x.size),
+      ...askRows.map((x) => x.size),
+    );
+
+    return {
+      bids: bidRows,
+      asks: askRows,
+      maxSize: max,
+    };
+  }, [data, levels]);
+
+  return (
+    <div className="rounded-md border p-3" style={{ background: "#1a191b", borderColor: "rgba(72,72,73,0.25)" }}>
+      <div className="mb-3 flex items-center justify-between">
+        <div className="text-xs font-semibold tracking-widest uppercase text-zinc-400">
+          Order Book
+        </div>
+        <div className="text-[10px] font-mono text-zinc-500">
+          {symbol} · {status}
+        </div>
+      </div>
+
+      <div className="mb-3 grid grid-cols-3 gap-2 text-[11px] font-mono">
+        <div className="text-red-400">
+          Ask Vol: {sumSizes(asks).toFixed(4)}
+        </div>
+        <div className="text-center text-white">
+          Mid: {data?.mid?.toFixed(2) ?? "—"}
+        </div>
+        <div className="text-right text-green-400">
+          Bid Vol: {sumSizes(bids).toFixed(4)}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <div className="mb-1 text-[10px] uppercase tracking-widest text-zinc-500">Asks</div>
+          <div className="space-y-1">
+            {asks.map((row) => (
+              <div key={`ask-${row.price}`} className="relative overflow-hidden rounded px-2 py-1 text-[11px] font-mono">
+                <div
+                  className="absolute inset-y-0 right-0"
+                  style={{
+                    width: `${(row.size / maxSize) * 100}%`,
+                    background: "rgba(255,113,98,0.18)",
+                  }}
+                />
+                <div className="relative flex justify-between">
+                  <span className="text-red-300">{row.price.toFixed(2)}</span>
+                  <span className="text-zinc-300">{row.size.toFixed(4)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <div className="mb-1 text-[10px] uppercase tracking-widest text-zinc-500">Bids</div>
+          <div className="space-y-1">
+            {bids.map((row) => (
+              <div key={`bid-${row.price}`} className="relative overflow-hidden rounded px-2 py-1 text-[11px] font-mono">
+                <div
+                  className="absolute inset-y-0 left-0"
+                  style={{
+                    width: `${(row.size / maxSize) * 100}%`,
+                    background: "rgba(156,255,147,0.18)",
+                  }}
+                />
+                <div className="relative flex justify-between">
+                  <span className="text-green-300">{row.price.toFixed(2)}</span>
+                  <span className="text-zinc-300">{row.size.toFixed(4)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-3 text-[10px] font-mono text-zinc-500">
+        Spread: {data?.spread?.toFixed(2) ?? "—"} | Best Bid: {data?.bestBid?.toFixed(2) ?? "—"} | Best Ask: {data?.bestAsk?.toFixed(2) ?? "—"}
+      </div>
+    </div>
+  );
+}
+```
+
+---
+
+## 8) Add it to your dashboard page
+
+Inside your chart area, add:
+
+```tsx
+<OrderbookPanel symbol={activeChartSymbol === "BTCUSD" ? "BTC/USD" : "ETH/USD"} />
+```
+
+If your current dashboard symbol is `BTCUSD`/`ETHUSD`, convert it to Alpaca’s slash format for crypto orders and latest order book REST examples, which use forms like `BTC/USD`. ([Alpaca API Docs][3])
+
+---
+
+## 9) Heatmap-ready aggregation helper
+
+This gives you normalized buckets for your future bookmap cloud.
+
+Create `artifacts/api-server/src/lib/heatmapBuckets.ts`
+
+```ts
+import type { NormalizedOrderbook } from "./alpacaOrderbook";
+
+export type HeatmapBucket = {
+  price: number;
+  side: "bid" | "ask";
+  intensity: number;
+  size: number;
+};
+
+export function toHeatmapBuckets(
+  book: NormalizedOrderbook,
+  tickSize = 1,
+  depth = 20,
+): HeatmapBucket[] {
+  const bidLevels = book.bids.slice(0, depth);
+  const askLevels = book.asks.slice(0, depth);
+
+  const allSizes = [...bidLevels, ...askLevels].map((x) => x.size);
+  const maxSize = Math.max(1, ...allSizes);
+
+  const normalize = (size: number) => size / maxSize;
+
+  return [
+    ...bidLevels.map((x) => ({
+      price: roundToTick(x.price, tickSize),
+      side: "bid" as const,
+      size: x.size,
+      intensity: normalize(x.size),
+    })),
+    ...askLevels.map((x) => ({
+      price: roundToTick(x.price, tickSize),
+      side: "ask" as const,
+      size: x.size,
+      intensity: normalize(x.size),
+    })),
+  ];
+}
+
+function roundToTick(price: number, tickSize: number) {
+  return Math.round(price / tickSize) * tickSize;
+}
+```
+
+---
+
+## What this does for Godsview
+
+After this, you have a working path:
+
+* Alpaca crypto order book WebSocket
+* backend state manager
+* SSE to frontend
+* visible DOM panel
+* heatmap-ready normalized levels
+
+That is the right base for your later:
+
+* bookmap strip per candle
+* liquidity cloud
+* reversal zones
+* absorption markers
+
+## Two important realities
+
+First, Alpaca’s docs clearly support crypto `orderbooks` on the real-time crypto WebSocket, but that does **not** mean a full native Bookmap product out of the box. You still need to accumulate and render time-evolving liquidity yourself. ([Alpaca API Docs][1])
+
+Second, because Alpaca warns about the connection limit on market data streams, you should not open one Alpaca socket per browser tab. The backend singleton pattern above avoids that. ([Alpaca API Docs][2])
+
+If you want, next I’ll give you the **Phase 4 code**: a real **canvas heatmap overlay** on top of your `LiveCandleChart.tsx`.
+
+[1]: https://docs.alpaca.markets/docs/real-time-crypto-pricing-data?utm_source=chatgpt.com "Real-time Crypto Data"
+[2]: https://docs.alpaca.markets/docs/streaming-market-data?utm_source=chatgpt.com "WebSocket Stream"
+[3]: https://docs.alpaca.markets/docs/crypto-orders?utm_source=chatgpt.com "Crypto Orders"
