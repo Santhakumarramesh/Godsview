@@ -33,7 +33,7 @@ function useLiveTicker() {
     };
 
     fetchTickers();
-    const interval = setInterval(fetchTickers, 10000);
+    const interval = setInterval(fetchTickers, 5000);
     return () => { cancelled = true; clearInterval(interval); };
   }, []);
 
@@ -153,7 +153,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             </div>
             {lastUpdated && (
               <div style={{ fontSize: "7px", color: "#484849", fontFamily: "JetBrains Mono, monospace", marginTop: "6px", paddingLeft: "4px" }}>
-                {lastUpdated} · 10s refresh
+                {lastUpdated} · 5s refresh
               </div>
             )}
           </div>

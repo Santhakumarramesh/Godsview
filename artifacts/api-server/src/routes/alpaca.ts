@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { getBars, getBarsHistorical, getLatestBar, getAccount, getPositions, hasValidTradingKey, isBrokerKey, type AlpacaBar } from "../lib/alpaca";
+import { getBars, getBarsHistorical, getLatestBar, getLatestTrade, getAccount, getPositions, hasValidTradingKey, isBrokerKey, type AlpacaBar } from "../lib/alpaca";
 import {
   buildRecallFeatures,
   detectAbsorptionReversal,
@@ -44,15 +44,30 @@ router.get("/alpaca/ticker", async (req, res) => {
 
   const results = await Promise.allSettled(
     symbols.map(async (sym) => {
-      const [latest, dailyBars] = await Promise.all([
-        getLatestBar(toAlpacaSymbol(sym) === sym ? sym : toAlpacaSymbol(sym)),
-        getBars(toAlpacaSymbol(sym) === sym ? sym : toAlpacaSymbol(sym), "1Day", 2).catch(() => []),
+      const alpacaSym = toAlpacaSymbol(sym) === sym ? sym : toAlpacaSymbol(sym);
+
+      // Fetch real-time trade price + 5 days of daily bars (ensures prev close available)
+      const fiveDaysAgo = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const [trade, dailyBars] = await Promise.all([
+        getLatestTrade(alpacaSym),
+        getBars(alpacaSym, "1Day", 10, fiveDaysAgo).catch(() => [] as AlpacaBar[]),
       ]);
 
-      if (!latest) return { symbol: sym, error: "no_data" };
+      if (!trade) return { symbol: sym, error: "no_data" };
 
-      const prevClose = dailyBars.length >= 2 ? dailyBars[dailyBars.length - 2].Close : null;
-      const price = latest.Close;
+      const price = trade.price;
+
+      // Sort oldest → newest; separate today's (still forming) from completed bars
+      const sortedBars = [...dailyBars].sort((a, b) => new Date(a.Timestamp).getTime() - new Date(b.Timestamp).getTime());
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const closedBars = sortedBars.filter((b) => b.Timestamp.slice(0, 10) < todayStr);
+      const prevClose = closedBars.length > 0 ? closedBars[closedBars.length - 1].Close : null;
+
+      const todayBar = sortedBars.find((b) => b.Timestamp.slice(0, 10) === todayStr) ?? sortedBars[sortedBars.length - 1];
+      const high = todayBar?.High ?? price;
+      const low = todayBar?.Low ?? price;
+      const volume = todayBar?.Volume ?? 0;
+
       const change = prevClose ? price - prevClose : 0;
       const changePct = prevClose ? (change / prevClose) * 100 : 0;
 
@@ -61,10 +76,10 @@ router.get("/alpaca/ticker", async (req, res) => {
         price,
         change: Math.round(change * 100) / 100,
         change_pct: Math.round(changePct * 100) / 100,
-        high: latest.High,
-        low: latest.Low,
-        volume: latest.Volume,
-        timestamp: latest.Timestamp,
+        high,
+        low,
+        volume,
+        timestamp: trade.timestamp,
         direction: change >= 0 ? "up" : "down",
       };
     })

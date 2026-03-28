@@ -194,6 +194,22 @@ export async function getBarsHistorical(
   return allBars;
 }
 
+export async function getLatestTrade(symbol: string): Promise<{ price: number; timestamp: string } | null> {
+  try {
+    if (isCryptoSymbol(symbol)) {
+      const cryptoSymbol = toCryptoSlash(symbol);
+      const params = new URLSearchParams({ symbols: cryptoSymbol });
+      const url = `${CRYPTO_BASE}/latest/trades?${params}`;
+      const data = await alpacaFetch(url, false) as { trades: Record<string, { p: number; t: string }> };
+      const trade = data.trades?.[cryptoSymbol];
+      return trade ? { price: trade.p, timestamp: trade.t } : null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export async function getLatestBar(symbol: string): Promise<AlpacaBar | null> {
   try {
     if (isCryptoSymbol(symbol)) {
