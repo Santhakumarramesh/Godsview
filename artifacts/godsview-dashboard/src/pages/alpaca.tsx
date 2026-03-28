@@ -4,6 +4,9 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import TradingViewChart from "@/components/TradingViewChart";
 import SKOrderFlowPanel from "@/components/SKOrderFlowPanel";
 import ExecutionPanel from "@/components/ExecutionPanel";
+import PriceLatencyPanel from "@/components/PriceLatencyPanel";
+import ReversalCloudPanel from "@/components/ReversalCloudPanel";
+import BookmapPanel from "@/components/BookmapPanel";
 
 const BASE = "/api";
 
@@ -246,6 +249,17 @@ export default function AlpacaPage() {
       {/* ── LIVE ANALYSIS ── */}
       {activeTab === "live" && (
         <div className="space-y-4">
+          {/* ── Price Latency Comparison ─────────────────────────── */}
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="material-symbols-outlined" style={{ fontSize: "13px", color: C.secondary }}>speed</span>
+              <span style={{ fontSize: "9px", fontFamily: "Space Grotesk", fontWeight: 700, color: C.muted, letterSpacing: "0.15em", textTransform: "uppercase" }}>
+                Feed Latency · WS vs REST · Alpaca → Coinbase
+              </span>
+            </div>
+            <PriceLatencyPanel symbol={alpacaSymbol} />
+          </div>
+
           {/* TradingView Chart — live prices matching TradingView.com */}
           <div className="rounded overflow-hidden" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
             <div className="flex items-center justify-between px-4 py-2.5" style={{ borderBottom: `1px solid rgba(72,72,73,0.15)` }}>
@@ -459,8 +473,34 @@ export default function AlpacaPage() {
                   />
                 </div>
               )}
+
+              {/* ── Phase 5 · Reversal Cloud ─────────────────────────────── */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="material-symbols-outlined" style={{ fontSize: "14px", color: "#a78bfa" }}>cloud</span>
+                  <span style={{ fontSize: "9px", fontFamily: "Space Grotesk", fontWeight: 700, color: C.muted, letterSpacing: "0.15em", textTransform: "uppercase" }}>
+                    Phase 5 · Reversal Cloud · SK Zone Probability
+                  </span>
+                </div>
+                <ReversalCloudPanel
+                  sk={analyzeData.recall_features?.sk as any}
+                  cvd={analyzeData.recall_features?.cvd as any}
+                />
+              </div>
+
             </>
           )}
+
+          {/* ── Phase 6 · Bookmap — always visible (live feed) ──────────── */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="material-symbols-outlined" style={{ fontSize: "14px", color: C.secondary }}>bar_chart</span>
+              <span style={{ fontSize: "9px", fontFamily: "Space Grotesk", fontWeight: 700, color: C.muted, letterSpacing: "0.15em", textTransform: "uppercase" }}>
+                Phase 6 · Live Bookmap · Per-Level Order Flow
+              </span>
+            </div>
+            <BookmapPanel symbol={alpacaSymbol} />
+          </div>
         </div>
       )}
 
