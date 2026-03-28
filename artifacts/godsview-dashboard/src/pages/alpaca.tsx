@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import LiveCandleChart from "@/components/LiveCandleChart";
 
 const BASE = "/api";
 
@@ -231,6 +232,9 @@ export default function AlpacaPage() {
       {/* ── LIVE ANALYSIS ── */}
       {activeTab === "live" && (
         <div className="space-y-4">
+          {/* Live Candlestick Chart — always visible */}
+          <LiveCandleChart defaultSymbol={instrument === "ETHUSDT" ? "ETHUSD" : "BTCUSD"} defaultTimeframe="5Min" />
+
           {analyzeMutation.isPending && (
             <div className="rounded p-10 text-center" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
               <div className="flex flex-col items-center gap-3">

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { getBars, getBarsHistorical, getLatestBar, getLatestTrade, getAccount, getPositions, hasValidTradingKey, isBrokerKey, type AlpacaBar } from "../lib/alpaca";
+import { getBars, getBarsHistorical, getLatestBar, getLatestTrade, getAccount, getPositions, hasValidTradingKey, isBrokerKey, type AlpacaBar, type AlpacaTimeframe } from "../lib/alpaca";
 import {
   buildRecallFeatures,
   detectAbsorptionReversal,
@@ -35,6 +35,53 @@ const SUPPORTED_SYMBOLS: Record<string, string> = {
 function toAlpacaSymbol(instrument: string): string {
   return SUPPORTED_SYMBOLS[instrument] ?? instrument;
 }
+
+// ─── In-memory cache for candle data (reduces Alpaca API calls) ──────────────
+const candleCache = new Map<string, { bars: unknown[]; fetchedAt: number }>();
+const CANDLE_CACHE_TTL = 4000; // 4 seconds — keeps data fresh at 5s poll interval
+
+// ─── GET /api/alpaca/candles — OHLCV bars for candlestick chart ───────────────
+router.get("/alpaca/candles", async (req, res) => {
+  const symbol = String(req.query.symbol ?? "BTCUSD");
+  const VALID_TF: AlpacaTimeframe[] = ["1Min", "5Min", "15Min", "1Hour", "1Day"];
+  const rawTf = String(req.query.timeframe ?? "5Min");
+  const timeframe: AlpacaTimeframe = VALID_TF.includes(rawTf as AlpacaTimeframe) ? (rawTf as AlpacaTimeframe) : "5Min";
+  const limit = Math.min(parseInt(String(req.query.limit ?? "200"), 10), 500);
+
+  const cacheKey = `${symbol}:${timeframe}:${limit}`;
+  const cached = candleCache.get(cacheKey);
+  if (cached && Date.now() - cached.fetchedAt < CANDLE_CACHE_TTL) {
+    res.setHeader("X-Cache", "HIT");
+    return res.json({ symbol, timeframe, bars: cached.bars, fetched_at: new Date(cached.fetchedAt).toISOString() });
+  }
+
+  try {
+    const alpacaSym = toAlpacaSymbol(symbol);
+    // Fetch candles going back enough to fill the chart
+    const hoursBack = timeframe === "1Min" ? 4 : timeframe === "5Min" ? 24 : timeframe === "15Min" ? 72 : timeframe === "1Hour" ? 30 * 24 : 365 * 24;
+    const start = new Date(Date.now() - hoursBack * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const bars = await getBars(alpacaSym, timeframe, limit, start);
+
+    // Normalise to lightweight-charts format { time, open, high, low, close, volume }
+    const formatted = bars
+      .sort((a, b) => new Date(a.Timestamp).getTime() - new Date(b.Timestamp).getTime())
+      .map((b) => ({
+        time: Math.floor(new Date(b.Timestamp).getTime() / 1000) as number,
+        open: b.Open,
+        high: b.High,
+        low: b.Low,
+        close: b.Close,
+        volume: b.Volume,
+      }));
+
+    candleCache.set(cacheKey, { bars: formatted, fetchedAt: Date.now() });
+    res.setHeader("X-Cache", "MISS");
+    res.json({ symbol, timeframe, bars: formatted, fetched_at: new Date().toISOString() });
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch candles");
+    res.status(500).json({ error: "candle_fetch_failed", message: String(err) });
+  }
+});
 
 // ─── GET /api/alpaca/ticker — live prices for multiple symbols ────────────────
 // Polls Alpaca latest bar + 24h change. No auth required for crypto.
