@@ -112,6 +112,49 @@ Every package extends `tsconfig.base.json` which sets `composite: true`. Run `pn
 - `pnpm --filter @workspace/db run push` — push DB schema changes
 - `pnpm --filter @workspace/scripts run seed` — seed demo data
 
+## Live Execution Stack
+
+The execution stack enables real order placement, live position monitoring, and one-click signal-to-trade execution.
+
+**Backend (`artifacts/api-server/src/lib/alpaca.ts`):**
+- `placeOrder()` — submit market/limit bracket orders to Alpaca (paper or live)
+- `getOrders()` — list open/closed orders
+- `cancelOrder()`, `cancelAllOrders()` — cancel individual or all orders
+- `closePosition()` — close an open position by symbol
+- `getTypedPositions()` — typed positions with full P&L data
+- `calcPositionSize()` — ATR-based risk calculator (equity × risk% / riskPerUnit)
+
+**Execution API Routes:**
+- `POST /api/alpaca/orders` — place a new order (market/limit, bracket, notional or qty)
+- `GET /api/alpaca/orders` — list orders (status: open/closed/all)
+- `DELETE /api/alpaca/orders/:id` — cancel an order
+- `DELETE /api/alpaca/orders` — cancel all open orders
+- `GET /api/alpaca/positions/live` — typed positions with live P&L
+- `DELETE /api/alpaca/positions/:symbol` — close a position
+- `GET /api/alpaca/size` — position size calculator endpoint
+
+**ExecutionPanel (`artifacts/godsview-dashboard/src/components/ExecutionPanel.tsx`):**
+- Account equity, buying power, cash stats (live from Alpaca)
+- Signal context display (entry/SL/TP pre-filled from pipeline output)
+- ATR-based position sizer with risk % slider
+- Long/Short execution buttons → OrderTicket modal
+- Two-step confirmation (Review → Confirm)
+- Auto-records trade in journal on successful order submission
+- Paper/live key detection with clear error messaging
+
+**Execution Center (`trades.tsx` — 3-tab upgrade):**
+- **Trade Journal tab** — full history with Record/Update flow
+- **Live Positions tab** — polls every 5s, unrealized P&L, Close button
+- **Orders tab** — open/closed/all filter, cancel individual or all orders
+
+**Signal → Execute Flow:**
+1. Run Scan Now on Live Intelligence page
+2. Setup card appears with "Execute This Signal" button
+3. Click → ExecutionPanel expands inline (pre-filled with entry/SL/TP)
+4. Adjust risk % → position size auto-calculated
+5. Click Long/Short → OrderTicket modal → Review → Confirm → order placed
+6. Trade auto-recorded in journal, ExecutionPanel collapses
+
 ## API Endpoints
 
 - `GET /api/signals` — list signals (params: limit, setup_type, instrument, status)
@@ -122,6 +165,11 @@ Every package extends `tsconfig.base.json` which sets `composite: true`. Run `pn
 - `PUT /api/trades/:id` — update trade outcome/P&L
 - `GET /api/performance` — analytics (win rate, profit factor, expectancy, equity curve, by-setup/session/regime)
 - `GET /api/system/status` — live status of all 6 pipeline layers
+- `POST /api/alpaca/orders` — place order
+- `GET /api/alpaca/orders` — list orders
+- `DELETE /api/alpaca/orders/:id` — cancel order
+- `GET /api/alpaca/positions/live` — live positions with P&L
+- `DELETE /api/alpaca/positions/:symbol` — close position
 
 ## Packages
 

@@ -252,4 +252,177 @@ export async function getPositions(): Promise<unknown> {
   return alpacaFetch(`${base}/v2/positions`, true);
 }
 
+// ─── Order Placement ─────────────────────────────────────────────────────────
+
+export type OrderSide = "buy" | "sell";
+export type OrderType = "market" | "limit" | "stop" | "stop_limit";
+export type TimeInForce = "gtc" | "ioc" | "fok" | "day";
+
+export type PlaceOrderRequest = {
+  symbol: string;           // e.g. "BTCUSD" or "ETHUSD"
+  qty?: number;             // number of units (use qty OR notional)
+  notional?: number;        // dollar amount (use qty OR notional)
+  side: OrderSide;
+  type: OrderType;
+  time_in_force: TimeInForce;
+  limit_price?: number;     // required for limit/stop_limit
+  stop_price?: number;      // required for stop/stop_limit
+  stop_loss_price?: number; // bracket stop-loss stop price
+  take_profit_price?: number; // bracket take-profit limit price
+};
+
+export type AlpacaOrder = {
+  id: string;
+  client_order_id: string;
+  symbol: string;
+  qty: string;
+  notional: string | null;
+  filled_qty: string;
+  filled_avg_price: string | null;
+  side: string;
+  type: string;
+  status: string;
+  time_in_force: string;
+  limit_price: string | null;
+  stop_price: string | null;
+  created_at: string;
+  updated_at: string;
+  submitted_at: string;
+  filled_at: string | null;
+  order_class: string;
+};
+
+export type AlpacaPosition = {
+  asset_id: string;
+  symbol: string;
+  exchange: string;
+  asset_class: string;
+  avg_entry_price: string;
+  qty: string;
+  qty_available: string;
+  side: string;
+  market_value: string;
+  cost_basis: string;
+  unrealized_pl: string;
+  unrealized_plpc: string;
+  unrealized_intraday_pl: string;
+  unrealized_intraday_plpc: string;
+  current_price: string;
+  lastday_price: string;
+  change_today: string;
+};
+
+async function alpacaPost(url: string, body: unknown): Promise<unknown> {
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { ...tradingHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`Alpaca ${resp.status}: ${text}`);
+  }
+  return resp.json();
+}
+
+async function alpacaDelete(url: string): Promise<unknown> {
+  const resp = await fetch(url, {
+    method: "DELETE",
+    headers: tradingHeaders(),
+  });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`Alpaca DELETE ${resp.status}: ${text}`);
+  }
+  // 204 No Content on success
+  if (resp.status === 204) return { success: true };
+  return resp.json();
+}
+
+export async function placeOrder(req: PlaceOrderRequest): Promise<AlpacaOrder> {
+  if (!hasValidTradingKey) {
+    throw new Error("Trading API keys required to place orders. Generate PK/AK keys from app.alpaca.markets.");
+  }
+
+  const base = isPaperKey ? PAPER_BASE : LIVE_BASE;
+  const symbol = toCryptoSlash(req.symbol);
+
+  const body: Record<string, unknown> = {
+    symbol,
+    side: req.side,
+    type: req.type,
+    time_in_force: req.time_in_force,
+  };
+
+  if (req.qty !== undefined) body.qty = String(req.qty);
+  else if (req.notional !== undefined) body.notional = String(req.notional);
+
+  if (req.limit_price !== undefined) body.limit_price = String(req.limit_price);
+  if (req.stop_price !== undefined) body.stop_price = String(req.stop_price);
+
+  // Bracket order (stop-loss + take-profit attached)
+  if (req.stop_loss_price !== undefined || req.take_profit_price !== undefined) {
+    body.order_class = "bracket";
+    if (req.stop_loss_price !== undefined) {
+      body.stop_loss = { stop_price: String(req.stop_loss_price) };
+    }
+    if (req.take_profit_price !== undefined) {
+      body.take_profit = { limit_price: String(req.take_profit_price) };
+    }
+  }
+
+  return alpacaPost(`${base}/v2/orders`, body) as Promise<AlpacaOrder>;
+}
+
+export async function getOrders(status: "open" | "closed" | "all" = "open", limit = 50): Promise<AlpacaOrder[]> {
+  if (!hasValidTradingKey) return [];
+  const base = isPaperKey ? PAPER_BASE : LIVE_BASE;
+  const params = new URLSearchParams({ status, limit: String(limit) });
+  const data = await alpacaFetch(`${base}/v2/orders?${params}`, true);
+  return (data as AlpacaOrder[]) ?? [];
+}
+
+export async function cancelOrder(orderId: string): Promise<unknown> {
+  if (!hasValidTradingKey) throw new Error("Trading API keys required.");
+  const base = isPaperKey ? PAPER_BASE : LIVE_BASE;
+  return alpacaDelete(`${base}/v2/orders/${orderId}`);
+}
+
+export async function cancelAllOrders(): Promise<unknown> {
+  if (!hasValidTradingKey) throw new Error("Trading API keys required.");
+  const base = isPaperKey ? PAPER_BASE : LIVE_BASE;
+  return alpacaDelete(`${base}/v2/orders`);
+}
+
+export async function closePosition(symbol: string): Promise<unknown> {
+  if (!hasValidTradingKey) throw new Error("Trading API keys required.");
+  const base = isPaperKey ? PAPER_BASE : LIVE_BASE;
+  const alpacaSymbol = toCryptoSlash(symbol).replace("/", "%2F");
+  return alpacaDelete(`${base}/v2/positions/${alpacaSymbol}`);
+}
+
+export async function getTypedPositions(): Promise<AlpacaPosition[]> {
+  if (!hasValidTradingKey) return [];
+  const base = isPaperKey ? PAPER_BASE : LIVE_BASE;
+  const data = await alpacaFetch(`${base}/v2/positions`, true);
+  return (data as AlpacaPosition[]) ?? [];
+}
+
+/**
+ * Calculate position size based on risk parameters.
+ * @param equity   - Account equity in dollars
+ * @param riskPct  - Risk per trade as decimal (e.g. 0.01 = 1%)
+ * @param entry    - Entry price
+ * @param stopLoss - Stop-loss price
+ * @returns qty (units to buy/sell)
+ */
+export function calcPositionSize(equity: number, riskPct: number, entry: number, stopLoss: number): number {
+  const riskDollars = equity * riskPct;
+  const riskPerUnit = Math.abs(entry - stopLoss);
+  if (riskPerUnit <= 0) return 0;
+  const qty = riskDollars / riskPerUnit;
+  // Round to 6 decimal places (crypto precision)
+  return Math.round(qty * 1e6) / 1e6;
+}
+
 export { isBrokerKey, isPaperKey, hasValidTradingKey };

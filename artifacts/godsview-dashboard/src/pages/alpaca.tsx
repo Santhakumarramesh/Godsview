@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import LiveCandleChart from "@/components/LiveCandleChart";
+import ExecutionPanel from "@/components/ExecutionPanel";
 
 const BASE = "/api";
 
@@ -140,6 +141,7 @@ export default function AlpacaPage() {
   const [activeTab, setActiveTab] = useState<Tab>("live");
   const [recallYears, setRecallYears] = useState(1);
   const [showAllSetups, setShowAllSetups] = useState(false);
+  const [executingSetup, setExecutingSetup] = useState<SetupResult | null>(null);
 
   const { data: accuracy, refetch: refetchAccuracy } = useQuery<AccuracyResult>({
     queryKey: ["alpaca-accuracy"],
@@ -367,6 +369,39 @@ export default function AlpacaPage() {
                       </div>
                     ))}
                   </div>
+
+                  {/* Execute button */}
+                  <div className="flex justify-end pt-1">
+                    <button
+                      onClick={() => setExecutingSetup(executingSetup?.setup_type === setup.setup_type && executingSetup?.direction === setup.direction ? null : setup)}
+                      className="flex items-center gap-2 px-4 py-2 rounded font-bold transition-all hover:brightness-110 active:scale-95"
+                      style={{
+                        backgroundColor: executingSetup?.setup_type === setup.setup_type && executingSetup?.direction === setup.direction
+                          ? (setup.direction === "long" ? "rgba(156,255,147,0.2)" : "rgba(255,113,98,0.2)")
+                          : (setup.direction === "long" ? "rgba(156,255,147,0.1)" : "rgba(255,113,98,0.1)"),
+                        border: `1px solid ${setup.direction === "long" ? "rgba(156,255,147,0.3)" : "rgba(255,113,98,0.3)"}`,
+                        color: setup.direction === "long" ? C.primary : C.tertiary,
+                        fontSize: "9px", fontFamily: "Space Grotesk", letterSpacing: "0.15em", textTransform: "uppercase"
+                      }}
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>bolt</span>
+                      {executingSetup?.setup_type === setup.setup_type && executingSetup?.direction === setup.direction ? "Close Execution Panel" : "Execute This Signal"}
+                    </button>
+                  </div>
+
+                  {/* Inline execution panel for this setup */}
+                  {executingSetup?.setup_type === setup.setup_type && executingSetup?.direction === setup.direction && (
+                    <ExecutionPanel
+                      symbol={instrument === "ETHUSDT" ? "ETHUSD" : "BTCUSD"}
+                      direction={setup.direction as "long" | "short"}
+                      entryPrice={setup.entry_price}
+                      stopLossPrice={setup.stop_loss}
+                      takeProfitPrice={setup.take_profit}
+                      setupType={setup.setup_type}
+                      atr={setup.atr}
+                      onOrderPlaced={() => setExecutingSetup(null)}
+                    />
+                  )}
                 </div>
               ))}
 

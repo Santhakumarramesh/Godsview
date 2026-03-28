@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { getBars, getBarsHistorical, getLatestBar, getLatestTrade, getAccount, getPositions, hasValidTradingKey, isBrokerKey, type AlpacaBar, type AlpacaTimeframe } from "../lib/alpaca";
+import { getBars, getBarsHistorical, getLatestBar, getLatestTrade, getAccount, getPositions, hasValidTradingKey, isBrokerKey, placeOrder, getOrders, cancelOrder, cancelAllOrders, closePosition, getTypedPositions, calcPositionSize, type AlpacaBar, type AlpacaTimeframe, type PlaceOrderRequest } from "../lib/alpaca";
 import { alpacaStream, type TickListener } from "../lib/alpaca_stream";
 import {
   buildRecallFeatures,
@@ -187,6 +187,116 @@ router.get("/alpaca/positions", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to get Alpaca positions");
     res.status(500).json({ error: "alpaca_error", message: "Failed to fetch positions" });
+  }
+});
+
+// ─── POST /api/alpaca/orders — place a new order ─────────────────────────────
+router.post("/alpaca/orders", async (req, res) => {
+  try {
+    if (!hasValidTradingKey) {
+      res.status(403).json({ error: "no_trading_key", message: "Trading API keys (PK/AK) required. Paper keys from app.alpaca.markets." });
+      return;
+    }
+    const orderReq: PlaceOrderRequest = {
+      symbol: String(req.body.symbol ?? "BTCUSD"),
+      side: req.body.side,
+      type: req.body.type ?? "market",
+      time_in_force: req.body.time_in_force ?? "gtc",
+    };
+    if (req.body.qty !== undefined) orderReq.qty = Number(req.body.qty);
+    if (req.body.notional !== undefined) orderReq.notional = Number(req.body.notional);
+    if (req.body.limit_price !== undefined) orderReq.limit_price = Number(req.body.limit_price);
+    if (req.body.stop_price !== undefined) orderReq.stop_price = Number(req.body.stop_price);
+    if (req.body.stop_loss_price !== undefined) orderReq.stop_loss_price = Number(req.body.stop_loss_price);
+    if (req.body.take_profit_price !== undefined) orderReq.take_profit_price = Number(req.body.take_profit_price);
+
+    const order = await placeOrder(orderReq);
+    req.log.info({ order_id: order.id, symbol: order.symbol, side: order.side }, "Order placed");
+    res.json({ success: true, order });
+  } catch (err) {
+    req.log.error({ err }, "Failed to place order");
+    res.status(500).json({ error: "order_failed", message: String(err) });
+  }
+});
+
+// ─── GET /api/alpaca/orders — list open/recent orders ────────────────────────
+router.get("/alpaca/orders", async (req, res) => {
+  try {
+    if (!hasValidTradingKey) {
+      res.json({ orders: [], message: "Trading API keys required" });
+      return;
+    }
+    const status = (req.query.status as "open" | "closed" | "all") ?? "open";
+    const limit = Math.min(Number(req.query.limit ?? 50), 200);
+    const orders = await getOrders(status, limit);
+    res.json({ orders, fetched_at: new Date().toISOString() });
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch orders");
+    res.status(500).json({ error: "orders_fetch_failed", message: String(err) });
+  }
+});
+
+// ─── DELETE /api/alpaca/orders/:id — cancel a specific order ─────────────────
+router.delete("/alpaca/orders/:id", async (req, res) => {
+  try {
+    if (!hasValidTradingKey) { res.status(403).json({ error: "no_trading_key" }); return; }
+    const result = await cancelOrder(req.params.id);
+    res.json({ success: true, result });
+  } catch (err) {
+    req.log.error({ err }, "Failed to cancel order");
+    res.status(500).json({ error: "cancel_failed", message: String(err) });
+  }
+});
+
+// ─── DELETE /api/alpaca/orders — cancel all open orders ──────────────────────
+router.delete("/alpaca/orders", async (req, res) => {
+  try {
+    if (!hasValidTradingKey) { res.status(403).json({ error: "no_trading_key" }); return; }
+    const result = await cancelAllOrders();
+    res.json({ success: true, result });
+  } catch (err) {
+    res.status(500).json({ error: "cancel_all_failed", message: String(err) });
+  }
+});
+
+// ─── GET /api/alpaca/positions/live — typed positions with P&L ───────────────
+router.get("/alpaca/positions/live", async (req, res) => {
+  try {
+    const positions = await getTypedPositions();
+    res.json({ positions, fetched_at: new Date().toISOString() });
+  } catch (err) {
+    res.status(500).json({ error: "positions_fetch_failed", message: String(err) });
+  }
+});
+
+// ─── DELETE /api/alpaca/positions/:symbol — close a position ─────────────────
+router.delete("/alpaca/positions/:symbol", async (req, res) => {
+  try {
+    if (!hasValidTradingKey) { res.status(403).json({ error: "no_trading_key" }); return; }
+    const result = await closePosition(req.params.symbol);
+    res.json({ success: true, result });
+  } catch (err) {
+    req.log.error({ err }, "Failed to close position");
+    res.status(500).json({ error: "close_failed", message: String(err) });
+  }
+});
+
+// ─── GET /api/alpaca/size — position size calculator ─────────────────────────
+router.get("/alpaca/size", async (req, res) => {
+  try {
+    const equity = Number(req.query.equity ?? 10000);
+    const riskPct = Number(req.query.risk_pct ?? 0.01);
+    const entry = Number(req.query.entry ?? 0);
+    const stopLoss = Number(req.query.stop_loss ?? 0);
+    if (!entry || !stopLoss) {
+      res.status(400).json({ error: "entry and stop_loss required" });
+      return;
+    }
+    const qty = calcPositionSize(equity, riskPct, entry, stopLoss);
+    const riskDollars = equity * riskPct;
+    res.json({ qty, risk_dollars: riskDollars, entry, stop_loss: stopLoss, equity, risk_pct: riskPct });
+  } catch (err) {
+    res.status(500).json({ error: "size_calc_failed", message: String(err) });
   }
 });
 
