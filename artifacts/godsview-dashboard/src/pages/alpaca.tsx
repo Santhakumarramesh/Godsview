@@ -139,6 +139,57 @@ type RecallBuildResult = {
   indicator_hints?: string[];
   summary: Record<string, { bars_fetched?: number; signals_detected?: number; closed?: number; wins?: number; win_rate?: string; by_setup?: Array<{ setup: string; total: number; wins: number; win_rate: string }>; date_range?: { start: string; end: string }; timeframe?: string; error?: string }>;
 };
+type BatchSetupSummary = {
+  setup_type: string;
+  total_signals: number;
+  closed_signals: number;
+  wins: number;
+  losses: number;
+  win_rate: number;
+  profit_factor: number;
+  gross_pnl_dollars: number;
+  expectancy_dollars: number;
+  fake_entries: number;
+  fake_entry_rate: number;
+  high_conviction_signals: number;
+  high_conviction_win_rate: number;
+  claude_reviewed: number;
+  claude_approved_rate: number;
+  rank_score: number;
+};
+type BatchSymbolSummary = {
+  instrument: string;
+  alpaca_symbol: string;
+  status: "ok" | "insufficient_data";
+  bars_scanned: number;
+  setup_summaries: BatchSetupSummary[];
+  best_setup: BatchSetupSummary | null;
+};
+type BatchBacktestResult = {
+  symbols_requested: string[];
+  setups_requested: string[];
+  days_analyzed: number;
+  history_range: { start: string; end: string };
+  indicator_hints?: string[];
+  claude_enabled: boolean;
+  generated_at: string;
+  runtime_ms: number;
+  symbol_summaries: BatchSymbolSummary[];
+  aggregate: {
+    symbols_completed: number;
+    symbols_failed: number;
+    total_signals: number;
+    closed_signals: number;
+    wins: number;
+    losses: number;
+    win_rate: number;
+    gross_pnl_dollars: number;
+    fake_entries: number;
+    fake_entry_rate: number;
+    claude_reviewed_signals: number;
+    high_conviction_signals: number;
+  };
+};
 
 const INSTRUMENTS = [
   { value: "BTCUSDT", label: "BTC/USD · Live", live: true },
@@ -244,7 +295,29 @@ function parseStudies(value: string): string[] {
     .filter(Boolean);
 }
 
-type Tab = "live" | "backtest" | "accuracy" | "recall" | "heatmap" | "replay";
+function parseSymbolList(value: string): string[] {
+  return Array.from(
+    new Set(
+      value
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    )
+  ).slice(0, 12);
+}
+
+function toTvSymbol(raw: string): string {
+  const normalized = raw.trim().toUpperCase();
+  if (!normalized) return "COINBASE:BTCUSD";
+  if (normalized.includes(":")) return normalized;
+  if (TV_SYMBOL_BY_INSTRUMENT[normalized]) return TV_SYMBOL_BY_INSTRUMENT[normalized];
+  if (normalized.endsWith("USDT")) return `BINANCE:${normalized}`;
+  if (normalized.endsWith("USD")) return `COINBASE:${normalized}`;
+  if (/^[A-Z]{1,5}$/.test(normalized)) return `NASDAQ:${normalized}`;
+  return normalized;
+}
+
+type Tab = "live" | "backtest" | "matrix" | "accuracy" | "recall" | "heatmap" | "replay";
 
 export default function AlpacaPage() {
   const [instrument, setInstrument] = useState("BTCUSDT");
@@ -258,6 +331,7 @@ export default function AlpacaPage() {
   const [tvSymbolInput, setTvSymbolInput] = useState("COINBASE:BTCUSD");
   const [tvStudiesInput, setTvStudiesInput] = useState(DEFAULT_TV_STUDIES.join(", "));
   const [useChartSymbolForAnalysis, setUseChartSymbolForAnalysis] = useState(true);
+  const [matrixSymbolsInput, setMatrixSymbolsInput] = useState("BTCUSDT,ETHUSDT,SOLUSDT,MES,MNQ");
 
   const fallbackTvSymbol = TV_SYMBOL_BY_INSTRUMENT[instrument] ?? "COINBASE:BTCUSD";
   const tvSymbol = tvSymbolInput.trim() || fallbackTvSymbol;
@@ -267,6 +341,8 @@ export default function AlpacaPage() {
     const parsed = parseStudies(tvStudiesInput);
     return parsed.length > 0 ? parsed : DEFAULT_TV_STUDIES;
   }, [tvStudiesInput]);
+  const matrixSymbols = useMemo(() => parseSymbolList(matrixSymbolsInput), [matrixSymbolsInput]);
+  const matrixTvSymbols = useMemo(() => matrixSymbols.map((symbol) => toTvSymbol(symbol)).slice(0, 6), [matrixSymbols]);
 
   const { data: accuracy, refetch: refetchAccuracy } = useQuery<AccuracyResult>({
     queryKey: ["alpaca-accuracy"],
@@ -317,9 +393,25 @@ export default function AlpacaPage() {
         return r.json();
       }),
   });
+  const batchBacktestMutation = useMutation<BatchBacktestResult>({
+    mutationFn: () =>
+      fetch(`${BASE}/alpaca/backtest-batch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          symbols: matrixSymbols,
+          setups: SETUPS,
+          days: backtestDays,
+          indicator_hints: tvStudies,
+          include_claude_history: true,
+          claude_sample_per_setup: 4,
+        }),
+      }).then((r) => r.json()),
+  });
 
   const analyzeData = analyzeMutation.data;
   const btData = backtestMutation.data;
+  const batchData = batchBacktestMutation.data;
   const recallData = recallBuildMutation.data;
   const displaySetups = analyzeData ? (showAllSetups ? analyzeData.setups : analyzeData.high_conviction) : [];
   const indicatorFeatures = (analyzeData?.recall_features as Record<string, any> | undefined)?.indicators as
@@ -382,6 +474,7 @@ export default function AlpacaPage() {
   const TABS: { id: Tab; label: string; icon: string }[] = [
     { id: "live",    label: "Live Analysis",      icon: "sensors" },
     { id: "backtest",label: "Backtest",            icon: "history" },
+    { id: "matrix",  label: "Batch Matrix",        icon: "dataset" },
     { id: "heatmap", label: "Volume Profile",      icon: "area_chart" },
     { id: "replay",  label: "Replay · Phase 7",   icon: "play_circle" },
     { id: "accuracy",label: "Accuracy DB",         icon: "database" },
@@ -427,7 +520,10 @@ export default function AlpacaPage() {
               <ActionBtn onClick={() => { analyzeMutation.mutate(); setActiveTab("live"); }} pending={analyzeMutation.isPending} pendingLabel="Scanning..." label="Scan Now" color={C.secondary} icon="radar" />
               <ActionBtn onClick={() => { backtestMutation.mutate(); setActiveTab("backtest"); }} pending={backtestMutation.isPending} pendingLabel="Running..." label="Backtest" color="#a78bfa" icon="history" />
             </div>
-            <ActionBtn onClick={() => { recallBuildMutation.mutate(); setActiveTab("recall"); }} pending={recallBuildMutation.isPending} pendingLabel="Building Recall..." label="Build Recall Memory" color="#fbbf24" icon="psychology" />
+            <div className="flex gap-1.5">
+              <ActionBtn onClick={() => { batchBacktestMutation.mutate(); setActiveTab("matrix"); }} pending={batchBacktestMutation.isPending} pendingLabel="Building Matrix..." label="Batch Learn" color="#34d399" icon="dataset" />
+              <ActionBtn onClick={() => { recallBuildMutation.mutate(); setActiveTab("recall"); }} pending={recallBuildMutation.isPending} pendingLabel="Building Recall..." label="Build Recall Memory" color="#fbbf24" icon="psychology" />
+            </div>
           </div>
         </div>
       </div>
@@ -568,6 +664,42 @@ export default function AlpacaPage() {
               allowSymbolChange={true}
               studies={tvStudies}
             />
+          </div>
+
+          <div className="rounded p-4 space-y-3" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined" style={{ fontSize: "14px", color: "#34d399" }}>grid_view</span>
+                <MicroLabel>All Charts Watchlist (TradingView)</MicroLabel>
+              </div>
+              <span style={{ fontSize: "9px", fontFamily: "Space Grotesk", color: C.outlineVar }}>
+                {matrixTvSymbols.length} charts · synced with Batch Matrix input
+              </span>
+            </div>
+            <input
+              value={matrixSymbolsInput}
+              onChange={(e) => setMatrixSymbolsInput(e.target.value.toUpperCase())}
+              placeholder="BTCUSDT, ETHUSDT, SOLUSDT, MES, MNQ, NASDAQ:AAPL"
+              className="w-full rounded px-3 py-2 outline-none text-xs"
+              style={{ backgroundColor: "#0e0e0f", border: `1px solid ${C.border}`, color: "#ffffff", fontFamily: "JetBrains Mono, monospace" }}
+            />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              {matrixTvSymbols.map((symbol) => (
+                <div key={symbol} className="rounded overflow-hidden" style={{ border: `1px solid ${C.border}` }}>
+                  <div className="px-3 py-1.5" style={{ borderBottom: `1px solid rgba(72,72,73,0.2)` }}>
+                    <MicroLabel>{symbol}</MicroLabel>
+                  </div>
+                  <TradingViewChart
+                    symbol={symbol}
+                    timeframe={chartTimeframe}
+                    height={260}
+                    showToolbar={false}
+                    allowSymbolChange={true}
+                    studies={tvStudies}
+                  />
+                </div>
+              ))}
+            </div>
           </div>
 
           {analyzeMutation.isPending && (
@@ -1123,6 +1255,132 @@ export default function AlpacaPage() {
                           </td>
                         </tr>
                       ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── BATCH MATRIX ── */}
+      {activeTab === "matrix" && (
+        <div className="space-y-4">
+          <div className="rounded p-4 space-y-3" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+            <div className="flex items-center justify-between">
+              <MicroLabel>Batch Learning Scope</MicroLabel>
+              <button
+                onClick={() => batchBacktestMutation.mutate()}
+                disabled={batchBacktestMutation.isPending || matrixSymbols.length === 0}
+                className="px-3 py-1.5 rounded transition-all disabled:opacity-40"
+                style={{ fontSize: "9px", fontFamily: "Space Grotesk", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#34d399", border: "1px solid rgba(52,211,153,0.25)", backgroundColor: "rgba(52,211,153,0.08)" }}
+              >
+                {batchBacktestMutation.isPending ? "Running..." : "Run Batch Matrix"}
+              </button>
+            </div>
+            <input
+              value={matrixSymbolsInput}
+              onChange={(e) => setMatrixSymbolsInput(e.target.value.toUpperCase())}
+              placeholder="BTCUSDT, ETHUSDT, SOLUSDT, MES, MNQ, NASDAQ:AAPL"
+              className="w-full rounded px-3 py-2 outline-none text-xs"
+              style={{ backgroundColor: "#0e0e0f", border: `1px solid ${C.border}`, color: "#ffffff", fontFamily: "JetBrains Mono, monospace" }}
+            />
+            <div className="flex flex-wrap gap-1.5">
+              {matrixSymbols.map((symbol) => (
+                <span key={symbol} className="px-2 py-0.5 rounded" style={{ fontSize: "8px", fontFamily: "Space Grotesk", color: C.secondary, border: "1px solid rgba(102,157,255,0.25)", backgroundColor: "rgba(102,157,255,0.08)", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                  {symbol}
+                </span>
+              ))}
+              {matrixSymbols.length === 0 && (
+                <span style={{ fontSize: "9px", color: C.outlineVar }}>Add at least one symbol.</span>
+              )}
+            </div>
+          </div>
+
+          {batchBacktestMutation.isPending && (
+            <div className="rounded p-10 text-center" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+              <span className="w-2 h-2 rounded-full animate-pulse inline-block mb-3" style={{ backgroundColor: "#34d399" }} />
+              <p style={{ fontSize: "10px", color: C.muted, fontFamily: "Space Grotesk" }}>
+                Running full-history matrix across symbols and setups...
+              </p>
+            </div>
+          )}
+
+          {!batchBacktestMutation.isPending && !batchData && (
+            <div className="rounded p-14 text-center" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+              <span className="material-symbols-outlined text-4xl mb-3 block" style={{ color: C.outlineVar }}>dataset</span>
+              <p style={{ fontSize: "11px", color: C.muted, fontFamily: "Space Grotesk" }}>
+                Run Batch Matrix to evaluate all setups across all selected symbols.
+              </p>
+            </div>
+          )}
+
+          {batchData && !(batchData as any).error && (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                {[
+                  { label: "Symbols", value: String(batchData.aggregate.symbols_completed), sub: `${batchData.aggregate.symbols_failed} insufficient`, accent: "#ffffff" },
+                  { label: "Total Signals", value: String(batchData.aggregate.total_signals), sub: `${batchData.aggregate.closed_signals} closed`, accent: C.secondary },
+                  { label: "Win Rate", value: `${(batchData.aggregate.win_rate * 100).toFixed(1)}%`, sub: `${batchData.aggregate.wins}W · ${batchData.aggregate.losses}L`, accent: batchData.aggregate.win_rate > 0.5 ? C.primary : C.tertiary },
+                  { label: "Gross P&L", value: `$${batchData.aggregate.gross_pnl_dollars >= 0 ? "+" : ""}${batchData.aggregate.gross_pnl_dollars.toFixed(0)}`, sub: `${(batchData.aggregate.fake_entry_rate * 100).toFixed(1)}% fake entries`, accent: batchData.aggregate.gross_pnl_dollars >= 0 ? C.primary : C.tertiary },
+                  { label: "High Conviction", value: String(batchData.aggregate.high_conviction_signals), sub: "signals", accent: C.primary },
+                  { label: "Claude Reviewed", value: String(batchData.aggregate.claude_reviewed_signals), sub: "sampled across matrix", accent: "#34d399" },
+                  { label: "Days", value: String(batchData.days_analyzed), sub: "historical lookback", accent: C.muted },
+                  { label: "Runtime", value: `${Math.round(batchData.runtime_ms / 1000)}s`, sub: "batch execution time", accent: C.muted },
+                ].map((item) => (
+                  <div key={item.label} className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+                    <MicroLabel>{item.label}</MicroLabel>
+                    <div className="mt-2 font-headline font-bold text-xl" style={{ color: item.accent }}>{item.value}</div>
+                    <div style={{ fontSize: "9px", color: C.outlineVar, marginTop: "3px", fontFamily: "Space Grotesk" }}>{item.sub}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="rounded overflow-hidden" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+                <div className="px-5 py-3 border-b flex items-center gap-2" style={{ borderColor: "rgba(72,72,73,0.2)" }}>
+                  <MicroLabel>Best Setup By Symbol</MicroLabel>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr style={{ borderBottom: "1px solid rgba(72,72,73,0.2)" }}>
+                        {["Symbol", "Best Setup", "Rank", "Signals", "Win Rate", "Expectancy", "Fake Rate", "P&L $"].map((h) => (
+                          <th key={h} className="px-4 py-2 text-left" style={{ fontSize: "8px", fontFamily: "Space Grotesk", letterSpacing: "0.15em", textTransform: "uppercase", color: C.outlineVar }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {batchData.symbol_summaries.map((summary) => {
+                        const best = summary.best_setup;
+                        return (
+                          <tr key={summary.instrument} style={{ borderBottom: "1px solid rgba(72,72,73,0.1)" }}>
+                            <td className="px-4 py-2.5">
+                              <div className="font-headline font-bold text-xs">{summary.instrument}</div>
+                              <div style={{ fontSize: "8px", color: C.outlineVar, fontFamily: "JetBrains Mono, monospace" }}>{summary.alpaca_symbol}</div>
+                            </td>
+                            <td className="px-4 py-2.5" style={{ fontSize: "10px", color: C.muted }}>
+                              {best ? best.setup_type.replace(/_/g, " ") : "—"}
+                            </td>
+                            <td className="px-4 py-2.5" style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: C.secondary }}>
+                              {best ? best.rank_score.toFixed(2) : "—"}
+                            </td>
+                            <td className="px-4 py-2.5" style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace" }}>{best ? best.total_signals : 0}</td>
+                            <td className="px-4 py-2.5" style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: best && best.win_rate > 0.5 ? C.primary : C.tertiary }}>
+                              {best ? `${(best.win_rate * 100).toFixed(1)}%` : "—"}
+                            </td>
+                            <td className="px-4 py-2.5" style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: best && best.expectancy_dollars > 0 ? C.primary : C.tertiary }}>
+                              {best ? `${best.expectancy_dollars >= 0 ? "+" : ""}$${best.expectancy_dollars.toFixed(2)}` : "—"}
+                            </td>
+                            <td className="px-4 py-2.5" style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: best && best.fake_entry_rate < 0.2 ? C.primary : "#fbbf24" }}>
+                              {best ? `${(best.fake_entry_rate * 100).toFixed(1)}%` : "—"}
+                            </td>
+                            <td className="px-4 py-2.5" style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: best && best.gross_pnl_dollars >= 0 ? C.primary : C.tertiary }}>
+                              {best ? `${best.gross_pnl_dollars >= 0 ? "+" : ""}$${best.gross_pnl_dollars.toFixed(0)}` : "—"}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

@@ -177,6 +177,7 @@ The execution stack enables real order placement, live position monitoring, and 
 - `DELETE /api/alpaca/orders/:id` — cancel order
 - `GET /api/alpaca/positions/live` — live positions with P&L
 - `DELETE /api/alpaca/positions/:symbol` — close position
+- `POST /api/alpaca/backtest-batch` — multi-symbol + multi-setup full-history matrix backtest
 
 ### Phase 3 — Order Book & Microstructure (real Alpaca data)
 - `GET /api/orderbook/snapshot?symbol=BTCUSD&depth=25` — full order book snapshot (asks + bids, sorted)
@@ -215,6 +216,13 @@ The execution stack enables real order placement, live position monitoring, and 
 - Added degraded/fallback UX on partial data failures (`Partial Data Mode` + live fallback polling).
 - Added robust System Core summary panel (live/degraded/offline layer counts + top remediation action).
 - Upgraded `/api/system/status` layer statuses from static-all-active to dynamic health states with key/Claude checks.
+
+## Phase 11 — Multi-Symbol Matrix + All Charts (Completed)
+
+- Added `POST /api/alpaca/backtest-batch` for full-history matrix backtesting across many symbols and setups in one run.
+- Batch response now includes per-symbol best setup ranking, fake-entry rates, expectancy, P&L, and optional Claude sampled review stats.
+- Live Intelligence page now supports an "All Charts Watchlist" TradingView grid driven by a shared symbol list.
+- Added a new "Batch Matrix" tab to run and inspect matrix-learning results directly in the dashboard.
 
 ## Phase 1 & 2 Frontend Modules
 

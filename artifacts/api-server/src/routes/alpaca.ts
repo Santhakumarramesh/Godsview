@@ -845,6 +845,14 @@ function runSetupDetector(
   return detectContinuationPullback(bars1m, bars5m, recall);
 }
 
+const DEFAULT_SETUPS: SetupType[] = [
+  "absorption_reversal",
+  "sweep_reclaim",
+  "continuation_pullback",
+  "cvd_divergence",
+  "breakout_failure",
+];
+
 // ─── POST /api/alpaca/backtest — walk-forward on recent bars ──────────────────
 router.post("/alpaca/backtest", async (req, res) => {
   try {
@@ -1199,6 +1207,322 @@ router.post("/alpaca/backtest", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Backtest failed");
     res.status(500).json({ error: "backtest_error", message: String(err) });
+  }
+});
+
+// ─── POST /api/alpaca/backtest-batch — multi-symbol, multi-setup learning ───
+router.post("/alpaca/backtest-batch", async (req, res) => {
+  try {
+    const rawSymbols = req.body.symbols;
+    const parsedSymbols: unknown[] = Array.isArray(rawSymbols)
+      ? rawSymbols
+      : typeof rawSymbols === "string"
+      ? rawSymbols.split(",")
+      : ["BTCUSDT", "ETHUSDT", "SOLUSDT", "MES", "MNQ"];
+    const uniqueSymbols = Array.from(
+      new Set(
+        parsedSymbols
+          .map((value) => String(value ?? "").trim())
+          .filter(Boolean)
+      )
+    ).slice(0, 12);
+
+    const rawSetups: unknown[] = Array.isArray(req.body.setups) ? req.body.setups : DEFAULT_SETUPS;
+    const setups = rawSetups
+      .map((value) => String(value ?? "").trim() as SetupType)
+      .filter((value): value is SetupType => DEFAULT_SETUPS.includes(value));
+    const setupList: SetupType[] = setups.length > 0 ? Array.from(new Set(setups)) : DEFAULT_SETUPS;
+
+    const days = Math.min(Math.max(Number(req.body.days ?? 5), 1), 60);
+    const indicatorHints = parseIndicatorHints(req.body);
+    const forwardBarsSetting = Math.min(Math.max(Number(req.body.forward_bars ?? 20), 10), 80);
+    const includeClaudeHistory = String(req.body.include_claude_history ?? "false").toLowerCase() === "true";
+    const claudeSamplePerSetup = Math.min(Math.max(Number(req.body.claude_sample_per_setup ?? 6), 0), 30);
+    const maxBars1m = Math.min(Math.max(Number(req.body.max_bars_1m ?? days * 24 * 60 + 500), 2000), 50000);
+    const maxBars5m = Math.min(Math.max(Number(req.body.max_bars_5m ?? days * 24 * 12 + 200), 600), 20000);
+
+    type BatchSetupSummary = {
+      setup_type: SetupType;
+      total_signals: number;
+      closed_signals: number;
+      wins: number;
+      losses: number;
+      win_rate: number;
+      profit_factor: number;
+      gross_pnl_dollars: number;
+      expectancy_dollars: number;
+      fake_entries: number;
+      fake_entry_rate: number;
+      high_conviction_signals: number;
+      high_conviction_win_rate: number;
+      claude_reviewed: number;
+      claude_approved_rate: number;
+      rank_score: number;
+    };
+    type BatchSymbolSummary = {
+      instrument: string;
+      alpaca_symbol: string;
+      status: "ok" | "insufficient_data";
+      bars_scanned: number;
+      setup_summaries: BatchSetupSummary[];
+      best_setup: BatchSetupSummary | null;
+    };
+
+    const startedAt = Date.now();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+    const startIso = startDate.toISOString();
+    const endIso = new Date().toISOString();
+
+    const symbolSummaries: BatchSymbolSummary[] = [];
+    let aggregateSignals = 0;
+    let aggregateClosed = 0;
+    let aggregateWins = 0;
+    let aggregateLosses = 0;
+    let aggregatePnl = 0;
+    let aggregateFakeEntries = 0;
+    let aggregateClaudeReviewed = 0;
+    let aggregateHighConviction = 0;
+
+    for (const instrument of uniqueSymbols) {
+      const alpacaSymbol = toAlpacaSymbol(instrument);
+      const [bars1mRaw, bars5mRaw] = await Promise.all([
+        getBarsHistorical(alpacaSymbol, "1Min", startIso, endIso, maxBars1m),
+        getBarsHistorical(alpacaSymbol, "5Min", startIso, endIso, maxBars5m),
+      ]);
+      const bars1m = [...bars1mRaw].sort((a, b) => new Date(a.Timestamp).getTime() - new Date(b.Timestamp).getTime());
+      const bars5m = [...bars5mRaw].sort((a, b) => new Date(a.Timestamp).getTime() - new Date(b.Timestamp).getTime());
+
+      if (bars1m.length < 40 || bars5m.length < 10) {
+        symbolSummaries.push({
+          instrument,
+          alpaca_symbol: alpacaSymbol,
+          status: "insufficient_data",
+          bars_scanned: bars1m.length,
+          setup_summaries: [],
+          best_setup: null,
+        });
+        continue;
+      }
+
+      const bars1mTimes = bars1m.map((bar) => new Date(bar.Timestamp).getTime());
+      const bars5mTimes = bars5m.map((bar) => new Date(bar.Timestamp).getTime());
+      const setupSummaries: BatchSetupSummary[] = [];
+
+      for (const setup of setupList) {
+        const results: Array<{
+          entry_time: string;
+          direction: "long" | "short";
+          final_quality: number;
+          meets_threshold: boolean;
+          outcome: "win" | "loss" | "open";
+          tp_ticks: number;
+          sl_ticks: number;
+          pnl_dollars: number;
+          is_fake_entry: boolean;
+          regime: string;
+        }> = [];
+        const claudeCandidates: Array<{ rank: number; context: SetupContext }> = [];
+
+        const WINDOW_1M = 30;
+        const FORWARD_BARS = forwardBarsSetting;
+        let bars5mCursor = -1;
+
+        for (let i = WINDOW_1M; i < bars1m.length - FORWARD_BARS; i++) {
+          const window1m = bars1m.slice(i - WINDOW_1M, i);
+          const windowTime = bars1mTimes[i];
+          while (bars5mCursor + 1 < bars5mTimes.length && bars5mTimes[bars5mCursor + 1] <= windowTime) {
+            bars5mCursor++;
+          }
+          if (bars5mCursor < 4) continue;
+
+          const start5m = Math.max(0, bars5mCursor - 19);
+          const closest5m = bars5m.slice(start5m, bars5mCursor + 1);
+          if (closest5m.length < 5) continue;
+
+          const recall = buildRecallFeatures(window1m, closest5m, indicatorHints);
+          const noTrade = applyNoTradeFilters(window1m, recall, setup, { replayMode: true });
+          if (noTrade.blocked) continue;
+
+          const detected = runSetupDetector(setup, window1m, closest5m, recall);
+          if (!detected.detected) continue;
+
+          const entryBar = bars1m[i];
+          const entryPrice = Number(entryBar.Close);
+          const atr = computeATR(window1m);
+          const { takeProfit, stopLoss, tpTicks, slTicks } = computeTPSL(entryPrice, detected.direction, atr, recall.regime);
+
+          const forwardBars = bars1m.slice(i + 1, i + 1 + FORWARD_BARS);
+          const outcome = checkForwardOutcome(entryPrice, detected.direction, takeProfit, stopLoss, forwardBars);
+          const fakeEntry = detectFakeEntry(detected.direction, entryPrice, atr, forwardBars);
+
+          const recallScore = scoreRecall(recall, setup, detected.direction);
+          const finalQuality = computeFinalQuality(detected.structure, detected.orderFlow, recallScore);
+          const threshold = getQualityThreshold(recall.regime, setup);
+
+          const tickValue = entryPrice > 10000 ? 5 : entryPrice > 1000 ? 1 : 0.25;
+          const pnlDollars = outcome.outcome === "win"
+            ? tpTicks * tickValue
+            : outcome.outcome === "loss"
+            ? -(slTicks * tickValue)
+            : 0;
+
+          results.push({
+            entry_time: entryBar.Timestamp,
+            direction: detected.direction,
+            final_quality: finalQuality,
+            meets_threshold: finalQuality >= threshold,
+            outcome: outcome.outcome,
+            tp_ticks: tpTicks,
+            sl_ticks: slTicks,
+            pnl_dollars: pnlDollars,
+            is_fake_entry: fakeEntry.isFakeEntry,
+            regime: recall.regime,
+          });
+
+          if (includeClaudeHistory) {
+            claudeCandidates.push({
+              rank: finalQuality * 0.7 + (1 - Math.min(fakeEntry.adverseMovePct / 2.5, 1)) * 0.3,
+              context: {
+                instrument,
+                setup_type: setup,
+                direction: detected.direction,
+                structure_score: detected.structure,
+                order_flow_score: detected.orderFlow,
+                recall_score: recallScore,
+                final_quality: finalQuality,
+                quality_threshold: threshold,
+                entry_price: entryPrice,
+                stop_loss: stopLoss,
+                take_profit: takeProfit,
+                regime: recall.regime,
+                sk_bias: recall.sk.bias,
+                sk_in_zone: recall.sk.in_zone,
+                sk_sequence_stage: recall.sk.sequence_stage,
+                sk_correction_complete: recall.sk.correction_complete,
+                cvd_slope: recall.cvd.cvd_slope,
+                cvd_divergence: recall.cvd.cvd_divergence,
+                buy_volume_ratio: recall.cvd.buy_volume_ratio,
+                wick_ratio: recall.wick_ratio_5m,
+                momentum_1m: recall.momentum_1m,
+                trend_slope_5m: recall.trend_slope_5m,
+                atr_pct: recall.atr_pct,
+                consec_bullish: recall.consec_bullish,
+                consec_bearish: recall.consec_bearish,
+              },
+            });
+          }
+        }
+
+        const closed = results.filter((result) => result.outcome !== "open");
+        const wins = closed.filter((result) => result.outcome === "win");
+        const losses = closed.filter((result) => result.outcome === "loss");
+        const winRate = closed.length > 0 ? wins.length / closed.length : 0;
+        const grossWinTicks = wins.reduce((sum, result) => sum + result.tp_ticks, 0);
+        const grossLossTicks = losses.reduce((sum, result) => sum + result.sl_ticks, 0);
+        const profitFactor = grossLossTicks > 0 ? grossWinTicks / grossLossTicks : grossWinTicks > 0 ? 999 : 0;
+        const grossPnlDollars = results.reduce((sum, result) => sum + result.pnl_dollars, 0);
+        const avgWinDollars = wins.length > 0 ? wins.reduce((sum, result) => sum + result.pnl_dollars, 0) / wins.length : 0;
+        const avgLossDollars = losses.length > 0 ? Math.abs(losses.reduce((sum, result) => sum + result.pnl_dollars, 0) / losses.length) : 0;
+        const expectancyDollars = closed.length > 0 ? (winRate * avgWinDollars) - ((1 - winRate) * avgLossDollars) : 0;
+        const fakeEntries = results.filter((result) => result.is_fake_entry);
+        const highConviction = results.filter((result) => result.meets_threshold);
+        const highConvictionClosed = highConviction.filter((result) => result.outcome !== "open");
+        const highConvictionWins = highConvictionClosed.filter((result) => result.outcome === "win");
+        const highConvictionWinRate = highConvictionClosed.length > 0 ? highConvictionWins.length / highConvictionClosed.length : 0;
+        const fakeEntryRate = results.length > 0 ? fakeEntries.length / results.length : 0;
+
+        let claudeReviewed = 0;
+        let claudeApprovedRate = 0;
+        if (includeClaudeHistory && claudeSamplePerSetup > 0 && claudeCandidates.length > 0) {
+          const reviewTargets = [...claudeCandidates]
+            .sort((a, b) => b.rank - a.rank)
+            .slice(0, claudeSamplePerSetup);
+          const reviews = await Promise.all(reviewTargets.map((target) => claudeVeto(target.context)));
+          claudeReviewed = reviews.length;
+          const approved = reviews.filter((review) => review.verdict === "APPROVED" || review.verdict === "CAUTION").length;
+          claudeApprovedRate = claudeReviewed > 0 ? approved / claudeReviewed : 0;
+        }
+
+        const rankScore =
+          expectancyDollars * 0.45 +
+          winRate * 18 +
+          (1 - fakeEntryRate) * 9 +
+          highConvictionWinRate * 8 +
+          Math.log(results.length + 1) * 2;
+
+        setupSummaries.push({
+          setup_type: setup,
+          total_signals: results.length,
+          closed_signals: closed.length,
+          wins: wins.length,
+          losses: losses.length,
+          win_rate: winRate,
+          profit_factor: profitFactor,
+          gross_pnl_dollars: Math.round(grossPnlDollars * 100) / 100,
+          expectancy_dollars: Math.round(expectancyDollars * 100) / 100,
+          fake_entries: fakeEntries.length,
+          fake_entry_rate: fakeEntryRate,
+          high_conviction_signals: highConviction.length,
+          high_conviction_win_rate: highConvictionWinRate,
+          claude_reviewed: claudeReviewed,
+          claude_approved_rate: claudeApprovedRate,
+          rank_score: Math.round(rankScore * 1000) / 1000,
+        } satisfies BatchSetupSummary);
+
+        aggregateSignals += results.length;
+        aggregateClosed += closed.length;
+        aggregateWins += wins.length;
+        aggregateLosses += losses.length;
+        aggregatePnl += grossPnlDollars;
+        aggregateFakeEntries += fakeEntries.length;
+        aggregateClaudeReviewed += claudeReviewed;
+        aggregateHighConviction += highConviction.length;
+      }
+
+      const orderedSetups = [...setupSummaries].sort(
+        (a, b) => Number((b.rank_score as number) ?? 0) - Number((a.rank_score as number) ?? 0)
+      );
+      const bestSetup = orderedSetups.length > 0 ? orderedSetups[0] : null;
+
+      symbolSummaries.push({
+        instrument,
+        alpaca_symbol: alpacaSymbol,
+        status: "ok",
+        bars_scanned: bars1m.length,
+        setup_summaries: orderedSetups,
+        best_setup: bestSetup,
+      });
+    }
+
+    res.json({
+      symbols_requested: uniqueSymbols,
+      setups_requested: setupList,
+      days_analyzed: days,
+      history_range: { start: startIso, end: endIso },
+      indicator_hints: indicatorHints,
+      claude_enabled: includeClaudeHistory,
+      generated_at: new Date().toISOString(),
+      runtime_ms: Date.now() - startedAt,
+      symbol_summaries: symbolSummaries,
+      aggregate: {
+        symbols_completed: symbolSummaries.filter((summary) => summary.status === "ok").length,
+        symbols_failed: symbolSummaries.filter((summary) => summary.status !== "ok").length,
+        total_signals: aggregateSignals,
+        closed_signals: aggregateClosed,
+        wins: aggregateWins,
+        losses: aggregateLosses,
+        win_rate: aggregateClosed > 0 ? aggregateWins / aggregateClosed : 0,
+        gross_pnl_dollars: Math.round(aggregatePnl * 100) / 100,
+        fake_entries: aggregateFakeEntries,
+        fake_entry_rate: aggregateSignals > 0 ? aggregateFakeEntries / aggregateSignals : 0,
+        claude_reviewed_signals: aggregateClaudeReviewed,
+        high_conviction_signals: aggregateHighConviction,
+      },
+    });
+  } catch (err) {
+    req.log.error({ err }, "Batch backtest failed");
+    res.status(500).json({ error: "batch_backtest_error", message: String(err) });
   }
 });
 
