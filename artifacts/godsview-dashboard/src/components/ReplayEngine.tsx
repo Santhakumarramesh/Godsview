@@ -281,9 +281,9 @@ export default function ReplayEngine({ symbol = "BTCUSD", timeframe = "5Min", ba
                   Events Seen (bar 1–{cursor + 1})
                 </div>
                 {[
-                  { label: "Reversal Signals", value: reversalsSeen, total: data.summary.reversal_signals, color: "#e879f9" },
-                  { label: "Absorption Zones", value: absorptionSeen, total: data.summary.absorption_zones, color: "#fb923c" },
-                  { label: "High Volume Bars", value: highVolSeen,    total: data.summary.high_vol_events,  color: "#fbbf24" },
+                  { label: "Reversal Signals", value: reversalsSeen, total: data?.summary?.reversal_signals ?? 0, color: "#e879f9" },
+                  { label: "Absorption Zones", value: absorptionSeen, total: data?.summary?.absorption_zones ?? 0, color: "#fb923c" },
+                  { label: "High Volume Bars", value: highVolSeen,    total: data?.summary?.high_vol_events ?? 0,  color: "#fbbf24" },
                 ].map((stat) => (
                   <div key={stat.label} className="flex items-center justify-between">
                     <span style={{ fontSize: "8px", color: C.muted, fontFamily: "Space Grotesk" }}>{stat.label}</span>

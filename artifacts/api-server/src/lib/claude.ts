@@ -15,8 +15,6 @@
  * - Multiple no-trade signals are present simultaneously
  */
 
-import Anthropic from "@anthropic-ai/sdk";
-
 export type ClaudeVerdict = "APPROVED" | "VETOED" | "CAUTION";
 
 export interface ClaudeVetoResult {
@@ -82,13 +80,45 @@ Respond ONLY with valid JSON matching this exact schema:
   "key_factors": ["factor 1", "factor 2", "factor 3"]
 }`;
 
-let client: Anthropic | null = null;
+type AnthropicMessageResult = {
+  content: Array<{ type: string; text: string }>;
+};
 
-function getClient(): Anthropic | null {
+type AnthropicClient = {
+  messages: {
+    create: (args: {
+      model: string;
+      max_tokens: number;
+      messages: Array<{ role: "user"; content: string }>;
+      system: string;
+    }) => Promise<AnthropicMessageResult>;
+  };
+};
+
+let client: AnthropicClient | null = null;
+let clientLoading: Promise<AnthropicClient | null> | null = null;
+
+async function getClient(): Promise<AnthropicClient | null> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) return null;
-  if (!client) client = new Anthropic({ apiKey: key });
-  return client;
+  if (client) return client;
+  if (clientLoading) return clientLoading;
+
+  clientLoading = (async () => {
+    try {
+      const importer = new Function("mod", "return import(mod);") as (mod: string) => Promise<unknown>;
+      const mod = await importer("@anthropic-ai/sdk") as { default?: new (args: { apiKey: string }) => AnthropicClient };
+      if (!mod.default) return null;
+      client = new mod.default({ apiKey: key });
+      return client;
+    } catch {
+      return null;
+    } finally {
+      clientLoading = null;
+    }
+  })();
+
+  return clientLoading;
 }
 
 export function isClaudeAvailable(): boolean {
@@ -97,7 +127,7 @@ export function isClaudeAvailable(): boolean {
 
 export async function claudeVeto(ctx: SetupContext): Promise<ClaudeVetoResult> {
   const t0 = Date.now();
-  const claude = getClient();
+  const claude = await getClient();
 
   if (!claude) {
     // Passthrough when no key — use final_quality as claude_score

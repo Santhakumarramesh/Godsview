@@ -93,6 +93,12 @@ export default function Signals() {
               {data?.signals.map((sig) => {
                 const q = sig.final_quality;
                 const qColor = q > 75 ? C.primary : q > 50 ? "#fbbf24" : C.tertiary;
+                const statusColor =
+                  sig.status === "approved" ? C.primary :
+                  sig.status === "pending" ? "#fbbf24" :
+                  sig.status === "executed" ? C.secondary :
+                  sig.status === "rejected" ? C.tertiary :
+                  C.muted;
                 return (
                   <tr key={sig.id} className="hover:brightness-105 transition-all" style={{ borderBottom: "1px solid rgba(72,72,73,0.12)" }}>
                     <td className="px-4 py-2.5 whitespace-nowrap" style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: C.muted }}>
@@ -111,9 +117,9 @@ export default function Signals() {
                     <td className="px-4 py-2.5">
                       <span className="px-2 py-0.5 rounded" style={{
                         fontSize: "8px", fontFamily: "Space Grotesk", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase",
-                        backgroundColor: sig.status === "active" ? "rgba(156,255,147,0.1)" : "rgba(72,72,73,0.2)",
-                        color: sig.status === "active" ? C.primary : C.muted,
-                        border: `1px solid ${sig.status === "active" ? "rgba(156,255,147,0.2)" : "rgba(72,72,73,0.3)"}`,
+                        backgroundColor: `${statusColor}1A`,
+                        color: statusColor,
+                        border: `1px solid ${statusColor}4D`,
                       }}>
                         {sig.status}
                       </span>

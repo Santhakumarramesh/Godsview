@@ -685,7 +685,10 @@ router.post("/alpaca/analyze", async (req, res) => {
       if (!result.detected) continue;
 
       const recallScore = scoreRecall(recall, setup, result.direction);
-      const finalQuality = computeFinalQuality(result.structure, result.orderFlow, recallScore);
+      const finalQuality = computeFinalQuality(result.structure, result.orderFlow, recallScore, {
+        recall,
+        direction: result.direction,
+      });
       const threshold = getQualityThreshold(regime, setup);
       const meetsThreshold = finalQuality >= threshold;
 
@@ -958,7 +961,10 @@ router.post("/alpaca/backtest", async (req, res) => {
       const fakeEntry = detectFakeEntry(detected.direction, entryPrice, atr, forwardBars);
 
       const recallScore = scoreRecall(recall, setup, detected.direction);
-      const finalQuality = computeFinalQuality(detected.structure, detected.orderFlow, recallScore);
+      const finalQuality = computeFinalQuality(detected.structure, detected.orderFlow, recallScore, {
+        recall,
+        direction: detected.direction,
+      });
       const threshold = getQualityThreshold(recall.regime, setup);
       const mlProbability = Math.min(1, 0.55 + recallScore * 0.25);
 
@@ -1357,7 +1363,10 @@ router.post("/alpaca/backtest-batch", async (req, res) => {
           const fakeEntry = detectFakeEntry(detected.direction, entryPrice, atr, forwardBars);
 
           const recallScore = scoreRecall(recall, setup, detected.direction);
-          const finalQuality = computeFinalQuality(detected.structure, detected.orderFlow, recallScore);
+          const finalQuality = computeFinalQuality(detected.structure, detected.orderFlow, recallScore, {
+            recall,
+            direction: detected.direction,
+          });
           const threshold = getQualityThreshold(recall.regime, setup);
 
           const tickValue = entryPrice > 10000 ? 5 : entryPrice > 1000 ? 1 : 0.25;
@@ -1382,7 +1391,10 @@ router.post("/alpaca/backtest-batch", async (req, res) => {
 
           if (includeClaudeHistory) {
             claudeCandidates.push({
-              rank: finalQuality * 0.7 + (1 - Math.min(fakeEntry.adverseMovePct / 2.5, 1)) * 0.3,
+              rank:
+                finalQuality * 0.55 +
+                (1 - recall.fake_entry_risk) * 0.25 +
+                (1 - Math.min(fakeEntry.adverseMovePct / 2.5, 1)) * 0.2,
               context: {
                 instrument,
                 setup_type: setup,
@@ -1595,7 +1607,10 @@ router.post("/alpaca/recall-build", async (req, res) => {
           if (!detected.detected) continue;
 
           const recallScore = scoreRecall(recall, setup, detected.direction);
-          const finalQuality = computeFinalQuality(detected.structure, detected.orderFlow, recallScore);
+          const finalQuality = computeFinalQuality(detected.structure, detected.orderFlow, recallScore, {
+            recall,
+            direction: detected.direction,
+          });
           const { takeProfit, stopLoss, tpTicks, slTicks } = computeTPSL(entryPrice, detected.direction, atr, recall.regime);
           const forwardBars = bars.slice(i, i + FORWARD);
           const outcome = checkForwardOutcome(entryPrice, detected.direction, takeProfit, stopLoss, forwardBars);

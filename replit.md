@@ -236,6 +236,21 @@ The execution stack enables real order placement, live position monitoring, and 
 - Stream core diagnostics were added to System Core page (`/system`) with WS/fallback status, auth, listeners, and tick/quote counters.
 - Backend symbol normalization was unified across stream/orderbook/market data paths to support broad crypto pairs beyond BTC/ETH.
 
+## Phase 13 — Typecheck Stabilization + Model-Core Scoring Hardening (Completed)
+
+- Cleared workspace typecheck blockers across API, dashboard, and scripts.
+- `corepack pnpm run typecheck` now passes from repo root.
+- Updated trade routes to coerce numeric payload fields safely for Drizzle numeric columns.
+- Hardened Claude layer SDK loading with lazy runtime import + graceful fallback when SDK/package is unavailable.
+- Upgraded recall feature engineering with additional stability/risk factors:
+  - `trend_consensus`
+  - `flow_alignment`
+  - `volatility_zscore`
+  - `fake_entry_risk`
+- Extended `scoreRecall` and `computeFinalQuality` to use these features for stronger fake-entry avoidance and volatility-aware scoring.
+- Updated live/backtest/batch scoring callsites to pass contextual recall + direction into final-quality computation.
+- Hardened historical Claude candidate ranking by incorporating fake-entry risk.
+
 ## Phase 1 & 2 Frontend Modules
 
 - `artifacts/godsview-dashboard/src/lib/market/clock.ts` — candle boundary math (UTC, zero drift)

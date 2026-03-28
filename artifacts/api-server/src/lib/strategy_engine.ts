@@ -68,6 +68,10 @@ export type RecallFeatures = {
   regime: Regime;
   atr_pct: number;
   directional_persistence: number;
+  trend_consensus: number;
+  flow_alignment: number;
+  volatility_zscore: number;
+  fake_entry_risk: number;
   sk: SKFeatures;
   cvd: CVDFeatures;
   indicators: IndicatorFeatures;
@@ -161,6 +165,13 @@ function clamp(val: number): number {
 function average(values: number[]): number {
   if (values.length === 0) return 0;
   return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function standardDeviation(values: number[]): number {
+  if (values.length <= 1) return 0;
+  const mean = average(values);
+  const variance = average(values.map((value) => (value - mean) ** 2));
+  return Math.sqrt(Math.max(variance, 0));
 }
 
 function closesOf(bars: AlpacaBar[]): number[] {
@@ -737,6 +748,9 @@ export function buildRecallFeatures(
 ): RecallFeatures {
   const last20_1m = bars1m.slice(-20);
   const last20_5m = bars5m.slice(-20);
+  const trendSlope1m = slope(last20_1m);
+  const trendSlope5m = slope(last20_5m);
+  const trendSlope15m = slope(bars5m.slice(-6));
   const high = last20_1m.length > 0 ? Math.max(...last20_1m.map((b) => b.High)) : 0;
   const low = last20_1m.length > 0 ? Math.min(...last20_1m.map((b) => b.Low)) : 0;
   const lastClose = last20_1m[last20_1m.length - 1]?.Close ?? 0;
@@ -747,7 +761,7 @@ export function buildRecallFeatures(
   const regime = detectRegime(bars1m);
 
   const directionMatches = last20_1m.filter((b) =>
-    slope(last20_1m) > 0 ? b.Close > b.Open : b.Close < b.Open
+    trendSlope1m > 0 ? b.Close > b.Open : b.Close < b.Open
   ).length;
   const directionalPersistence = directionMatches / (last20_1m.length || 1);
 
@@ -755,11 +769,43 @@ export function buildRecallFeatures(
   const sk = computeSKFeatures(bars1m, bars5m);
   const cvd = computeCVDFeatures(bars1m);
   const { indicators, normalizedHints } = computeIndicatorFeatures(bars1m, indicatorHints);
+  const sign1m = Math.sign(trendSlope1m);
+  const sign5m = Math.sign(trendSlope5m);
+  const sign15m = Math.sign(trendSlope15m);
+  const agreementPenalty =
+    Math.abs(sign1m - sign5m) +
+    Math.abs(sign1m - sign15m) +
+    Math.abs(sign5m - sign15m);
+  const trendConsensus = clamp((1 - agreementPenalty / 6) * 0.7 + directionalPersistence * 0.3);
+
+  const cvdTrendComponent = clamp((Math.tanh(cvd.cvd_slope * 250) + 1) / 2);
+  const cvdVolumeComponent = clamp(cvd.buy_volume_ratio);
+  const trendComponent = clamp((Math.tanh(trendSlope5m * 140) + 1) / 2);
+  const flowAlignment = clamp(1 - Math.abs((cvdTrendComponent * 0.6 + cvdVolumeComponent * 0.4) - trendComponent));
+
+  const rangeSeries = last20_1m.map((bar) => bar.High - bar.Low);
+  const rangeStd = standardDeviation(rangeSeries);
+  const latestRange = rangeSeries[rangeSeries.length - 1] ?? 0;
+  const avgRangeSeries = average(rangeSeries) || 1;
+  const rangeZ = rangeStd > 0 ? Math.abs((latestRange - avgRangeSeries) / rangeStd) : 0;
+  const volatilityZscore = clamp(rangeZ / 3);
+
+  const wickNoise = clamp((wickRatio(last20_1m) - 0.25) / 0.55);
+  const participationPenalty = clamp((1.05 - (avgVol1m > 0 ? lastVol / avgVol1m : 1)) / 0.8);
+  const momentumCompression = clamp(1 - Math.min(Math.abs(last20_1m.length >= 5 ? slope(last20_1m.slice(-5)) : 0) * 240, 1));
+  const regimePenalty = regime === "chop" ? 1 : regime === "ranging" ? 0.6 : regime === "volatile" ? 0.45 : 0.25;
+  const fakeEntryRisk = clamp(
+    wickNoise * 0.35 +
+    participationPenalty * 0.2 +
+    (1 - trendConsensus) * 0.2 +
+    momentumCompression * 0.15 +
+    regimePenalty * 0.1
+  );
 
   return {
-    trend_slope_1m: slope(last20_1m),
-    trend_slope_5m: slope(last20_5m),
-    trend_slope_15m: slope(bars5m.slice(-6)),
+    trend_slope_1m: trendSlope1m,
+    trend_slope_5m: trendSlope5m,
+    trend_slope_15m: trendSlope15m,
     avg_range_1m: avgRange(last20_1m),
     avg_range_5m: avgRange(last20_5m),
     wick_ratio_1m: wickRatio(last20_1m),
@@ -774,6 +820,10 @@ export function buildRecallFeatures(
     regime,
     atr_pct: atrPct,
     directional_persistence: directionalPersistence,
+    trend_consensus: trendConsensus,
+    flow_alignment: flowAlignment,
+    volatility_zscore: volatilityZscore,
+    fake_entry_risk: fakeEntryRisk,
     sk,
     cvd,
     indicators,
@@ -1180,12 +1230,14 @@ export function scoreRecall(
   // CALIB_LO raised 0.40 → 0.55: setup detectors already filtered for quality,
   // so the baseline should sit comfortably above the 0.50 stub threshold.
   // This is equivalent to the Python pipeline's CALIB_LO=0.55 fix.
-  let score = 0.55;
+  let score = 0.53;
   if (trendAligned) score += 0.12;
   if (momentumAligned) score += 0.10;
   if (recall.vol_relative > 1.2) score += 0.07;
   if (recall.wick_ratio_5m > 0.35) score += 0.06;
   if (setup === "absorption_reversal" && !trendAligned) score += 0.04;
+  score += (recall.trend_consensus - 0.5) * 0.14;
+  score += (recall.flow_alignment - 0.5) * 0.10;
 
   // Regime alignment
   if (
@@ -1225,20 +1277,49 @@ export function scoreRecall(
     if ((direction === "long" && rsi <= 45) || (direction === "short" && rsi >= 55)) score += 0.03;
   }
 
+  const fakeEntryPenaltyWeight = setup === "continuation_pullback" ? 0.14 : 0.10;
+  score -= recall.fake_entry_risk * fakeEntryPenaltyWeight;
+  score -= recall.volatility_zscore * 0.05;
+
   return clamp(score);
 }
 
 export function computeFinalQuality(
   structure: number,
   orderFlow: number,
-  recall: number
+  recall: number,
+  context?: { recall?: RecallFeatures; direction?: "long" | "short" }
 ): number {
+  const safeStructure = clamp(Number.isFinite(structure) ? structure : 0);
+  const safeOrderFlow = clamp(Number.isFinite(orderFlow) ? orderFlow : 0);
+  const safeRecall = clamp(Number.isFinite(recall) ? recall : 0);
+
   // Layer weights: 0.30 structure · 0.25 order_flow · 0.20 recall · 0.15 ml · 0.10 claude
   // ML stub baseline raised 0.50 → 0.55 (CALIB_LO fix): since recall score is already
   // calibrated above 0.55, the ml stub should reflect that rather than pulling it down.
-  const ml = 0.55 + recall * 0.25;
-  const claude = 0.52 + (structure + orderFlow) * 0.22;
-  return clamp(0.30 * structure + 0.25 * orderFlow + 0.20 * recall + 0.15 * ml + 0.10 * claude);
+  const ml = 0.55 + safeRecall * 0.25;
+  const claude = 0.52 + (safeStructure + safeOrderFlow) * 0.22;
+  let quality = 0.30 * safeStructure + 0.25 * safeOrderFlow + 0.20 * safeRecall + 0.15 * ml + 0.10 * claude;
+
+  // Coherence bonus: strong when structure and order-flow tell the same story.
+  const coherence = 1 - Math.abs(safeStructure - safeOrderFlow);
+  quality += (coherence - 0.5) * 0.06;
+
+  if (context?.recall) {
+    quality += (context.recall.trend_consensus - 0.5) * 0.05;
+    quality += (context.recall.flow_alignment - 0.5) * 0.05;
+    quality -= context.recall.fake_entry_risk * 0.08;
+    quality -= context.recall.volatility_zscore * 0.04;
+
+    if (context.direction && context.recall.sk.bias !== "neutral") {
+      const biasAligned =
+        (context.direction === "long" && context.recall.sk.bias === "bull") ||
+        (context.direction === "short" && context.recall.sk.bias === "bear");
+      quality += biasAligned ? 0.02 : -0.03;
+    }
+  }
+
+  return clamp(quality);
 }
 
 // ─── Chart Overlay Events ─────────────────────────────────────────────────────

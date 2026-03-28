@@ -10,7 +10,7 @@ const outcomes = ["win", "loss", "win", "win", "loss"] as const;
 function rand(min: number, max: number) {
   return Math.random() * (max - min) + min;
 }
-function pick<T>(arr: T[]): T {
+function pick<T>(arr: readonly T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 

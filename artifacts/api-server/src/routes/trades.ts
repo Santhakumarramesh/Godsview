@@ -5,6 +5,31 @@ import { CreateTradeBody, UpdateTradeBody, GetTradesQueryParams, UpdateTradePara
 
 const router: IRouter = Router();
 
+const NUMERIC_FIELDS = [
+  "entry_price",
+  "exit_price",
+  "stop_loss",
+  "take_profit",
+  "quantity",
+  "pnl",
+  "pnl_pct",
+  "mfe",
+  "mae",
+  "slippage",
+] as const;
+
+function toDbNumeric(value: unknown): unknown {
+  return typeof value === "number" ? String(value) : value;
+}
+
+function coerceNumericFields<T extends Record<string, unknown>>(payload: T): T {
+  const next: Record<string, unknown> = { ...payload };
+  for (const field of NUMERIC_FIELDS) {
+    if (field in next) next[field] = toDbNumeric(next[field]);
+  }
+  return next as T;
+}
+
 router.get("/trades", async (req, res) => {
   try {
     const query = GetTradesQueryParams.parse(req.query);
@@ -35,9 +60,10 @@ router.get("/trades", async (req, res) => {
 router.post("/trades", async (req, res) => {
   try {
     const body = CreateTradeBody.parse(req.body);
+    const insertPayload = coerceNumericFields({ ...body, outcome: "open" });
     const [trade] = await db
       .insert(tradesTable)
-      .values({ ...body, outcome: "open" })
+      .values(insertPayload as any)
       .returning();
     res.status(201).json(trade);
   } catch (err) {
@@ -50,9 +76,10 @@ router.put("/trades/:id", async (req, res) => {
   try {
     const { id } = UpdateTradeParams.parse(req.params);
     const body = UpdateTradeBody.parse(req.body);
+    const updatePayload = coerceNumericFields(body);
     const [trade] = await db
       .update(tradesTable)
-      .set(body)
+      .set(updatePayload as any)
       .where(eq(tradesTable.id, id))
       .returning();
     if (!trade) {
