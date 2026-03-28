@@ -23,6 +23,15 @@ type Diagnostics = {
   layers: Record<string, DiagnosticsLayer>;
   recommendations: string[];
 };
+type StreamStatus = {
+  pollingMode?: boolean;
+  authenticated?: boolean;
+  wsState?: number;
+  wsConnectedAt?: number | null;
+  ticksReceived?: number;
+  quotesReceived?: number;
+  listenersCount?: number;
+};
 
 const LAYER_LABELS: Record<string, string> = {
   data_feed: "Data Feed (Alpaca)",
@@ -69,6 +78,12 @@ export default function System() {
     queryFn: () => fetch("/api/system/diagnostics").then((r) => r.json()),
     refetchInterval: 30000,
   });
+  const { data: streamStatus } = useQuery<StreamStatus>({
+    queryKey: ["stream-status"],
+    queryFn: () => fetch("/api/alpaca/stream-status").then((r) => r.json()),
+    refetchInterval: 10000,
+    staleTime: 8000,
+  });
 
   if (isLoading || !data) {
     return (
@@ -79,6 +94,7 @@ export default function System() {
   }
 
   const healthy = data.overall === "healthy";
+  const wsHealthy = Boolean(!streamStatus?.pollingMode && streamStatus?.authenticated && streamStatus?.wsState === 1);
 
   return (
     <div className="space-y-8">
@@ -126,6 +142,46 @@ export default function System() {
           </div>
         </div>
       )}
+
+      {/* Stream Core Health */}
+      <div className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${wsHealthy ? "rgba(156,255,147,0.16)" : "rgba(251,191,36,0.22)"}` }}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined" style={{ fontSize: "14px", color: wsHealthy ? C.primary : "#fbbf24" }}>hub</span>
+            <MicroLabel>Realtime Stream Core</MicroLabel>
+            <StatusPill status={wsHealthy ? "live" : "degraded"} />
+          </div>
+          <span style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: C.outlineVar }}>
+            ticks {streamStatus?.ticksReceived ?? 0} · quotes {streamStatus?.quotesReceived ?? 0}
+          </span>
+        </div>
+        <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2">
+          <div className="rounded p-2.5" style={{ backgroundColor: "#0e0e0f", border: `1px solid ${C.border}` }}>
+            <MicroLabel>Transport</MicroLabel>
+            <div style={{ marginTop: "6px", fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: wsHealthy ? C.primary : "#fbbf24" }}>
+              {wsHealthy ? "WebSocket" : "REST Fallback"}
+            </div>
+          </div>
+          <div className="rounded p-2.5" style={{ backgroundColor: "#0e0e0f", border: `1px solid ${C.border}` }}>
+            <MicroLabel>Auth</MicroLabel>
+            <div style={{ marginTop: "6px", fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: streamStatus?.authenticated ? C.primary : C.tertiary }}>
+              {streamStatus?.authenticated ? "OK" : "PENDING"}
+            </div>
+          </div>
+          <div className="rounded p-2.5" style={{ backgroundColor: "#0e0e0f", border: `1px solid ${C.border}` }}>
+            <MicroLabel>WS State</MicroLabel>
+            <div style={{ marginTop: "6px", fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: C.muted }}>
+              {streamStatus?.wsState ?? "-"}
+            </div>
+          </div>
+          <div className="rounded p-2.5" style={{ backgroundColor: "#0e0e0f", border: `1px solid ${C.border}` }}>
+            <MicroLabel>Listeners</MicroLabel>
+            <div style={{ marginTop: "6px", fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: C.secondary }}>
+              {streamStatus?.listenersCount ?? 0}
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Live Layer Diagnostics */}
       <div>

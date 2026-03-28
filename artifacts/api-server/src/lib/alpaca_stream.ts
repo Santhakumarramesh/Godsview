@@ -4,10 +4,12 @@
 
 import WebSocket from "ws";
 import { orderBookManager } from "./market/orderbook";
+import { fromAlpacaSlash, isCryptoSymbol, normalizeMarketSymbol, toAlpacaSlash } from "./market/symbols";
 
 const WS_URL = "wss://stream.data.alpaca.markets/v1beta3/crypto/us";
 const KEY_ID = process.env.ALPACA_API_KEY ?? "";
 const SECRET_KEY = process.env.ALPACA_SECRET_KEY ?? "";
+const DEFAULT_STREAM_SYMBOLS = ["BTCUSD", "ETHUSD", "SOLUSD", "AVAXUSD", "DOGEUSD", "ADAUSD"];
 
 const TF_MS: Record<string, number> = {
   "1Min": 60_000, "5Min": 300_000, "15Min": 900_000, "1Hour": 3_600_000, "1Day": 86_400_000,
@@ -78,7 +80,9 @@ class AlpacaStreamManager {
 
   /** Subscribe to orderbook WS updates for a symbol (no listener needed — goes to orderBookManager) */
   subscribeOrderbook(symbol: string) {
-    const alpacaSym = toAlpacaSlash(symbol);
+    const normalizedSymbol = normalizeMarketSymbol(symbol);
+    if (!isCryptoSymbol(normalizedSymbol)) return;
+    const alpacaSym = toAlpacaSlash(normalizedSymbol);
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.authenticated) {
       // Will be sent automatically after auth via the default symbols set below
       return;
@@ -88,7 +92,12 @@ class AlpacaStreamManager {
   }
 
   subscribe(symbol: string, timeframe: string, listener: TickListener) {
-    const key = `${symbol}:${timeframe}`;
+    const normalizedSymbol = normalizeMarketSymbol(symbol);
+    if (!isCryptoSymbol(normalizedSymbol)) {
+      console.warn(`[stream] ignored non-crypto subscription request for ${symbol}`);
+      return;
+    }
+    const key = `${normalizedSymbol}:${timeframe}`;
     if (!this.listeners.has(key)) this.listeners.set(key, new Set());
     this.listeners.get(key)!.add(listener);
 
@@ -96,9 +105,9 @@ class AlpacaStreamManager {
 
     // If already connected and authenticated, subscribe the new symbol immediately
     if (!this.pollingMode && this.authenticated && this.ws?.readyState === WebSocket.OPEN) {
-      this.sendSubscribe([toAlpacaSlash(symbol)]);
+      this.sendSubscribe([toAlpacaSlash(normalizedSymbol)]);
     } else if (this.pollingMode) {
-      this.ensurePolling(symbol);
+      this.ensurePolling(normalizedSymbol);
     } else {
       // WS connecting or not yet authenticated — subscription will be sent after auth
       console.log(`[stream] WS not ready yet, will subscribe ${symbol} after auth`);
@@ -106,7 +115,7 @@ class AlpacaStreamManager {
   }
 
   unsubscribe(symbol: string, timeframe: string, listener: TickListener) {
-    const key = `${symbol}:${timeframe}`;
+    const key = `${normalizeMarketSymbol(symbol)}:${timeframe}`;
     this.listeners.get(key)?.delete(listener);
   }
 
@@ -162,10 +171,13 @@ class AlpacaStreamManager {
       console.log("[stream] authenticated OK");
 
       // Always subscribe to default crypto symbols for orderbooks, trades & quotes
-      const defaultSymbols = ["BTC/USD", "ETH/USD"];
+      const defaultSymbols = DEFAULT_STREAM_SYMBOLS.map((symbol) => toAlpacaSlash(symbol));
       const listenerSymbols = new Set<string>();
       for (const key of this.listeners.keys()) {
-        listenerSymbols.add(toAlpacaSlash(key.split(":")[0]));
+        const symbol = normalizeMarketSymbol(key.split(":")[0]);
+        if (isCryptoSymbol(symbol)) {
+          listenerSymbols.add(toAlpacaSlash(symbol));
+        }
       }
       const allSymbols = [...new Set([...defaultSymbols, ...listenerSymbols])];
       console.log(`[stream] subscribing after auth: ${allSymbols.join(", ")}`);
@@ -201,7 +213,7 @@ class AlpacaStreamManager {
     if (T === "t") {
       // Trade tick: { T: "t", S: "BTC/USD", p: 66700.5, s: 0.001, t: "..." }
       const alpacaSym = String(msg.S ?? "");
-      const symbol = fromAlpacaSlash(alpacaSym);
+      const symbol = normalizeMarketSymbol(fromAlpacaSlash(alpacaSym));
       const price = Number(msg.p ?? 0);
       const volume = Number(msg.s ?? 0);
       const timestamp = String(msg.t ?? "");
@@ -226,7 +238,7 @@ class AlpacaStreamManager {
       // Forward to orderBookManager so SSE clients receive WS-speed order book updates
       try {
         const alpacaSym = String(msg.S ?? "");
-        const symbol    = fromAlpacaSlash(alpacaSym);
+        const symbol    = normalizeMarketSymbol(fromAlpacaSlash(alpacaSym));
         const bids = ((msg.b ?? []) as Array<{ p: number; s: number }>).map((l) => ({ price: l.p, size: l.s }));
         const asks = ((msg.a ?? []) as Array<{ p: number; s: number }>).map((l) => ({ price: l.p, size: l.s }));
         const timestamp = String(msg.t ?? new Date().toISOString());
@@ -239,7 +251,7 @@ class AlpacaStreamManager {
       // Quote: { T: "q", S: "BTC/USD", bp: 66700, ap: 66701, bx: "...", ax: "...", t: "..." }
       // Use midpoint as price for zero-latency updates
       const alpacaSym = String(msg.S ?? "");
-      const symbol = fromAlpacaSlash(alpacaSym);
+      const symbol = normalizeMarketSymbol(fromAlpacaSlash(alpacaSym));
       const bp = Number(msg.bp ?? 0);
       const ap = Number(msg.ap ?? 0);
       const timestamp = String(msg.t ?? "");
@@ -324,7 +336,10 @@ class AlpacaStreamManager {
   // ── Fallback: poll REST every 500ms when WebSocket auth fails ────────────
   private startFallbackPolling() {
     const symbols = new Set<string>();
-    for (const key of this.listeners.keys()) symbols.add(key.split(":")[0]);
+    for (const key of this.listeners.keys()) {
+      const symbol = normalizeMarketSymbol(key.split(":")[0]);
+      if (isCryptoSymbol(symbol)) symbols.add(symbol);
+    }
     for (const sym of symbols) this.ensurePolling(sym);
   }
 
@@ -338,7 +353,7 @@ class AlpacaStreamManager {
   private async pollSymbol(symbol: string) {
     try {
       const { getLatestTrade } = await import("./alpaca.js");
-      const trade = await getLatestTrade(toAlpacaSlash(symbol));
+      const trade = await getLatestTrade(normalizeMarketSymbol(symbol));
       if (!trade) return;
 
       const prev = this.lastTrade.get(symbol);
@@ -348,18 +363,6 @@ class AlpacaStreamManager {
       this.broadcastPrice(symbol, trade.price, 0, trade.timestamp);
     } catch { /* silent */ }
   }
-}
-
-function toAlpacaSlash(sym: string): string {
-  if (sym === "BTCUSD") return "BTC/USD";
-  if (sym === "ETHUSD") return "ETH/USD";
-  return sym;
-}
-
-function fromAlpacaSlash(sym: string): string {
-  if (sym === "BTC/USD") return "BTCUSD";
-  if (sym === "ETH/USD") return "ETHUSD";
-  return sym.replace("/", "");
 }
 
 export const alpacaStream = new AlpacaStreamManager();

@@ -3,6 +3,7 @@
 // Stocks: requires Trading API keys (PK/AK prefix) with APCA header auth
 // Broker keys (CK prefix) do NOT have market data access
 
+import { normalizeMarketSymbol, toAlpacaSlash } from "./market/symbols";
 const KEY_ID = process.env.ALPACA_API_KEY ?? "";
 const SECRET_KEY = process.env.ALPACA_SECRET_KEY ?? "";
 
@@ -15,16 +16,10 @@ const LIVE_BASE = "https://api.alpaca.markets";
 const DATA_BASE = "https://data.alpaca.markets";
 const CRYPTO_BASE = "https://data.alpaca.markets/v1beta3/crypto/us";
 
-// Crypto symbol set (Alpaca uses slash format: BTC/USD)
-const CRYPTO_SYMBOLS = new Set(["BTCUSD", "ETHUSD", "BTC/USD", "ETH/USD"]);
 function isCryptoSymbol(symbol: string) {
-  return CRYPTO_SYMBOLS.has(symbol) || symbol.includes("/");
-}
-function toCryptoSlash(symbol: string) {
-  // Convert BTCUSD → BTC/USD
-  if (symbol === "BTCUSD") return "BTC/USD";
-  if (symbol === "ETHUSD") return "ETH/USD";
-  return symbol;
+  const normalized = normalizeMarketSymbol(symbol, "");
+  if (!normalized) return false;
+  return normalized.endsWith("USD") || normalized.endsWith("USDT") || normalized.endsWith("USDC");
 }
 
 function tradingHeaders(): Record<string, string> {
@@ -105,9 +100,10 @@ export async function getBars(
   end?: string
 ): Promise<AlpacaBar[]> {
   const safeLimit = Math.min(limit, 1000);
+  const normalizedSymbol = normalizeMarketSymbol(symbol);
 
-  if (isCryptoSymbol(symbol)) {
-    const cryptoSymbol = toCryptoSlash(symbol);
+  if (isCryptoSymbol(normalizedSymbol)) {
+    const cryptoSymbol = toAlpacaSlash(normalizedSymbol);
     const params = new URLSearchParams({
       symbols: cryptoSymbol,
       timeframe: TF_MAP[timeframe],
@@ -138,7 +134,7 @@ export async function getBars(
   if (start) params.set("start", start);
   if (end) params.set("end", end);
 
-  const url = `${DATA_BASE}/v2/stocks/${symbol}/bars?${params}`;
+    const url = `${DATA_BASE}/v2/stocks/${normalizedSymbol}/bars?${params}`;
   const data = await alpacaFetch(url, true) as { bars: Record<string, unknown>[] };
   return (data.bars ?? []).map(normaliseBar);
 }
@@ -155,13 +151,14 @@ export async function getBarsHistorical(
   const allBars: AlpacaBar[] = [];
   let pageToken: string | null = null;
   const PAGE_SIZE = 1000;
+  const normalizedSymbol = normalizeMarketSymbol(symbol);
 
-  if (!isCryptoSymbol(symbol)) {
+  if (!isCryptoSymbol(normalizedSymbol)) {
     // For stocks: single page call (limited by Trading key availability)
-    return getBars(symbol, timeframe, Math.min(maxBars, 10000), start, end);
+    return getBars(normalizedSymbol, timeframe, Math.min(maxBars, 10000), start, end);
   }
 
-  const cryptoSymbol = toCryptoSlash(symbol);
+  const cryptoSymbol = toAlpacaSlash(normalizedSymbol);
 
   while (allBars.length < maxBars) {
     const params = new URLSearchParams({
@@ -196,8 +193,9 @@ export async function getBarsHistorical(
 
 export async function getLatestTrade(symbol: string): Promise<{ price: number; timestamp: string } | null> {
   try {
-    if (isCryptoSymbol(symbol)) {
-      const cryptoSymbol = toCryptoSlash(symbol);
+    const normalizedSymbol = normalizeMarketSymbol(symbol);
+    if (isCryptoSymbol(normalizedSymbol)) {
+      const cryptoSymbol = toAlpacaSlash(normalizedSymbol);
       const params = new URLSearchParams({ symbols: cryptoSymbol });
       const url = `${CRYPTO_BASE}/latest/trades?${params}`;
       const data = await alpacaFetch(url, false) as { trades: Record<string, { p: number; t: string }> };
@@ -212,8 +210,9 @@ export async function getLatestTrade(symbol: string): Promise<{ price: number; t
 
 export async function getLatestBar(symbol: string): Promise<AlpacaBar | null> {
   try {
-    if (isCryptoSymbol(symbol)) {
-      const cryptoSymbol = toCryptoSlash(symbol);
+    const normalizedSymbol = normalizeMarketSymbol(symbol);
+    if (isCryptoSymbol(normalizedSymbol)) {
+      const cryptoSymbol = toAlpacaSlash(normalizedSymbol);
       const params = new URLSearchParams({ symbols: cryptoSymbol });
       const url = `${CRYPTO_BASE}/latest/bars?${params}`;
       const data = await alpacaFetch(url, false) as { bars: Record<string, Record<string, unknown>> };
@@ -222,7 +221,7 @@ export async function getLatestBar(symbol: string): Promise<AlpacaBar | null> {
     }
 
     if (!hasValidTradingKey) return null;
-    const url = `${DATA_BASE}/v2/stocks/${symbol}/bars/latest?feed=iex`;
+    const url = `${DATA_BASE}/v2/stocks/${normalizedSymbol}/bars/latest?feed=iex`;
     const data = await alpacaFetch(url, true) as { bar: Record<string, unknown> };
     return data.bar ? normaliseBar(data.bar) : null;
   } catch {
@@ -345,7 +344,7 @@ export async function placeOrder(req: PlaceOrderRequest): Promise<AlpacaOrder> {
   }
 
   const base = isPaperKey ? PAPER_BASE : LIVE_BASE;
-  const symbol = toCryptoSlash(req.symbol);
+  const symbol = toAlpacaSlash(req.symbol);
 
   const body: Record<string, unknown> = {
     symbol,
@@ -397,7 +396,7 @@ export async function cancelAllOrders(): Promise<unknown> {
 export async function closePosition(symbol: string): Promise<unknown> {
   if (!hasValidTradingKey) throw new Error("Trading API keys required.");
   const base = isPaperKey ? PAPER_BASE : LIVE_BASE;
-  const alpacaSymbol = toCryptoSlash(symbol).replace("/", "%2F");
+  const alpacaSymbol = toAlpacaSlash(symbol).replace("/", "%2F");
   return alpacaDelete(`${base}/v2/positions/${alpacaSymbol}`);
 }
 

@@ -9,6 +9,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { isCryptoSymbol, toAlpacaSymbol as toUnifiedAlpacaSymbol } from "@/lib/market/symbols";
 
 type Timeframe = "1" | "5" | "15" | "60" | "D";
 
@@ -84,15 +85,11 @@ export default function TradingViewChart({
   const esRef = useRef<EventSource | null>(null);
 
   // ── SSE subscription ──────────────────────────────────────────────────────
-  const alpacaSymbol = normalizedInput
-    .split(":")
-    .pop()
-    ?.replace(/[^A-Z0-9]/g, "")
-    .replace("USDT", "USD")
-    .replace("USDC", "USD") ?? "BTCUSD";
+  const alpacaSymbol = toUnifiedAlpacaSymbol(normalizedInput);
+  const streamEnabled = isCryptoSymbol(alpacaSymbol);
 
   useEffect(() => {
-    if (!showLatency) return;
+    if (!showLatency || !streamEnabled) return;
     const es = new EventSource(`/api/alpaca/stream?symbol=${alpacaSymbol}`);
     esRef.current = es;
     es.onmessage = (evt) => {
@@ -113,16 +110,16 @@ export default function TradingViewChart({
       es.close();
       esRef.current = null;
     };
-  }, [alpacaSymbol, showLatency]);
+  }, [alpacaSymbol, showLatency, streamEnabled]);
 
   // ── Feed-age counter (ticks up every second since last tick) ─────────────
   useEffect(() => {
-    if (!showLatency) return;
+    if (!showLatency || !streamEnabled) return;
     const id = setInterval(() => {
       setFeedAge(lastTickAt ? Math.round((Date.now() - lastTickAt) / 1000) : 0);
     }, 1000);
     return () => clearInterval(id);
-  }, [lastTickAt, showLatency]);
+  }, [lastTickAt, showLatency, streamEnabled]);
 
   // ── Fullscreen handling ───────────────────────────────────────────────────
   useEffect(() => {
@@ -206,7 +203,7 @@ export default function TradingViewChart({
         }}
       >
         {/* Live price + latency pill */}
-        {showLatency && livePrice !== null && (
+        {showLatency && streamEnabled && livePrice !== null && (
           <div
             style={{
               display: "flex",

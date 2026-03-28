@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Area, AreaChart, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from "recharts";
+import { Link } from "wouter";
 import TradingViewChart from "@/components/TradingViewChart";
 import SKOrderFlowPanel from "@/components/SKOrderFlowPanel";
 import ExecutionPanel from "@/components/ExecutionPanel";
@@ -11,6 +12,8 @@ import CVDPanel from "@/components/CVDPanel";
 import VolumeProfilePanel from "@/components/VolumeProfilePanel";
 import CandleIntelligencePanel from "@/components/CandleIntelligencePanel";
 import ReplayEngine from "@/components/ReplayEngine";
+import ChartIntelStrip from "@/components/ChartIntelStrip";
+import { toAlpacaSymbol as toUnifiedAlpacaSymbol } from "@/lib/market/symbols";
 
 const BASE = "/api";
 
@@ -336,13 +339,14 @@ export default function AlpacaPage() {
   const fallbackTvSymbol = TV_SYMBOL_BY_INSTRUMENT[instrument] ?? "COINBASE:BTCUSD";
   const tvSymbol = tvSymbolInput.trim() || fallbackTvSymbol;
   const alpacaSymbol = ALPACA_SYMBOL_BY_INSTRUMENT[instrument] ?? "BTCUSD";
+  const chartAlpacaSymbol = useMemo(() => toUnifiedAlpacaSymbol(tvSymbol), [tvSymbol]);
   const analysisInstrument = useChartSymbolForAnalysis ? tvSymbol : instrument;
   const tvStudies = useMemo(() => {
     const parsed = parseStudies(tvStudiesInput);
     return parsed.length > 0 ? parsed : DEFAULT_TV_STUDIES;
   }, [tvStudiesInput]);
   const matrixSymbols = useMemo(() => parseSymbolList(matrixSymbolsInput), [matrixSymbolsInput]);
-  const matrixTvSymbols = useMemo(() => matrixSymbols.map((symbol) => toTvSymbol(symbol)).slice(0, 6), [matrixSymbols]);
+  const matrixTvSymbols = useMemo(() => matrixSymbols.map((symbol) => toTvSymbol(symbol)).slice(0, 8), [matrixSymbols]);
 
   const { data: accuracy, refetch: refetchAccuracy } = useQuery<AccuracyResult>({
     queryKey: ["alpaca-accuracy"],
@@ -655,6 +659,19 @@ export default function AlpacaPage() {
               <p style={{ fontSize: "8px", color: C.outlineVar, fontFamily: "Space Grotesk" }}>
                 Premium-only TradingView indicators depend on your TradingView account/session and licensing.
               </p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p style={{ fontSize: "8px", color: C.secondary, fontFamily: "Space Grotesk" }}>
+                  Chart-linked microstructure symbol: {chartAlpacaSymbol}
+                </p>
+                <Link href="/infinity">
+                  <button
+                    className="px-2 py-1 rounded"
+                    style={{ fontSize: "8px", fontFamily: "Space Grotesk", letterSpacing: "0.1em", textTransform: "uppercase", color: "#34d399", border: "1px solid rgba(52,211,153,0.25)", backgroundColor: "rgba(52,211,153,0.08)" }}
+                  >
+                    Open Infinity Screen
+                  </button>
+                </Link>
+              </div>
             </div>
             <TradingViewChart
               symbol={tvSymbol}
@@ -664,6 +681,9 @@ export default function AlpacaPage() {
               allowSymbolChange={true}
               studies={tvStudies}
             />
+            <div className="px-2 pb-2">
+              <ChartIntelStrip symbol={chartAlpacaSymbol} timeframe={chartTimeframe} />
+            </div>
           </div>
 
           <div className="rounded p-4 space-y-3" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
@@ -683,7 +703,7 @@ export default function AlpacaPage() {
               className="w-full rounded px-3 py-2 outline-none text-xs"
               style={{ backgroundColor: "#0e0e0f", border: `1px solid ${C.border}`, color: "#ffffff", fontFamily: "JetBrains Mono, monospace" }}
             />
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-3">
               {matrixTvSymbols.map((symbol) => (
                 <div key={symbol} className="rounded overflow-hidden" style={{ border: `1px solid ${C.border}` }}>
                   <div className="px-3 py-1.5" style={{ borderBottom: `1px solid rgba(72,72,73,0.2)` }}>
@@ -697,6 +717,9 @@ export default function AlpacaPage() {
                     allowSymbolChange={true}
                     studies={tvStudies}
                   />
+                  <div className="p-2" style={{ borderTop: `1px solid rgba(72,72,73,0.2)` }}>
+                    <ChartIntelStrip symbol={toUnifiedAlpacaSymbol(symbol)} timeframe={chartTimeframe} compact />
+                  </div>
                 </div>
               ))}
             </div>

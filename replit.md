@@ -180,10 +180,10 @@ The execution stack enables real order placement, live position monitoring, and 
 - `POST /api/alpaca/backtest-batch` — multi-symbol + multi-setup full-history matrix backtest
 
 ### Phase 3 — Order Book & Microstructure (real Alpaca data)
-- `GET /api/orderbook/snapshot?symbol=BTCUSD&depth=25` — full order book snapshot (asks + bids, sorted)
-- `GET /api/orderbook/stream?symbol=BTCUSD` — SSE stream of live order book updates (polls every 5s)
-- `GET /api/market/microstructure?symbol=BTCUSD` — top-of-book metrics: spread, spreadBps, imbalance, absorption flags
-- `GET /api/market/liquidity-zones?symbol=BTCUSD&bucket_pct=0.1&top_n=20` — clustered zones with strength 0–1
+- `GET /api/orderbook/snapshot?symbol=<symbol>&depth=25` — full order book snapshot (asks + bids, sorted)
+- `GET /api/orderbook/stream?symbol=<symbol>` — SSE stream of live order book updates (WS + REST fallback)
+- `GET /api/market/microstructure?symbol=<symbol>` — top-of-book metrics: spread, spreadBps, imbalance, absorption flags
+- `GET /api/market/liquidity-zones?symbol=<symbol>&bucket_pct=0.1&top_n=20` — clustered zones with strength 0–1
 
 ## Roadmap Implementation Status
 
@@ -223,6 +223,18 @@ The execution stack enables real order placement, live position monitoring, and 
 - Batch response now includes per-symbol best setup ranking, fake-entry rates, expectancy, P&L, and optional Claude sampled review stats.
 - Live Intelligence page now supports an "All Charts Watchlist" TradingView grid driven by a shared symbol list.
 - Added a new "Batch Matrix" tab to run and inspect matrix-learning results directly in the dashboard.
+
+## Phase 12 — Infinity Screen + Live Core Hardening (Completed)
+
+- Sidebar live prices are now SSE-first (`/api/alpaca/stream`) with REST snapshot fallback, instead of 5s polling only.
+- Added Infinity Screen route/page (`/infinity`) for running many charts at once with configurable symbols, timeframe, and layout.
+- Added per-chart intelligence strip with:
+  - live orderbook best bid/ask + spread + imbalance
+  - liquidity heatmap strength from clustered zones
+  - per-candle intelligence counters (reversal/absorption/high-volume)
+- Live Intelligence page now embeds this strip below the main chart and each watchlist tile.
+- Stream core diagnostics were added to System Core page (`/system`) with WS/fallback status, auth, listeners, and tick/quote counters.
+- Backend symbol normalization was unified across stream/orderbook/market data paths to support broad crypto pairs beyond BTC/ETH.
 
 ## Phase 1 & 2 Frontend Modules
 

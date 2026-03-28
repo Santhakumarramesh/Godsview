@@ -1,6 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
+import { DEFAULT_WATCH_SYMBOLS, normalizeMarketSymbol, toDisplaySymbol } from "@/lib/market/symbols";
 
 type TickerEntry = {
   symbol: string;
@@ -14,17 +15,53 @@ type TickerEntry = {
 function useLiveTicker() {
   const [tickers, setTickers] = useState<TickerEntry[]>([]);
   const [lastUpdated, setLastUpdated] = useState<string>("");
+  const [feedMode, setFeedMode] = useState<"sse" | "poll">("poll");
 
   useEffect(() => {
     let cancelled = false;
+    const watchSymbols = DEFAULT_WATCH_SYMBOLS.slice(0, 6).map((symbol) => normalizeMarketSymbol(symbol));
+
+    const upsertTicker = (symbol: string, price: number) => {
+      setTickers((prev) => {
+        const bySymbol = new Map(prev.map((row) => [normalizeMarketSymbol(row.symbol), row]));
+        const existing = bySymbol.get(symbol);
+
+        if (existing) {
+          const direction: "up" | "down" = price >= existing.price ? "up" : "down";
+          bySymbol.set(symbol, { ...existing, symbol, price, direction });
+        } else {
+          bySymbol.set(symbol, {
+            symbol,
+            price,
+            change: 0,
+            change_pct: 0,
+            direction: "up",
+          });
+        }
+
+        return watchSymbols
+          .map((sym) => bySymbol.get(sym))
+          .filter((row): row is TickerEntry => Boolean(row));
+      });
+      setLastUpdated(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+    };
 
     const fetchTickers = async () => {
       try {
-        const res = await fetch("/api/alpaca/ticker?symbols=BTCUSD,ETHUSD");
+        const res = await fetch(`/api/alpaca/ticker?symbols=${watchSymbols.join(",")}`);
         if (!res.ok) return;
-        const data = await res.json();
+        const data = await res.json() as { tickers?: TickerEntry[] };
         if (!cancelled && data.tickers) {
-          setTickers(data.tickers.filter((t: TickerEntry) => !t.error));
+          const rows = data.tickers
+            .filter((t: TickerEntry) => !t.error)
+            .map((t) => ({ ...t, symbol: normalizeMarketSymbol(t.symbol) }));
+
+          const bySymbol = new Map(rows.map((row) => [row.symbol, row]));
+          setTickers(
+            watchSymbols
+              .map((symbol) => bySymbol.get(symbol))
+              .filter((row): row is TickerEntry => Boolean(row))
+          );
           setLastUpdated(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
         }
       } catch {
@@ -32,17 +69,40 @@ function useLiveTicker() {
       }
     };
 
+    const streams = watchSymbols.map((symbol) => {
+      const es = new EventSource(`/api/alpaca/stream?symbol=${encodeURIComponent(symbol)}&timeframe=1Min`);
+
+      es.onmessage = (evt) => {
+        if (cancelled) return;
+        try {
+          const payload = JSON.parse(evt.data) as { type?: string; price?: number };
+          if (payload.type !== "tick" || typeof payload.price !== "number") return;
+          setFeedMode("sse");
+          upsertTicker(symbol, payload.price);
+        } catch {
+          // ignore malformed frames
+        }
+      };
+
+      return es;
+    });
+
     fetchTickers();
-    const interval = setInterval(fetchTickers, 5000);
-    return () => { cancelled = true; clearInterval(interval); };
+    const interval = setInterval(fetchTickers, 10_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      for (const stream of streams) stream.close();
+    };
   }, []);
 
-  return { tickers, lastUpdated };
+  return { tickers, lastUpdated, feedMode };
 }
 
 const navItems = [
   { href: "/", label: "Mission Control", icon: "dashboard", sub: "Overview" },
   { href: "/alpaca", label: "Live Intelligence", icon: "psychology", sub: "Analysis" },
+  { href: "/infinity", label: "Infinity Screen", icon: "grid_view", sub: "Multi-Chart" },
   { href: "/signals", label: "Signal Feed", icon: "sensors", sub: "Pipeline" },
   { href: "/trades", label: "Trade Journal", icon: "receipt_long", sub: "Execution" },
   { href: "/performance", label: "Analytics", icon: "analytics", sub: "Performance" },
@@ -52,7 +112,7 @@ const navItems = [
 export function Shell({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { tickers, lastUpdated } = useLiveTicker();
+  const { tickers, lastUpdated, feedMode } = useLiveTicker();
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row" style={{ backgroundColor: "#0e0e0f", color: "#ffffff" }}>
@@ -133,7 +193,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
               {tickers.map((t) => {
                 const up = t.direction === "up";
                 const color = up ? "#9cff93" : "#ff7162";
-                const sym = t.symbol === "BTCUSD" ? "BTC" : t.symbol === "ETHUSD" ? "ETH" : t.symbol;
+                const sym = toDisplaySymbol(t.symbol);
                 return (
                   <div key={t.symbol} className="flex items-center justify-between px-3 py-2 rounded" style={{ backgroundColor: "rgba(255,255,255,0.025)", border: "1px solid rgba(72,72,73,0.18)" }}>
                     <div className="flex items-center gap-2">
@@ -153,7 +213,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             </div>
             {lastUpdated && (
               <div style={{ fontSize: "7px", color: "#484849", fontFamily: "JetBrains Mono, monospace", marginTop: "6px", paddingLeft: "4px" }}>
-                {lastUpdated} · 5s refresh
+                {lastUpdated} · {feedMode === "sse" ? "SSE live" : "REST snapshot"}
               </div>
             )}
           </div>

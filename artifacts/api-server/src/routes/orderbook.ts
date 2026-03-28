@@ -19,15 +19,14 @@
 import { Router } from "express";
 import { orderBookManager } from "../lib/market/orderbook";
 import { computeLiquidityZones, computeMicrostructure } from "../lib/market/liquidityMap";
+import { isCryptoSymbol, normalizeMarketSymbol } from "../lib/market/symbols";
 import { getBars } from "../lib/alpaca";
 
 const router = Router();
 
-const VALID_SYMBOLS = ["BTCUSD", "ETHUSD"];
-
 function validateSymbol(sym: string): string {
-  const upper = String(sym).toUpperCase();
-  return VALID_SYMBOLS.includes(upper) ? upper : "BTCUSD";
+  const normalized = normalizeMarketSymbol(sym, "BTCUSD");
+  return isCryptoSymbol(normalized) ? normalized : "BTCUSD";
 }
 
 // ─── GET /api/orderbook/snapshot ──────────────────────────────────────────────
@@ -407,15 +406,18 @@ router.get("/market/candle-intelligence", async (req, res) => {
 // ─── GET /api/market/cvd — Cumulative Volume Delta ──────────────────────────
 router.get("/market/cvd", async (req, res) => {
   const symbol    = validateSymbol(String(req.query.symbol ?? "BTCUSD"));
-  const timeframe = ["1Min","5Min","15Min","1H"].includes(String(req.query.timeframe))
-    ? String(req.query.timeframe) : "5Min";
+  const rawTf = String(req.query.timeframe ?? "5Min");
+  const timeframe: "1Min" | "5Min" | "15Min" | "1Hour" =
+    rawTf === "1H" ? "1Hour" :
+    (["1Min", "5Min", "15Min", "1Hour"].includes(rawTf) ? (rawTf as "1Min" | "5Min" | "15Min" | "1Hour") : "5Min");
   const bars      = Math.min(Math.max(parseInt(String(req.query.bars ?? "100"), 10), 20), 300);
 
   try {
     const rawBars = await getBars(symbol, timeframe, bars);
 
     if (!rawBars?.length) {
-      return res.json({ symbol, timeframe, bars: [], regime: "unknown", cvd_total: 0 });
+      res.json({ symbol, timeframe, bars: [], regime: "unknown", cvd_total: 0 });
+      return;
     }
 
     // Sort ascending (oldest → newest)

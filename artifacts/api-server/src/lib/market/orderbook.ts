@@ -16,18 +16,13 @@
 
 import https from "https";
 import type { OrderBookSnapshot, OrderBookListener, PriceLevel } from "./types";
+import { normalizeMarketSymbol, toAlpacaSlash } from "./symbols";
 
 const ALPACA_DATA_URL = "data.alpaca.markets";
 const KEY_ID          = process.env.ALPACA_API_KEY    ?? "";
 const SECRET_KEY      = process.env.ALPACA_SECRET_KEY ?? "";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
-
-function toAlpacaSlash(sym: string): string {
-  if (sym === "BTCUSD") return "BTC/USD";
-  if (sym === "ETHUSD") return "ETH/USD";
-  return sym;
-}
 
 /** Parse Alpaca's raw level array [{p, s}] → PriceLevel[] */
 function parseLevels(raw: Array<{ p: number; s: number }>): PriceLevel[] {
@@ -54,6 +49,7 @@ class OrderBookManager {
    * Starts REST polling on first subscriber; sends cached snapshot immediately.
    */
   subscribe(symbol: string, listener: OrderBookListener): void {
+    symbol = normalizeMarketSymbol(symbol);
     if (!this.listeners.has(symbol)) this.listeners.set(symbol, new Set());
     this.listeners.get(symbol)!.add(listener);
 
@@ -69,6 +65,7 @@ class OrderBookManager {
 
   /** Remove a subscriber. Stops polling when the last listener leaves. */
   unsubscribe(symbol: string, listener: OrderBookListener): void {
+    symbol = normalizeMarketSymbol(symbol);
     const set = this.listeners.get(symbol);
     if (!set) return;
     set.delete(listener);
@@ -81,7 +78,7 @@ class OrderBookManager {
 
   /** Return the latest snapshot synchronously (may be null if not yet polled). */
   getSnapshot(symbol: string): OrderBookSnapshot | null {
-    return this.snapshots.get(symbol) ?? null;
+    return this.snapshots.get(normalizeMarketSymbol(symbol)) ?? null;
   }
 
   /**
@@ -89,6 +86,7 @@ class OrderBookManager {
    * Used by GET /api/orderbook/snapshot even without an SSE subscriber.
    */
   async fetchSnapshot(symbol: string): Promise<OrderBookSnapshot> {
+    symbol = normalizeMarketSymbol(symbol);
     const snap = await this.restFetch(symbol);
     this.snapshots.set(symbol, snap);
     return snap;
@@ -101,6 +99,7 @@ class OrderBookManager {
    *  - Otherwise merges incrementally (size=0 means remove that level).
    */
   applyUpdate(symbol: string, asks: PriceLevel[], bids: PriceLevel[], timestamp: string): void {
+    symbol = normalizeMarketSymbol(symbol);
     const existing = this.snapshots.get(symbol);
 
     let mergedAsks: PriceLevel[];

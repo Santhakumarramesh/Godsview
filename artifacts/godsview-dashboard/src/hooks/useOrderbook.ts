@@ -23,12 +23,18 @@ export type OrderbookStatus = "connecting" | "live" | "ws" | "error";
 
 const BASE = "/api";
 
-export function useOrderbook(symbol: string, depth: number = 20) {
+export function useOrderbook(symbol: string, depth: number = 20, enabled: boolean = true) {
   const [data, setData]     = useState<OrderbookSnapshot | null>(null);
   const [status, setStatus] = useState<OrderbookStatus>("connecting");
   const esRef               = useRef<EventSource | null>(null);
 
   useEffect(() => {
+    if (!enabled) {
+      setData(null);
+      setStatus("connecting");
+      return;
+    }
+
     setData(null);
     setStatus("connecting");
 
@@ -58,7 +64,7 @@ export function useOrderbook(symbol: string, depth: number = 20) {
       es.close();
       esRef.current = null;
     };
-  }, [symbol, depth]);
+  }, [symbol, depth, enabled]);
 
   return { data, status };
 }
