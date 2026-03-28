@@ -13,6 +13,7 @@ export const signalsTable = pgTable("signals", {
   ml_probability: numeric("ml_probability", { precision: 5, scale: 4 }).notNull(),
   claude_score: numeric("claude_score", { precision: 5, scale: 4 }).notNull(),
   final_quality: numeric("final_quality", { precision: 5, scale: 4 }).notNull(),
+  claude_verdict: text("claude_verdict"),
   claude_reasoning: text("claude_reasoning"),
   entry_price: numeric("entry_price", { precision: 12, scale: 4 }),
   stop_loss: numeric("stop_loss", { precision: 12, scale: 4 }),
