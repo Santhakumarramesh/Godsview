@@ -1,6 +1,6 @@
 // Alpaca real-time WebSocket stream manager
 // Connects to wss://stream.data.alpaca.markets/v1beta3/crypto/us
-// Streams live trade ticks → aggregates into candles → broadcasts to SSE clients
+// Streams live trade ticks + quotes → aggregates into candles → broadcasts to SSE clients
 
 import WebSocket from "ws";
 
@@ -34,14 +34,35 @@ class AlpacaStreamManager {
   private candles = new Map<string, LiveCandle>();
   // Last trade ts per symbol to deduplicate
   private lastTradeTs = new Map<string, string>();
+  // Last quote ts per symbol to deduplicate
+  private lastQuoteTs = new Map<string, string>();
 
   // Fallback polling (used if WebSocket auth fails)
   private pollingMode = false;
   private pollTimers = new Map<string, ReturnType<typeof setInterval>>();
   private lastTrade = new Map<string, { price: number; ts: string }>();
 
+  // Status tracking
+  private wsConnectedAt: number | null = null;
+  private ticksReceived = 0;
+  private quotesReceived = 0;
+
+  status() {
+    return {
+      pollingMode: this.pollingMode,
+      authenticated: this.authenticated,
+      wsState: this.ws ? this.ws.readyState : -1,
+      wsConnectedAt: this.wsConnectedAt,
+      ticksReceived: this.ticksReceived,
+      quotesReceived: this.quotesReceived,
+      listenersCount: this.listeners.size,
+      symbols: [...this.listeners.keys()],
+    };
+  }
+
   start() {
     if (this.ws || this.stopped) return;
+    console.log("[stream] starting WS connection to Alpaca crypto stream");
     this.connect();
   }
 
@@ -59,11 +80,16 @@ class AlpacaStreamManager {
     if (!this.listeners.has(key)) this.listeners.set(key, new Set());
     this.listeners.get(key)!.add(listener);
 
-    // If already connected, subscribe the new symbol
+    console.log(`[stream] subscribe ${key} | authenticated=${this.authenticated} wsState=${this.ws?.readyState} pollingMode=${this.pollingMode}`);
+
+    // If already connected and authenticated, subscribe the new symbol immediately
     if (!this.pollingMode && this.authenticated && this.ws?.readyState === WebSocket.OPEN) {
       this.sendSubscribe([toAlpacaSlash(symbol)]);
     } else if (this.pollingMode) {
       this.ensurePolling(symbol);
+    } else {
+      // WS connecting or not yet authenticated — subscription will be sent after auth
+      console.log(`[stream] WS not ready yet, will subscribe ${symbol} after auth`);
     }
   }
 
@@ -74,13 +100,15 @@ class AlpacaStreamManager {
 
   private connect() {
     if (this.stopped) return;
+    console.log(`[stream] connecting to ${WS_URL}`);
     try {
       const ws = new WebSocket(WS_URL);
       this.ws = ws;
 
       ws.on("open", () => {
         this.reconnectDelay = 1000;
-        // Auth
+        this.wsConnectedAt = Date.now();
+        console.log("[stream] WS open — sending auth");
         ws.send(JSON.stringify({ action: "auth", key: KEY_ID, secret: SECRET_KEY }));
       });
 
@@ -93,9 +121,17 @@ class AlpacaStreamManager {
         } catch { /* ignore */ }
       });
 
-      ws.on("error", () => this.scheduleReconnect());
-      ws.on("close", () => { this.authenticated = false; this.scheduleReconnect(); });
-    } catch {
+      ws.on("error", (e) => {
+        console.error("[stream] WS error:", e.message);
+        this.scheduleReconnect();
+      });
+      ws.on("close", (code, reason) => {
+        this.authenticated = false;
+        console.log(`[stream] WS closed code=${code} reason=${reason?.toString()} — reconnecting`);
+        this.scheduleReconnect();
+      });
+    } catch (e) {
+      console.error("[stream] connect error:", e);
       this.scheduleReconnect();
     }
   }
@@ -103,22 +139,48 @@ class AlpacaStreamManager {
   private handleMessage(msg: Record<string, unknown>) {
     const T = msg.T as string;
 
-    if (T === "success" && msg.msg === "connected") return;
+    if (T === "success" && msg.msg === "connected") {
+      console.log("[stream] connected to Alpaca");
+      return;
+    }
 
     if (T === "success" && msg.msg === "authenticated") {
       this.authenticated = true;
       this.pollingMode = false;
+      console.log("[stream] authenticated OK");
+
       // Subscribe to all symbols currently tracked
       const symbols = new Set<string>();
       for (const key of this.listeners.keys()) {
         symbols.add(toAlpacaSlash(key.split(":")[0]));
       }
-      if (symbols.size > 0) this.sendSubscribe([...symbols]);
+      if (symbols.size > 0) {
+        console.log(`[stream] re-subscribing after auth: ${[...symbols].join(", ")}`);
+        this.sendSubscribe([...symbols]);
+      } else {
+        console.log("[stream] no listeners to subscribe yet");
+      }
+      return;
+    }
+
+    if (T === "subscription") {
+      console.log("[stream] subscription confirmed:", JSON.stringify(msg));
       return;
     }
 
     if (T === "error") {
-      // Auth failed (e.g., broker key) — fall back to polling
+      const code = msg.code as number;
+      const errMsg = msg.msg as string;
+      console.error(`[stream] Alpaca error code=${code} msg=${errMsg}`);
+
+      // 406 = connection limit exceeded — this is our second connection attempt from outside; ignore
+      if (code === 406) {
+        console.warn("[stream] connection limit error — this means a second WS connection was attempted. Ignoring.");
+        return;
+      }
+
+      // Auth failed — fall back to polling
+      console.warn("[stream] auth failed, falling back to REST polling at 500ms");
       this.pollingMode = true;
       this.ws?.close();
       this.ws = null;
@@ -136,51 +198,91 @@ class AlpacaStreamManager {
 
       if (!symbol || !price) return;
 
-      // Deduplicate
+      // Deduplicate trades
       const prevTs = this.lastTradeTs.get(symbol);
       if (prevTs === timestamp) return;
       this.lastTradeTs.set(symbol, timestamp);
 
-      const tMs = new Date(timestamp).getTime();
+      this.ticksReceived++;
+      if (this.ticksReceived <= 5 || this.ticksReceived % 100 === 0) {
+        console.log(`[stream] TRADE tick #${this.ticksReceived} ${symbol} $${price} @ ${timestamp}`);
+      }
 
-      // Update candle for each subscribed timeframe of this symbol
-      for (const [key, listeners] of this.listeners) {
-        const [keySym, keyTf] = key.split(":");
-        if (keySym !== symbol || !listeners.size) continue;
+      this.broadcastPrice(symbol, price, volume, timestamp);
+    }
 
-        const bucket = candleBucket(tMs, keyTf);
-        const existing = this.candles.get(key);
+    if (T === "q") {
+      // Quote: { T: "q", S: "BTC/USD", bp: 66700, ap: 66701, bx: "...", ax: "...", t: "..." }
+      // Use midpoint as price for zero-latency updates
+      const alpacaSym = String(msg.S ?? "");
+      const symbol = fromAlpacaSlash(alpacaSym);
+      const bp = Number(msg.bp ?? 0);
+      const ap = Number(msg.ap ?? 0);
+      const timestamp = String(msg.t ?? "");
 
-        let candle: LiveCandle;
-        if (!existing || existing.time !== bucket) {
-          candle = { time: bucket, open: price, high: price, low: price, close: price, volume };
-        } else {
-          candle = {
-            ...existing,
-            high: Math.max(existing.high, price),
-            low: Math.min(existing.low, price),
-            close: price,
-            volume: existing.volume + volume,
-          };
-        }
-        this.candles.set(key, candle);
+      if (!symbol || (!bp && !ap)) return;
+      const price = bp && ap ? (bp + ap) / 2 : bp || ap;
 
-        const payload: TickPayload = { type: "tick", symbol, price, timestamp, candle };
-        for (const fn of listeners) {
-          try { fn(payload); } catch { /* ignore */ }
-        }
+      // Deduplicate
+      const prevTs = this.lastQuoteTs.get(symbol);
+      if (prevTs === timestamp) return;
+      this.lastQuoteTs.set(symbol, timestamp);
+
+      this.quotesReceived++;
+      if (this.quotesReceived <= 3 || this.quotesReceived % 200 === 0) {
+        console.log(`[stream] QUOTE tick #${this.quotesReceived} ${symbol} mid=$${price.toFixed(2)} @ ${timestamp}`);
+      }
+
+      this.broadcastPrice(symbol, price, 0, timestamp);
+    }
+  }
+
+  private broadcastPrice(symbol: string, price: number, volume: number, timestamp: string) {
+    const tMs = new Date(timestamp).getTime();
+
+    for (const [key, listeners] of this.listeners) {
+      const [keySym, keyTf] = key.split(":");
+      if (keySym !== symbol || !listeners.size) continue;
+
+      const bucket = candleBucket(tMs, keyTf);
+      const existing = this.candles.get(key);
+
+      let candle: LiveCandle;
+      if (!existing || existing.time !== bucket) {
+        candle = { time: bucket, open: price, high: price, low: price, close: price, volume };
+      } else {
+        candle = {
+          ...existing,
+          high: Math.max(existing.high, price),
+          low: Math.min(existing.low, price),
+          close: price,
+          volume: existing.volume + volume,
+        };
+      }
+      this.candles.set(key, candle);
+
+      const payload: TickPayload = { type: "tick", symbol, price, timestamp, candle };
+      for (const fn of listeners) {
+        try { fn(payload); } catch { /* ignore */ }
       }
     }
   }
 
   private sendSubscribe(alpacaSymbols: string[]) {
-    if (this.ws?.readyState !== WebSocket.OPEN) return;
-    this.ws.send(JSON.stringify({ action: "subscribe", trades: alpacaSymbols }));
+    if (this.ws?.readyState !== WebSocket.OPEN) {
+      console.warn("[stream] sendSubscribe called but WS not open");
+      return;
+    }
+    // Subscribe to both trades AND quotes for minimum latency
+    const msg = { action: "subscribe", trades: alpacaSymbols, quotes: alpacaSymbols };
+    console.log("[stream] sending subscribe:", JSON.stringify(msg));
+    this.ws.send(JSON.stringify(msg));
   }
 
   private scheduleReconnect() {
     if (this.stopped || this.pollingMode) return;
     if (this.reconnectTimer) return;
+    console.log(`[stream] scheduling reconnect in ${this.reconnectDelay}ms`);
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.ws = null;
@@ -199,6 +301,7 @@ class AlpacaStreamManager {
 
   private ensurePolling(symbol: string) {
     if (!this.pollingMode || this.pollTimers.has(symbol)) return;
+    console.log(`[stream] starting REST fallback poll for ${symbol} at 500ms`);
     const timer = setInterval(() => this.pollSymbol(symbol), 500);
     this.pollTimers.set(symbol, timer);
   }
@@ -213,27 +316,7 @@ class AlpacaStreamManager {
       if (prev && prev.ts === trade.timestamp) return;
       this.lastTrade.set(symbol, { price: trade.price, ts: trade.timestamp });
 
-      const tMs = new Date(trade.timestamp).getTime();
-
-      for (const [key, listeners] of this.listeners) {
-        const [keySym, keyTf] = key.split(":");
-        if (keySym !== symbol || !listeners.size) continue;
-
-        const bucket = candleBucket(tMs, keyTf);
-        const existing = this.candles.get(key);
-        let candle: LiveCandle;
-        if (!existing || existing.time !== bucket) {
-          candle = { time: bucket, open: trade.price, high: trade.price, low: trade.price, close: trade.price, volume: 0 };
-        } else {
-          candle = { ...existing, high: Math.max(existing.high, trade.price), low: Math.min(existing.low, trade.price), close: trade.price };
-        }
-        this.candles.set(key, candle);
-
-        const payload: TickPayload = { type: "tick", symbol, price: trade.price, timestamp: trade.timestamp, candle };
-        for (const fn of listeners) {
-          try { fn(payload); } catch { /* ignore */ }
-        }
-      }
+      this.broadcastPrice(symbol, trade.price, 0, trade.timestamp);
     } catch { /* silent */ }
   }
 }

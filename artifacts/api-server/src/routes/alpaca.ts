@@ -39,7 +39,7 @@ function toAlpacaSymbol(instrument: string): string {
 
 // ─── In-memory cache for candle data (reduces Alpaca API calls) ──────────────
 const candleCache = new Map<string, { bars: unknown[]; fetchedAt: number }>();
-const CANDLE_CACHE_TTL = 4000; // 4 seconds — keeps data fresh at 5s poll interval
+const CANDLE_CACHE_TTL = 1500; // 1.5 seconds — keeps data fresh for 3s chart REST polls
 
 // ─── GET /api/alpaca/candles — OHLCV bars for candlestick chart ───────────────
 router.get("/alpaca/candles", async (req, res) => {
@@ -85,29 +85,47 @@ router.get("/alpaca/candles", async (req, res) => {
 });
 
 // ─── GET /api/alpaca/stream — SSE real-time price stream (WebSocket-backed) ───
-// Uses AlpacaStreamManager: tries Alpaca WebSocket first, falls back to 500ms REST poll.
+// Uses AlpacaStreamManager: Alpaca WebSocket (trades + quotes) for sub-100ms latency.
 // Start stream manager once on module load
 alpacaStream.start();
+
+// ─── GET /api/alpaca/stream-status — diagnostic: show stream manager state ───
+router.get("/alpaca/stream-status", (_req, res) => {
+  res.json(alpacaStream.status());
+});
 
 router.get("/alpaca/stream", (req, res) => {
   const symbol = String(req.query.symbol ?? "BTCUSD");
   const timeframe = String(req.query.timeframe ?? "5Min");
 
+  // SSE headers — X-Accel-Buffering: no disables nginx/proxy buffering
   res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");
   res.setHeader("X-Accel-Buffering", "no");
+  res.setHeader("Transfer-Encoding", "chunked");
   res.flushHeaders();
-  res.write(`: connected\n\n`);
+
+  const send = (data: string) => {
+    try {
+      res.write(data);
+      // Force flush — bypasses Node.js stream buffering
+      if (typeof (res as unknown as { flush?: () => void }).flush === "function") {
+        (res as unknown as { flush: () => void }).flush();
+      }
+    } catch { /* client gone */ }
+  };
+
+  send(`: connected\n\n`);
 
   const listener: TickListener = (payload) => {
-    try { res.write(`data: ${JSON.stringify(payload)}\n\n`); } catch { /* gone */ }
+    send(`data: ${JSON.stringify(payload)}\n\n`);
   };
 
   alpacaStream.subscribe(symbol, timeframe, listener);
 
-  // Heartbeat every 15s to keep proxies alive
-  const heartbeat = setInterval(() => { try { res.write(": ping\n\n"); } catch { /* gone */ } }, 15_000);
+  // Heartbeat every 10s to keep proxies alive and detect stale connections
+  const heartbeat = setInterval(() => send(": ping\n\n"), 10_000);
 
   req.on("close", () => {
     clearInterval(heartbeat);

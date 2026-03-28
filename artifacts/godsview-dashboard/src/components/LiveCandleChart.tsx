@@ -183,6 +183,51 @@ export default function LiveCandleChart({
     };
   }, [symbol, timeframe]);
 
+  // ── Supplement SSE: poll /ticker every 3s for true current price ──────────
+  // Uses latest-trade price so the chart always shows the real current price
+  // even when Alpaca WS tick rate is low. SSE ticks override this when faster.
+  useEffect(() => {
+    let cancelled = false;
+    const poll = async () => {
+      if (cancelled) return;
+      try {
+        const alpacaSym = symbol; // e.g. BTCUSD
+        const res = await fetch(`/api/alpaca/ticker?symbols=${alpacaSym}`);
+        if (!res.ok || cancelled) return;
+        const data = await res.json() as { tickers?: Array<{ symbol: string; price: number; high: number; low: number; volume: number }> };
+        const row = (data.tickers ?? []).find((r) => r.symbol === alpacaSym);
+        if (!row || cancelled) return;
+        const price = row.price;
+
+        // Apply to the live forming candle (update close + high/low if needed)
+        if (liveCandle && candleRef.current) {
+          const updated: Candle = {
+            ...liveCandle,
+            close: price,
+            high: Math.max(liveCandle.high, price),
+            low: Math.min(liveCandle.low, price),
+          };
+          if (price !== lastPriceRef.current) {
+            candleRef.current.update({ time: updated.time as Time, open: updated.open, high: updated.high, low: updated.low, close: updated.close });
+            setLivePrice(price);
+            setLiveCandle(updated);
+            lastPriceRef.current = price;
+            onPriceUpdateRef.current?.(price, symbol);
+          }
+        } else if (price !== lastPriceRef.current) {
+          setLivePrice(price);
+          lastPriceRef.current = price;
+          onPriceUpdateRef.current?.(price, symbol);
+        }
+      } catch { /* silent */ }
+    };
+
+    const interval = setInterval(poll, 3000);
+    poll(); // immediate first poll
+    return () => { cancelled = true; clearInterval(interval); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbol]);
+
   // ── Load history + start stream when symbol/timeframe changes ────────────
   useEffect(() => {
     loadHistory().then(() => connectStream());
