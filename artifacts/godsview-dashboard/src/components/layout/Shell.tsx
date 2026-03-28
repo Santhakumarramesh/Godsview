@@ -1,6 +1,44 @@
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+
+type TickerEntry = {
+  symbol: string;
+  price: number;
+  change: number;
+  change_pct: number;
+  direction: "up" | "down";
+  error?: string;
+};
+
+function useLiveTicker() {
+  const [tickers, setTickers] = useState<TickerEntry[]>([]);
+  const [lastUpdated, setLastUpdated] = useState<string>("");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchTickers = async () => {
+      try {
+        const res = await fetch("/api/alpaca/ticker?symbols=BTCUSD,ETHUSD");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled && data.tickers) {
+          setTickers(data.tickers.filter((t: TickerEntry) => !t.error));
+          setLastUpdated(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+        }
+      } catch {
+        // silent fail
+      }
+    };
+
+    fetchTickers();
+    const interval = setInterval(fetchTickers, 10000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
+
+  return { tickers, lastUpdated };
+}
 
 const navItems = [
   { href: "/", label: "Mission Control", icon: "dashboard", sub: "Overview" },
@@ -14,6 +52,7 @@ const navItems = [
 export function Shell({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { tickers, lastUpdated } = useLiveTicker();
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row" style={{ backgroundColor: "#0e0e0f", color: "#ffffff" }}>
@@ -83,6 +122,42 @@ export function Shell({ children }: { children: React.ReactNode }) {
             );
           })}
         </nav>
+
+        {/* Live Price Ticker */}
+        {tickers.length > 0 && (
+          <div className="px-3 py-3 border-t" style={{ borderColor: "rgba(72,72,73,0.15)" }}>
+            <div style={{ fontSize: "8px", color: "#484849", letterSpacing: "0.2em", textTransform: "uppercase", fontFamily: "Space Grotesk", fontWeight: 700, marginBottom: "8px", paddingLeft: "4px" }}>
+              Live Prices
+            </div>
+            <div className="space-y-1.5">
+              {tickers.map((t) => {
+                const up = t.direction === "up";
+                const color = up ? "#9cff93" : "#ff7162";
+                const sym = t.symbol === "BTCUSD" ? "BTC" : t.symbol === "ETHUSD" ? "ETH" : t.symbol;
+                return (
+                  <div key={t.symbol} className="flex items-center justify-between px-3 py-2 rounded" style={{ backgroundColor: "rgba(255,255,255,0.025)", border: "1px solid rgba(72,72,73,0.18)" }}>
+                    <div className="flex items-center gap-2">
+                      <span className="font-headline font-bold" style={{ fontSize: "10px", color: "#ffffff" }}>{sym}</span>
+                    </div>
+                    <div className="text-right">
+                      <div style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: "#ffffff", fontWeight: 700 }}>
+                        ${t.price > 1000 ? t.price.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 }) : t.price.toFixed(2)}
+                      </div>
+                      <div style={{ fontSize: "8px", fontFamily: "JetBrains Mono, monospace", color, fontWeight: 700 }}>
+                        {up ? "▲" : "▼"} {Math.abs(t.change_pct).toFixed(2)}%
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {lastUpdated && (
+              <div style={{ fontSize: "7px", color: "#484849", fontFamily: "JetBrains Mono, monospace", marginTop: "6px", paddingLeft: "4px" }}>
+                {lastUpdated} · 10s refresh
+              </div>
+            )}
+          </div>
+        )}
 
         {/* System Status */}
         <div className="px-3 pb-4 border-t pt-4" style={{ borderColor: "rgba(72,72,73,0.15)" }}>

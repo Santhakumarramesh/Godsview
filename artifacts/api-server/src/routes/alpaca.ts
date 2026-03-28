@@ -36,6 +36,44 @@ function toAlpacaSymbol(instrument: string): string {
   return SUPPORTED_SYMBOLS[instrument] ?? instrument;
 }
 
+// ─── GET /api/alpaca/ticker — live prices for multiple symbols ────────────────
+// Polls Alpaca latest bar + 24h change. No auth required for crypto.
+router.get("/alpaca/ticker", async (req, res) => {
+  const symbolsParam = String(req.query.symbols ?? "BTCUSD,ETHUSD");
+  const symbols = symbolsParam.split(",").map((s) => s.trim()).filter(Boolean);
+
+  const results = await Promise.allSettled(
+    symbols.map(async (sym) => {
+      const [latest, dailyBars] = await Promise.all([
+        getLatestBar(toAlpacaSymbol(sym) === sym ? sym : toAlpacaSymbol(sym)),
+        getBars(toAlpacaSymbol(sym) === sym ? sym : toAlpacaSymbol(sym), "1Day", 2).catch(() => []),
+      ]);
+
+      if (!latest) return { symbol: sym, error: "no_data" };
+
+      const prevClose = dailyBars.length >= 2 ? dailyBars[dailyBars.length - 2].Close : null;
+      const price = latest.Close;
+      const change = prevClose ? price - prevClose : 0;
+      const changePct = prevClose ? (change / prevClose) * 100 : 0;
+
+      return {
+        symbol: sym,
+        price,
+        change: Math.round(change * 100) / 100,
+        change_pct: Math.round(changePct * 100) / 100,
+        high: latest.High,
+        low: latest.Low,
+        volume: latest.Volume,
+        timestamp: latest.Timestamp,
+        direction: change >= 0 ? "up" : "down",
+      };
+    })
+  );
+
+  const tickers = results.map((r) => (r.status === "fulfilled" ? r.value : { error: "fetch_failed" }));
+  res.json({ tickers, fetched_at: new Date().toISOString() });
+});
+
 // ─── GET /api/alpaca/account ──────────────────────────────────────────────────
 router.get("/alpaca/account", async (req, res) => {
   try {
@@ -301,6 +339,8 @@ router.post("/alpaca/backtest", async (req, res) => {
           sl_ticks: r.sl_ticks,
           hit_tp: String(r.hit_tp),
           forward_bars_checked: r.bars_to_outcome,
+          regime: r.regime,
+          direction: r.direction,
         }))
       );
     }
@@ -460,6 +500,8 @@ router.post("/alpaca/recall-build", async (req, res) => {
             sl_ticks: slTicks,
             hit_tp: String(outcome.hitTP),
             forward_bars_checked: outcome.barsChecked,
+            regime: recall.regime,
+            direction: detected.direction,
           });
         }
       }
@@ -553,6 +595,27 @@ router.get("/alpaca/accuracy", async (req, res) => {
       if (r.outcome === "win") bySymbol[k].wins++;
     }
 
+    const byRegime: Record<string, { wins: number; total: number; sumQuality: number }> = {};
+    for (const r of closed) {
+      const k = r.regime ?? "unknown";
+      if (!byRegime[k]) byRegime[k] = { wins: 0, total: 0, sumQuality: 0 };
+      byRegime[k].total++;
+      byRegime[k].sumQuality += Number(r.final_quality);
+      if (r.outcome === "win") byRegime[k].wins++;
+    }
+
+    // Expectancy per setup (in ticks)
+    const expectancyBySetup: Record<string, number> = {};
+    for (const [st, d] of Object.entries(bySetup)) {
+      const setupClosed = closed.filter((r) => r.setup_type === st);
+      const setupWins = setupClosed.filter((r) => r.outcome === "win");
+      const setupLosses = setupClosed.filter((r) => r.outcome === "loss");
+      const wr = d.total > 0 ? d.wins / d.total : 0;
+      const avgWinTicks = setupWins.length > 0 ? setupWins.reduce((s, r) => s + (r.tp_ticks ?? 0), 0) / setupWins.length : 0;
+      const avgLossTicks = setupLosses.length > 0 ? setupLosses.reduce((s, r) => s + (r.sl_ticks ?? 0), 0) / setupLosses.length : 0;
+      expectancyBySetup[st] = wr * avgWinTicks - (1 - wr) * avgLossTicks;
+    }
+
     res.json({
       total_records: rows.length,
       closed: closed.length,
@@ -566,6 +629,7 @@ router.get("/alpaca/accuracy", async (req, res) => {
         wins: d.wins,
         win_rate: d.total > 0 ? d.wins / d.total : 0,
         avg_quality: d.total > 0 ? d.sumQuality / d.total : 0,
+        expectancy_ticks: Math.round((expectancyBySetup[setup_type] ?? 0) * 10) / 10,
       })),
       by_symbol: Object.entries(bySymbol).map(([sym, d]) => ({
         symbol: sym,
@@ -573,6 +637,13 @@ router.get("/alpaca/accuracy", async (req, res) => {
         wins: d.wins,
         win_rate: d.total > 0 ? d.wins / d.total : 0,
       })),
+      by_regime: Object.entries(byRegime).map(([regime, d]) => ({
+        regime,
+        total: d.total,
+        wins: d.wins,
+        win_rate: d.total > 0 ? d.wins / d.total : 0,
+        avg_quality: d.total > 0 ? d.sumQuality / d.total : 0,
+      })).sort((a, b) => b.total - a.total),
       recent: rows.slice(0, 50),
     });
   } catch (err) {

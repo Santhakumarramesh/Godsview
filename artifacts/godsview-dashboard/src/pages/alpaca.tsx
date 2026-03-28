@@ -42,9 +42,10 @@ type BacktestResult = {
 };
 type AccuracyResult = {
   total_records: number; closed: number; wins: number; losses: number; win_rate: number; profit_factor: number;
-  by_setup: Array<{ setup_type: string; total: number; wins: number; win_rate: number; avg_quality: number }>;
+  by_setup: Array<{ setup_type: string; total: number; wins: number; win_rate: number; avg_quality: number; expectancy_ticks: number }>;
   by_symbol: Array<{ symbol: string; total: number; wins: number; win_rate: number }>;
-  recent: Array<{ bar_time: string; setup_type: string; symbol: string; outcome: string; final_quality: string }>;
+  by_regime: Array<{ regime: string; total: number; wins: number; win_rate: number; avg_quality: number }>;
+  recent: Array<{ bar_time: string; setup_type: string; symbol: string; outcome: string; final_quality: string; regime?: string; direction?: string }>;
 };
 type RecallBuildResult = {
   status: string; symbols_processed: number; total_records_saved: number; years_back: number;
@@ -373,12 +374,13 @@ export default function AlpacaPage() {
                     <span className="font-headline font-bold text-xs" style={{ color: C.secondary }}>SK Structure Intelligence</span>
                     <MicroLabel>Price-action location filter</MicroLabel>
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                     {[
-                      { label: "HTF Bias", value: analyzeData.recall_features.sk.htf_bias ?? "—", color: analyzeData.recall_features.sk.htf_bias === "bullish" ? C.primary : analyzeData.recall_features.sk.htf_bias === "bearish" ? C.tertiary : C.muted },
-                      { label: "Sequence Stage", value: analyzeData.recall_features.sk.sequence_stage ?? "—" },
-                      { label: "Zone Distance", value: analyzeData.recall_features.sk.zone_distance != null ? `${(analyzeData.recall_features.sk.zone_distance * 100).toFixed(1)}%` : "—" },
-                      { label: "R:R Quality", value: analyzeData.recall_features.sk.rr_quality != null ? analyzeData.recall_features.sk.rr_quality.toFixed(2) : "—", color: (analyzeData.recall_features.sk.rr_quality ?? 0) >= 2 ? C.primary : C.muted },
+                      { label: "HTF Bias", value: (analyzeData.recall_features.sk.bias ?? "—").toUpperCase(), color: analyzeData.recall_features.sk.bias === "bull" ? C.primary : analyzeData.recall_features.sk.bias === "bear" ? C.tertiary : C.muted },
+                      { label: "Sequence Stage", value: (analyzeData.recall_features.sk.sequence_stage ?? "—").replace(/_/g, " "), color: analyzeData.recall_features.sk.sequence_stage === "completion" ? C.primary : "#ffffff" },
+                      { label: "Zone Distance", value: analyzeData.recall_features.sk.zone_distance_pct != null ? `${(analyzeData.recall_features.sk.zone_distance_pct * 100).toFixed(1)}%` : "—", color: (analyzeData.recall_features.sk.zone_distance_pct ?? 1) < 0.15 ? C.primary : C.muted },
+                      { label: "In SK Zone", value: analyzeData.recall_features.sk.in_zone ? "YES" : "NO", color: analyzeData.recall_features.sk.in_zone ? C.primary : C.muted },
+                      { label: "R:R Quality", value: analyzeData.recall_features.sk.rr_quality != null ? analyzeData.recall_features.sk.rr_quality.toFixed(2) : "—", color: (analyzeData.recall_features.sk.rr_quality ?? 0) >= 0.5 ? C.primary : C.muted },
                     ].map((f) => (
                       <div key={f.label} className="rounded p-3" style={{ backgroundColor: "#0e0e0f" }}>
                         <MicroLabel>{f.label}</MicroLabel>
@@ -386,6 +388,13 @@ export default function AlpacaPage() {
                       </div>
                     ))}
                   </div>
+                  {analyzeData.recall_features.sk.correction_complete && (
+                    <div className="mt-3 px-3 py-2 rounded" style={{ backgroundColor: "rgba(156,255,147,0.06)", border: "1px solid rgba(156,255,147,0.15)" }}>
+                      <span style={{ fontSize: "9px", fontFamily: "Space Grotesk", color: C.primary, fontWeight: 700, letterSpacing: "0.1em" }}>
+                        ✓ CORRECTION COMPLETE — SK entry zone active
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -397,12 +406,13 @@ export default function AlpacaPage() {
                     <span className="font-headline font-bold text-xs" style={{ color: C.tertiary }}>CVD Order Flow Analysis</span>
                     <MicroLabel>Buy/sell pressure detection</MicroLabel>
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                     {[
-                      { label: "Buy/Sell Ratio", value: analyzeData.recall_features.cvd.buy_sell_ratio != null ? analyzeData.recall_features.cvd.buy_sell_ratio.toFixed(3) : "—", color: (analyzeData.recall_features.cvd.buy_sell_ratio ?? 1) > 1 ? C.primary : C.tertiary },
-                      { label: "CVD Slope", value: analyzeData.recall_features.cvd.cvd_slope != null ? analyzeData.recall_features.cvd.cvd_slope.toFixed(0) : "—" },
-                      { label: "Price-Delta Div", value: analyzeData.recall_features.cvd.price_delta_divergence ? "YES" : "NO", color: analyzeData.recall_features.cvd.price_delta_divergence ? C.primary : C.muted },
-                      { label: "Delta Spike", value: analyzeData.recall_features.cvd.delta_spike ? "DETECTED" : "NONE", color: analyzeData.recall_features.cvd.delta_spike ? "#fbbf24" : C.muted },
+                      { label: "Buy Volume %", value: analyzeData.recall_features.cvd.buy_volume_ratio != null ? `${(analyzeData.recall_features.cvd.buy_volume_ratio * 100).toFixed(1)}%` : "—", color: (analyzeData.recall_features.cvd.buy_volume_ratio ?? 0.5) > 0.55 ? C.primary : (analyzeData.recall_features.cvd.buy_volume_ratio ?? 0.5) < 0.45 ? C.tertiary : C.muted },
+                      { label: "CVD Slope", value: analyzeData.recall_features.cvd.cvd_slope != null ? (analyzeData.recall_features.cvd.cvd_slope > 0 ? "+" : "") + analyzeData.recall_features.cvd.cvd_slope.toFixed(4) : "—", color: (analyzeData.recall_features.cvd.cvd_slope ?? 0) > 0 ? C.primary : C.tertiary },
+                      { label: "CVD Value", value: analyzeData.recall_features.cvd.cvd_value != null ? analyzeData.recall_features.cvd.cvd_value.toFixed(0) : "—" },
+                      { label: "Price-Delta Div", value: analyzeData.recall_features.cvd.cvd_divergence ? "YES" : "NO", color: analyzeData.recall_features.cvd.cvd_divergence ? C.primary : C.muted },
+                      { label: "Delta Spike", value: analyzeData.recall_features.cvd.large_delta_bar ? "DETECTED" : "NONE", color: analyzeData.recall_features.cvd.large_delta_bar ? "#fbbf24" : C.muted },
                     ].map((f) => (
                       <div key={f.label} className="rounded p-3" style={{ backgroundColor: "#0e0e0f" }}>
                         <MicroLabel>{f.label}</MicroLabel>
@@ -585,63 +595,106 @@ export default function AlpacaPage() {
               {/* By Setup */}
               <div className="rounded overflow-hidden" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
                 <div className="px-5 py-3 border-b flex items-center gap-2" style={{ borderColor: "rgba(72,72,73,0.2)" }}>
+                  <span className="material-symbols-outlined text-sm" style={{ color: C.secondary }}>account_tree</span>
                   <MicroLabel>Accuracy by Setup Type</MicroLabel>
                 </div>
-                <table className="w-full">
-                  <thead>
-                    <tr style={{ borderBottom: "1px solid rgba(72,72,73,0.2)" }}>
-                      {["Setup", "Total", "Wins", "Win Rate", "Avg Quality"].map((h) => (
-                        <th key={h} className="px-4 py-2 text-left" style={{ fontSize: "8px", fontFamily: "Space Grotesk", letterSpacing: "0.15em", textTransform: "uppercase", color: C.outlineVar }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {accuracy.by_setup.map((s) => (
-                      <tr key={s.setup_type} style={{ borderBottom: "1px solid rgba(72,72,73,0.1)" }}>
-                        <td className="px-4 py-2.5 font-headline font-bold text-xs">{s.setup_type.replace(/_/g, " ")}</td>
-                        <td className="px-4 py-2.5" style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace" }}>{s.total}</td>
-                        <td className="px-4 py-2.5" style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: C.primary }}>{s.wins}</td>
-                        <td className="px-4 py-2.5" style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, color: s.win_rate > 0.5 ? C.primary : C.tertiary }}>{(s.win_rate * 100).toFixed(1)}%</td>
-                        <td className="px-4 py-2.5" style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: C.muted }}>{(s.avg_quality * 100).toFixed(1)}%</td>
-                      </tr>
-                    ))}
-                    {accuracy.by_setup.length === 0 && (
-                      <tr><td colSpan={5} className="px-4 py-8 text-center" style={{ fontSize: "11px", color: C.outlineVar }}>No accuracy data yet — run a backtest or build recall.</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Recent */}
-              {accuracy.recent.length > 0 && (
-                <div className="rounded overflow-hidden" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
-                  <div className="px-5 py-3 border-b flex items-center gap-2" style={{ borderColor: "rgba(72,72,73,0.2)" }}>
-                    <MicroLabel>Recent Accuracy Records</MicroLabel>
-                  </div>
+                <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
                       <tr style={{ borderBottom: "1px solid rgba(72,72,73,0.2)" }}>
-                        {["Date", "Setup", "Symbol", "Quality", "Outcome"].map((h) => (
+                        {["Setup", "Total", "Wins", "Win Rate", "Avg Quality", "Expectancy"].map((h) => (
                           <th key={h} className="px-4 py-2 text-left" style={{ fontSize: "8px", fontFamily: "Space Grotesk", letterSpacing: "0.15em", textTransform: "uppercase", color: C.outlineVar }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {accuracy.recent.map((r, i) => (
-                        <tr key={i} style={{ borderBottom: "1px solid rgba(72,72,73,0.1)" }}>
-                          <td className="px-4 py-2" style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: C.muted }}>{new Date(r.bar_time).toLocaleDateString()}</td>
-                          <td className="px-4 py-2" style={{ fontSize: "9px", color: C.muted }}>{r.setup_type.replace(/_/g, " ")}</td>
-                          <td className="px-4 py-2 font-headline font-bold text-xs">{r.symbol}</td>
-                          <td className="px-4 py-2" style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: Number(r.final_quality) > 0.65 ? C.primary : C.muted }}>{(Number(r.final_quality) * 100).toFixed(0)}%</td>
-                          <td className="px-4 py-2">
-                            <span className="px-2 py-0.5 rounded" style={{ fontSize: "8px", fontFamily: "Space Grotesk", fontWeight: 700, textTransform: "uppercase", backgroundColor: r.outcome === "win" ? "rgba(156,255,147,0.1)" : r.outcome === "loss" ? "rgba(255,113,98,0.1)" : "rgba(72,72,73,0.2)", color: r.outcome === "win" ? C.primary : r.outcome === "loss" ? C.tertiary : C.muted }}>
-                              {r.outcome}
-                            </span>
+                      {accuracy.by_setup.map((s) => (
+                        <tr key={s.setup_type} style={{ borderBottom: "1px solid rgba(72,72,73,0.1)" }}>
+                          <td className="px-4 py-2.5 font-headline font-bold text-xs">{s.setup_type.replace(/_/g, " ")}</td>
+                          <td className="px-4 py-2.5" style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace" }}>{s.total}</td>
+                          <td className="px-4 py-2.5" style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: C.primary }}>{s.wins}</td>
+                          <td className="px-4 py-2.5" style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, color: s.win_rate > 0.5 ? C.primary : C.tertiary }}>{(s.win_rate * 100).toFixed(1)}%</td>
+                          <td className="px-4 py-2.5" style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: C.muted }}>{(s.avg_quality * 100).toFixed(1)}%</td>
+                          <td className="px-4 py-2.5" style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, color: (s.expectancy_ticks ?? 0) > 0 ? C.primary : C.tertiary }}>
+                            {s.expectancy_ticks != null ? `${s.expectancy_ticks > 0 ? "+" : ""}${s.expectancy_ticks.toFixed(1)}t` : "—"}
                           </td>
+                        </tr>
+                      ))}
+                      {accuracy.by_setup.length === 0 && (
+                        <tr><td colSpan={6} className="px-4 py-8 text-center" style={{ fontSize: "11px", color: C.outlineVar }}>No accuracy data yet — run a backtest or build recall.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* By Regime */}
+              {accuracy.by_regime && accuracy.by_regime.length > 0 && (
+                <div className="rounded overflow-hidden" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+                  <div className="px-5 py-3 border-b flex items-center gap-2" style={{ borderColor: "rgba(72,72,73,0.2)" }}>
+                    <span className="material-symbols-outlined text-sm" style={{ color: "#fbbf24" }}>bar_chart</span>
+                    <MicroLabel>Accuracy by Market Regime</MicroLabel>
+                  </div>
+                  <table className="w-full">
+                    <thead>
+                      <tr style={{ borderBottom: "1px solid rgba(72,72,73,0.2)" }}>
+                        {["Regime", "Total", "Wins", "Win Rate", "Avg Quality"].map((h) => (
+                          <th key={h} className="px-4 py-2 text-left" style={{ fontSize: "8px", fontFamily: "Space Grotesk", letterSpacing: "0.15em", textTransform: "uppercase", color: C.outlineVar }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {accuracy.by_regime.map((r) => (
+                        <tr key={r.regime} style={{ borderBottom: "1px solid rgba(72,72,73,0.1)" }}>
+                          <td className="px-4 py-2.5"><RegimeBadge regime={r.regime} /></td>
+                          <td className="px-4 py-2.5" style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace" }}>{r.total}</td>
+                          <td className="px-4 py-2.5" style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: C.primary }}>{r.wins}</td>
+                          <td className="px-4 py-2.5" style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, color: r.win_rate > 0.5 ? C.primary : C.tertiary }}>{(r.win_rate * 100).toFixed(1)}%</td>
+                          <td className="px-4 py-2.5" style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: C.muted }}>{(r.avg_quality * 100).toFixed(1)}%</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
+                </div>
+              )}
+
+              {/* Recent */}
+              {accuracy.recent.length > 0 && (
+                <div className="rounded overflow-hidden" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+                  <div className="px-5 py-3 border-b flex items-center gap-2" style={{ borderColor: "rgba(72,72,73,0.2)" }}>
+                    <span className="material-symbols-outlined text-sm" style={{ color: C.muted }}>history</span>
+                    <MicroLabel>Recent Accuracy Records</MicroLabel>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr style={{ borderBottom: "1px solid rgba(72,72,73,0.2)" }}>
+                          {["Date", "Setup", "Symbol", "Dir", "Regime", "Quality", "Outcome"].map((h) => (
+                            <th key={h} className="px-4 py-2 text-left" style={{ fontSize: "8px", fontFamily: "Space Grotesk", letterSpacing: "0.15em", textTransform: "uppercase", color: C.outlineVar }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {accuracy.recent.map((r, i) => (
+                          <tr key={i} style={{ borderBottom: "1px solid rgba(72,72,73,0.1)" }}>
+                            <td className="px-4 py-2" style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: C.muted }}>{new Date(r.bar_time).toLocaleDateString()}</td>
+                            <td className="px-4 py-2" style={{ fontSize: "9px", color: C.muted }}>{r.setup_type.replace(/_/g, " ")}</td>
+                            <td className="px-4 py-2 font-headline font-bold text-xs">{r.symbol}</td>
+                            <td className="px-4 py-2">
+                              {r.direction && <span style={{ fontSize: "9px", fontFamily: "Space Grotesk", fontWeight: 700, color: r.direction === "long" ? C.primary : C.tertiary }}>{r.direction.toUpperCase()}</span>}
+                            </td>
+                            <td className="px-4 py-2">{r.regime ? <RegimeBadge regime={r.regime} /> : <span style={{ fontSize: "9px", color: C.outlineVar }}>—</span>}</td>
+                            <td className="px-4 py-2" style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: Number(r.final_quality) > 0.65 ? C.primary : C.muted }}>{(Number(r.final_quality) * 100).toFixed(0)}%</td>
+                            <td className="px-4 py-2">
+                              <span className="px-2 py-0.5 rounded" style={{ fontSize: "8px", fontFamily: "Space Grotesk", fontWeight: 700, textTransform: "uppercase", backgroundColor: r.outcome === "win" ? "rgba(156,255,147,0.1)" : r.outcome === "loss" ? "rgba(255,113,98,0.1)" : "rgba(72,72,73,0.2)", color: r.outcome === "win" ? C.primary : r.outcome === "loss" ? C.tertiary : C.muted }}>
+                                {r.outcome}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
             </>

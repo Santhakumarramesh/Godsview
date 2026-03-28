@@ -30,6 +30,8 @@ export const accuracyResultsTable = pgTable("accuracy_results", {
   sl_ticks: integer("sl_ticks"),
   hit_tp: text("hit_tp"),
   forward_bars_checked: integer("forward_bars_checked"),
+  regime: text("regime"),
+  direction: text("direction"),
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
