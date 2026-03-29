@@ -3,7 +3,9 @@ from __future__ import annotations
 import uuid
 
 from app.agents.base import Agent, AgentState, utc_now_iso
+from app.brain.learning import build_learning_summary
 from app.brain.schema import TradeMemory
+from app.execution.journal import append_journal_entry
 
 
 class MonitorAgent(Agent):
@@ -44,6 +46,18 @@ class MonitorAgent(Agent):
             outcome=outcome,
         )
         state.brain.add_memory(trade_memory)
+        append_journal_entry(
+            {
+                "symbol": state.symbol,
+                "setup": setup,
+                "regime": regime,
+                "action": action,
+                "status": status,
+                "execution": execution,
+                "risk": risk,
+                "reasoning": reasoning,
+            }
+        )
 
         # Keep stats moving with a neutral outcome unless caller updates later.
         if outcome == "open":
@@ -58,7 +72,7 @@ class MonitorAgent(Agent):
         state.data["monitor"] = {
             "recorded_at": utc_now_iso(),
             "brain_stats": state.brain.snapshot().get("stats", {}),
+            "learning": build_learning_summary(state.brain, state.symbol),
             "trade_outcome": outcome,
         }
         return state
-

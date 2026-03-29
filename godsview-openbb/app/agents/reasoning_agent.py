@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from app.agents.base import Agent, AgentState
-from app.ai_filter import ai_trade_filter
+from app.brain.reasoning import compose_reasoning_decision
 from app.brain.schema import EpisodicMemory
 
 
@@ -15,6 +15,11 @@ class ReasoningAgent(Agent):
         signal = state.data.get("signal")
         market = state.data.get("market", {})
         mtf = state.data.get("mtf", {})
+        sentiment = state.data.get("sentiment", {})
+        macro = state.data.get("macro", {})
+        setup_candidate = None
+        if isinstance(signal, dict):
+            setup_candidate = signal.get("setup_candidate")
         if not isinstance(signal, dict):
             state.set_blocked("missing_signal")
             return state
@@ -24,31 +29,29 @@ class ReasoningAgent(Agent):
         recent_total = len(memory_tail)
         recent_loss_rate = (recent_losses / recent_total) if recent_total > 0 else 0.0
 
-        context = {
-            "high_volatility": str(market.get("regime", "")) == "high_volatility",
-            "major_news_window": False,
-            "spread_too_wide": False,
-            "degraded_data": False,
-            "recent_loss_rate": recent_loss_rate,
-        }
-        if recent_total >= 10 and recent_loss_rate > 0.65:
-            context["degraded_data"] = True
-
-        decision = ai_trade_filter(signal, context)
+        decision = compose_reasoning_decision(
+            symbol=state.symbol,
+            signal=signal,
+            setup_candidate=setup_candidate if isinstance(setup_candidate, dict) else None,
+            sentiment=sentiment if isinstance(sentiment, dict) else None,
+            macro=macro if isinstance(macro, dict) else None,
+            memory_tail=memory_tail,
+        )
         confluence = float(mtf.get("summary", {}).get("confluence", 0.0)) if isinstance(mtf, dict) else 0.0
-        if confluence < 0.45 and decision.approved:
-            # Low MTF alignment forces caution.
-            decision = ai_trade_filter(
-                {**signal, "action": "skip"},
-                {"degraded_data": True},
-            )
+        if confluence < 0.45 and bool(decision.get("approved", False)):
+            decision["approved"] = False
+            decision["final_action"] = "skip"
+            reasons = list(decision.get("reasons", []))
+            reasons.append("mtf_confluence_too_low")
+            decision["reasons"] = reasons
         reasoning = {
-            "approved": decision.approved,
-            "final_action": decision.final_action,
-            "reasons": decision.reasons,
+            "approved": bool(decision.get("approved", False)),
+            "final_action": str(decision.get("final_action", "skip")),
+            "reasons": decision.get("reasons", []),
             "recent_loss_rate": recent_loss_rate,
             "recent_trades": recent_total,
             "mtf_confluence": confluence,
+            "inputs": decision.get("inputs", {}),
         }
         state.data["reasoning"] = reasoning
 
@@ -56,14 +59,14 @@ class ReasoningAgent(Agent):
             EpisodicMemory(
                 symbol=state.symbol,
                 title="Reasoning decision",
-                content=f"approved={decision.approved}, action={decision.final_action}",
+                content=f"approved={reasoning['approved']}, action={reasoning['final_action']}",
                 confidence=float(signal.get("confidence", 0.5)),
                 tags=["reasoning", "decision"],
                 context=reasoning,
             )
         )
 
-        if not decision.approved:
+        if not reasoning["approved"]:
             state.set_blocked("reasoning_veto")
 
         return state

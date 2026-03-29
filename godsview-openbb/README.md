@@ -78,7 +78,14 @@ python -m app.learning.replay --symbol AAPL --timeframe 1D --max-steps 400
 - `app/brain/memory.py`: persistent brain memory store.
 - `app/agents/*`: 6-agent pipeline (`data`, `signal`, `reasoning`, `risk`, `execution`, `monitor`) and orchestrator.
 - `app/analysis/*`: structure, order-block, FVG, and multi-timeframe intelligence modules.
+- `app/analysis/liquidity.py`: equal-high/equal-low liquidity pool detector.
+- `app/analysis/sweep.py`: liquidity sweep + rejection detector.
 - `app/learning/replay.py`: no-lookahead replay runner with memory feedback.
+- `app/strategy/*`: time trigger, setup candidate generation, and setup validation.
+- `app/data/*`: OpenBB wrapper + sentiment + macro context fetchers.
+- `app/execution/journal.py`: append-only trade/decision journal.
+- `app/brain/reasoning.py`: context + memory-aware decision composer.
+- `app/brain/learning.py`: memory-derived performance summaries.
 - `app/visuals/*`: chart plotting and screenshot outputs.
 
 ## Output Artifacts
@@ -89,6 +96,7 @@ python -m app.learning.replay --symbol AAPL --timeframe 1D --max-steps 400
 - Backtest summary: `data/processed/backtest_summary.json`
 - Replay report: `data/processed/replay_latest.json`
 - Replay screenshots: `charts/*.png`
+- Journal: `data/processed/trade_journal.jsonl`
 
 ## Safety Defaults
 

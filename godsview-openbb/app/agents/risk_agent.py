@@ -30,6 +30,7 @@ class RiskAgent(Agent):
         # - otherwise fallback to a deterministic simulation equity
         account_equity = 10_000.0
         day_pnl_pct = 0.0
+        open_positions = 0
         if state.live and settings.has_alpaca_keys:
             try:
                 account = get_account()
@@ -40,6 +41,16 @@ class RiskAgent(Agent):
                 ) - 1.0
             except Exception as err:  # noqa: BLE001
                 state.add_error(f"risk_agent_account_fetch_error: {err}")
+
+        if open_positions >= settings.max_positions:
+            state.data["risk"] = {
+                "allowed": False,
+                "reason": "max_positions_reached",
+                "qty": 0,
+                "open_positions": open_positions,
+            }
+            state.set_blocked("risk_blocked")
+            return state
 
         stop_price = entry_price * (1.0 - settings.default_stop_pct)
         if action == "sell":
@@ -62,9 +73,9 @@ class RiskAgent(Agent):
             "stop_price": stop_price,
             "account_equity": account_equity,
             "day_pnl_pct": day_pnl_pct,
+            "open_positions": open_positions,
         }
         state.data["risk"] = risk_payload
         if not risk.allowed:
             state.set_blocked("risk_blocked")
         return state
-

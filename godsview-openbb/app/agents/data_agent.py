@@ -5,7 +5,10 @@ from statistics import mean, pstdev
 from app.agents.base import Agent, AgentState
 from app.analysis.multi_timeframe import analyze_multi_timeframes
 from app.brain.schema import AssetEntity, SemanticMemory
+from app.data.macro import get_macro_event_context
+from app.data.sentiment import get_sentiment_snapshot
 from app.data_fetch import fetch_price_history
+from app.strategy.time_trigger import evaluate_time_window
 
 
 class DataAgent(Agent):
@@ -45,6 +48,9 @@ class DataAgent(Agent):
                 "volatility_100": float(vol),
                 "regime": regime,
             }
+            state.data["session"] = evaluate_time_window()
+            state.data["sentiment"] = get_sentiment_snapshot(state.symbol)
+            state.data["macro"] = get_macro_event_context(state.symbol)
             # Build lightweight multi-timeframe context for downstream agents.
             state.data["mtf"] = analyze_multi_timeframes(
                 state.symbol,
@@ -70,7 +76,12 @@ class DataAgent(Agent):
                     content=f"Regime={regime}, trend_20={trend:.4f}, vol_100={vol:.4f}",
                     confidence=0.55,
                     tags=["regime", "market_state"],
-                    context=state.data["market"],
+                    context={
+                        **state.data["market"],
+                        "session": state.data["session"],
+                        "sentiment": state.data["sentiment"],
+                        "macro": state.data["macro"],
+                    },
                 )
             )
             return state

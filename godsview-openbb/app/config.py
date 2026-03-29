@@ -64,6 +64,12 @@ class Settings:
     default_stop_pct: float = _as_float("DEFAULT_STOP_PCT", 0.015)
 
     dry_run: bool = _as_bool("DRY_RUN", True)
+    x_bearer_token: str = os.getenv("X_BEARER_TOKEN", "").strip()
+    ftmo_calendar_url: str = os.getenv("FTMO_CALENDAR_URL", "https://ftmo.com/en/calendar/").strip()
+    session_timezone: str = os.getenv("SESSION_TIMEZONE", "America/New_York").strip()
+    allowed_sessions: str = os.getenv("ALLOWED_SESSIONS", "LONDON,NEW_YORK").strip().upper()
+    max_positions: int = _as_int("MAX_POSITIONS", 3)
+    min_rr: float = _as_float("MIN_RR", 1.5)
 
     @property
     def has_alpaca_keys(self) -> bool:
