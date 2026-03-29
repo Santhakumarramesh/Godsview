@@ -6,6 +6,7 @@ import performanceRouter from "./performance";
 import systemRouter from "./system";
 import alpacaRouter from "./alpaca";
 import orderbookRouter from "./orderbook";
+import strictSetupRouter from "./strict_setup";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(performanceRouter);
 router.use(systemRouter);
 router.use(alpacaRouter);
 router.use(orderbookRouter);
+router.use(strictSetupRouter);
 
 export default router;
