@@ -8,14 +8,19 @@ export type StrictGateReason =
   | "setup_not_detected"
   | "bad_session"
   | "news_lockout"
+  | "stale_data"
+  | "regime_mismatch"
   | "orderbook_unavailable"
   | "low_liquidity"
   | "spread_too_wide";
 
 export interface StrictSetupGates {
+  barFresh: boolean;
   sessionValid: boolean;
+  regimeValid: boolean;
   newsClear: boolean;
   orderbookAvailable: boolean;
+  orderbookFresh: boolean;
   liquidityValid: boolean;
   spreadValid: boolean;
 }
@@ -40,6 +45,7 @@ export interface StrictSweepReclaimDecision {
     lookbackHigh: number | null;
     lookbackLow: number | null;
     sweepWickRatio: number | null;
+    regime: "ranging" | "volatile" | "trend_bull" | "trend_bear";
     atr14: number | null;
     spreadBps: number | null;
     topBookNotionalUsd: number | null;
@@ -55,6 +61,9 @@ export interface StrictSweepReclaimOptions {
   requireOrderbook?: boolean;
   allowAsianSession?: boolean;
   newsLockoutActive?: boolean;
+  maxBarAgeMs?: number;
+  maxOrderbookAgeMs?: number;
+  nowMs?: number;
 }
 
 const SUPPORTED_SYMBOLS = new Set<string>(["BTCUSD", "ETHUSD"]);
@@ -115,6 +124,26 @@ function computeOrderbookLiquidity(snapshot: OrderBookSnapshot | null): {
   };
 }
 
+function detectSweepRegime(bars1m: AlpacaBar[]): "ranging" | "volatile" | "trend_bull" | "trend_bear" {
+  if (bars1m.length < 20) return "ranging";
+  const window = bars1m.slice(-30);
+  const firstClose = window[0]!.Close;
+  const lastClose = window[window.length - 1]!.Close;
+  const movePct = firstClose !== 0 ? (lastClose - firstClose) / firstClose : 0;
+  const directionalBars = window
+    .slice(1)
+    .filter((bar) => (movePct >= 0 ? bar.Close >= bar.Open : bar.Close <= bar.Open)).length;
+  const directionalPersistence = directionalBars / Math.max(window.length - 1, 1);
+  const avgRange = window.reduce((sum, bar) => sum + (bar.High - bar.Low), 0) / window.length;
+  const atrPct = lastClose !== 0 ? avgRange / Math.abs(lastClose) : 0;
+
+  if (atrPct > 0.012) return "volatile";
+  if (Math.abs(movePct) > 0.006 && directionalPersistence > 0.65) {
+    return movePct > 0 ? "trend_bull" : "trend_bear";
+  }
+  return "ranging";
+}
+
 export function evaluateStrictSweepReclaim(
   symbol: string,
   bars1m: AlpacaBar[],
@@ -130,12 +159,19 @@ export function evaluateStrictSweepReclaim(
   const requireOrderbook = options.requireOrderbook ?? true;
   const allowAsianSession = options.allowAsianSession ?? false;
   const newsLockoutActive = options.newsLockoutActive ?? false;
+  const maxBarAgeMs = Math.floor(clampPositive(options.maxBarAgeMs ?? 3 * 60_000, 3 * 60_000));
+  const maxOrderbookAgeMs = Math.floor(clampPositive(options.maxOrderbookAgeMs ?? 10_000, 10_000));
+  const nowMs = options.nowMs ?? Date.now();
 
   const defaultSession: StrictSweepReclaimDecision["session"] = "asian";
+  const defaultRegime: StrictSweepReclaimDecision["diagnostics"]["regime"] = "ranging";
   const defaultGates: StrictSetupGates = {
+    barFresh: false,
     sessionValid: false,
+    regimeValid: false,
     newsClear: !newsLockoutActive,
     orderbookAvailable: false,
+    orderbookFresh: false,
     liquidityValid: false,
     spreadValid: false,
   };
@@ -161,6 +197,7 @@ export function evaluateStrictSweepReclaim(
         lookbackHigh: null,
         lookbackLow: null,
         sweepWickRatio: null,
+        regime: defaultRegime,
         atr14: null,
         spreadBps: null,
         topBookNotionalUsd: null,
@@ -189,6 +226,7 @@ export function evaluateStrictSweepReclaim(
         lookbackHigh: null,
         lookbackLow: null,
         sweepWickRatio: null,
+        regime: defaultRegime,
         atr14: null,
         spreadBps: null,
         topBookNotionalUsd: null,
@@ -233,11 +271,18 @@ export function evaluateStrictSweepReclaim(
 
   const detected = direction !== null;
   const session = detectSession(reclaimBar.Timestamp);
+  const regime = detectSweepRegime(bars1m);
+  const regimeValid = regime === "ranging" || regime === "volatile";
+  const barTimeMs = Date.parse(reclaimBar.Timestamp);
+  const barFresh = Number.isFinite(barTimeMs) ? nowMs - barTimeMs <= maxBarAgeMs : false;
   const sessionValid = allowAsianSession ? true : session !== "asian";
   const newsClear = !newsLockoutActive;
 
   const liq = computeOrderbookLiquidity(orderbookSnapshot);
   const orderbookAvailable = liq.available;
+  const orderbookFresh = orderbookAvailable && orderbookSnapshot !== null
+    ? nowMs - orderbookSnapshot.receivedAt <= maxOrderbookAgeMs
+    : false;
   const liquidityValid = liq.topBookNotionalUsd !== null && liq.topBookNotionalUsd >= minTopBookNotionalUsd;
   const spreadValid = liq.spreadBps !== null && liq.spreadBps <= maxSpreadBps;
 
@@ -267,17 +312,27 @@ export function evaluateStrictSweepReclaim(
   }
 
   const blockedReasons: StrictGateReason[] = [];
-  if (!detected) blockedReasons.push("setup_not_detected");
-  if (!sessionValid) blockedReasons.push("bad_session");
-  if (!newsClear) blockedReasons.push("news_lockout");
-  if (!orderbookAvailable && requireOrderbook) blockedReasons.push("orderbook_unavailable");
-  if (orderbookAvailable && !liquidityValid) blockedReasons.push("low_liquidity");
-  if (orderbookAvailable && !spreadValid) blockedReasons.push("spread_too_wide");
+  const addReason = (reason: StrictGateReason): void => {
+    if (!blockedReasons.includes(reason)) blockedReasons.push(reason);
+  };
+
+  if (!detected) addReason("setup_not_detected");
+  if (!barFresh) addReason("stale_data");
+  if (!sessionValid) addReason("bad_session");
+  if (!regimeValid) addReason("regime_mismatch");
+  if (!newsClear) addReason("news_lockout");
+  if (!orderbookAvailable && requireOrderbook) addReason("orderbook_unavailable");
+  if (orderbookAvailable && requireOrderbook && !orderbookFresh) addReason("stale_data");
+  if (orderbookAvailable && orderbookFresh && !liquidityValid) addReason("low_liquidity");
+  if (orderbookAvailable && orderbookFresh && !spreadValid) addReason("spread_too_wide");
 
   const gates: StrictSetupGates = {
+    barFresh,
     sessionValid,
+    regimeValid,
     newsClear,
     orderbookAvailable,
+    orderbookFresh,
     liquidityValid,
     spreadValid,
   };
@@ -302,6 +357,7 @@ export function evaluateStrictSweepReclaim(
       lookbackHigh,
       lookbackLow,
       sweepWickRatio,
+      regime,
       atr14: Number.isFinite(atr14) ? atr14 : null,
       spreadBps: liq.spreadBps,
       topBookNotionalUsd: liq.topBookNotionalUsd,

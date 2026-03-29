@@ -65,6 +65,8 @@ function buildOptions(req: Request): StrictSweepReclaimOptions {
     minTopBookNotionalUsd: parseNumber(req.query.min_top_book_notional, 200_000, 1_000, 100_000_000),
     maxSpreadBps: parseNumber(req.query.max_spread_bps, 15, 0.5, 150),
     rrTarget: parseNumber(req.query.rr_target, 2, 0.5, 8),
+    maxBarAgeMs: parseNumber(req.query.max_bar_age_ms, 3 * 60_000, 30_000, 30 * 60_000),
+    maxOrderbookAgeMs: parseNumber(req.query.max_orderbook_age_ms, 10_000, 2_000, 120_000),
     requireOrderbook: parseBoolean(req.query.require_orderbook, true),
     allowAsianSession: parseBoolean(req.query.allow_asian, false),
     newsLockoutActive: queryNewsLockout || envNewsLockout,
@@ -135,7 +137,11 @@ router.get("/market/strict-setup/backtest", async (req, res) => {
     const startIndex = Math.max(40, Math.floor(options.minLookbackBars ?? 20) + 2);
     for (let i = startIndex; i < bars.length - 1; i++) {
       const window = bars.slice(0, i + 1);
-      const decision = evaluateStrictSweepReclaim(symbol, window, null, options);
+      const windowTsMs = Date.parse(window[window.length - 1]!.Timestamp);
+      const decision = evaluateStrictSweepReclaim(symbol, window, null, {
+        ...options,
+        nowMs: Number.isFinite(windowTsMs) ? windowTsMs : undefined,
+      });
       if (!decision.detected || !decision.direction || !decision.entryPrice || !decision.stopLoss || !decision.takeProfit) {
         continue;
       }
