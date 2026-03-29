@@ -185,11 +185,13 @@ export default function Signals() {
               {data?.signals.map((sig) => {
                 const q = toPct(Number(sig.final_quality));
                 const qColor = q > 75 ? C.primary : q > 50 ? "#fbbf24" : C.tertiary;
+                const statusValue = String(sig.status ?? "");
                 const statusColor =
-                  sig.status === "approved" ? C.primary :
-                  sig.status === "pending" ? "#fbbf24" :
-                  sig.status === "executed" ? C.secondary :
-                  sig.status === "rejected" ? C.tertiary :
+                  statusValue === "approved" ? C.primary :
+                  statusValue === "active_reduced" ? C.secondary :
+                  statusValue === "pending" ? "#fbbf24" :
+                  statusValue === "executed" ? C.secondary :
+                  statusValue === "rejected" ? C.tertiary :
                   C.muted;
                 const isExpanded = expandedId === sig.id;
                 const plot = isExpanded ? plotQuery.data : null;
@@ -217,7 +219,7 @@ export default function Signals() {
                           color: statusColor,
                           border: `1px solid ${statusColor}4D`,
                         }}>
-                          {sig.status}
+                          {statusValue === "active_reduced" ? "active (reduced)" : statusValue}
                         </span>
                       </td>
                       <td className="px-4 py-2.5">

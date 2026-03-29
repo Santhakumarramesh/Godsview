@@ -34,6 +34,25 @@ type DiagnosticsPayload = {
   layers: Record<string, DiagnosticsLayer>;
   recommendations: string[];
 };
+type ModelDiagnosticsPayload = {
+  status: { status: "active" | "warning" | "error"; message: string };
+  validation: { auc: number; accuracy: number; evaluatedSamples: number } | null;
+  drift: { status: "stable" | "watch" | "drift"; winRateDelta: number; qualityDelta: number } | null;
+};
+type ProofBucket = {
+  key: string;
+  closedSignals: number;
+  winRate: number;
+  profitFactor: number;
+  expectancyR: number;
+};
+type ProofPayload = {
+  overall: { closedSignals: number; winRate: number; profitFactor: number; expectancyR: number };
+  rows: ProofBucket[];
+};
+type OosPayload = {
+  deltas: { winRateDelta: number; expectancyDeltaR: number; avgFinalQualityDelta: number };
+};
 
 export default function Dashboard() {
 
@@ -53,6 +72,27 @@ export default function Dashboard() {
     staleTime: 25_000,
     retry: 2,
   });
+  const { data: modelDiagnostics, refetch: refetchModelDiagnostics } = useQuery<ModelDiagnosticsPayload>({
+    queryKey: ["system-model-diagnostics"],
+    queryFn: () => fetch("/api/system/model/diagnostics").then((r) => r.json()),
+    refetchInterval: 45_000,
+    staleTime: 30_000,
+    retry: 2,
+  });
+  const { data: proofBySetup, refetch: refetchProofBySetup } = useQuery<ProofPayload>({
+    queryKey: ["proof-by-setup"],
+    queryFn: () => fetch("/api/system/proof/by-setup?days=30&min_signals=20").then((r) => r.json()),
+    refetchInterval: 60_000,
+    staleTime: 45_000,
+    retry: 2,
+  });
+  const { data: oosProof, refetch: refetchOosProof } = useQuery<OosPayload>({
+    queryKey: ["proof-oos-vs-is"],
+    queryFn: () => fetch("/api/system/proof/oos-vs-is?lookback_days=90&oos_days=14&min_signals=20").then((r) => r.json()),
+    refetchInterval: 60_000,
+    staleTime: 45_000,
+    retry: 2,
+  });
 
   // Fallback manual interval — 30 s to avoid Alpaca 429 rate limits
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -62,9 +102,12 @@ export default function Dashboard() {
       refetchPerf();
       refetchSigs();
       refetchDiag();
+      refetchModelDiagnostics();
+      refetchProofBySetup();
+      refetchOosProof();
     }, 30_000);
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [refetchStatus, refetchPerf, refetchSigs, refetchDiag]);
+  }, [refetchStatus, refetchPerf, refetchSigs, refetchDiag, refetchModelDiagnostics, refetchProofBySetup, refetchOosProof]);
 
   const isInitialLoading =
     (sysLoading && !systemStatus) ||
@@ -242,6 +285,65 @@ export default function Dashboard() {
             Next action: {diagnostics.recommendations[0]}
           </p>
         ) : null}
+      </div>
+
+      <div className="rounded p-4 space-y-3" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined" style={{ fontSize: "14px", color: C.secondary }}>analytics</span>
+            <MicroLabel>Proof + Drift Snapshot</MicroLabel>
+          </div>
+          <span style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: C.outlineVar }}>
+            {(modelDiagnostics?.status.status ?? "n/a").toUpperCase()}
+          </span>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+          <div className="rounded p-2.5" style={{ backgroundColor: "#0e0e0f" }}>
+            <MicroLabel>Purged CV AUC</MicroLabel>
+            <div style={{ marginTop: "4px", fontSize: "11px", fontFamily: "JetBrains Mono, monospace", color: C.secondary }}>
+              {modelDiagnostics?.validation ? modelDiagnostics.validation.auc.toFixed(3) : "n/a"}
+            </div>
+          </div>
+          <div className="rounded p-2.5" style={{ backgroundColor: "#0e0e0f" }}>
+            <MicroLabel>Drift</MicroLabel>
+            <div style={{
+              marginTop: "4px",
+              fontSize: "11px",
+              fontFamily: "JetBrains Mono, monospace",
+              color: modelDiagnostics?.drift?.status === "drift" ? C.tertiary : modelDiagnostics?.drift?.status === "watch" ? "#fbbf24" : C.primary,
+            }}>
+              {(modelDiagnostics?.drift?.status ?? "n/a").toUpperCase()}
+            </div>
+          </div>
+          <div className="rounded p-2.5" style={{ backgroundColor: "#0e0e0f" }}>
+            <MicroLabel>OOS Win Δ</MicroLabel>
+            <div style={{ marginTop: "4px", fontSize: "11px", fontFamily: "JetBrains Mono, monospace", color: (oosProof?.deltas.winRateDelta ?? 0) >= 0 ? C.primary : C.tertiary }}>
+              {oosProof ? `${(oosProof.deltas.winRateDelta * 100).toFixed(2)}%` : "n/a"}
+            </div>
+          </div>
+          <div className="rounded p-2.5" style={{ backgroundColor: "#0e0e0f" }}>
+            <MicroLabel>PF (30d)</MicroLabel>
+            <div style={{ marginTop: "4px", fontSize: "11px", fontFamily: "JetBrains Mono, monospace", color: C.primary }}>
+              {proofBySetup?.overall ? proofBySetup.overall.profitFactor.toFixed(2) : "n/a"}
+            </div>
+          </div>
+          <div className="rounded p-2.5" style={{ backgroundColor: "#0e0e0f" }}>
+            <MicroLabel>Expectancy R</MicroLabel>
+            <div style={{ marginTop: "4px", fontSize: "11px", fontFamily: "JetBrains Mono, monospace", color: (proofBySetup?.overall.expectancyR ?? 0) >= 0 ? C.primary : C.tertiary }}>
+              {proofBySetup?.overall ? `${proofBySetup.overall.expectancyR >= 0 ? "+" : ""}${proofBySetup.overall.expectancyR.toFixed(2)}` : "n/a"}
+            </div>
+          </div>
+        </div>
+        <div className="space-y-1">
+          {(proofBySetup?.rows ?? []).slice(0, 3).map((row) => (
+            <div key={row.key} className="flex items-center justify-between rounded px-2 py-1.5" style={{ backgroundColor: "#0f0f10", border: `1px solid ${C.border}` }}>
+              <span style={{ fontSize: "10px", fontFamily: "Space Grotesk", color: "#fff" }}>{row.key.replace(/_/g, " ")}</span>
+              <span style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: C.muted }}>
+                {(row.winRate * 100).toFixed(1)}% · PF {row.profitFactor.toFixed(2)} · {row.expectancyR >= 0 ? "+" : ""}{row.expectancyR.toFixed(2)}R
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* ── Live Chart — TradingView (Coinbase real-time) ── */}

@@ -233,7 +233,26 @@ const DEFAULT_TV_STUDIES = [
   "RSI@tv-basicstudies",
 ];
 
-const SETUPS = ["absorption_reversal", "sweep_reclaim", "continuation_pullback", "cvd_divergence", "breakout_failure"];
+const SETUPS = [
+  "absorption_reversal",
+  "sweep_reclaim",
+  "continuation_pullback",
+  "cvd_divergence",
+  "breakout_failure",
+  "vwap_reclaim",
+  "opening_range_breakout",
+  "post_news_continuation",
+];
+const SETUP_LABELS: Record<string, string> = {
+  absorption_reversal: "Absorption Reversal",
+  sweep_reclaim: "Sweep Reclaim",
+  continuation_pullback: "Continuation Pullback",
+  cvd_divergence: "CVD Divergence ★",
+  breakout_failure: "Breakout Failure ★",
+  vwap_reclaim: "VWAP Reclaim",
+  opening_range_breakout: "Opening Range Breakout",
+  post_news_continuation: "Post-News Continuation",
+};
 
 const REGIME_COLORS: Record<string, string> = {
   trending_bull: C.primary, trending_bear: C.tertiary, ranging: C.secondary, volatile: "#fbbf24", chop: C.outline,
@@ -525,7 +544,7 @@ export default function AlpacaPage() {
             {INSTRUMENTS.map((i) => <option key={i.value} value={i.value}>{i.label}</option>)}
           </SelectInput>
           <SelectInput label="Setup Filter" value={selectedSetup} onChange={setSelectedSetup}>
-            {SETUPS.map((s) => <option key={s} value={s}>{s === "cvd_divergence" ? "CVD Divergence ★" : s === "breakout_failure" ? "Breakout Failure ★" : s.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}</option>)}
+            {SETUPS.map((s) => <option key={s} value={s}>{SETUP_LABELS[s] ?? s.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}</option>)}
           </SelectInput>
           <SelectInput label="Backtest Days" value={backtestDays} onChange={(v) => setBacktestDays(Number(v))}>
             {[1, 2, 3, 5, 7, 10, 14].map((d) => <option key={d} value={d}>{d} day{d > 1 ? "s" : ""}</option>)}

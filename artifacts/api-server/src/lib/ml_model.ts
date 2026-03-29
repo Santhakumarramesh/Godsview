@@ -87,7 +87,16 @@ interface DriftSnapshot {
 
 // ── Feature Engineering ────────────────────────────────────────────────────────
 
-const SETUP_TYPES = ["absorption_reversal", "sweep_reclaim", "continuation_pullback", "cvd_divergence", "breakout_failure"] as const;
+const SETUP_TYPES = [
+  "absorption_reversal",
+  "sweep_reclaim",
+  "continuation_pullback",
+  "cvd_divergence",
+  "breakout_failure",
+  "vwap_reclaim",
+  "opening_range_breakout",
+  "post_news_continuation",
+] as const;
 const REGIMES = ["trending_bull", "trending_bear", "ranging", "volatile", "chop"] as const;
 
 function oneHotSetup(setup: string): number[] {

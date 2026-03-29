@@ -722,6 +722,9 @@ const REGIME_THRESHOLDS: Record<Regime, Record<SetupType, number>> = {
     absorption_reversal: 0.75,
     cvd_divergence: 0.68,
     breakout_failure: 0.70,
+    vwap_reclaim: 0.62,
+    opening_range_breakout: 0.66,
+    post_news_continuation: 0.72,
   }),
   trending_bear: withCatalogFloors({
     continuation_pullback: 0.58,
@@ -729,6 +732,9 @@ const REGIME_THRESHOLDS: Record<Regime, Record<SetupType, number>> = {
     absorption_reversal: 0.75,
     cvd_divergence: 0.68,
     breakout_failure: 0.70,
+    vwap_reclaim: 0.62,
+    opening_range_breakout: 0.66,
+    post_news_continuation: 0.72,
   }),
   ranging: withCatalogFloors({
     absorption_reversal: 0.65,
@@ -736,6 +742,9 @@ const REGIME_THRESHOLDS: Record<Regime, Record<SetupType, number>> = {
     continuation_pullback: 0.75,
     cvd_divergence: 0.65,
     breakout_failure: 0.67,
+    vwap_reclaim: 0.69,
+    opening_range_breakout: 0.78,
+    post_news_continuation: 0.83,
   }),
   volatile: withCatalogFloors({
     sweep_reclaim: 0.75,
@@ -743,6 +752,9 @@ const REGIME_THRESHOLDS: Record<Regime, Record<SetupType, number>> = {
     continuation_pullback: 0.82,
     cvd_divergence: 0.76,
     breakout_failure: 0.78,
+    vwap_reclaim: 0.71,
+    opening_range_breakout: 0.75,
+    post_news_continuation: 0.74,
   }),
   chop: withCatalogFloors({
     absorption_reversal: 1.0,
@@ -750,6 +762,9 @@ const REGIME_THRESHOLDS: Record<Regime, Record<SetupType, number>> = {
     continuation_pullback: 1.0,
     cvd_divergence: 1.0,
     breakout_failure: 1.0,
+    vwap_reclaim: 1.0,
+    opening_range_breakout: 1.0,
+    post_news_continuation: 1.0,
   }),
 };
 
@@ -1203,6 +1218,188 @@ export function detectBreakoutFailure(
   return { detected: true, direction, structure, orderFlow };
 }
 
+function computeRollingVWAP(bars: AlpacaBar[]): number {
+  if (!bars.length) return 0;
+  const recent = bars.slice(-40);
+  let weightedPrice = 0;
+  let totalVol = 0;
+  for (const bar of recent) {
+    const v = Number(bar.Volume ?? 0);
+    const barVwap = Number(bar.VWAP ?? 0);
+    const price = Number.isFinite(barVwap) && barVwap > 0 ? barVwap : (bar.High + bar.Low + bar.Close) / 3;
+    weightedPrice += price * Math.max(v, 1);
+    totalVol += Math.max(v, 1);
+  }
+  return totalVol > 0 ? weightedPrice / totalVol : recent[recent.length - 1]!.Close;
+}
+
+/** VWAP reclaim/value setup: cross through session value with flow confirmation */
+export function detectVWAPReclaim(
+  bars1m: AlpacaBar[],
+  bars5m: AlpacaBar[],
+  recall: RecallFeatures
+): { detected: boolean; direction: "long" | "short"; structure: number; orderFlow: number } {
+  if (bars1m.length < 12) return { detected: false, direction: "long", structure: 0, orderFlow: 0 };
+
+  const recent = bars1m.slice(-12);
+  const prev = recent[recent.length - 2]!;
+  const last = recent[recent.length - 1]!;
+  const vwap = computeRollingVWAP(recent);
+  if (!Number.isFinite(vwap) || vwap <= 0) return { detected: false, direction: "long", structure: 0, orderFlow: 0 };
+
+  const longReclaim =
+    prev.Close <= vwap &&
+    last.Close > vwap &&
+    last.Close > last.Open &&
+    recall.momentum_1m > 0;
+  const shortReclaim =
+    prev.Close >= vwap &&
+    last.Close < vwap &&
+    last.Close < last.Open &&
+    recall.momentum_1m < 0;
+
+  if (!longReclaim && !shortReclaim) return { detected: false, direction: "long", structure: 0, orderFlow: 0 };
+
+  const direction = longReclaim ? "long" : "short";
+  const priceDist = Math.abs(last.Close - vwap) / Math.max(vwap, 1);
+  const skBiasAligned =
+    (direction === "long" && recall.sk.bias !== "bear") ||
+    (direction === "short" && recall.sk.bias !== "bull");
+  const structure = clamp(
+    0.48 +
+    (priceDist < 0.004 ? 0.14 : 0.08) +
+    (recall.regime === "ranging" ? 0.08 : 0) +
+    (recall.regime === "chop" ? -0.15 : 0) +
+    (skBiasAligned ? 0.08 : -0.05) +
+    recall.sk.sequence_score * 0.1
+  );
+
+  const cvdAligned =
+    direction === "long"
+      ? recall.cvd.cvd_slope > 0 || recall.cvd.buy_volume_ratio > 0.52
+      : recall.cvd.cvd_slope < 0 || recall.cvd.buy_volume_ratio < 0.48;
+  const orderFlow = clamp(
+    0.42 +
+    (cvdAligned ? 0.16 : -0.05) +
+    (recall.vol_relative > 1.1 ? 0.1 : 0.03) +
+    (Math.abs(recall.cvd.delta_momentum) > 0.08 ? 0.08 : 0.02)
+  );
+
+  return { detected: true, direction, structure, orderFlow };
+}
+
+/** Opening range breakout setup (intraday expansion) */
+export function detectOpeningRangeBreakout(
+  bars1m: AlpacaBar[],
+  bars5m: AlpacaBar[],
+  recall: RecallFeatures
+): { detected: boolean; direction: "long" | "short"; structure: number; orderFlow: number } {
+  if (bars1m.length < 40) return { detected: false, direction: "long", structure: 0, orderFlow: 0 };
+
+  const latest = bars1m[bars1m.length - 1]!;
+  const prev = bars1m[bars1m.length - 2]!;
+  const latestTs = new Date(latest.Timestamp);
+  const dayStartUtc = Date.UTC(latestTs.getUTCFullYear(), latestTs.getUTCMonth(), latestTs.getUTCDate(), 13, 30, 0, 0); // NY open proxy
+  const openWindowEnd = dayStartUtc + 30 * 60 * 1000;
+
+  let openingBars = bars1m.filter((bar) => {
+    const t = Date.parse(bar.Timestamp);
+    return Number.isFinite(t) && t >= dayStartUtc && t < openWindowEnd;
+  });
+
+  if (openingBars.length < 8) {
+    // Fallback when market/session bars are sparse (crypto or off-session replay)
+    openingBars = bars1m.slice(-30);
+  }
+
+  const rangeHigh = Math.max(...openingBars.map((bar) => bar.High));
+  const rangeLow = Math.min(...openingBars.map((bar) => bar.Low));
+  const rangeWidthPct = (rangeHigh - rangeLow) / Math.max(rangeHigh, 1);
+  if (rangeWidthPct < 0.0015) return { detected: false, direction: "long", structure: 0, orderFlow: 0 };
+
+  const brokeUp = latest.Close > rangeHigh && prev.Close <= rangeHigh;
+  const brokeDown = latest.Close < rangeLow && prev.Close >= rangeLow;
+  if (!brokeUp && !brokeDown) return { detected: false, direction: "long", structure: 0, orderFlow: 0 };
+
+  const direction: "long" | "short" = brokeUp ? "long" : "short";
+  const trendAligned =
+    (direction === "long" && recall.trend_slope_5m > 0) ||
+    (direction === "short" && recall.trend_slope_5m < 0);
+  const structure = clamp(
+    0.5 +
+    (recall.regime === "volatile" ? 0.15 : 0.05) +
+    (trendAligned ? 0.12 : -0.06) +
+    clamp(rangeWidthPct * 12) * 0.12 +
+    clamp(recall.directional_persistence) * 0.1
+  );
+
+  const cvdAligned =
+    direction === "long"
+      ? recall.cvd.cvd_slope > 0 && recall.cvd.buy_volume_ratio > 0.52
+      : recall.cvd.cvd_slope < 0 && recall.cvd.buy_volume_ratio < 0.48;
+  const orderFlow = clamp(
+    0.44 +
+    (cvdAligned ? 0.16 : -0.07) +
+    (recall.vol_relative > 1.2 ? 0.12 : 0.04) +
+    (recall.cvd.large_delta_bar ? 0.08 : 0.02)
+  );
+
+  return { detected: true, direction, structure, orderFlow };
+}
+
+/** Post-news continuation setup (event-like volatility expansion continuation) */
+export function detectPostNewsContinuation(
+  bars1m: AlpacaBar[],
+  bars5m: AlpacaBar[],
+  recall: RecallFeatures
+): { detected: boolean; direction: "long" | "short"; structure: number; orderFlow: number } {
+  if (bars1m.length < 16) return { detected: false, direction: "long", structure: 0, orderFlow: 0 };
+  if (!(recall.regime === "volatile" || recall.regime === "trending_bull" || recall.regime === "trending_bear")) {
+    return { detected: false, direction: "long", structure: 0, orderFlow: 0 };
+  }
+  if (recall.atr_pct < 0.004) return { detected: false, direction: "long", structure: 0, orderFlow: 0 };
+
+  const last5 = bars1m.slice(-5);
+  const directionalBars = last5.filter((bar) => bar.Close > bar.Open).length;
+  const trendUp = recall.trend_slope_5m > 0 && recall.trend_slope_15m > -0.001;
+  const trendDown = recall.trend_slope_5m < 0 && recall.trend_slope_15m < 0.001;
+
+  const longSetup =
+    trendUp &&
+    directionalBars >= 3 &&
+    recall.directional_persistence > 0.55 &&
+    recall.vol_relative > 1.15;
+  const shortSetup =
+    trendDown &&
+    directionalBars <= 2 &&
+    recall.directional_persistence > 0.55 &&
+    recall.vol_relative > 1.15;
+
+  if (!longSetup && !shortSetup) return { detected: false, direction: "long", structure: 0, orderFlow: 0 };
+
+  const direction: "long" | "short" = longSetup ? "long" : "short";
+  const structure = clamp(
+    0.52 +
+    clamp(Math.abs(recall.trend_slope_5m) * 120) * 0.15 +
+    clamp(recall.directional_persistence) * 0.12 +
+    (recall.volatility_zscore > 0.35 ? 0.08 : 0.03) +
+    (recall.sk.sequence_stage === "impulse" ? 0.07 : 0)
+  );
+
+  const cvdAligned =
+    direction === "long"
+      ? recall.cvd.cvd_slope > 0 && recall.cvd.buy_volume_ratio > 0.54
+      : recall.cvd.cvd_slope < 0 && recall.cvd.buy_volume_ratio < 0.46;
+  const orderFlow = clamp(
+    0.45 +
+    (cvdAligned ? 0.18 : -0.08) +
+    (Math.abs(recall.cvd.delta_momentum) > 0.12 ? 0.1 : 0.04) +
+    (recall.cvd.large_delta_bar ? 0.08 : 0.02)
+  );
+
+  return { detected: true, direction, structure, orderFlow };
+}
+
 // ─── Scoring ──────────────────────────────────────────────────────────────────
 
 function indicatorDirectionalConfidence(
@@ -1263,7 +1460,10 @@ export function scoreRecall(
     (setup === "absorption_reversal" && recall.regime === "ranging") ||
     (setup === "sweep_reclaim" && (recall.regime === "ranging" || recall.regime === "volatile")) ||
     (setup === "cvd_divergence" && recall.regime === "ranging") ||
-    (setup === "breakout_failure" && recall.regime === "ranging")
+    (setup === "breakout_failure" && recall.regime === "ranging") ||
+    (setup === "vwap_reclaim" && (recall.regime === "ranging" || recall.regime === "trending_bull" || recall.regime === "trending_bear")) ||
+    (setup === "opening_range_breakout" && (recall.regime === "volatile" || recall.regime === "trending_bull" || recall.regime === "trending_bear")) ||
+    (setup === "post_news_continuation" && (recall.regime === "volatile" || recall.regime === "trending_bull" || recall.regime === "trending_bear"))
   ) {
     score += 0.10;
   }
@@ -1291,6 +1491,10 @@ export function scoreRecall(
   const rsi = recall.indicators.rsi_14;
   if (setup === "continuation_pullback") {
     if ((direction === "long" && rsi >= 50) || (direction === "short" && rsi <= 50)) score += 0.03;
+  } else if (setup === "vwap_reclaim") {
+    if ((direction === "long" && recall.indicators.bb_position <= 0.55) || (direction === "short" && recall.indicators.bb_position >= 0.45)) score += 0.03;
+  } else if (setup === "opening_range_breakout" || setup === "post_news_continuation") {
+    if ((direction === "long" && recall.indicators.macd_hist >= 0) || (direction === "short" && recall.indicators.macd_hist <= 0)) score += 0.03;
   } else if (setup === "absorption_reversal" || setup === "sweep_reclaim" || setup === "breakout_failure") {
     if ((direction === "long" && rsi <= 45) || (direction === "short" && rsi >= 55)) score += 0.03;
   }

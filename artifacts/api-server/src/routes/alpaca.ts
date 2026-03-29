@@ -11,6 +11,9 @@ import {
   detectContinuationPullback,
   detectCVDDivergence,
   detectBreakoutFailure,
+  detectVWAPReclaim,
+  detectOpeningRangeBreakout,
+  detectPostNewsContinuation,
   scoreRecall,
   computeFinalQuality,
   computeTPSL,
@@ -1625,18 +1628,7 @@ router.post("/alpaca/analyze", async (req, res) => {
         continue;
       }
 
-      let result: { detected: boolean; direction: "long" | "short"; structure: number; orderFlow: number };
-      if (setup === "absorption_reversal") {
-        result = detectAbsorptionReversal(bars1m, bars5m, recall);
-      } else if (setup === "sweep_reclaim") {
-        result = detectSweepReclaim(bars1m, bars5m, recall);
-      } else if (setup === "cvd_divergence") {
-        result = detectCVDDivergence(bars1m, bars5m, recall);
-      } else if (setup === "breakout_failure") {
-        result = detectBreakoutFailure(bars1m, bars5m, recall);
-      } else {
-        result = detectContinuationPullback(bars1m, bars5m, recall);
-      }
+      const result = runSetupDetector(setup, bars1m, bars5m, recall);
 
       if (!result.detected) continue;
 
@@ -1858,7 +1850,7 @@ router.post("/alpaca/analyze", async (req, res) => {
             return {
               instrument:    s.instrument,
               setup_type:    s.setup_type,
-              status:        s.meets_threshold ? "active" : "pending",
+              status:        s.meets_threshold ? (s.execution_mode === "reduced_size" ? "active_reduced" : "active") : "pending",
               structure_score:   s.structure_score.toFixed(4),
               order_flow_score:  s.order_flow_score.toFixed(4),
               recall_score:      s.recall_score.toFixed(4),
@@ -1948,6 +1940,9 @@ function runSetupDetector(
   if (setup === "sweep_reclaim") return detectSweepReclaim(bars1m, bars5m, recall);
   if (setup === "cvd_divergence") return detectCVDDivergence(bars1m, bars5m, recall);
   if (setup === "breakout_failure") return detectBreakoutFailure(bars1m, bars5m, recall);
+  if (setup === "vwap_reclaim") return detectVWAPReclaim(bars1m, bars5m, recall);
+  if (setup === "opening_range_breakout") return detectOpeningRangeBreakout(bars1m, bars5m, recall);
+  if (setup === "post_news_continuation") return detectPostNewsContinuation(bars1m, bars5m, recall);
   return detectContinuationPullback(bars1m, bars5m, recall);
 }
 

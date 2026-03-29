@@ -1,3 +1,5 @@
+import type { SetupType } from "./types";
+
 export interface OrderFlowFeatures {
   cvd: number;
   cvdSlope: number;
@@ -12,7 +14,7 @@ export interface OrderFlowFeatures {
 }
 
 export function shouldRejectForOrderFlow(
-  setupType: "absorption_reversal" | "sweep_reclaim" | "continuation_pullback" | "cvd_divergence" | "breakout_failure",
+  setupType: SetupType,
   features: OrderFlowFeatures,
 ): string[] {
   const rejectReasons: string[] = [];

@@ -2,6 +2,7 @@ import { useGetPerformance } from "@workspace/api-client-react";
 import { formatCurrency, formatPercent, cn } from "@/lib/utils";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 const C = {
   card: "#1a191b",
@@ -21,9 +22,29 @@ function MicroLabel({ children }: { children: React.ReactNode }) {
 
 const DAYS_OPTIONS = [7, 30, 90];
 
+type ModelDiagnosticsPayload = {
+  validation: { auc: number; accuracy: number } | null;
+  drift: { status: "stable" | "watch" | "drift"; winRateDelta: number; qualityDelta: number } | null;
+};
+type OosPayload = {
+  deltas: { winRateDelta: number; expectancyDeltaR: number; avgFinalQualityDelta: number };
+};
+
 export default function Performance() {
   const [days, setDays] = useState(30);
   const { data, isLoading } = useGetPerformance({ days });
+  const { data: modelDiagnostics } = useQuery<ModelDiagnosticsPayload>({
+    queryKey: ["system-model-diagnostics"],
+    queryFn: () => fetch("/api/system/model/diagnostics").then((r) => r.json()),
+    refetchInterval: 45_000,
+    staleTime: 30_000,
+  });
+  const { data: oosProof } = useQuery<OosPayload>({
+    queryKey: ["proof-oos-vs-is"],
+    queryFn: () => fetch("/api/system/proof/oos-vs-is?lookback_days=90&oos_days=14&min_signals=20").then((r) => r.json()),
+    refetchInterval: 60_000,
+    staleTime: 45_000,
+  });
 
   if (isLoading || !data) {
     return (
@@ -79,6 +100,44 @@ export default function Performance() {
             <div className="mt-2 font-headline font-bold text-lg" style={{ color: s.accent }}>{s.value}</div>
           </div>
         ))}
+      </div>
+
+      <div className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+        <div className="flex items-center gap-2 mb-3">
+          <span className="material-symbols-outlined text-base" style={{ color: C.secondary }}>monitoring</span>
+          <MicroLabel>Model Stability</MicroLabel>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <div className="rounded p-2.5" style={{ backgroundColor: "#0e0e0f" }}>
+            <MicroLabel>Purged CV AUC</MicroLabel>
+            <div style={{ marginTop: "4px", fontSize: "11px", fontFamily: "JetBrains Mono, monospace", color: C.secondary }}>
+              {modelDiagnostics?.validation ? modelDiagnostics.validation.auc.toFixed(3) : "n/a"}
+            </div>
+          </div>
+          <div className="rounded p-2.5" style={{ backgroundColor: "#0e0e0f" }}>
+            <MicroLabel>Drift Status</MicroLabel>
+            <div style={{
+              marginTop: "4px",
+              fontSize: "11px",
+              fontFamily: "JetBrains Mono, monospace",
+              color: modelDiagnostics?.drift?.status === "drift" ? C.tertiary : modelDiagnostics?.drift?.status === "watch" ? "#fbbf24" : C.primary,
+            }}>
+              {(modelDiagnostics?.drift?.status ?? "n/a").toUpperCase()}
+            </div>
+          </div>
+          <div className="rounded p-2.5" style={{ backgroundColor: "#0e0e0f" }}>
+            <MicroLabel>OOS Win Δ</MicroLabel>
+            <div style={{ marginTop: "4px", fontSize: "11px", fontFamily: "JetBrains Mono, monospace", color: (oosProof?.deltas.winRateDelta ?? 0) >= 0 ? C.primary : C.tertiary }}>
+              {oosProof ? `${(oosProof.deltas.winRateDelta * 100).toFixed(2)}%` : "n/a"}
+            </div>
+          </div>
+          <div className="rounded p-2.5" style={{ backgroundColor: "#0e0e0f" }}>
+            <MicroLabel>OOS Exp ΔR</MicroLabel>
+            <div style={{ marginTop: "4px", fontSize: "11px", fontFamily: "JetBrains Mono, monospace", color: (oosProof?.deltas.expectancyDeltaR ?? 0) >= 0 ? C.primary : C.tertiary }}>
+              {oosProof ? `${oosProof.deltas.expectancyDeltaR >= 0 ? "+" : ""}${oosProof.deltas.expectancyDeltaR.toFixed(2)}` : "n/a"}
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Charts */}

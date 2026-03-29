@@ -3,7 +3,10 @@ export type SetupType =
   | "sweep_reclaim"
   | "continuation_pullback"
   | "cvd_divergence"
-  | "breakout_failure";
+  | "breakout_failure"
+  | "vwap_reclaim"
+  | "opening_range_breakout"
+  | "post_news_continuation";
 
 export type Direction = "long" | "short";
 
