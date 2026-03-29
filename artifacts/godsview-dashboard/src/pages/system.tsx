@@ -1,5 +1,6 @@
+import { useEffect, useState } from "react";
 import { useGetSystemStatus } from "@workspace/api-client-react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 
@@ -31,6 +32,24 @@ type StreamStatus = {
   ticksReceived?: number;
   quotesReceived?: number;
   listenersCount?: number;
+};
+type RiskConfig = {
+  maxRiskPerTradePct: number;
+  maxDailyLossUsd: number;
+  maxOpenExposurePct: number;
+  maxConcurrentPositions: number;
+  maxTradesPerSession: number;
+  cooldownAfterLosses: number;
+  cooldownMinutes: number;
+  blockOnDegradedData: boolean;
+};
+type RuntimeRiskSnapshot = {
+  runtime: {
+    killSwitchActive: boolean;
+    updatedAt: string;
+  };
+  config: RiskConfig;
+  fetched_at?: string;
 };
 
 const LAYER_LABELS: Record<string, string> = {
@@ -72,6 +91,7 @@ function StatusPill({ status }: { status: string }) {
 const PIPELINE_ICONS = ["sensors", "account_tree", "psychology", "smart_toy", "auto_awesome", "shield"];
 
 export default function System() {
+  const queryClient = useQueryClient();
   const { data, isLoading } = useGetSystemStatus();
   const { data: diag, isLoading: diagLoading, refetch: refetchDiag } = useQuery<Diagnostics>({
     queryKey: ["diagnostics"],
@@ -84,6 +104,72 @@ export default function System() {
     refetchInterval: 30_000,
     staleTime: 25_000,
   });
+  const { data: riskSnapshot, isLoading: riskLoading } = useQuery<RuntimeRiskSnapshot>({
+    queryKey: ["system-risk-controls"],
+    queryFn: async () => {
+      const r = await fetch("/api/system/risk");
+      if (!r.ok) throw new Error(`risk controls fetch failed: ${r.status}`);
+      return r.json();
+    },
+    refetchInterval: 30_000,
+  });
+  const [draft, setDraft] = useState<RiskConfig | null>(null);
+  useEffect(() => {
+    if (riskSnapshot && !draft) {
+      setDraft(riskSnapshot.config);
+    }
+  }, [riskSnapshot, draft]);
+
+  const retrainMutation = useMutation({
+    mutationFn: async () => {
+      const r = await fetch("/api/system/retrain", { method: "POST" });
+      if (!r.ok) throw new Error(`retrain failed: ${r.status}`);
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["diagnostics"] });
+      queryClient.invalidateQueries({ queryKey: ["system-status"] });
+    },
+  });
+  const toggleKillSwitchMutation = useMutation({
+    mutationFn: async (active: boolean) => {
+      const r = await fetch("/api/system/kill-switch", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ active }),
+      });
+      if (!r.ok) throw new Error(`kill switch update failed: ${r.status}`);
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["system-risk-controls"] });
+      queryClient.invalidateQueries({ queryKey: ["system-status"] });
+    },
+  });
+  const saveRiskMutation = useMutation({
+    mutationFn: async (payload: RiskConfig) => {
+      const r = await fetch("/api/system/risk", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!r.ok) throw new Error(`risk controls save failed: ${r.status}`);
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["system-risk-controls"] });
+    },
+  });
+  const resetRuntimeMutation = useMutation({
+    mutationFn: async () => {
+      const r = await fetch("/api/system/risk/reset", { method: "POST" });
+      if (!r.ok) throw new Error(`risk runtime reset failed: ${r.status}`);
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["system-risk-controls"] });
+    },
+  });
 
   if (isLoading || !data) {
     return (
@@ -95,6 +181,7 @@ export default function System() {
 
   const healthy = data.overall === "healthy";
   const wsHealthy = Boolean(!streamStatus?.pollingMode && streamStatus?.authenticated && streamStatus?.wsState === 1);
+  const killSwitchActive = Boolean(riskSnapshot?.runtime.killSwitchActive);
 
   return (
     <div className="space-y-8">
@@ -301,6 +388,135 @@ export default function System() {
               </div>
             );
           })}
+        </div>
+      </div>
+
+      {/* Runtime Risk Controls */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <div className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <MicroLabel>Kill Switch</MicroLabel>
+              <div className="font-headline font-bold text-lg mt-1">
+                {killSwitchActive ? "ACTIVE" : "INACTIVE"}
+              </div>
+            </div>
+            <button
+              onClick={() => toggleKillSwitchMutation.mutate(!killSwitchActive)}
+              disabled={toggleKillSwitchMutation.isPending || riskLoading}
+              className={cn("px-4 py-2 rounded text-xs uppercase tracking-wider", "disabled:opacity-50")}
+              style={{
+                backgroundColor: killSwitchActive ? "rgba(156,255,147,0.15)" : "rgba(255,113,98,0.15)",
+                border: `1px solid ${killSwitchActive ? "rgba(156,255,147,0.35)" : "rgba(255,113,98,0.35)"}`,
+                color: killSwitchActive ? C.primary : C.tertiary,
+              }}
+            >
+              {killSwitchActive ? "Deactivate" : "Activate"}
+            </button>
+          </div>
+          <div className="mt-3 text-[10px]" style={{ color: C.muted }}>
+            Updated: {riskSnapshot?.runtime.updatedAt ? format(new Date(riskSnapshot.runtime.updatedAt), "yyyy-MM-dd HH:mm:ss") : "n/a"}
+          </div>
+          <div className="mt-4 flex gap-2">
+            <button
+              onClick={() => retrainMutation.mutate()}
+              disabled={retrainMutation.isPending}
+              className={cn("px-3 py-2 rounded text-[10px] uppercase tracking-wider border", "disabled:opacity-50")}
+              style={{ borderColor: "rgba(102,157,255,0.35)", color: C.secondary, backgroundColor: "rgba(102,157,255,0.12)" }}
+            >
+              {retrainMutation.isPending ? "Retraining..." : "Retrain ML Model"}
+            </button>
+            <button
+              onClick={() => resetRuntimeMutation.mutate()}
+              disabled={resetRuntimeMutation.isPending}
+              className={cn("px-3 py-2 rounded text-[10px] uppercase tracking-wider border", "disabled:opacity-50")}
+              style={{ borderColor: "rgba(173,170,171,0.35)", color: C.muted, backgroundColor: "rgba(173,170,171,0.12)" }}
+            >
+              {resetRuntimeMutation.isPending ? "Resetting..." : "Reset Runtime State"}
+            </button>
+          </div>
+        </div>
+
+        <div className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+          <div className="flex items-center justify-between mb-3">
+            <MicroLabel>Risk Controls</MicroLabel>
+            <button
+              onClick={() => draft && saveRiskMutation.mutate(draft)}
+              disabled={!draft || saveRiskMutation.isPending}
+              className={cn("px-3 py-2 rounded text-[10px] uppercase tracking-wider border", "disabled:opacity-50")}
+              style={{ borderColor: "rgba(156,255,147,0.35)", color: C.primary, backgroundColor: "rgba(156,255,147,0.12)" }}
+            >
+              {saveRiskMutation.isPending ? "Saving..." : "Save Controls"}
+            </button>
+          </div>
+          {draft ? (
+            <div className="grid grid-cols-2 gap-2">
+              <label className="text-[10px] space-y-1" style={{ color: C.muted }}>
+                Max Risk/Trade
+                <input
+                  type="number"
+                  step="0.001"
+                  value={draft.maxRiskPerTradePct}
+                  onChange={(e) => setDraft({ ...draft, maxRiskPerTradePct: Number(e.target.value) })}
+                  className="w-full rounded px-2 py-1 bg-[#111113] border border-[#333] text-zinc-100"
+                />
+              </label>
+              <label className="text-[10px] space-y-1" style={{ color: C.muted }}>
+                Max Daily Loss USD
+                <input
+                  type="number"
+                  step="1"
+                  value={draft.maxDailyLossUsd}
+                  onChange={(e) => setDraft({ ...draft, maxDailyLossUsd: Number(e.target.value) })}
+                  className="w-full rounded px-2 py-1 bg-[#111113] border border-[#333] text-zinc-100"
+                />
+              </label>
+              <label className="text-[10px] space-y-1" style={{ color: C.muted }}>
+                Max Exposure %
+                <input
+                  type="number"
+                  step="0.01"
+                  value={draft.maxOpenExposurePct}
+                  onChange={(e) => setDraft({ ...draft, maxOpenExposurePct: Number(e.target.value) })}
+                  className="w-full rounded px-2 py-1 bg-[#111113] border border-[#333] text-zinc-100"
+                />
+              </label>
+              <label className="text-[10px] space-y-1" style={{ color: C.muted }}>
+                Max Positions
+                <input
+                  type="number"
+                  step="1"
+                  value={draft.maxConcurrentPositions}
+                  onChange={(e) => setDraft({ ...draft, maxConcurrentPositions: Number(e.target.value) })}
+                  className="w-full rounded px-2 py-1 bg-[#111113] border border-[#333] text-zinc-100"
+                />
+              </label>
+              <label className="text-[10px] space-y-1" style={{ color: C.muted }}>
+                Max Trades/Session
+                <input
+                  type="number"
+                  step="1"
+                  value={draft.maxTradesPerSession}
+                  onChange={(e) => setDraft({ ...draft, maxTradesPerSession: Number(e.target.value) })}
+                  className="w-full rounded px-2 py-1 bg-[#111113] border border-[#333] text-zinc-100"
+                />
+              </label>
+              <label className="text-[10px] space-y-1" style={{ color: C.muted }}>
+                Cooldown Minutes
+                <input
+                  type="number"
+                  step="1"
+                  value={draft.cooldownMinutes}
+                  onChange={(e) => setDraft({ ...draft, cooldownMinutes: Number(e.target.value) })}
+                  className="w-full rounded px-2 py-1 bg-[#111113] border border-[#333] text-zinc-100"
+                />
+              </label>
+            </div>
+          ) : (
+            <div className="text-xs" style={{ color: C.muted }}>
+              Loading risk controls...
+            </div>
+          )}
         </div>
       </div>
 

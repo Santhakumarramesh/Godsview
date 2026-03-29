@@ -2,6 +2,7 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { claudeVeto, isClaudeAvailable, type ClaudeVetoResult, type SetupContext } from "../lib/claude";
 import { getBars, getBarsHistorical, getLatestBar, getLatestTrade, getAccount, getPositions, hasValidTradingKey, isBrokerKey, placeOrder, getOrders, cancelOrder, cancelAllOrders, closePosition, getTypedPositions, calcPositionSize, getTodayFills, computeRoundTrips, type AlpacaBar, type AlpacaTimeframe, type AlpacaPosition, type AlpacaFillActivity, type PlaceOrderRequest } from "../lib/alpaca";
 import { alpacaStream, type TickListener } from "../lib/alpaca_stream";
+import { getRiskEngineSnapshot, isKillSwitchActive } from "../lib/risk_engine";
 import {
   buildRecallFeatures,
   detectAbsorptionReversal,
@@ -41,9 +42,6 @@ const LEGACY_LIVE_TRADING_ENABLED = String(process.env.GODSVIEW_ENABLE_LIVE_TRAD
 const SYSTEM_MODE = resolveSystemMode(process.env.GODSVIEW_SYSTEM_MODE, {
   liveTradingEnabled: LEGACY_LIVE_TRADING_ENABLED,
 });
-const TRADING_KILL_SWITCH = String(process.env.GODSVIEW_KILL_SWITCH ?? "").toLowerCase() === "true";
-const MAX_DAILY_LOSS_USD = parseEnvFloat("GODSVIEW_MAX_DAILY_LOSS_USD", 250, 0, 5_000_000);
-const MAX_OPEN_EXPOSURE_PCT = parseEnvFloat("GODSVIEW_MAX_OPEN_EXPOSURE_PCT", 0.6, 0, 5);
 const OPERATOR_TOKEN = (process.env.GODSVIEW_OPERATOR_TOKEN ?? "").trim();
 type AccuracyResultRow = typeof accuracyResultsTable.$inferSelect;
 
@@ -83,14 +81,6 @@ let auditEventsTableReady = false;
 function isAlpacaRateLimitError(error: unknown): boolean {
   const message = String(error ?? "");
   return message.includes("Alpaca API 429") || message.toLowerCase().includes("too many requests");
-}
-
-function parseEnvFloat(name: string, fallback: number, min: number, max: number): number {
-  const raw = process.env[name];
-  if (!raw) return fallback;
-  const parsed = Number.parseFloat(raw);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.max(min, Math.min(max, parsed));
 }
 
 function delayMs(ms: number): Promise<void> {
@@ -336,7 +326,7 @@ function getProvidedOperatorToken(req: Request): string | null {
 }
 
 function ensureTradingWriteAccess(req: Request, res: Response): boolean {
-  if (TRADING_KILL_SWITCH) {
+  if (isKillSwitchActive()) {
     void writeAuditEvent(req, {
       eventType: "ORDER_WRITE_BLOCKED",
       decisionState: "BLOCKED_BY_RISK",
@@ -409,9 +399,13 @@ type TradingRiskSnapshot = {
   realizedPnlTodayUsd: number;
   openExposureUsd: number;
   openExposurePct: number;
+  openPositions: number;
+  closedTradesToday: number;
   limits: {
     maxDailyLossUsd: number;
     maxOpenExposurePct: number;
+    maxConcurrentPositions: number;
+    maxTradesPerSession: number;
   };
 };
 
@@ -433,14 +427,19 @@ async function computeTradingRiskSnapshot(): Promise<TradingRiskSnapshot | null>
   const openExposurePct = openExposureUsd / equity;
   const dailySummary = computeRoundTrips(fills);
 
+  const controls = getRiskEngineSnapshot().config;
   return {
     accountEquityUsd: equity,
     realizedPnlTodayUsd: dailySummary.totalPnl,
     openExposureUsd,
     openExposurePct: Number.isFinite(openExposurePct) ? openExposurePct : 0,
+    openPositions: positions.length,
+    closedTradesToday: dailySummary.trades,
     limits: {
-      maxDailyLossUsd: MAX_DAILY_LOSS_USD,
-      maxOpenExposurePct: MAX_OPEN_EXPOSURE_PCT,
+      maxDailyLossUsd: controls.maxDailyLossUsd,
+      maxOpenExposurePct: controls.maxOpenExposurePct,
+      maxConcurrentPositions: controls.maxConcurrentPositions,
+      maxTradesPerSession: controls.maxTradesPerSession,
     },
   };
 }
@@ -503,6 +502,46 @@ async function enforceTradeRiskRails(
     res.status(403).json({
       error: "daily_loss_limit_reached",
       message: "Daily realized loss limit reached. Trade blocked.",
+      decision_state: "BLOCKED_BY_RISK",
+      system_mode: SYSTEM_MODE,
+      risk: snapshot,
+    });
+    return false;
+  }
+
+  if (snapshot.limits.maxConcurrentPositions > 0 && snapshot.openPositions >= snapshot.limits.maxConcurrentPositions) {
+    void writeAuditEvent(req, {
+      eventType: "ORDER_RISK_BLOCKED",
+      decisionState: "BLOCKED_BY_RISK",
+      actor: "api",
+      instrument: orderReq.symbol,
+      symbol: orderReq.symbol,
+      reason: "max_concurrent_positions_reached",
+      payload: snapshot,
+    });
+    res.status(403).json({
+      error: "max_concurrent_positions_reached",
+      message: "Max concurrent positions limit reached. Trade blocked.",
+      decision_state: "BLOCKED_BY_RISK",
+      system_mode: SYSTEM_MODE,
+      risk: snapshot,
+    });
+    return false;
+  }
+
+  if (snapshot.limits.maxTradesPerSession > 0 && snapshot.closedTradesToday >= snapshot.limits.maxTradesPerSession) {
+    void writeAuditEvent(req, {
+      eventType: "ORDER_RISK_BLOCKED",
+      decisionState: "BLOCKED_BY_RISK",
+      actor: "api",
+      instrument: orderReq.symbol,
+      symbol: orderReq.symbol,
+      reason: "max_trades_per_session_reached",
+      payload: snapshot,
+    });
+    res.status(403).json({
+      error: "max_trades_per_session_reached",
+      message: "Max trades per session reached. Trade blocked.",
       decision_state: "BLOCKED_BY_RISK",
       system_mode: SYSTEM_MODE,
       risk: snapshot,
@@ -1053,19 +1092,22 @@ router.get("/alpaca/risk/status", async (_req, res) => {
         error: "risk_data_unavailable",
         message: "Unable to compute risk snapshot.",
         system_mode: SYSTEM_MODE,
-        trading_kill_switch: TRADING_KILL_SWITCH,
+        trading_kill_switch: isKillSwitchActive(),
       });
       return;
     }
 
+    const killSwitchActive = isKillSwitchActive();
     res.json({
       system_mode: SYSTEM_MODE,
-      trading_kill_switch: TRADING_KILL_SWITCH,
-      live_writes_enabled: canWriteOrders(SYSTEM_MODE) && !TRADING_KILL_SWITCH,
+      trading_kill_switch: killSwitchActive,
+      live_writes_enabled: canWriteOrders(SYSTEM_MODE) && !killSwitchActive,
       risk: snapshot,
       gate_state:
         (snapshot.limits.maxDailyLossUsd > 0 && snapshot.realizedPnlTodayUsd <= -snapshot.limits.maxDailyLossUsd) ||
-        (snapshot.limits.maxOpenExposurePct > 0 && snapshot.openExposurePct > snapshot.limits.maxOpenExposurePct)
+        (snapshot.limits.maxOpenExposurePct > 0 && snapshot.openExposurePct > snapshot.limits.maxOpenExposurePct) ||
+        (snapshot.limits.maxConcurrentPositions > 0 && snapshot.openPositions >= snapshot.limits.maxConcurrentPositions) ||
+        (snapshot.limits.maxTradesPerSession > 0 && snapshot.closedTradesToday >= snapshot.limits.maxTradesPerSession)
           ? "BLOCKED_BY_RISK"
           : "PASS",
     });
@@ -1418,11 +1460,12 @@ router.post("/alpaca/analyze", async (req, res) => {
       },
     });
 
+    const killSwitchActive = isKillSwitchActive();
     res.json({
       instrument,
       alpaca_symbol: alpacaSymbol,
       system_mode: SYSTEM_MODE,
-      trading_kill_switch: TRADING_KILL_SWITCH,
+      trading_kill_switch: killSwitchActive,
       indicator_hints: recall.indicator_hints,
       analyzed_at: new Date().toISOString(),
       regime,
@@ -2508,13 +2551,14 @@ router.get("/system/diagnostics", async (req, res) => {
       ? "degraded"
       : "partial";
 
+  const killSwitchActive = isKillSwitchActive();
   res.json({
     system_status: systemStatus,
     timestamp: new Date().toISOString(),
     system_mode: SYSTEM_MODE,
-    live_writes_enabled: canWriteOrders(SYSTEM_MODE),
+    live_writes_enabled: canWriteOrders(SYSTEM_MODE) && !killSwitchActive,
     live_mode: isLiveMode(SYSTEM_MODE),
-    trading_kill_switch: TRADING_KILL_SWITCH,
+    trading_kill_switch: killSwitchActive,
     layers,
     recommendations: [
       ...(!hasValidTradingKey ? ["Add Trading API keys (PK/AK) from app.alpaca.markets to unlock stock data"] : []),

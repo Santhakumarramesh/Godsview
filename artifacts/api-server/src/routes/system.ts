@@ -4,13 +4,13 @@ import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { getTypedPositions, getAccount, hasValidTradingKey, isBrokerKey } from "../lib/alpaca";
 import { getModelStatus, retrainModel } from "../lib/ml_model";
 import { resolveSystemMode, canWriteOrders, isLiveMode } from "@workspace/strategy-core";
+import { getRiskEngineSnapshot, isKillSwitchActive, resetRiskEngineRuntime, setKillSwitchActive, updateRiskConfig } from "../lib/risk_engine";
 
 const router: IRouter = Router();
 const LEGACY_LIVE_TRADING_ENABLED = String(process.env.GODSVIEW_ENABLE_LIVE_TRADING ?? "").toLowerCase() === "true";
 const SYSTEM_MODE = resolveSystemMode(process.env.GODSVIEW_SYSTEM_MODE, {
   liveTradingEnabled: LEGACY_LIVE_TRADING_ENABLED,
 });
-const TRADING_KILL_SWITCH = String(process.env.GODSVIEW_KILL_SWITCH ?? "").toLowerCase() === "true";
 const CREATE_AUDIT_EVENTS_TABLE_SQL = `
   CREATE TABLE IF NOT EXISTS audit_events (
     id SERIAL PRIMARY KEY,
@@ -116,13 +116,14 @@ router.get("/system/status", async (req, res) => {
     if (hour >= 13 && hour < 22) active_session = "NY";
     else if (hour >= 7 && hour < 13) active_session = "London";
     else if (hour >= 0 && hour < 7) active_session = "Asian";
+    const killSwitchActive = isKillSwitchActive();
 
     res.json({
       overall,
       system_mode: SYSTEM_MODE,
-      live_writes_enabled: canWriteOrders(SYSTEM_MODE) && !TRADING_KILL_SWITCH,
+      live_writes_enabled: canWriteOrders(SYSTEM_MODE) && !killSwitchActive,
       live_mode: isLiveMode(SYSTEM_MODE),
-      trading_kill_switch: TRADING_KILL_SWITCH,
+      trading_kill_switch: killSwitchActive,
       layers,
       news_lockout_active: false,
       active_instrument: activeInstrument,
@@ -150,6 +151,59 @@ router.post("/system/retrain", async (req, res) => {
   } catch (err) {
     res.status(500).json({ success: false, message: String(err) });
   }
+});
+
+// ─── GET /api/system/risk — current runtime risk controls ───────────────────
+router.get("/system/risk", (_req, res) => {
+  res.json({
+    ...getRiskEngineSnapshot(),
+    fetched_at: new Date().toISOString(),
+  });
+});
+
+// ─── PUT /api/system/risk — update runtime risk controls ────────────────────
+router.put("/system/risk", (req, res) => {
+  try {
+    const body = (typeof req.body === "object" && req.body !== null ? req.body : {}) as Record<string, unknown>;
+    const updated = updateRiskConfig({
+      maxRiskPerTradePct: body.maxRiskPerTradePct as number | undefined,
+      maxDailyLossUsd: body.maxDailyLossUsd as number | undefined,
+      maxOpenExposurePct: body.maxOpenExposurePct as number | undefined,
+      maxConcurrentPositions: body.maxConcurrentPositions as number | undefined,
+      maxTradesPerSession: body.maxTradesPerSession as number | undefined,
+      cooldownAfterLosses: body.cooldownAfterLosses as number | undefined,
+      cooldownMinutes: body.cooldownMinutes as number | undefined,
+      blockOnDegradedData: body.blockOnDegradedData as boolean | undefined,
+    });
+    res.json({
+      ...updated,
+      updated_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to update runtime risk controls");
+    res.status(500).json({ error: "risk_update_failed", message: "Failed to update runtime risk controls" });
+  }
+});
+
+// ─── POST /api/system/risk/reset — reset runtime risk state ─────────────────
+router.post("/system/risk/reset", (_req, res) => {
+  const state = resetRiskEngineRuntime();
+  res.json({
+    ...state,
+    reset_at: new Date().toISOString(),
+  });
+});
+
+// ─── POST /api/system/kill-switch — toggle runtime kill switch ──────────────
+router.post("/system/kill-switch", (req, res) => {
+  const body = (typeof req.body === "object" && req.body !== null ? req.body : {}) as Record<string, unknown>;
+  const active = Boolean(body.active);
+  const state = setKillSwitchActive(active);
+  res.json({
+    ...state,
+    active,
+    updated_at: new Date().toISOString(),
+  });
 });
 
 // ─── GET /api/system/audit — recent audit events ─────────────────────────────
