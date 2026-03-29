@@ -1,6 +1,8 @@
 import { Router, type IRouter } from "express";
 import { db, accuracyResultsTable, auditEventsTable, signalsTable, tradesTable } from "@workspace/db";
 import { and, desc, eq, gte, isNotNull, or, sql } from "drizzle-orm";
+import { readFile } from "node:fs/promises";
+import * as path from "node:path";
 import { getTypedPositions, getAccount, hasValidTradingKey, isBrokerKey } from "../lib/alpaca";
 import { getModelDiagnostics, getModelStatus, retrainModel } from "../lib/ml_model";
 import { resolveSystemMode, canWriteOrders, isLiveMode } from "@workspace/strategy-core";
@@ -31,6 +33,159 @@ let auditEventsTableReady = false;
 // ── Server-side cache for Alpaca data (avoid 429 rate limits) ───────────────
 let _alpacaCache: { positions: any[]; account: any; ts: number } = { positions: [], account: null, ts: 0 };
 const ALPACA_CACHE_TTL = 15_000; // 15 seconds
+const GOV_MIN_TRADES = 30;
+const GOV_MIN_PROFIT_FACTOR = 1.5;
+const GOV_MAX_DRAWDOWN_PCT = 20;
+const GOV_MIN_EXPECTANCY_R = 0.2;
+const GOV_MIN_WIN_RATE = 0.4;
+
+type JsonRecord = Record<string, unknown>;
+
+type GovernanceMetrics = {
+  trades: number;
+  closed_trades: number;
+  wins: number;
+  losses: number;
+  win_rate: number;
+  profit_factor: number;
+  expectancy_r: number;
+  max_drawdown_pct: number;
+  total_pnl_pct: number;
+};
+
+function parseNum(value: unknown, fallback = 0): number {
+  const parsed = Number.parseFloat(String(value ?? ""));
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function parseIntSafe(value: unknown, fallback = 0): number {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function toTupleReasonList(value: unknown): Array<{ reason: string; count: number }> {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => {
+      if (Array.isArray(entry) && entry.length >= 2) {
+        return {
+          reason: String(entry[0] ?? "unknown"),
+          count: parseIntSafe(entry[1], 0),
+        };
+      }
+      if (typeof entry === "object" && entry !== null) {
+        const row = entry as JsonRecord;
+        return {
+          reason: String(row.reason ?? "unknown"),
+          count: parseIntSafe(row.count, 0),
+        };
+      }
+      return null;
+    })
+    .filter((row): row is { reason: string; count: number } => row !== null && row.reason.length > 0);
+}
+
+function evaluateReplayRecordsMetrics(recordsRaw: unknown): GovernanceMetrics {
+  const records = Array.isArray(recordsRaw) ? (recordsRaw as JsonRecord[]) : [];
+  if (!records.length) {
+    return {
+      trades: 0,
+      closed_trades: 0,
+      wins: 0,
+      losses: 0,
+      win_rate: 0,
+      profit_factor: 0,
+      expectancy_r: 0,
+      max_drawdown_pct: 0,
+      total_pnl_pct: 0,
+    };
+  }
+
+  let wins = 0;
+  let losses = 0;
+  let grossWin = 0;
+  let grossLoss = 0;
+  let totalR = 0;
+  let totalPnl = 0;
+  let equity = 100;
+  let peak = equity;
+  let maxDrawdown = 0;
+
+  for (const row of records) {
+    const outcome = String(row.outcome ?? "").toLowerCase();
+    const rr = parseNum(row.rr, 0);
+    const pnlPct = parseNum(row.pnl_pct, 0);
+    totalPnl += pnlPct;
+
+    if (outcome === "win") {
+      wins += 1;
+      grossWin += Math.max(pnlPct, 0);
+      totalR += rr;
+    } else if (outcome === "loss") {
+      losses += 1;
+      grossLoss += Math.abs(Math.min(pnlPct, 0));
+      totalR -= 1;
+    }
+
+    equity = equity * (1 + pnlPct / 100);
+    peak = Math.max(peak, equity);
+    const drawdown = ((peak - equity) / Math.max(peak, 1e-9)) * 100;
+    maxDrawdown = Math.max(maxDrawdown, drawdown);
+  }
+
+  const closed = wins + losses;
+  return {
+    trades: records.length,
+    closed_trades: closed,
+    wins,
+    losses,
+    win_rate: closed > 0 ? wins / closed : 0,
+    profit_factor: grossLoss > 0 ? grossWin / grossLoss : grossWin > 0 ? 999 : 0,
+    expectancy_r: closed > 0 ? totalR / closed : 0,
+    max_drawdown_pct: maxDrawdown,
+    total_pnl_pct: totalPnl,
+  };
+}
+
+function normalizeGovernanceMetrics(orchestrator: JsonRecord | null, replay: JsonRecord | null): GovernanceMetrics {
+  const strategyControl = (orchestrator?.data as JsonRecord | undefined)?.strategy_control as JsonRecord | undefined;
+  const strategyMetrics = strategyControl?.metrics as JsonRecord | undefined;
+  if (strategyMetrics) {
+    return {
+      trades: parseIntSafe(strategyMetrics.trades, 0),
+      closed_trades: parseIntSafe(strategyMetrics.closed_trades ?? strategyMetrics.trades, 0),
+      wins: parseIntSafe(strategyMetrics.wins, 0),
+      losses: parseIntSafe(strategyMetrics.losses, 0),
+      win_rate: parseNum(strategyMetrics.win_rate, 0),
+      profit_factor: parseNum(strategyMetrics.profit_factor, 0),
+      expectancy_r: parseNum(strategyMetrics.expectancy_r, 0),
+      max_drawdown_pct: parseNum(strategyMetrics.max_drawdown_pct, 0),
+      total_pnl_pct: parseNum(strategyMetrics.total_pnl_pct, 0),
+    };
+  }
+  return evaluateReplayRecordsMetrics(replay?.records);
+}
+
+function resolveProcessedArtifactsDir(): string {
+  return path.resolve(process.cwd(), "godsview-openbb", "data", "processed");
+}
+
+async function readJsonArtifact(filename: string): Promise<{
+  exists: boolean;
+  path: string;
+  data: JsonRecord | null;
+  error: string | null;
+}> {
+  const artifactPath = path.join(resolveProcessedArtifactsDir(), filename);
+  try {
+    const raw = await readFile(artifactPath, "utf8");
+    const parsed = JSON.parse(raw) as JsonRecord;
+    return { exists: true, path: artifactPath, data: parsed, error: null };
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err);
+    return { exists: false, path: artifactPath, data: null, error };
+  }
+}
 
 async function getCachedAlpacaData() {
   if (Date.now() - _alpacaCache.ts < ALPACA_CACHE_TTL) {
@@ -682,6 +837,165 @@ router.get("/system/audit/summary", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to fetch audit summary");
     res.status(500).json({ error: "audit_summary_failed", message: "Failed to fetch audit summary" });
+  }
+});
+
+// ─── GET /api/system/governance/overview — strict market-readiness gates ───
+router.get("/system/governance/overview", async (req, res) => {
+  try {
+    const [orchestratorArtifact, replayArtifact, dailyArtifact] = await Promise.all([
+      readJsonArtifact("latest_orchestrator_run.json"),
+      readJsonArtifact("replay_latest.json"),
+      readJsonArtifact("daily_report_latest.json"),
+    ]);
+
+    const orchestrator = orchestratorArtifact.data;
+    const replay = replayArtifact.data;
+    const daily = dailyArtifact.data;
+    const strategyControl = ((orchestrator?.data as JsonRecord | undefined)?.strategy_control as JsonRecord | undefined) ?? null;
+    const metrics = normalizeGovernanceMetrics(orchestrator, replay);
+    const strategyStatus = String(strategyControl?.status ?? "UNKNOWN").toUpperCase();
+    const promotionReady = Boolean(strategyControl?.promotion_ready ?? false);
+    const strategyReasons = Array.isArray(strategyControl?.reasons)
+      ? (strategyControl?.reasons as unknown[]).map((reason) => String(reason))
+      : [];
+    const dailyTopReasons = toTupleReasonList(daily?.top_reasons);
+    const replayGeneratedAt = typeof replay?.generated_at === "string" ? replay.generated_at : null;
+    const orchestratorGeneratedAt = typeof orchestrator?.generated_at === "string" ? orchestrator.generated_at : null;
+    const dailyGeneratedAt = typeof daily?.generated_at === "string" ? daily.generated_at : null;
+    const checks = [
+      {
+        id: "strategy_active",
+        label: "Strategy state is ACTIVE",
+        pass: strategyStatus === "ACTIVE",
+        actual: strategyStatus,
+        target: "ACTIVE",
+      },
+      {
+        id: "promotion_ready",
+        label: "Promotion gate ready",
+        pass: promotionReady,
+        actual: promotionReady,
+        target: true,
+      },
+      {
+        id: "sample_size",
+        label: "Closed trades sample size",
+        pass: metrics.closed_trades >= GOV_MIN_TRADES,
+        actual: metrics.closed_trades,
+        target: `>= ${GOV_MIN_TRADES}`,
+      },
+      {
+        id: "profit_factor",
+        label: "Profit factor",
+        pass: metrics.profit_factor >= GOV_MIN_PROFIT_FACTOR,
+        actual: Number(metrics.profit_factor.toFixed(4)),
+        target: `>= ${GOV_MIN_PROFIT_FACTOR}`,
+      },
+      {
+        id: "expectancy_r",
+        label: "Expectancy (R)",
+        pass: metrics.expectancy_r >= GOV_MIN_EXPECTANCY_R,
+        actual: Number(metrics.expectancy_r.toFixed(4)),
+        target: `>= ${GOV_MIN_EXPECTANCY_R}`,
+      },
+      {
+        id: "drawdown",
+        label: "Max drawdown (%)",
+        pass: metrics.max_drawdown_pct <= GOV_MAX_DRAWDOWN_PCT,
+        actual: Number(metrics.max_drawdown_pct.toFixed(4)),
+        target: `<= ${GOV_MAX_DRAWDOWN_PCT}`,
+      },
+      {
+        id: "win_rate",
+        label: "Win rate",
+        pass: metrics.win_rate >= GOV_MIN_WIN_RATE,
+        actual: Number(metrics.win_rate.toFixed(4)),
+        target: `>= ${GOV_MIN_WIN_RATE}`,
+      },
+      {
+        id: "daily_health",
+        label: "Daily system health",
+        pass: String(daily?.system_health ?? "").toUpperCase() !== "DEGRADED",
+        actual: String(daily?.system_health ?? "UNKNOWN").toUpperCase(),
+        target: "GOOD",
+      },
+    ];
+
+    const missingArtifacts: string[] = [];
+    if (!orchestratorArtifact.exists) missingArtifacts.push("latest_orchestrator_run.json");
+    if (!replayArtifact.exists) missingArtifacts.push("replay_latest.json");
+    if (!dailyArtifact.exists) missingArtifacts.push("daily_report_latest.json");
+
+    const failedChecks = checks.filter((check) => !check.pass).map((check) => check.id);
+    const pass = failedChecks.length === 0 && missingArtifacts.length === 0;
+    const reasons = [
+      ...missingArtifacts.map((name) => `missing_artifact:${name}`),
+      ...failedChecks.map((id) => `failed_check:${id}`),
+      ...strategyReasons.map((reason) => `strategy_reason:${reason}`),
+    ];
+
+    res.json({
+      pass,
+      status: pass ? "market_ready" : "needs_work",
+      generated_at: new Date().toISOString(),
+      strict_thresholds: {
+        min_closed_trades: GOV_MIN_TRADES,
+        min_profit_factor: GOV_MIN_PROFIT_FACTOR,
+        min_expectancy_r: GOV_MIN_EXPECTANCY_R,
+        max_drawdown_pct: GOV_MAX_DRAWDOWN_PCT,
+        min_win_rate: GOV_MIN_WIN_RATE,
+      },
+      strategy_control: {
+        status: strategyStatus,
+        promotion_ready: promotionReady,
+        reasons: strategyReasons,
+      },
+      metrics: {
+        trades: metrics.trades,
+        closed_trades: metrics.closed_trades,
+        wins: metrics.wins,
+        losses: metrics.losses,
+        win_rate: Number(metrics.win_rate.toFixed(6)),
+        profit_factor: Number(metrics.profit_factor.toFixed(6)),
+        expectancy_r: Number(metrics.expectancy_r.toFixed(6)),
+        max_drawdown_pct: Number(metrics.max_drawdown_pct.toFixed(6)),
+        total_pnl_pct: Number(metrics.total_pnl_pct.toFixed(6)),
+      },
+      daily_report: {
+        date: String(daily?.date ?? ""),
+        symbol: String(daily?.symbol ?? "ALL"),
+        trades_taken: parseIntSafe(daily?.trades_taken, 0),
+        trades_skipped_or_blocked: parseIntSafe(daily?.trades_skipped_or_blocked, 0),
+        system_health: String(daily?.system_health ?? "UNKNOWN").toUpperCase(),
+        top_reasons: dailyTopReasons,
+      },
+      checks,
+      reasons,
+      sources: {
+        orchestrator: {
+          exists: orchestratorArtifact.exists,
+          path: orchestratorArtifact.path,
+          generated_at: orchestratorGeneratedAt,
+          error: orchestratorArtifact.error,
+        },
+        replay: {
+          exists: replayArtifact.exists,
+          path: replayArtifact.path,
+          generated_at: replayGeneratedAt,
+          error: replayArtifact.error,
+        },
+        daily_report: {
+          exists: dailyArtifact.exists,
+          path: dailyArtifact.path,
+          generated_at: dailyGeneratedAt,
+          error: dailyArtifact.error,
+        },
+      },
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch governance overview");
+    res.status(500).json({ error: "governance_overview_failed", message: "Failed to fetch governance overview" });
   }
 });
 

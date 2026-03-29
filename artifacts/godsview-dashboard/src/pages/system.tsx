@@ -202,6 +202,71 @@ type ModelDiagnostics = {
   } | null;
   fetched_at: string;
 };
+type GovernanceCheck = {
+  id: string;
+  label: string;
+  pass: boolean;
+  actual: string | number | boolean;
+  target: string | number | boolean;
+};
+type GovernanceOverview = {
+  pass: boolean;
+  status: "market_ready" | "needs_work";
+  generated_at: string;
+  strict_thresholds: {
+    min_closed_trades: number;
+    min_profit_factor: number;
+    min_expectancy_r: number;
+    max_drawdown_pct: number;
+    min_win_rate: number;
+  };
+  strategy_control: {
+    status: string;
+    promotion_ready: boolean;
+    reasons: string[];
+  };
+  metrics: {
+    trades: number;
+    closed_trades: number;
+    wins: number;
+    losses: number;
+    win_rate: number;
+    profit_factor: number;
+    expectancy_r: number;
+    max_drawdown_pct: number;
+    total_pnl_pct: number;
+  };
+  daily_report: {
+    date: string;
+    symbol: string;
+    trades_taken: number;
+    trades_skipped_or_blocked: number;
+    system_health: string;
+    top_reasons: Array<{ reason: string; count: number }>;
+  };
+  checks: GovernanceCheck[];
+  reasons: string[];
+  sources: {
+    orchestrator: {
+      exists: boolean;
+      path: string;
+      generated_at: string | null;
+      error: string | null;
+    };
+    replay: {
+      exists: boolean;
+      path: string;
+      generated_at: string | null;
+      error: string | null;
+    };
+    daily_report: {
+      exists: boolean;
+      path: string;
+      generated_at: string | null;
+      error: string | null;
+    };
+  };
+};
 
 const LAYER_LABELS: Record<string, string> = {
   data_feed: "Data Feed (Alpaca)",
@@ -345,6 +410,16 @@ export default function System() {
     refetchInterval: 60_000,
     staleTime: 45_000,
   });
+  const { data: governanceOverview } = useQuery<GovernanceOverview>({
+    queryKey: ["system-governance-overview"],
+    queryFn: async () => {
+      const r = await fetch("/api/system/governance/overview");
+      if (!r.ok) throw new Error(`governance overview fetch failed: ${r.status}`);
+      return r.json();
+    },
+    refetchInterval: 45_000,
+    staleTime: 30_000,
+  });
   const [draft, setDraft] = useState<RiskConfig | null>(null);
   useEffect(() => {
     if (riskSnapshot && !draft) {
@@ -365,6 +440,7 @@ export default function System() {
       queryClient.invalidateQueries({ queryKey: ["proof-by-setup"] });
       queryClient.invalidateQueries({ queryKey: ["proof-by-regime"] });
       queryClient.invalidateQueries({ queryKey: ["proof-oos-vs-is"] });
+      queryClient.invalidateQueries({ queryKey: ["system-governance-overview"] });
     },
   });
   const toggleKillSwitchMutation = useMutation({
@@ -382,6 +458,7 @@ export default function System() {
       queryClient.invalidateQueries({ queryKey: ["system-status"] });
       queryClient.invalidateQueries({ queryKey: ["live-risk-status"] });
       queryClient.invalidateQueries({ queryKey: ["system-audit-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["system-governance-overview"] });
     },
   });
   const saveRiskMutation = useMutation({
@@ -398,6 +475,7 @@ export default function System() {
       queryClient.invalidateQueries({ queryKey: ["system-risk-controls"] });
       queryClient.invalidateQueries({ queryKey: ["live-risk-status"] });
       queryClient.invalidateQueries({ queryKey: ["system-audit-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["system-governance-overview"] });
     },
   });
   const resetRuntimeMutation = useMutation({
@@ -410,6 +488,7 @@ export default function System() {
       queryClient.invalidateQueries({ queryKey: ["system-risk-controls"] });
       queryClient.invalidateQueries({ queryKey: ["live-risk-status"] });
       queryClient.invalidateQueries({ queryKey: ["system-audit-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["system-governance-overview"] });
     },
   });
 
@@ -607,6 +686,108 @@ export default function System() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Governance Readiness */}
+      <div className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined" style={{ fontSize: "14px", color: governanceOverview?.pass ? C.primary : "#fbbf24" }}>gavel</span>
+            <MicroLabel>Governance Readiness</MicroLabel>
+            <StatusPill status={governanceOverview?.pass ? "live" : "degraded"} />
+          </div>
+          <span style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: C.outlineVar }}>
+            {governanceOverview?.generated_at ? format(new Date(governanceOverview.generated_at), "HH:mm:ss") : "n/a"}
+          </span>
+        </div>
+        {governanceOverview ? (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+              <div className="rounded p-2.5" style={{ backgroundColor: "#0e0e0f", border: `1px solid ${C.border}` }}>
+                <MicroLabel>Strategy State</MicroLabel>
+                <div style={{ marginTop: "6px", fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: governanceOverview.strategy_control.status === "ACTIVE" ? C.primary : governanceOverview.strategy_control.status === "WEAK" ? "#fbbf24" : C.tertiary }}>
+                  {governanceOverview.strategy_control.status}
+                </div>
+              </div>
+              <div className="rounded p-2.5" style={{ backgroundColor: "#0e0e0f", border: `1px solid ${C.border}` }}>
+                <MicroLabel>Closed Trades</MicroLabel>
+                <div style={{ marginTop: "6px", fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: C.secondary }}>
+                  {governanceOverview.metrics.closed_trades}
+                </div>
+              </div>
+              <div className="rounded p-2.5" style={{ backgroundColor: "#0e0e0f", border: `1px solid ${C.border}` }}>
+                <MicroLabel>Profit Factor</MicroLabel>
+                <div style={{ marginTop: "6px", fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: governanceOverview.metrics.profit_factor >= governanceOverview.strict_thresholds.min_profit_factor ? C.primary : C.tertiary }}>
+                  {governanceOverview.metrics.profit_factor.toFixed(3)}
+                </div>
+              </div>
+              <div className="rounded p-2.5" style={{ backgroundColor: "#0e0e0f", border: `1px solid ${C.border}` }}>
+                <MicroLabel>Max Drawdown</MicroLabel>
+                <div style={{ marginTop: "6px", fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: governanceOverview.metrics.max_drawdown_pct <= governanceOverview.strict_thresholds.max_drawdown_pct ? C.primary : C.tertiary }}>
+                  {governanceOverview.metrics.max_drawdown_pct.toFixed(2)}%
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 mt-3">
+              <div className="rounded p-3" style={{ backgroundColor: "#0f0f10", border: `1px solid ${C.border}` }}>
+                <div className="flex items-center justify-between mb-2">
+                  <MicroLabel>Strict Checks</MicroLabel>
+                  <span style={{ fontSize: "9px", color: C.outlineVar, fontFamily: "JetBrains Mono, monospace" }}>
+                    {governanceOverview.checks.filter((c) => c.pass).length}/{governanceOverview.checks.length} pass
+                  </span>
+                </div>
+                <div className="space-y-1.5">
+                  {governanceOverview.checks.map((check) => (
+                    <div key={check.id} className="rounded px-2 py-1.5 flex items-center justify-between" style={{ border: `1px solid ${C.border}`, backgroundColor: "#131314" }}>
+                      <div>
+                        <div style={{ fontSize: "10px", fontFamily: "Space Grotesk", fontWeight: 700 }}>{check.label}</div>
+                        <div style={{ fontSize: "9px", color: C.muted, fontFamily: "JetBrains Mono, monospace" }}>
+                          actual {String(check.actual)} · target {String(check.target)}
+                        </div>
+                      </div>
+                      <StatusPill status={check.pass ? "live" : "degraded"} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded p-3" style={{ backgroundColor: "#0f0f10", border: `1px solid ${C.border}` }}>
+                <div className="flex items-center justify-between mb-2">
+                  <MicroLabel>Data Sources</MicroLabel>
+                  <span style={{ fontSize: "9px", color: C.outlineVar, fontFamily: "JetBrains Mono, monospace" }}>
+                    latest artifacts
+                  </span>
+                </div>
+                <div className="space-y-1.5">
+                  {Object.entries(governanceOverview.sources).map(([key, source]) => (
+                    <div key={key} className="rounded px-2 py-1.5" style={{ border: `1px solid ${C.border}`, backgroundColor: "#131314" }}>
+                      <div className="flex items-center justify-between">
+                        <span style={{ fontSize: "10px", fontFamily: "Space Grotesk", fontWeight: 700 }}>{key.replace(/_/g, " ")}</span>
+                        <StatusPill status={source.exists ? "live" : "offline"} />
+                      </div>
+                      <div style={{ fontSize: "9px", color: C.muted, fontFamily: "JetBrains Mono, monospace", marginTop: "2px" }}>
+                        {source.generated_at ? format(new Date(source.generated_at), "yyyy-MM-dd HH:mm:ss") : "not generated"}
+                      </div>
+                      {!source.exists && source.error && (
+                        <div style={{ fontSize: "9px", color: "#fbbf24", fontFamily: "JetBrains Mono, monospace", marginTop: "2px" }}>
+                          {source.error}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {governanceOverview.reasons.length > 0 && (
+                  <div className="mt-2 text-[9px]" style={{ color: C.muted }}>
+                    Reasons: {governanceOverview.reasons.slice(0, 8).join(", ")}
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="text-xs" style={{ color: C.muted }}>
+            Governance overview unavailable.
+          </div>
+        )}
       </div>
 
       {/* Live Layer Diagnostics */}
