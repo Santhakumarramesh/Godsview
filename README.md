@@ -123,3 +123,9 @@ Next recommended milestones:
 ## Disclaimer
 
 This software is for research and trading-assistance workflows. It does not guarantee profitability. Always use paper mode before any live execution.
+
+## Architecture Doc
+
+Detailed production architecture and phase plan:
+
+- [docs/market-ready-architecture.md](./docs/market-ready-architecture.md)
