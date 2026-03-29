@@ -45,6 +45,12 @@ class AlpacaStreamManager {
   private pollingMode = false;
   private pollTimers = new Map<string, ReturnType<typeof setInterval>>();
   private lastTrade = new Map<string, { price: number; ts: string }>();
+  private pollInFlight = new Set<string>();
+  private readonly FALLBACK_POLL_MS = (() => {
+    const parsed = Number.parseInt(process.env.ALPACA_FALLBACK_POLL_MS ?? "2000", 10);
+    if (!Number.isFinite(parsed)) return 2000;
+    return Math.max(1000, Math.min(parsed, 15_000));
+  })();
 
   // Status tracking
   private wsConnectedAt: number | null = null;
@@ -116,8 +122,25 @@ class AlpacaStreamManager {
   }
 
   unsubscribe(symbol: string, timeframe: string, listener: TickListener) {
-    const key = `${normalizeMarketSymbol(symbol)}:${timeframe}`;
-    this.listeners.get(key)?.delete(listener);
+    const normalizedSymbol = normalizeMarketSymbol(symbol);
+    const key = `${normalizedSymbol}:${timeframe}`;
+    const set = this.listeners.get(key);
+    if (!set) return;
+
+    set.delete(listener);
+    if (set.size === 0) {
+      this.listeners.delete(key);
+    }
+
+    if (!this.hasAnyListenerForSymbol(normalizedSymbol)) {
+      const pollTimer = this.pollTimers.get(normalizedSymbol);
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        this.pollTimers.delete(normalizedSymbol);
+      }
+      this.lastTrade.delete(normalizedSymbol);
+      this.pollInFlight.delete(normalizedSymbol);
+    }
   }
 
   private connect() {
@@ -202,8 +225,8 @@ class AlpacaStreamManager {
         return;
       }
 
-      // Auth failed — fall back to polling
-      console.warn("[stream] auth failed, falling back to REST polling at 500ms");
+      // Auth failed — fall back to slower REST polling to avoid 429s
+      console.warn(`[stream] auth failed, falling back to REST polling at ${this.FALLBACK_POLL_MS}ms`);
       this.pollingMode = true;
       this.ws?.close();
       this.ws = null;
@@ -342,7 +365,7 @@ class AlpacaStreamManager {
     this.reconnectDelay = Math.min(this.reconnectDelay * 2, 30_000);
   }
 
-  // ── Fallback: poll REST every 500ms when WebSocket auth fails ────────────
+  // ── Fallback: poll REST when WebSocket auth fails ────────────────────────
   private startFallbackPolling() {
     const symbols = new Set<string>();
     for (const key of this.listeners.keys()) {
@@ -354,12 +377,14 @@ class AlpacaStreamManager {
 
   private ensurePolling(symbol: string) {
     if (!this.pollingMode || this.pollTimers.has(symbol)) return;
-    console.log(`[stream] starting REST fallback poll for ${symbol} at 500ms`);
-    const timer = setInterval(() => this.pollSymbol(symbol), 500);
+    console.log(`[stream] starting REST fallback poll for ${symbol} at ${this.FALLBACK_POLL_MS}ms`);
+    const timer = setInterval(() => this.pollSymbol(symbol), this.FALLBACK_POLL_MS);
     this.pollTimers.set(symbol, timer);
   }
 
   private async pollSymbol(symbol: string) {
+    if (this.pollInFlight.has(symbol)) return;
+    this.pollInFlight.add(symbol);
     try {
       const { getLatestTrade } = await import("./alpaca.js");
       const trade = await getLatestTrade(normalizeMarketSymbol(symbol));
@@ -379,6 +404,16 @@ class AlpacaStreamManager {
 
       this.broadcastPrice(symbol, trade.price, 0, trade.timestamp);
     } catch { /* silent */ }
+    finally {
+      this.pollInFlight.delete(symbol);
+    }
+  }
+
+  private hasAnyListenerForSymbol(symbol: string): boolean {
+    for (const key of this.listeners.keys()) {
+      if (key.startsWith(`${symbol}:`)) return true;
+    }
+    return false;
   }
 }
 

@@ -421,6 +421,7 @@ router.get("/alpaca/stream", (req, res) => {
 // ── Ticker cache (avoid Alpaca 429 rate limits) ─────────────────────────────
 const _tickerCache: Map<string, { data: any; ts: number }> = new Map();
 const TICKER_CACHE_TTL = 8_000; // 8 seconds
+const _tickerInFlight: Map<string, Promise<{ tickers: unknown[]; fetched_at: string }>> = new Map();
 
 router.get("/alpaca/ticker", async (req, res) => {
   const symbolsParam = String(req.query.symbols ?? "BTCUSD,ETHUSD");
@@ -431,55 +432,78 @@ router.get("/alpaca/ticker", async (req, res) => {
     return;
   }
 
+  const inFlight = _tickerInFlight.get(cacheKey);
+  if (inFlight) {
+    try {
+      const payload = await inFlight;
+      res.setHeader("X-Cache", "INFLIGHT");
+      res.json(payload);
+      return;
+    } catch {
+      // If inflight request failed, continue and create a fresh request.
+    }
+  }
+
   const symbols = symbolsParam.split(",").map((s) => s.trim()).filter(Boolean);
 
-  const results = await Promise.allSettled(
-    symbols.map(async (sym) => {
-      const alpacaSym = toAlpacaSymbol(sym) === sym ? sym : toAlpacaSymbol(sym);
+  const loadPromise: Promise<{ tickers: unknown[]; fetched_at: string }> = (async () => {
+    const results = await Promise.allSettled(
+      symbols.map(async (sym) => {
+        const alpacaSym = toAlpacaSymbol(sym) === sym ? sym : toAlpacaSymbol(sym);
 
-      // Fetch real-time trade price + 5 days of daily bars (ensures prev close available)
-      const fiveDaysAgo = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-      const [trade, dailyBars] = await Promise.all([
-        getLatestTrade(alpacaSym),
-        getBars(alpacaSym, "1Day", 10, fiveDaysAgo).catch(() => [] as AlpacaBar[]),
-      ]);
+        // Fetch real-time trade price + 5 days of daily bars (ensures prev close available)
+        const fiveDaysAgo = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+        const [trade, dailyBars] = await Promise.all([
+          getLatestTrade(alpacaSym),
+          getBars(alpacaSym, "1Day", 10, fiveDaysAgo).catch(() => [] as AlpacaBar[]),
+        ]);
 
-      if (!trade) return { symbol: sym, error: "no_data" };
+        if (!trade) return { symbol: sym, error: "no_data" };
 
-      const price = trade.price;
+        const price = trade.price;
 
-      // Sort oldest → newest; separate today's (still forming) from completed bars
-      const sortedBars = [...dailyBars].sort((a, b) => new Date(a.Timestamp).getTime() - new Date(b.Timestamp).getTime());
-      const todayStr = new Date().toISOString().slice(0, 10);
-      const closedBars = sortedBars.filter((b) => b.Timestamp.slice(0, 10) < todayStr);
-      const prevClose = closedBars.length > 0 ? closedBars[closedBars.length - 1].Close : null;
+        // Sort oldest → newest; separate today's (still forming) from completed bars
+        const sortedBars = [...dailyBars].sort((a, b) => new Date(a.Timestamp).getTime() - new Date(b.Timestamp).getTime());
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const closedBars = sortedBars.filter((b) => b.Timestamp.slice(0, 10) < todayStr);
+        const prevClose = closedBars.length > 0 ? closedBars[closedBars.length - 1].Close : null;
 
-      const todayBar = sortedBars.find((b) => b.Timestamp.slice(0, 10) === todayStr) ?? sortedBars[sortedBars.length - 1];
-      const high = todayBar?.High ?? price;
-      const low = todayBar?.Low ?? price;
-      const volume = todayBar?.Volume ?? 0;
+        const todayBar = sortedBars.find((b) => b.Timestamp.slice(0, 10) === todayStr) ?? sortedBars[sortedBars.length - 1];
+        const high = todayBar?.High ?? price;
+        const low = todayBar?.Low ?? price;
+        const volume = todayBar?.Volume ?? 0;
 
-      const change = prevClose ? price - prevClose : 0;
-      const changePct = prevClose ? (change / prevClose) * 100 : 0;
+        const change = prevClose ? price - prevClose : 0;
+        const changePct = prevClose ? (change / prevClose) * 100 : 0;
 
-      return {
-        symbol: sym,
-        price,
-        change: Math.round(change * 100) / 100,
-        change_pct: Math.round(changePct * 100) / 100,
-        high,
-        low,
-        volume,
-        timestamp: trade.timestamp,
-        direction: change >= 0 ? "up" : "down",
-      };
-    })
-  );
+        return {
+          symbol: sym,
+          price,
+          change: Math.round(change * 100) / 100,
+          change_pct: Math.round(changePct * 100) / 100,
+          high,
+          low,
+          volume,
+          timestamp: trade.timestamp,
+          direction: change >= 0 ? "up" : "down",
+        };
+      }),
+    );
 
-  const tickers = results.map((r) => (r.status === "fulfilled" ? r.value : { error: "fetch_failed" }));
-  const payload = { tickers, fetched_at: new Date().toISOString() };
-  _tickerCache.set(cacheKey, { data: payload, ts: Date.now() });
-  res.json(payload);
+    const tickers = results.map((r) => (r.status === "fulfilled" ? r.value : { error: "fetch_failed" }));
+    const payload = { tickers, fetched_at: new Date().toISOString() };
+    _tickerCache.set(cacheKey, { data: payload, ts: Date.now() });
+    return payload;
+  })();
+
+  _tickerInFlight.set(cacheKey, loadPromise);
+  try {
+    const payload = await loadPromise;
+    res.setHeader("X-Cache", "MISS");
+    res.json(payload);
+  } finally {
+    _tickerInFlight.delete(cacheKey);
+  }
 });
 
 // ─── GET /api/alpaca/account ──────────────────────────────────────────────────

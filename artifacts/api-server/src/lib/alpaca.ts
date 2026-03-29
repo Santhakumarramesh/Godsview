@@ -15,6 +15,9 @@ const PAPER_BASE = "https://paper-api.alpaca.markets";
 const LIVE_BASE = "https://api.alpaca.markets";
 const DATA_BASE = "https://data.alpaca.markets";
 const CRYPTO_BASE = "https://data.alpaca.markets/v1beta3/crypto/us";
+const MAX_RETRIES_429 = 3;
+const inflightFetches = new Map<string, Promise<unknown>>();
+let globalRateLimitUntilMs = 0;
 
 function isCryptoSymbol(symbol: string) {
   const normalized = normalizeMarketSymbol(symbol, "");
@@ -32,15 +35,72 @@ function tradingHeaders(): Record<string, string> {
 }
 
 async function alpacaFetch(url: string, withAuth = true): Promise<unknown> {
-  const headers: Record<string, string> = { Accept: "application/json" };
-  if (withAuth && KEY_ID) Object.assign(headers, tradingHeaders());
+  const inflightKey = `${withAuth ? "auth" : "public"}:${url}`;
+  const existing = inflightFetches.get(inflightKey);
+  if (existing) return existing;
 
-  const resp = await fetch(url, { headers });
-  if (!resp.ok) {
-    const body = await resp.text();
-    throw new Error(`Alpaca API ${resp.status}: ${body}`);
+  const requestPromise = (async () => {
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (withAuth && KEY_ID) Object.assign(headers, tradingHeaders());
+
+    for (let attempt = 0; attempt <= MAX_RETRIES_429; attempt++) {
+      const now = Date.now();
+      if (now < globalRateLimitUntilMs) {
+        await sleep(globalRateLimitUntilMs - now);
+      }
+
+      const resp = await fetch(url, { headers });
+      if (resp.ok) return resp.json();
+
+      const body = await resp.text();
+      if (resp.status === 429 && attempt < MAX_RETRIES_429) {
+        const retryAfterMs = getRetryAfterMs(resp.headers.get("retry-after")) ?? backoffForAttempt(attempt);
+        globalRateLimitUntilMs = Math.max(globalRateLimitUntilMs, Date.now() + retryAfterMs);
+        await sleep(retryAfterMs);
+        continue;
+      }
+
+      throw new Error(`Alpaca API ${resp.status}: ${body}`);
+    }
+
+    throw new Error("Alpaca rate limit retries exhausted");
+  })();
+
+  inflightFetches.set(inflightKey, requestPromise);
+  try {
+    return await requestPromise;
+  } finally {
+    inflightFetches.delete(inflightKey);
   }
-  return resp.json();
+}
+
+function sleep(ms: number): Promise<void> {
+  if (!Number.isFinite(ms) || ms <= 0) return Promise.resolve();
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getRetryAfterMs(rawHeader: string | null): number | null {
+  if (!rawHeader) return null;
+  const value = rawHeader.trim();
+  if (!value) return null;
+
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.floor(seconds * 1000);
+  }
+
+  const dateMs = Date.parse(value);
+  if (Number.isFinite(dateMs)) {
+    return Math.max(0, dateMs - Date.now());
+  }
+
+  return null;
+}
+
+function backoffForAttempt(attempt: number): number {
+  const base = Math.min(15_000, 900 * 2 ** attempt);
+  const jitter = Math.floor(Math.random() * 250);
+  return base + jitter;
 }
 
 export type AlpacaBar = {
@@ -218,7 +278,23 @@ export async function getLatestTrade(symbol: string): Promise<{ price: number; t
       const trade = data.trades?.[cryptoSymbol];
       return trade ? { price: trade.p, timestamp: trade.t } : null;
     }
-    return null;
+
+    if (!hasValidTradingKey) return null;
+
+    const url = `${DATA_BASE}/v2/stocks/${normalizedSymbol}/trades/latest?feed=iex`;
+    const data = await alpacaFetch(url, true) as {
+      trade?: { p?: number; t?: string; price?: number; timestamp?: string };
+    };
+
+    const stockTrade = data.trade;
+    const price = Number(stockTrade?.p ?? stockTrade?.price ?? NaN);
+    const timestamp = String(stockTrade?.t ?? stockTrade?.timestamp ?? "");
+    if (Number.isFinite(price) && timestamp) {
+      return { price, timestamp };
+    }
+
+    const latestBar = await getLatestBar(normalizedSymbol);
+    return latestBar ? { price: latestBar.Close, timestamp: latestBar.Timestamp } : null;
   } catch {
     return null;
   }
