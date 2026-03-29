@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, auditEventsTable, signalsTable, tradesTable } from "@workspace/db";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { getTypedPositions, getAccount, hasValidTradingKey, isBrokerKey } from "../lib/alpaca";
-import { getModelStatus, retrainModel } from "../lib/ml_model";
+import { getModelDiagnostics, getModelStatus, retrainModel } from "../lib/ml_model";
 import { resolveSystemMode, canWriteOrders, isLiveMode } from "@workspace/strategy-core";
 import { getCurrentTradingSession, getRiskEngineSnapshot, isKillSwitchActive, isSessionAllowed, resetRiskEngineRuntime, setKillSwitchActive, updateRiskConfig } from "../lib/risk_engine";
 
@@ -160,6 +160,20 @@ router.post("/system/retrain", async (req, res) => {
     res.json(result);
   } catch (err) {
     res.status(500).json({ success: false, message: String(err) });
+  }
+});
+
+// ─── GET /api/system/model/diagnostics — CV + drift + model status ─────────
+router.get("/system/model/diagnostics", async (req, res) => {
+  try {
+    const diagnostics = await getModelDiagnostics();
+    res.json({
+      ...diagnostics,
+      fetched_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch model diagnostics");
+    res.status(500).json({ error: "model_diagnostics_failed", message: "Failed to fetch model diagnostics" });
   }
 });
 
