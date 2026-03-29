@@ -4,6 +4,7 @@ import { evaluateStrictSweepReclaim, type StrictSweepReclaimOptions } from "../l
 import { orderBookManager } from "../lib/market/orderbook";
 import { normalizeMarketSymbol } from "../lib/market/symbols";
 import type { AlpacaBar } from "../lib/alpaca";
+import type { StrictSweepReclaimDecision } from "../lib/strict_setup_engine";
 
 const router = Router();
 
@@ -80,6 +81,23 @@ type KeyMetricRow = {
   winRate: number;
   avgRiskReward: number;
   expectancyR: number;
+};
+
+type PromotionThresholds = {
+  minClosedSignals: number;
+  minWinRatePct: number;
+  minExpectancyR: number;
+  minPassRatePct: number;
+  minAvgConfidence: number;
+  maxEce: number;
+  maxBrier: number;
+};
+
+type PromotionFailure = {
+  check: string;
+  actual: number;
+  required: number;
+  comparator: ">=" | "<=";
 };
 
 function clampProbability(value: number): number {
@@ -335,6 +353,55 @@ function computeStrictReportMetrics(
   };
 }
 
+function parsePromotionThresholds(req: Request): PromotionThresholds {
+  return {
+    minClosedSignals: Math.round(parseNumber(req.query.min_closed_signals, 120, 20, 10000)),
+    minWinRatePct: parseNumber(req.query.min_win_rate_pct, 54, 1, 100),
+    minExpectancyR: parseNumber(req.query.min_expectancy_r, 0.12, -1, 10),
+    minPassRatePct: parseNumber(req.query.min_pass_rate_pct, 20, 0, 100),
+    minAvgConfidence: parseNumber(req.query.min_avg_confidence, 0.5, 0, 1),
+    maxEce: parseNumber(req.query.max_ece, 0.12, 0, 1),
+    maxBrier: parseNumber(req.query.max_brier, 0.26, 0, 1),
+  };
+}
+
+function evaluatePromotionReadiness(
+  metrics: ReturnType<typeof computeStrictReportMetrics>,
+  thresholds: PromotionThresholds,
+): { promote: boolean; failedChecks: PromotionFailure[] } {
+  const failedChecks: PromotionFailure[] = [];
+
+  const requireMin = (check: string, actual: number, required: number): void => {
+    if (actual < required) failedChecks.push({ check, actual, required, comparator: ">=" });
+  };
+  const requireMax = (check: string, actual: number, required: number): void => {
+    if (actual > required) failedChecks.push({ check, actual, required, comparator: "<=" });
+  };
+
+  requireMin("closed_signals", metrics.summary.closedSignals, thresholds.minClosedSignals);
+  requireMin("win_rate_pct", metrics.summary.winRatePct, thresholds.minWinRatePct);
+  requireMin("expectancy_r", metrics.summary.expectancyR, thresholds.minExpectancyR);
+  requireMin("pass_rate_pct", metrics.gateAttribution.passRatePct, thresholds.minPassRatePct);
+  requireMin("avg_confidence", metrics.summary.avgConfidence, thresholds.minAvgConfidence);
+  requireMax("ece", metrics.calibration.expectedCalibrationError, thresholds.maxEce);
+  requireMax("brier_score", metrics.calibration.brierScore, thresholds.maxBrier);
+
+  return {
+    promote: failedChecks.length === 0,
+    failedChecks,
+  };
+}
+
+function parseStrictSymbols(raw: unknown): string[] {
+  const input = String(raw ?? "BTCUSD,ETHUSD");
+  const values = input
+    .split(",")
+    .map((part) => normalizeStrictSymbol(part.trim()))
+    .filter(Boolean);
+  const unique = Array.from(new Set(values));
+  return unique.slice(0, 8);
+}
+
 function buildOptions(req: Request): StrictSweepReclaimOptions {
   const nowMs = Date.now();
   const queryNewsLockout = parseBoolean(req.query.news_lockout, false);
@@ -488,15 +555,7 @@ router.get("/market/strict-setup/promotion-check", async (req, res) => {
   const options = buildOptions(req);
   options.requireOrderbook = false;
 
-  const thresholds = {
-    minClosedSignals: Math.round(parseNumber(req.query.min_closed_signals, 120, 20, 10000)),
-    minWinRatePct: parseNumber(req.query.min_win_rate_pct, 54, 1, 100),
-    minExpectancyR: parseNumber(req.query.min_expectancy_r, 0.12, -1, 10),
-    minPassRatePct: parseNumber(req.query.min_pass_rate_pct, 20, 0, 100),
-    minAvgConfidence: parseNumber(req.query.min_avg_confidence, 0.5, 0, 1),
-    maxEce: parseNumber(req.query.max_ece, 0.12, 0, 1),
-    maxBrier: parseNumber(req.query.max_brier, 0.26, 0, 1),
-  };
+  const thresholds = parsePromotionThresholds(req);
 
   try {
     const bars = await getBars(symbol, "1Min", barsCount);
@@ -510,24 +569,8 @@ router.get("/market/strict-setup/promotion-check", async (req, res) => {
 
     const rows = runStrictBacktestRows(symbol, bars, forwardBars, options);
     const metrics = computeStrictReportMetrics(rows, calibrationBins);
-    const failedChecks: Array<{ check: string; actual: number; required: number; comparator: ">=" | "<=" }> = [];
-
-    const requireMin = (check: string, actual: number, required: number): void => {
-      if (actual < required) failedChecks.push({ check, actual, required, comparator: ">=" });
-    };
-    const requireMax = (check: string, actual: number, required: number): void => {
-      if (actual > required) failedChecks.push({ check, actual, required, comparator: "<=" });
-    };
-
-    requireMin("closed_signals", metrics.summary.closedSignals, thresholds.minClosedSignals);
-    requireMin("win_rate_pct", metrics.summary.winRatePct, thresholds.minWinRatePct);
-    requireMin("expectancy_r", metrics.summary.expectancyR, thresholds.minExpectancyR);
-    requireMin("pass_rate_pct", metrics.gateAttribution.passRatePct, thresholds.minPassRatePct);
-    requireMin("avg_confidence", metrics.summary.avgConfidence, thresholds.minAvgConfidence);
-    requireMax("ece", metrics.calibration.expectedCalibrationError, thresholds.maxEce);
-    requireMax("brier_score", metrics.calibration.brierScore, thresholds.maxBrier);
-
-    const promote = failedChecks.length === 0;
+    const promotion = evaluatePromotionReadiness(metrics, thresholds);
+    const promote = promotion.promote;
 
     res.json({
       setup: "sweep_reclaim_v1",
@@ -538,7 +581,7 @@ router.get("/market/strict-setup/promotion-check", async (req, res) => {
       thresholds,
       promote,
       decision: promote ? "PROMOTE" : "HOLD",
-      failedChecks,
+      failedChecks: promotion.failedChecks,
       metrics: {
         summary: metrics.summary,
         gateAttribution: metrics.gateAttribution,
@@ -558,6 +601,121 @@ router.get("/market/strict-setup/promotion-check", async (req, res) => {
     req.log.error({ err, symbol }, "strict setup promotion check failed");
     res.status(500).json({
       error: "strict_setup_promotion_check_failed",
+      message: String(err),
+    });
+  }
+});
+
+// ─── GET /api/market/strict-setup/matrix ─────────────────────────────────────
+router.get("/market/strict-setup/matrix", async (req, res) => {
+  const symbols = parseStrictSymbols(req.query.symbols);
+  const barsCount = Math.round(parseNumber(req.query.bars, 1600, 400, 10000));
+  const forwardBars = Math.round(parseNumber(req.query.forward_bars, 30, 5, 200));
+  const calibrationBins = Math.round(parseNumber(req.query.calibration_bins, 10, 4, 20));
+  const includeRows = parseBoolean(req.query.include_rows, false);
+
+  const decisionOptions = buildOptions(req);
+  const backtestOptions = buildOptions(req);
+  backtestOptions.requireOrderbook = false;
+
+  const thresholds = parsePromotionThresholds(req);
+
+  try {
+    const matrixRows: Array<{
+      symbol: string;
+      liveDecision: StrictSweepReclaimDecision;
+      metrics: ReturnType<typeof computeStrictReportMetrics>;
+      promotion: ReturnType<typeof evaluatePromotionReadiness>;
+      barsScanned: number;
+      orderbookTimestamp: string | null;
+      orderbookReceivedAt: number | null;
+      rows?: StrictBacktestRow[];
+    }> = [];
+
+    for (const symbol of symbols) {
+      const bars = await getBars(symbol, "1Min", barsCount);
+      const latestSnapshot = orderBookManager.getSnapshot(symbol);
+      const snapshot = latestSnapshot && Date.now() - latestSnapshot.receivedAt < 12_000
+        ? latestSnapshot
+        : await orderBookManager.fetchSnapshot(symbol).catch(() => null);
+
+      const liveDecision = evaluateStrictSweepReclaim(symbol, bars, snapshot, decisionOptions);
+      const rows = runStrictBacktestRows(symbol, bars, forwardBars, backtestOptions);
+      const metrics = computeStrictReportMetrics(rows, calibrationBins);
+      const promotion = evaluatePromotionReadiness(metrics, thresholds);
+
+      matrixRows.push({
+        symbol,
+        liveDecision,
+        metrics,
+        promotion,
+        barsScanned: bars.length,
+        orderbookTimestamp: snapshot?.timestamp ?? null,
+        orderbookReceivedAt: snapshot?.receivedAt ?? null,
+        ...(includeRows ? { rows } : {}),
+      });
+    }
+
+    const ranked = [...matrixRows]
+      .sort((a, b) => {
+        const aScore =
+          (a.liveDecision.tradeAllowed ? 1 : 0) * 2 +
+          (a.liveDecision.confidenceScore ?? 0) * 1.5 +
+          a.metrics.summary.expectancyR * 0.7 +
+          (a.promotion.promote ? 1 : 0);
+        const bScore =
+          (b.liveDecision.tradeAllowed ? 1 : 0) * 2 +
+          (b.liveDecision.confidenceScore ?? 0) * 1.5 +
+          b.metrics.summary.expectancyR * 0.7 +
+          (b.promotion.promote ? 1 : 0);
+        return bScore - aScore;
+      })
+      .map((row) => ({
+        symbol: row.symbol,
+        liveTradeAllowed: row.liveDecision.tradeAllowed,
+        direction: row.liveDecision.direction,
+        confidenceScore: row.liveDecision.confidenceScore,
+        expectedWinProbability: row.liveDecision.expectedWinProbability,
+        blockedReasons: row.liveDecision.blockedReasons,
+        promotionDecision: row.promotion.promote ? "PROMOTE" : "HOLD",
+        winRatePct: row.metrics.summary.winRatePct,
+        expectancyR: row.metrics.summary.expectancyR,
+        closedSignals: row.metrics.summary.closedSignals,
+      }));
+
+    res.json({
+      setup: "sweep_reclaim_v1",
+      symbols,
+      barsRequested: barsCount,
+      forwardBars,
+      options: {
+        decision: decisionOptions,
+        backtest: backtestOptions,
+      },
+      thresholds,
+      ranked,
+      results: matrixRows.map((row) => ({
+        symbol: row.symbol,
+        barsScanned: row.barsScanned,
+        orderbookTimestamp: row.orderbookTimestamp,
+        orderbookReceivedAt: row.orderbookReceivedAt,
+        liveDecision: row.liveDecision,
+        summary: row.metrics.summary,
+        gateAttribution: row.metrics.gateAttribution,
+        calibration: row.metrics.calibration,
+        promotion: {
+          promote: row.promotion.promote,
+          decision: row.promotion.promote ? "PROMOTE" : "HOLD",
+          failedChecks: row.promotion.failedChecks,
+        },
+        attribution: row.metrics.attribution,
+        ...(includeRows ? { rows: row.rows ?? [] } : {}),
+      })),
+    });
+  } catch (err) {
+    req.log.error({ err, symbols }, "strict setup matrix failed");
+    res.status(500).json({
+      error: "strict_setup_matrix_failed",
       message: String(err),
     });
   }
