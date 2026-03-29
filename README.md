@@ -139,6 +139,7 @@ Detailed production architecture and phase plan:
 
 - [docs/market-ready-architecture.md](./docs/market-ready-architecture.md)
 - [docs/production-runbook.md](./docs/production-runbook.md)
+- [docs/brain-schema.md](./docs/brain-schema.md)
 
 ## OpenBB Research Integration
 
@@ -156,3 +157,10 @@ It provides a separate workflow for:
 Bridge endpoint in API:
 
 - `GET /api/research/openbb/latest` (reads generated artifacts from `godsview-openbb/data/processed`)
+
+Brain memory endpoints:
+
+- `POST /api/brain/entities`
+- `POST /api/brain/relations`
+- `POST /api/brain/memories`
+- `GET /api/brain/:symbol/context`

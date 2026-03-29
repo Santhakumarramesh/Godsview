@@ -119,6 +119,47 @@ if (dbUrl) {
       payload_json TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    CREATE TABLE IF NOT EXISTS brain_entities (
+      id SERIAL PRIMARY KEY,
+      symbol TEXT NOT NULL,
+      entity_type TEXT NOT NULL DEFAULT 'stock',
+      name TEXT,
+      sector TEXT,
+      regime TEXT,
+      volatility NUMERIC(8,4),
+      last_price NUMERIC(14,6),
+      state_json TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_brain_entities_symbol ON brain_entities(symbol);
+    CREATE TABLE IF NOT EXISTS brain_relations (
+      id SERIAL PRIMARY KEY,
+      source_entity_id INTEGER NOT NULL,
+      target_entity_id INTEGER NOT NULL,
+      relation_type TEXT NOT NULL,
+      strength NUMERIC(6,4) NOT NULL DEFAULT 0.5000,
+      context_json TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_brain_relations_source ON brain_relations(source_entity_id);
+    CREATE INDEX IF NOT EXISTS idx_brain_relations_target ON brain_relations(target_entity_id);
+    CREATE TABLE IF NOT EXISTS brain_memories (
+      id SERIAL PRIMARY KEY,
+      entity_id INTEGER NOT NULL,
+      memory_type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      signal_id INTEGER,
+      trade_id INTEGER,
+      confidence NUMERIC(6,4) NOT NULL DEFAULT 0.5000,
+      outcome_score NUMERIC(8,4),
+      tags TEXT,
+      context_json TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_brain_memories_entity ON brain_memories(entity_id);
+    CREATE INDEX IF NOT EXISTS idx_brain_memories_created_at ON brain_memories(created_at);
   `);
 
   db = drizzle(client, { schema });
