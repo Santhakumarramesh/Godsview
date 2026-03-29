@@ -5,6 +5,7 @@ import { GetPerformanceQueryParams } from "@workspace/api-zod";
 import { getTodayFills, computeRoundTrips, getPortfolioHistory } from "../lib/alpaca.js";
 
 const router: IRouter = Router();
+type TradeRow = typeof tradesTable.$inferSelect;
 
 router.get("/performance", async (req, res) => {
   try {
@@ -17,7 +18,7 @@ router.get("/performance", async (req, res) => {
     if (query.instrument) conditions.push(eq(tradesTable.instrument, query.instrument));
     if (query.setup_type) conditions.push(eq(tradesTable.setup_type, query.setup_type));
 
-    const trades = await db
+    const trades: TradeRow[] = await db
       .select()
       .from(tradesTable)
       .where(and(...conditions));

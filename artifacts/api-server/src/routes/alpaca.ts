@@ -28,6 +28,7 @@ import { eq, desc, and, count, sql, inArray } from "drizzle-orm";
 const router: IRouter = Router();
 const LIVE_TRADING_ENABLED = String(process.env.GODSVIEW_ENABLE_LIVE_TRADING ?? "").toLowerCase() === "true";
 const OPERATOR_TOKEN = (process.env.GODSVIEW_OPERATOR_TOKEN ?? "").trim();
+type AccuracyResultRow = typeof accuracyResultsTable.$inferSelect;
 
 const SUPPORTED_SYMBOLS: Record<string, string> = {
   MES: "SPY",
@@ -1716,7 +1717,7 @@ router.get("/alpaca/accuracy", async (req, res) => {
     if (symbol) conditions.push(eq(accuracyResultsTable.symbol, symbol));
     if (setup) conditions.push(eq(accuracyResultsTable.setup_type, setup));
 
-    const rows = await db
+    const rows: AccuracyResultRow[] = await db
       .select()
       .from(accuracyResultsTable)
       .where(conditions.length > 0 ? and(...conditions) : undefined)
@@ -1760,9 +1761,9 @@ router.get("/alpaca/accuracy", async (req, res) => {
     // Expectancy per setup (in ticks)
     const expectancyBySetup: Record<string, number> = {};
     for (const [st, d] of Object.entries(bySetup)) {
-      const setupClosed = closed.filter((r) => r.setup_type === st);
-      const setupWins = setupClosed.filter((r) => r.outcome === "win");
-      const setupLosses = setupClosed.filter((r) => r.outcome === "loss");
+      const setupClosed = closed.filter((r: AccuracyResultRow) => r.setup_type === st);
+      const setupWins = setupClosed.filter((r: AccuracyResultRow) => r.outcome === "win");
+      const setupLosses = setupClosed.filter((r: AccuracyResultRow) => r.outcome === "loss");
       const wr = d.total > 0 ? d.wins / d.total : 0;
       const avgWinTicks = setupWins.length > 0 ? setupWins.reduce((s, r) => s + (r.tp_ticks ?? 0), 0) / setupWins.length : 0;
       const avgLossTicks = setupLosses.length > 0 ? setupLosses.reduce((s, r) => s + (r.sl_ticks ?? 0), 0) / setupLosses.length : 0;
@@ -1853,7 +1854,7 @@ router.get("/system/diagnostics", async (req, res) => {
 
   // Layer 5: Recall / Accuracy DB
   try {
-    const recent = await db
+    const recent: AccuracyResultRow[] = await db
       .select()
       .from(accuracyResultsTable)
       .orderBy(desc(accuracyResultsTable.created_at))
