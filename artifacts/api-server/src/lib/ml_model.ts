@@ -21,7 +21,7 @@ import { eq, sql, and, isNotNull, or, desc } from "drizzle-orm";
 export interface MLPrediction {
   probability: number;   // 0.0 – 1.0 win probability
   confidence: number;    // model confidence (calibration quality)
-  source: "trained" | "heuristic";
+  source: "trained" | "trained_setup" | "heuristic";
 }
 
 interface TrainingRow {
@@ -83,6 +83,14 @@ interface DriftSnapshot {
     baselineSamples: number;
   }>;
   computedAt: string;
+}
+
+interface SetupModelMeta {
+  setup: string;
+  samples: number;
+  accuracy: number;
+  auc: number;
+  winRate: number;
 }
 
 // ── Feature Engineering ────────────────────────────────────────────────────────
@@ -396,6 +404,52 @@ function summarizeRows(rows: TrainingRow[]): {
   };
 }
 
+function trainSetupSpecificModels(rows: TrainingRow[]): {
+  models: Map<string, LogisticRegression>;
+  meta: SetupModelMeta[];
+} {
+  const bySetup = new Map<string, { X: number[][]; y: number[]; wins: number; losses: number }>();
+
+  for (const row of rows) {
+    const bucket = bySetup.get(row.setup_type) ?? { X: [], y: [], wins: 0, losses: 0 };
+    const label = row.outcome === "win" ? 1 : 0;
+    bucket.X.push(featurize(row));
+    bucket.y.push(label);
+    if (label === 1) bucket.wins += 1;
+    else bucket.losses += 1;
+    bySetup.set(row.setup_type, bucket);
+  }
+
+  const models = new Map<string, LogisticRegression>();
+  const meta: SetupModelMeta[] = [];
+
+  for (const [setup, bucket] of bySetup.entries()) {
+    if (bucket.X.length < 350) continue;
+    if (bucket.wins < 25 || bucket.losses < 25) continue;
+
+    const model = new LogisticRegression(FEATURE_DIM);
+    model.train(bucket.X, bucket.y, {
+      epochs: 70,
+      lr: 0.013,
+      lambda: 0.0007,
+      batchSize: 96,
+    });
+    if (!model.trained) continue;
+
+    models.set(setup, model);
+    meta.push({
+      setup,
+      samples: bucket.X.length,
+      accuracy: model.accuracy,
+      auc: model.auc,
+      winRate: bucket.wins / Math.max(bucket.X.length, 1),
+    });
+  }
+
+  meta.sort((a, b) => b.samples - a.samples);
+  return { models, meta };
+}
+
 // ── Global Model Instance ──────────────────────────────────────────────────────
 
 let _model: LogisticRegression | null = null;
@@ -406,8 +460,11 @@ let _modelMeta: {
   auc: number;
   winRate: number;
   purgedCv: PurgedCvMetrics | null;
+  setupModelsTrained: number;
+  setupModelMeta: SetupModelMeta[];
   trainedAt: string;
 } | null = null;
+let _setupModels = new Map<string, LogisticRegression>();
 let _driftCache: { data: DriftSnapshot; ts: number } | null = null;
 const DRIFT_CACHE_TTL_MS = 60_000;
 
@@ -449,6 +506,7 @@ export async function trainModel(): Promise<void> {
     if (rows.length < 50) {
       console.log(`[ml] Only ${rows.length} labeled samples — need ≥50. Keeping heuristic fallback.`);
       _modelStatus = "untrained";
+      _setupModels = new Map();
       return;
     }
 
@@ -494,7 +552,9 @@ export async function trainModel(): Promise<void> {
       batchSize: 128,
     });
 
+    const setupSpecific = trainSetupSpecificModels(normalizedRows);
     _model = model;
+    _setupModels = setupSpecific.models;
     _modelStatus = "trained";
     _modelMeta = {
       samples: rows.length,
@@ -502,6 +562,8 @@ export async function trainModel(): Promise<void> {
       auc: model.auc,
       winRate,
       purgedCv,
+      setupModelsTrained: setupSpecific.models.size,
+      setupModelMeta: setupSpecific.meta,
       trainedAt: new Date().toISOString(),
     };
 
@@ -510,6 +572,7 @@ export async function trainModel(): Promise<void> {
     console.log(`[ml]   Accuracy: ${(model.accuracy * 100).toFixed(1)}%`);
     console.log(`[ml]   AUC-ROC: ${model.auc.toFixed(3)}`);
     console.log(`[ml]   Win rate baseline: ${(winRate * 100).toFixed(1)}%`);
+    console.log(`[ml]   Setup models: ${setupSpecific.models.size}`);
     if (purgedCv) {
       console.log(
         `[ml]   Purged CV: AUC ${purgedCv.auc.toFixed(3)} · Accuracy ${(purgedCv.accuracy * 100).toFixed(1)}% · Samples ${purgedCv.evaluatedSamples}`,
@@ -525,6 +588,7 @@ export async function trainModel(): Promise<void> {
   } catch (err) {
     console.error("[ml] Training failed:", err);
     _modelStatus = "error";
+    _setupModels = new Map();
   }
 }
 
@@ -543,11 +607,36 @@ export function predictWinProbability(input: {
 }): MLPrediction {
   if (_model?.trained) {
     const features = featurize(input);
-    const probability = _model.predict(features);
+    const globalProbability = _model.predict(features);
+    const setupModel = _setupModels.get(input.setup_type);
+    let source: MLPrediction["source"] = "trained";
+    let probability = globalProbability;
+    let confidence = _model.auc;
+
+    if (setupModel?.trained) {
+      const setupProbability = setupModel.predict(features);
+      probability = globalProbability * 0.35 + setupProbability * 0.65;
+      confidence = (_model.auc * 0.45) + (setupModel.auc * 0.55);
+      source = "trained_setup";
+    }
+
+    // Drift-aware fallback: squeeze confidence/probability when degradation is detected.
+    const drift = _driftCache?.data;
+    if (drift?.status === "watch") {
+      probability = 0.5 + (probability - 0.5) * 0.7;
+      confidence *= 0.88;
+    } else if (drift?.status === "drift") {
+      let squeeze = 0.45;
+      const setupDrift = drift.bySetup.find((item) => item.setup === input.setup_type);
+      if (setupDrift && setupDrift.winRateDelta <= -0.06) squeeze = 0.35;
+      probability = 0.5 + (probability - 0.5) * squeeze;
+      confidence *= 0.75;
+    }
+
     return {
       probability: Math.max(0.01, Math.min(0.99, probability)),
-      confidence: _model.auc,
-      source: "trained",
+      confidence: Math.max(0, Math.min(1, confidence)),
+      source,
     };
   }
 
@@ -573,9 +662,12 @@ export function getModelStatus(): {
       const cvMessage = _modelMeta?.purgedCv
         ? ` · PurgedCV AUC ${_modelMeta.purgedCv.auc.toFixed(2)}`
         : "";
+      const setupMessage = _modelMeta?.setupModelsTrained
+        ? ` · SetupModels ${_modelMeta.setupModelsTrained}`
+        : "";
       return {
         status: "active",
-        message: `Trained on ${_modelMeta!.samples} samples · AUC ${_modelMeta!.auc.toFixed(2)} · Accuracy ${(_modelMeta!.accuracy * 100).toFixed(0)}%${cvMessage}`,
+        message: `Trained on ${_modelMeta!.samples} samples · AUC ${_modelMeta!.auc.toFixed(2)} · Accuracy ${(_modelMeta!.accuracy * 100).toFixed(0)}%${cvMessage}${setupMessage}`,
         meta: _modelMeta,
       };
     }
