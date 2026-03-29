@@ -50,6 +50,13 @@ python -m app.agents.orchestrator --symbol BTCUSD --live
 python -m app.agents.orchestrator --symbol AAPL --with-replay --replay-timeframe 1D
 ```
 
+Generate daily observability report:
+
+```bash
+python -m app.monitoring.daily_report
+python -m app.monitoring.daily_report --symbol AAPL
+```
+
 Run lightweight backtest report:
 
 ```bash
@@ -81,11 +88,14 @@ python -m app.learning.replay --symbol AAPL --timeframe 1D --max-steps 400
 - `app/analysis/liquidity.py`: equal-high/equal-low liquidity pool detector.
 - `app/analysis/sweep.py`: liquidity sweep + rejection detector.
 - `app/learning/replay.py`: no-lookahead replay runner with memory feedback.
+- `app/learning/evaluator.py`: promotion metrics (PF/DD/expectancy/win rate).
 - `app/strategy/*`: time trigger, setup candidate generation, and setup validation.
+- `app/strategy/governance.py`: strategy state control (`ACTIVE/WEAK/DISABLED`).
 - `app/data/*`: OpenBB wrapper + sentiment + macro context fetchers.
 - `app/execution/journal.py`: append-only trade/decision journal.
 - `app/brain/reasoning.py`: context + memory-aware decision composer.
 - `app/brain/learning.py`: memory-derived performance summaries.
+- `app/monitoring/daily_report.py`: daily health and trade activity report.
 - `app/visuals/*`: chart plotting and screenshot outputs.
 
 ## Output Artifacts
@@ -97,6 +107,7 @@ python -m app.learning.replay --symbol AAPL --timeframe 1D --max-steps 400
 - Replay report: `data/processed/replay_latest.json`
 - Replay screenshots: `charts/*.png`
 - Journal: `data/processed/trade_journal.jsonl`
+- Daily report: `data/processed/daily_report_latest.json`
 
 ## Safety Defaults
 

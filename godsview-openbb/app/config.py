@@ -70,6 +70,12 @@ class Settings:
     allowed_sessions: str = os.getenv("ALLOWED_SESSIONS", "LONDON,NEW_YORK").strip().upper()
     max_positions: int = _as_int("MAX_POSITIONS", 3)
     min_rr: float = _as_float("MIN_RR", 1.5)
+    max_trades_per_day: int = _as_int("MAX_TRADES_PER_DAY", 2)
+    godsview_kill_switch: bool = _as_bool("GODSVIEW_KILL_SWITCH", False)
+    promotion_min_profit_factor: float = _as_float("PROMOTION_MIN_PROFIT_FACTOR", 1.5)
+    promotion_max_drawdown_pct: float = _as_float("PROMOTION_MAX_DRAWDOWN_PCT", 20.0)
+    promotion_min_expectancy_r: float = _as_float("PROMOTION_MIN_EXPECTANCY_R", 0.2)
+    promotion_min_win_rate: float = _as_float("PROMOTION_MIN_WIN_RATE", 0.4)
 
     @property
     def has_alpaca_keys(self) -> bool:

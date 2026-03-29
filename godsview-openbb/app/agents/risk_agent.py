@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.agents.base import Agent, AgentState
 from app.broker import get_account
 from app.config import settings
+from app.execution.journal import get_trade_count_today
 from app.risk import apply_risk_checks
 
 
@@ -17,6 +18,11 @@ class RiskAgent(Agent):
         reasoning = state.data.get("reasoning")
         if not isinstance(signal, dict) or not isinstance(reasoning, dict):
             state.set_blocked("missing_reasoning_or_signal")
+            return state
+
+        if settings.godsview_kill_switch:
+            state.data["risk"] = {"allowed": False, "reason": "kill_switch_active", "qty": 0}
+            state.set_blocked("risk_blocked")
             return state
 
         entry_price = float(signal.get("close_price", 0.0))
@@ -52,6 +58,17 @@ class RiskAgent(Agent):
             state.set_blocked("risk_blocked")
             return state
 
+        trades_today = get_trade_count_today(state.symbol)
+        if trades_today >= settings.max_trades_per_day:
+            state.data["risk"] = {
+                "allowed": False,
+                "reason": "max_trades_per_day_reached",
+                "qty": 0,
+                "trades_today": trades_today,
+            }
+            state.set_blocked("risk_blocked")
+            return state
+
         stop_price = entry_price * (1.0 - settings.default_stop_pct)
         if action == "sell":
             stop_price = entry_price * (1.0 + settings.default_stop_pct)
@@ -74,6 +91,7 @@ class RiskAgent(Agent):
             "account_equity": account_equity,
             "day_pnl_pct": day_pnl_pct,
             "open_positions": open_positions,
+            "trades_today": trades_today,
         }
         state.data["risk"] = risk_payload
         if not risk.allowed:

@@ -12,7 +12,9 @@ from app.agents.reasoning_agent import ReasoningAgent
 from app.agents.risk_agent import RiskAgent
 from app.agents.signal_agent import SignalAgent
 from app.config import settings
+from app.learning.evaluator import evaluate_replay_metrics
 from app.learning.replay import run_replay
+from app.strategy.governance import classify_strategy_state
 from app.utils import write_json
 
 
@@ -34,11 +36,24 @@ def run_orchestrator(
     with_replay: bool = False,
     replay_timeframe: str | None = None,
 ) -> dict[str, Any]:
+    replay_snapshot = run_replay(
+        symbol=symbol.upper(),
+        timeframe=(replay_timeframe or settings.timeframe),
+        max_steps=250,
+        screenshot_interval=0,
+    )
+    strategy_control = classify_strategy_state(evaluate_replay_metrics(replay_snapshot))
+
     state = AgentState(
         symbol=symbol.upper(),
         live=live,
         dry_run=dry_run,
     )
+    state.data["strategy_control"] = strategy_control
+    if strategy_control["status"] == "DISABLED":
+        state.set_blocked("strategy_disabled")
+    if strategy_control["status"] == "WEAK" and live:
+        state.set_blocked("strategy_not_promoted_for_live")
 
     for agent in PIPELINE:
         state = agent.run(state)
@@ -63,6 +78,9 @@ def run_orchestrator(
                 timeframe=(replay_timeframe or settings.timeframe),
                 max_steps=400,
                 screenshot_interval=50,
+            )
+            payload["strategy_control_after_replay"] = classify_strategy_state(
+                evaluate_replay_metrics(payload["replay"])
             )
         except Exception as err:  # noqa: BLE001
             payload["replay"] = {"error": str(err)}
