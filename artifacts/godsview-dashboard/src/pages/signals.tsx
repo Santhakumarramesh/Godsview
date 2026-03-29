@@ -1,8 +1,10 @@
 import { useGetSignals, useCreateSignal, type CreateSignalRequest } from "@workspace/api-client-react";
 import { formatNumber, cn } from "@/lib/utils";
 import { format } from "date-fns";
-import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { Fragment, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import TradingViewChart from "@/components/TradingViewChart";
+import ReplayEngine from "@/components/ReplayEngine";
 
 const C = {
   card: "#1a191b",
@@ -15,6 +17,64 @@ const C = {
   outline: "#767576",
   outlineVar: "#484849",
 };
+
+type OrderBlockPlot = {
+  time: number;
+  ts: string;
+  side: "bullish" | "bearish";
+  low: number;
+  high: number;
+  mid: number;
+  strength: number;
+};
+
+type SignalPlotResponse = {
+  chart: {
+    symbol: string;
+    tradingview_symbol: string;
+    timeframe: string;
+    live_stream: string;
+  };
+  position: {
+    direction: "long" | "short";
+    entry_price: number | null;
+    stop_loss: number | null;
+    take_profit: number | null;
+    risk_reward: number | null;
+  };
+  order_blocks: OrderBlockPlot[];
+  generated_at: string;
+};
+
+type AutoBacktestSummary = {
+  total_signals: number;
+  closed_signals: number;
+  wins: number;
+  losses: number;
+  win_rate: number;
+  profit_factor: number;
+  expectancy_dollars: number;
+  gross_pnl_dollars: number;
+  fake_entry_rate: number;
+  claude_reviewed_signals: number;
+  claude_approved_rate: number;
+};
+
+type AutoBacktestResponse = {
+  signal_id: number;
+  instrument: string;
+  alpaca_symbol: string;
+  setup_type: string;
+  days_analyzed: number;
+  summary: AutoBacktestSummary;
+  recommendations: string[];
+};
+
+function toPct(v: number | null | undefined): number {
+  const n = Number(v ?? 0);
+  if (!Number.isFinite(n)) return 0;
+  return n <= 1 ? n * 100 : n;
+}
 
 function MicroLabel({ children }: { children: React.ReactNode }) {
   return <span style={{ fontSize: "8px", fontFamily: "Space Grotesk", letterSpacing: "0.2em", textTransform: "uppercase", color: C.outline }}>{children}</span>;
@@ -35,6 +95,34 @@ export default function Signals() {
   const [instrumentFilter, setInstrumentFilter] = useState<string>("");
   const { data, isLoading } = useGetSignals({ instrument: instrumentFilter || undefined, limit: 50 });
   const [showCreate, setShowCreate] = useState(false);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [learnBySignal, setLearnBySignal] = useState<Record<number, AutoBacktestResponse>>({});
+
+  const plotQuery = useQuery<SignalPlotResponse>({
+    queryKey: ["signal-plot", expandedId],
+    queryFn: async () => {
+      const r = await fetch(`/api/signals/${expandedId}/plot`);
+      if (!r.ok) throw new Error(`signal plot fetch failed: ${r.status}`);
+      return r.json();
+    },
+    enabled: expandedId != null,
+    staleTime: 20_000,
+  });
+
+  const autoLearnMutation = useMutation({
+    mutationFn: async (signalId: number) => {
+      const r = await fetch(`/api/signals/${signalId}/autobacktest`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ days: 14, include_claude: true, claude_sample: 16 }),
+      });
+      if (!r.ok) throw new Error(`auto-backtest failed: ${r.status}`);
+      return r.json() as Promise<AutoBacktestResponse>;
+    },
+    onSuccess: (result) => {
+      setLearnBySignal((prev) => ({ ...prev, [result.signal_id]: result }));
+    },
+  });
 
   return (
     <div className="space-y-8">
@@ -45,6 +133,9 @@ export default function Signals() {
             Godsview · Signal Intelligence
           </div>
           <h1 className="font-headline font-bold text-2xl tracking-tight">Signal Feed</h1>
+          <p style={{ fontSize: "11px", color: C.muted, marginTop: "8px", maxWidth: "780px" }}>
+            Each signal now includes live chart context, order block plotting levels, and long/short position map. Use Auto Backtest + Claude Learn to replay past behavior and reduce fake entries.
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <select
@@ -56,6 +147,7 @@ export default function Signals() {
             <option value="">All Instruments</option>
             <option value="BTCUSDT">BTCUSDT</option>
             <option value="ETHUSDT">ETHUSDT</option>
+            <option value="SOLUSDT">SOLUSDT</option>
             <option value="MES">MES</option>
             <option value="MNQ">MNQ</option>
           </select>
@@ -82,7 +174,7 @@ export default function Signals() {
           <table className="w-full text-left">
             <thead>
               <tr style={{ borderBottom: "1px solid rgba(72,72,73,0.3)" }}>
-                {["Timestamp", "Asset", "Setup", "Str", "OF", "Rcl", "ML", "Cld", "Final Q.", "Status"].map((h) => (
+                {["Timestamp", "Asset", "Setup", "Str", "OF", "Rcl", "ML", "Cld", "Final Q.", "Status", "View"].map((h) => (
                   <th key={h} className="px-4 py-2.5" style={{ fontSize: "8px", fontFamily: "Space Grotesk", letterSpacing: "0.15em", textTransform: "uppercase", color: C.outlineVar, whiteSpace: "nowrap" }}>
                     {h}
                   </th>
@@ -91,7 +183,7 @@ export default function Signals() {
             </thead>
             <tbody>
               {data?.signals.map((sig) => {
-                const q = sig.final_quality;
+                const q = toPct(Number(sig.final_quality));
                 const qColor = q > 75 ? C.primary : q > 50 ? "#fbbf24" : C.tertiary;
                 const statusColor =
                   sig.status === "approved" ? C.primary :
@@ -99,37 +191,143 @@ export default function Signals() {
                   sig.status === "executed" ? C.secondary :
                   sig.status === "rejected" ? C.tertiary :
                   C.muted;
+                const isExpanded = expandedId === sig.id;
+                const plot = isExpanded ? plotQuery.data : null;
+                const learn = learnBySignal[sig.id];
                 return (
-                  <tr key={sig.id} className="hover:brightness-105 transition-all" style={{ borderBottom: "1px solid rgba(72,72,73,0.12)" }}>
-                    <td className="px-4 py-2.5 whitespace-nowrap" style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: C.muted }}>
-                      {format(new Date(sig.created_at), "MM/dd HH:mm:ss")}
-                    </td>
-                    <td className="px-4 py-2.5 font-headline font-bold text-xs">{sig.instrument}</td>
-                    <td className="px-4 py-2.5" style={{ fontSize: "9px", color: C.muted, whiteSpace: "nowrap" }}>{sig.setup_type.replace(/_/g, " ")}</td>
-                    {[sig.structure_score, sig.order_flow_score, sig.recall_score, sig.ml_probability, sig.claude_score].map((v, i) => (
-                      <td key={i} className="px-4 py-2.5" style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: C.muted }}>
-                        {formatNumber(v, 1)}
+                  <Fragment key={sig.id}>
+                    <tr className="hover:brightness-105 transition-all" style={{ borderBottom: "1px solid rgba(72,72,73,0.12)" }}>
+                      <td className="px-4 py-2.5 whitespace-nowrap" style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: C.muted }}>
+                        {format(new Date(sig.created_at), "MM/dd HH:mm:ss")}
                       </td>
-                    ))}
-                    <td className="px-4 py-2.5">
-                      <span className="font-mono-num font-bold text-xs" style={{ color: qColor }}>{formatNumber(q, 1)}%</span>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <span className="px-2 py-0.5 rounded" style={{
-                        fontSize: "8px", fontFamily: "Space Grotesk", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase",
-                        backgroundColor: `${statusColor}1A`,
-                        color: statusColor,
-                        border: `1px solid ${statusColor}4D`,
-                      }}>
-                        {sig.status}
-                      </span>
-                    </td>
-                  </tr>
+                      <td className="px-4 py-2.5 font-headline font-bold text-xs">{sig.instrument}</td>
+                      <td className="px-4 py-2.5" style={{ fontSize: "9px", color: C.muted, whiteSpace: "nowrap" }}>{sig.setup_type.replace(/_/g, " ")}</td>
+                      {[sig.structure_score, sig.order_flow_score, sig.recall_score, sig.ml_probability, sig.claude_score].map((v, i) => (
+                        <td key={i} className="px-4 py-2.5" style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: C.muted }}>
+                          {formatNumber(toPct(Number(v)), 1)}
+                        </td>
+                      ))}
+                      <td className="px-4 py-2.5">
+                        <span className="font-mono-num font-bold text-xs" style={{ color: qColor }}>{formatNumber(q, 1)}%</span>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <span className="px-2 py-0.5 rounded" style={{
+                          fontSize: "8px", fontFamily: "Space Grotesk", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase",
+                          backgroundColor: `${statusColor}1A`,
+                          color: statusColor,
+                          border: `1px solid ${statusColor}4D`,
+                        }}>
+                          {sig.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <button
+                          onClick={() => setExpandedId(isExpanded ? null : sig.id)}
+                          className="px-2 py-1 rounded text-[9px] uppercase tracking-wider"
+                          style={{
+                            border: `1px solid ${isExpanded ? "rgba(156,255,147,0.35)" : "rgba(102,157,255,0.35)"}`,
+                            color: isExpanded ? C.primary : C.secondary,
+                            backgroundColor: isExpanded ? "rgba(156,255,147,0.08)" : "rgba(102,157,255,0.08)",
+                          }}
+                        >
+                          {isExpanded ? "Hide" : "Chart"}
+                        </button>
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr>
+                        <td colSpan={11} className="px-4 py-4" style={{ backgroundColor: C.cardHigh }}>
+                          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+                            <div className="xl:col-span-2 rounded overflow-hidden" style={{ border: `1px solid ${C.border}` }}>
+                              <TradingViewChart symbol={plot?.chart.symbol ?? sig.instrument} timeframe="5" height={360} />
+                            </div>
+                            <div className="space-y-3">
+                              <div className="rounded p-3" style={{ border: `1px solid ${C.border}`, backgroundColor: C.card }}>
+                                <MicroLabel>Position Plot</MicroLabel>
+                                <div className="mt-2 text-[10px]" style={{ color: C.muted }}>
+                                  <div>Direction: <span style={{ color: plot?.position.direction === "long" ? C.primary : C.tertiary, fontWeight: 700 }}>{plot?.position.direction?.toUpperCase() ?? "N/A"}</span></div>
+                                  <div>Entry: <span className="font-mono">{plot?.position.entry_price?.toFixed(4) ?? "—"}</span></div>
+                                  <div>Stop: <span className="font-mono" style={{ color: C.tertiary }}>{plot?.position.stop_loss?.toFixed(4) ?? "—"}</span></div>
+                                  <div>Take Profit: <span className="font-mono" style={{ color: C.primary }}>{plot?.position.take_profit?.toFixed(4) ?? "—"}</span></div>
+                                  <div>R:R: <span className="font-mono">{plot?.position.risk_reward ? plot.position.risk_reward.toFixed(2) : "—"}</span></div>
+                                </div>
+                              </div>
+
+                              <div className="rounded p-3" style={{ border: `1px solid ${C.border}`, backgroundColor: C.card }}>
+                                <div className="flex items-center justify-between mb-2">
+                                  <MicroLabel>Order Blocks (Auto)</MicroLabel>
+                                  <span style={{ fontSize: "9px", color: C.outlineVar }}>{plot?.order_blocks?.length ?? 0}</span>
+                                </div>
+                                <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
+                                  {(plot?.order_blocks ?? []).slice(-10).reverse().map((ob) => (
+                                    <div key={`${ob.ts}-${ob.side}-${ob.low}`} className="rounded px-2 py-1" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0f0f10" }}>
+                                      <div style={{ fontSize: "9px", color: ob.side === "bullish" ? C.primary : C.tertiary, fontWeight: 700 }}>{ob.side.toUpperCase()}</div>
+                                      <div style={{ fontSize: "9px", color: C.muted, fontFamily: "JetBrains Mono, monospace" }}>
+                                        {ob.low.toFixed(2)} - {ob.high.toFixed(2)} · S {ob.strength.toFixed(2)}
+                                      </div>
+                                    </div>
+                                  ))}
+                                  {(plot?.order_blocks?.length ?? 0) === 0 && (
+                                    <div style={{ fontSize: "10px", color: C.outlineVar }}>No recent order blocks found.</div>
+                                  )}
+                                </div>
+                              </div>
+
+                              <button
+                                onClick={() => autoLearnMutation.mutate(sig.id)}
+                                disabled={autoLearnMutation.isPending}
+                                className={cn("w-full px-3 py-2 rounded text-[10px] uppercase tracking-wider", "disabled:opacity-60")}
+                                style={{ border: "1px solid rgba(156,255,147,0.35)", color: C.primary, backgroundColor: "rgba(156,255,147,0.12)" }}
+                              >
+                                {autoLearnMutation.isPending ? "Running Auto Backtest..." : "Auto Backtest + Claude Learn"}
+                              </button>
+                            </div>
+                          </div>
+
+                          {plotQuery.isLoading && (
+                            <div className="mt-3 text-xs" style={{ color: C.outlineVar }}>Loading chart payload...</div>
+                          )}
+
+                          {learn && (
+                            <div className="mt-4 rounded p-3" style={{ border: `1px solid ${C.border}`, backgroundColor: "#101112" }}>
+                              <div className="flex items-center justify-between mb-2">
+                                <MicroLabel>Auto Backtest Summary ({learn.days_analyzed}d)</MicroLabel>
+                                <span style={{ fontSize: "9px", color: C.outlineVar }}>{learn.setup_type}</span>
+                              </div>
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[10px]">
+                                <div>Win Rate: <span className="font-mono" style={{ color: learn.summary.win_rate > 0.5 ? C.primary : C.tertiary }}>{(learn.summary.win_rate * 100).toFixed(1)}%</span></div>
+                                <div>Profit Factor: <span className="font-mono">{learn.summary.profit_factor.toFixed(2)}</span></div>
+                                <div>Expectancy: <span className="font-mono">${learn.summary.expectancy_dollars.toFixed(2)}</span></div>
+                                <div>Fake Entry: <span className="font-mono" style={{ color: learn.summary.fake_entry_rate < 0.25 ? C.primary : C.tertiary }}>{(learn.summary.fake_entry_rate * 100).toFixed(1)}%</span></div>
+                                <div>Closed: <span className="font-mono">{learn.summary.closed_signals}</span></div>
+                                <div>Wins/Losses: <span className="font-mono">{learn.summary.wins}/{learn.summary.losses}</span></div>
+                                <div>Claude Reviewed: <span className="font-mono">{learn.summary.claude_reviewed_signals}</span></div>
+                                <div>Claude Approved: <span className="font-mono">{(learn.summary.claude_approved_rate * 100).toFixed(1)}%</span></div>
+                              </div>
+                              {learn.recommendations.length > 0 && (
+                                <div className="mt-3 space-y-1">
+                                  {learn.recommendations.map((item, idx) => (
+                                    <div key={`${learn.signal_id}-rec-${idx}`} style={{ fontSize: "10px", color: C.muted }}>
+                                      {idx + 1}. {item}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          <div className="mt-4">
+                            <ReplayEngine symbol={plot?.chart.symbol ?? sig.instrument} timeframe="5Min" barCount={120} />
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 );
               })}
               {(!data?.signals || data.signals.length === 0) && (
                 <tr>
-                  <td colSpan={10} className="px-4 py-12 text-center" style={{ color: C.outlineVar, fontSize: "11px", fontFamily: "Space Grotesk" }}>
+                  <td colSpan={11} className="px-4 py-12 text-center" style={{ color: C.outlineVar, fontSize: "11px", fontFamily: "Space Grotesk" }}>
                     No signals found. Run a live scan or backtest to generate signals.
                   </td>
                 </tr>
