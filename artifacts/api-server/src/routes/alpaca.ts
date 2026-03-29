@@ -23,8 +23,17 @@ import {
   type RecallFeatures,
 } from "../lib/strategy_engine";
 import { getModelStatus, predictWinProbability } from "../lib/ml_model";
-import { db, accuracyResultsTable, marketBarsTable, signalsTable } from "@workspace/db";
-import { DEFAULT_SETUPS, isSetupType, resolveSystemMode, canWriteOrders, isLiveMode, deriveDecisionState } from "@workspace/strategy-core";
+import { db, accuracyResultsTable, auditEventsTable, marketBarsTable, signalsTable } from "@workspace/db";
+import {
+  DEFAULT_SETUPS,
+  isSetupType,
+  resolveSystemMode,
+  canWriteOrders,
+  isLiveMode,
+  deriveDecisionState,
+  type DecisionState,
+  type SystemMode,
+} from "@workspace/strategy-core";
 import { eq, desc, and, count, sql, inArray, gte } from "drizzle-orm";
 
 const router: IRouter = Router();
@@ -54,6 +63,22 @@ const BAR_TIMEFRAME_MS: Record<AlpacaTimeframe, number> = {
   "1Hour": 60 * 60_000,
   "1Day": 24 * 60 * 60_000,
 };
+const CREATE_AUDIT_EVENTS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS audit_events (
+    id SERIAL PRIMARY KEY,
+    event_type TEXT NOT NULL,
+    decision_state TEXT,
+    system_mode TEXT,
+    instrument TEXT,
+    setup_type TEXT,
+    symbol TEXT,
+    actor TEXT NOT NULL DEFAULT 'system',
+    reason TEXT,
+    payload_json TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+`;
+let auditEventsTableReady = false;
 
 function isAlpacaRateLimitError(error: unknown): boolean {
   const message = String(error ?? "");
@@ -71,6 +96,71 @@ function parseEnvFloat(name: string, fallback: number, min: number, max: number)
 function delayMs(ms: number): Promise<void> {
   if (!Number.isFinite(ms) || ms <= 0) return Promise.resolve();
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function extractAuditSymbolFromRequest(req: Request): string | null {
+  const paramsSymbol = typeof req.params?.symbol === "string" ? req.params.symbol.trim() : "";
+  if (paramsSymbol) return paramsSymbol.toUpperCase();
+
+  const body = (typeof req.body === "object" && req.body !== null ? req.body : {}) as Record<string, unknown>;
+  const bodySymbol = typeof body.symbol === "string" ? body.symbol.trim() : "";
+  if (bodySymbol) return bodySymbol.toUpperCase();
+
+  const bodyInstrument = typeof body.instrument === "string" ? body.instrument.trim() : "";
+  if (bodyInstrument) return toAlpacaSymbol(bodyInstrument);
+
+  const querySymbol = typeof req.query?.symbol === "string" ? req.query.symbol.trim() : "";
+  if (querySymbol) return querySymbol.toUpperCase();
+
+  return null;
+}
+
+function stringifyAuditPayload(payload: unknown): string | null {
+  if (payload === undefined || payload === null) return null;
+  try {
+    return JSON.stringify(payload);
+  } catch {
+    return JSON.stringify({ serialization_error: "payload_not_serializable" });
+  }
+}
+
+type AuditEventInput = {
+  eventType: string;
+  decisionState?: DecisionState | null;
+  systemMode?: SystemMode;
+  instrument?: string | null;
+  setupType?: string | null;
+  symbol?: string | null;
+  actor?: "system" | "api" | "operator";
+  reason?: string | null;
+  payload?: unknown;
+};
+
+async function writeAuditEvent(req: Request, input: AuditEventInput): Promise<void> {
+  try {
+    if (!auditEventsTableReady) {
+      await db.execute(sql.raw(CREATE_AUDIT_EVENTS_TABLE_SQL));
+      auditEventsTableReady = true;
+    }
+    const symbolCandidate = input.symbol ?? extractAuditSymbolFromRequest(req);
+    const symbol = typeof symbolCandidate === "string" && symbolCandidate.trim()
+      ? symbolCandidate.trim().toUpperCase()
+      : null;
+
+    await db.insert(auditEventsTable).values({
+      event_type: input.eventType,
+      decision_state: input.decisionState ?? null,
+      system_mode: input.systemMode ?? SYSTEM_MODE,
+      instrument: input.instrument ?? null,
+      setup_type: input.setupType ?? null,
+      symbol,
+      actor: input.actor ?? "system",
+      reason: input.reason ?? null,
+      payload_json: stringifyAuditPayload(input.payload),
+    });
+  } catch (err) {
+    req.log.warn({ err, eventType: input.eventType }, "failed to persist audit event");
+  }
 }
 
 async function readBarsFromCacheStore(
@@ -247,6 +337,13 @@ function getProvidedOperatorToken(req: Request): string | null {
 
 function ensureTradingWriteAccess(req: Request, res: Response): boolean {
   if (TRADING_KILL_SWITCH) {
+    void writeAuditEvent(req, {
+      eventType: "ORDER_WRITE_BLOCKED",
+      decisionState: "BLOCKED_BY_RISK",
+      actor: "api",
+      reason: "kill_switch_active",
+      payload: { path: req.path, method: req.method },
+    });
     res.status(423).json({
       error: "kill_switch_active",
       message: "Trading writes are blocked by kill switch. Set GODSVIEW_KILL_SWITCH=false to resume.",
@@ -256,6 +353,13 @@ function ensureTradingWriteAccess(req: Request, res: Response): boolean {
   }
 
   if (!canWriteOrders(SYSTEM_MODE)) {
+    void writeAuditEvent(req, {
+      eventType: "ORDER_WRITE_BLOCKED",
+      decisionState: "BLOCKED_BY_RISK",
+      actor: "api",
+      reason: "system_mode_disallows_write",
+      payload: { path: req.path, method: req.method },
+    });
     res.status(403).json({
       error: "trading_disabled",
       message: `Trading write actions are disabled in system mode '${SYSTEM_MODE}'.`,
@@ -265,6 +369,13 @@ function ensureTradingWriteAccess(req: Request, res: Response): boolean {
   }
 
   if (!OPERATOR_TOKEN) {
+    void writeAuditEvent(req, {
+      eventType: "ORDER_WRITE_BLOCKED",
+      decisionState: "DEGRADED_DATA",
+      actor: "api",
+      reason: "operator_token_not_configured",
+      payload: { path: req.path, method: req.method },
+    });
     req.log.error("Trading write attempted but GODSVIEW_OPERATOR_TOKEN is not configured");
     res.status(503).json({
       error: "operator_token_not_configured",
@@ -275,6 +386,13 @@ function ensureTradingWriteAccess(req: Request, res: Response): boolean {
 
   const provided = getProvidedOperatorToken(req);
   if (!provided || provided !== OPERATOR_TOKEN) {
+    void writeAuditEvent(req, {
+      eventType: "ORDER_WRITE_BLOCKED",
+      decisionState: "REJECTED",
+      actor: "api",
+      reason: "operator_token_invalid",
+      payload: { path: req.path, method: req.method },
+    });
     res.status(401).json({
       error: "unauthorized",
       message: "Missing or invalid operator token.",
@@ -356,6 +474,14 @@ async function enforceTradeRiskRails(
 ): Promise<boolean> {
   const snapshot = await computeTradingRiskSnapshot();
   if (!snapshot) {
+    void writeAuditEvent(req, {
+      eventType: "ORDER_RISK_BLOCKED",
+      decisionState: "DEGRADED_DATA",
+      actor: "api",
+      instrument: orderReq.symbol,
+      symbol: orderReq.symbol,
+      reason: "risk_data_unavailable",
+    });
     res.status(503).json({
       error: "risk_data_unavailable",
       message: "Unable to fetch account equity for risk checks. Trade blocked for safety.",
@@ -365,6 +491,15 @@ async function enforceTradeRiskRails(
   }
 
   if (snapshot.limits.maxDailyLossUsd > 0 && snapshot.realizedPnlTodayUsd <= -snapshot.limits.maxDailyLossUsd) {
+    void writeAuditEvent(req, {
+      eventType: "ORDER_RISK_BLOCKED",
+      decisionState: "BLOCKED_BY_RISK",
+      actor: "api",
+      instrument: orderReq.symbol,
+      symbol: orderReq.symbol,
+      reason: "daily_loss_limit_reached",
+      payload: snapshot,
+    });
     res.status(403).json({
       error: "daily_loss_limit_reached",
       message: "Daily realized loss limit reached. Trade blocked.",
@@ -380,6 +515,20 @@ async function enforceTradeRiskRails(
   const projectedExposurePct = snapshot.accountEquityUsd > 0 ? projectedExposureUsd / snapshot.accountEquityUsd : 0;
 
   if (snapshot.limits.maxOpenExposurePct > 0 && projectedExposurePct > snapshot.limits.maxOpenExposurePct) {
+    void writeAuditEvent(req, {
+      eventType: "ORDER_RISK_BLOCKED",
+      decisionState: "BLOCKED_BY_RISK",
+      actor: "api",
+      instrument: orderReq.symbol,
+      symbol: orderReq.symbol,
+      reason: "max_open_exposure_exceeded",
+      payload: {
+        ...snapshot,
+        incomingNotionalUsd,
+        projectedExposureUsd,
+        projectedExposurePct,
+      },
+    });
     res.status(403).json({
       error: "max_open_exposure_exceeded",
       message: "Projected open exposure exceeds configured risk limit. Trade blocked.",
@@ -838,6 +987,12 @@ router.post("/alpaca/orders", async (req, res) => {
   try {
     if (!ensureTradingWriteAccess(req, res)) return;
     if (!hasValidTradingKey) {
+      void writeAuditEvent(req, {
+        eventType: "ORDER_WRITE_BLOCKED",
+        decisionState: "BLOCKED_BY_RISK",
+        actor: "api",
+        reason: "no_trading_key",
+      });
       res.status(403).json({ error: "no_trading_key", message: "Trading API keys (PK/AK) required. Paper keys from app.alpaca.markets." });
       return;
     }
@@ -857,9 +1012,33 @@ router.post("/alpaca/orders", async (req, res) => {
     if (!(await enforceTradeRiskRails(req, res, orderReq))) return;
 
     const order = await placeOrder(orderReq);
+    void writeAuditEvent(req, {
+      eventType: "ORDER_PLACED",
+      decisionState: "TRADE",
+      actor: "operator",
+      instrument: orderReq.symbol,
+      symbol: orderReq.symbol,
+      reason: "order_submitted",
+      payload: {
+        order_id: order.id,
+        side: orderReq.side,
+        type: orderReq.type,
+        qty: orderReq.qty ?? null,
+        notional: orderReq.notional ?? null,
+        limit_price: orderReq.limit_price ?? null,
+        stop_price: orderReq.stop_price ?? null,
+      },
+    });
     req.log.info({ order_id: order.id, symbol: order.symbol, side: order.side }, "Order placed");
     res.json({ success: true, order });
   } catch (err) {
+    void writeAuditEvent(req, {
+      eventType: "ORDER_PLACE_ERROR",
+      decisionState: "DEGRADED_DATA",
+      actor: "api",
+      reason: "order_failed",
+      payload: { error: String(err) },
+    });
     req.log.error({ err }, "Failed to place order");
     res.status(500).json({ error: "order_failed", message: String(err) });
   }
@@ -1180,6 +1359,15 @@ router.post("/alpaca/analyze", async (req, res) => {
       return acc;
     }, {});
     decisionSummary.BLOCKED_BY_RISK = (decisionSummary.BLOCKED_BY_RISK ?? 0) + blockedSetups.length;
+    const highConvictionSetups = enrichedSetups.filter((s) => s.meets_threshold);
+    const analyzeDecisionState: DecisionState =
+      highConvictionSetups.length > 0
+        ? "TRADE"
+        : enrichedSetups.length > 0
+          ? "REJECTED"
+          : blockedSetups.length > 0
+            ? "BLOCKED_BY_RISK"
+            : "PASS";
 
     // Persist detected setups to signals table so Mission Control can count them
     if (enrichedSetups.length > 0) {
@@ -1212,6 +1400,24 @@ router.post("/alpaca/analyze", async (req, res) => {
       }
     }
 
+    void writeAuditEvent(req, {
+      eventType: "ANALYZE_COMPLETED",
+      decisionState: analyzeDecisionState,
+      actor: "system",
+      instrument,
+      symbol: alpacaSymbol,
+      reason: highConvictionSetups.length > 0 ? "high_conviction_available" : "no_executable_setup",
+      payload: {
+        regime,
+        setups_requested: setups.length,
+        setups_detected: enrichedSetups.length,
+        setups_blocked: blockedSetups.length,
+        high_conviction_count: highConvictionSetups.length,
+        decision_summary: decisionSummary,
+        bars_analyzed: { "1m": bars1m.length, "5m": bars5m.length, "15m": bars15m.length },
+      },
+    });
+
     res.json({
       instrument,
       alpaca_symbol: alpacaSymbol,
@@ -1226,11 +1432,21 @@ router.post("/alpaca/analyze", async (req, res) => {
       setups_detected:  enrichedSetups.length,
       setups_blocked:   blockedSetups,
       setups:           enrichedSetups,
-      high_conviction:  enrichedSetups.filter((s) => s.meets_threshold),
+      high_conviction:  highConvictionSetups,
       decision_summary: decisionSummary,
       claude_active:    isClaudeAvailable(),
     });
   } catch (err) {
+    const instrument = String(req.body?.instrument ?? "BTCUSDT");
+    void writeAuditEvent(req, {
+      eventType: "ANALYZE_ERROR",
+      decisionState: "DEGRADED_DATA",
+      actor: "system",
+      instrument,
+      symbol: toAlpacaSymbol(instrument),
+      reason: "analysis_error",
+      payload: { error: String(err) },
+    });
     req.log.error({ err }, "Failed to analyze market");
     res.status(500).json({ error: "analysis_error", message: String(err) });
   }

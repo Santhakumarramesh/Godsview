@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, signalsTable, tradesTable } from "@workspace/db";
-import { gte, sql } from "drizzle-orm";
+import { db, auditEventsTable, signalsTable, tradesTable } from "@workspace/db";
+import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { getTypedPositions, getAccount, hasValidTradingKey, isBrokerKey } from "../lib/alpaca";
 import { getModelStatus, retrainModel } from "../lib/ml_model";
 import { resolveSystemMode, canWriteOrders, isLiveMode } from "@workspace/strategy-core";
@@ -11,6 +11,22 @@ const SYSTEM_MODE = resolveSystemMode(process.env.GODSVIEW_SYSTEM_MODE, {
   liveTradingEnabled: LEGACY_LIVE_TRADING_ENABLED,
 });
 const TRADING_KILL_SWITCH = String(process.env.GODSVIEW_KILL_SWITCH ?? "").toLowerCase() === "true";
+const CREATE_AUDIT_EVENTS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS audit_events (
+    id SERIAL PRIMARY KEY,
+    event_type TEXT NOT NULL,
+    decision_state TEXT,
+    system_mode TEXT,
+    instrument TEXT,
+    setup_type TEXT,
+    symbol TEXT,
+    actor TEXT NOT NULL DEFAULT 'system',
+    reason TEXT,
+    payload_json TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+`;
+let auditEventsTableReady = false;
 
 // ── Server-side cache for Alpaca data (avoid 429 rate limits) ───────────────
 let _alpacaCache: { positions: any[]; account: any; ts: number } = { positions: [], account: null, ts: 0 };
@@ -133,6 +149,95 @@ router.post("/system/retrain", async (req, res) => {
     res.json(result);
   } catch (err) {
     res.status(500).json({ success: false, message: String(err) });
+  }
+});
+
+// ─── GET /api/system/audit — recent audit events ─────────────────────────────
+router.get("/system/audit", async (req, res) => {
+  try {
+    if (!auditEventsTableReady) {
+      await db.execute(sql.raw(CREATE_AUDIT_EVENTS_TABLE_SQL));
+      auditEventsTableReady = true;
+    }
+    const limitRaw = Number(req.query.limit ?? 100);
+    const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? Math.trunc(limitRaw) : 100, 1), 500);
+    const eventType = String(req.query.event_type ?? "").trim();
+    const decisionState = String(req.query.decision_state ?? "").trim();
+    const symbol = String(req.query.symbol ?? "").trim().toUpperCase();
+
+    let events;
+    if (eventType && decisionState && symbol) {
+      events = await db
+        .select()
+        .from(auditEventsTable)
+        .where(
+          and(
+            eq(auditEventsTable.event_type, eventType),
+            eq(auditEventsTable.decision_state, decisionState),
+            eq(auditEventsTable.symbol, symbol),
+          ),
+        )
+        .orderBy(desc(auditEventsTable.created_at))
+        .limit(limit);
+    } else if (eventType && decisionState) {
+      events = await db
+        .select()
+        .from(auditEventsTable)
+        .where(and(eq(auditEventsTable.event_type, eventType), eq(auditEventsTable.decision_state, decisionState)))
+        .orderBy(desc(auditEventsTable.created_at))
+        .limit(limit);
+    } else if (eventType && symbol) {
+      events = await db
+        .select()
+        .from(auditEventsTable)
+        .where(and(eq(auditEventsTable.event_type, eventType), eq(auditEventsTable.symbol, symbol)))
+        .orderBy(desc(auditEventsTable.created_at))
+        .limit(limit);
+    } else if (decisionState && symbol) {
+      events = await db
+        .select()
+        .from(auditEventsTable)
+        .where(and(eq(auditEventsTable.decision_state, decisionState), eq(auditEventsTable.symbol, symbol)))
+        .orderBy(desc(auditEventsTable.created_at))
+        .limit(limit);
+    } else if (eventType) {
+      events = await db
+        .select()
+        .from(auditEventsTable)
+        .where(eq(auditEventsTable.event_type, eventType))
+        .orderBy(desc(auditEventsTable.created_at))
+        .limit(limit);
+    } else if (decisionState) {
+      events = await db
+        .select()
+        .from(auditEventsTable)
+        .where(eq(auditEventsTable.decision_state, decisionState))
+        .orderBy(desc(auditEventsTable.created_at))
+        .limit(limit);
+    } else if (symbol) {
+      events = await db
+        .select()
+        .from(auditEventsTable)
+        .where(eq(auditEventsTable.symbol, symbol))
+        .orderBy(desc(auditEventsTable.created_at))
+        .limit(limit);
+    } else {
+      events = await db
+        .select()
+        .from(auditEventsTable)
+        .orderBy(desc(auditEventsTable.created_at))
+        .limit(limit);
+    }
+
+    res.json({
+      events,
+      count: events.length,
+      limit,
+      fetched_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch audit events");
+    res.status(500).json({ error: "audit_fetch_failed", message: "Failed to fetch audit events" });
   }
 });
 
