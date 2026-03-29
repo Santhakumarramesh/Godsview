@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, signalsTable, tradesTable } from "@workspace/db";
 import { gte, sql } from "drizzle-orm";
 import { getTypedPositions, getAccount, hasValidTradingKey, isBrokerKey } from "../lib/alpaca";
+import { getModelStatus, retrainModel } from "../lib/ml_model";
 
 const router: IRouter = Router();
 
@@ -59,8 +60,8 @@ router.get("/system/status", async (req, res) => {
       },
       {
         name: "ML Model",
-        status: "warning" as const,
-        message: "Heuristic quality scoring active — train learned model for stronger recall",
+        status: getModelStatus().status,
+        message: getModelStatus().message,
         last_update: new Date().toISOString(),
       },
       {
@@ -112,6 +113,16 @@ router.get("/system/status", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to get system status");
     res.status(500).json({ error: "internal_error", message: "Failed to fetch system status" });
+  }
+});
+
+// ─── POST /api/system/retrain — retrain ML model on demand ──────────────────
+router.post("/system/retrain", async (req, res) => {
+  try {
+    const result = await retrainModel();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, message: String(err) });
   }
 });
 

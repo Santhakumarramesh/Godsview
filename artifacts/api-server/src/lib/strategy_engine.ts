@@ -1,4 +1,5 @@
 import type { AlpacaBar } from "./alpaca";
+import { predictWinProbability } from "./ml_model";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1288,16 +1289,24 @@ export function computeFinalQuality(
   structure: number,
   orderFlow: number,
   recall: number,
-  context?: { recall?: RecallFeatures; direction?: "long" | "short" }
+  context?: { recall?: RecallFeatures; direction?: "long" | "short"; setup_type?: SetupType }
 ): number {
   const safeStructure = clamp(Number.isFinite(structure) ? structure : 0);
   const safeOrderFlow = clamp(Number.isFinite(orderFlow) ? orderFlow : 0);
   const safeRecall = clamp(Number.isFinite(recall) ? recall : 0);
 
-  // Layer weights: 0.30 structure · 0.25 order_flow · 0.20 recall · 0.15 ml · 0.10 claude
-  // ML stub baseline raised 0.50 → 0.55 (CALIB_LO fix): since recall score is already
-  // calibrated above 0.55, the ml stub should reflect that rather than pulling it down.
-  const ml = 0.55 + safeRecall * 0.25;
+  // Layer 4: ML Model — trained logistic regression (falls back to heuristic if untrained)
+  const mlPred = predictWinProbability({
+    structure_score: safeStructure,
+    order_flow_score: safeOrderFlow,
+    recall_score: safeRecall,
+    final_quality: 0.30 * safeStructure + 0.25 * safeOrderFlow + 0.20 * safeRecall, // pre-ML estimate
+    setup_type: context?.setup_type ?? "absorption_reversal",
+    regime: context?.recall?.regime ?? "ranging",
+    direction: context?.direction,
+  });
+  const ml = mlPred.probability;
+
   const claude = 0.52 + (safeStructure + safeOrderFlow) * 0.22;
   let quality = 0.30 * safeStructure + 0.25 * safeOrderFlow + 0.20 * safeRecall + 0.15 * ml + 0.10 * claude;
 

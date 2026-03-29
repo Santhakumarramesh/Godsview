@@ -22,6 +22,7 @@ import {
   type SetupCooldowns,
   type RecallFeatures,
 } from "../lib/strategy_engine";
+import { getModelStatus, predictWinProbability } from "../lib/ml_model";
 import { db, accuracyResultsTable, marketBarsTable, signalsTable } from "@workspace/db";
 import { eq, desc, and, count, sql, inArray } from "drizzle-orm";
 
@@ -723,6 +724,7 @@ router.post("/alpaca/analyze", async (req, res) => {
       const finalQuality = computeFinalQuality(result.structure, result.orderFlow, recallScore, {
         recall,
         direction: result.direction,
+        setup_type: setup,
       });
       const threshold = getQualityThreshold(regime, setup);
       const meetsThreshold = finalQuality >= threshold;
@@ -825,7 +827,7 @@ router.post("/alpaca/analyze", async (req, res) => {
       try {
         await db.insert(signalsTable).values(
           enrichedSetups.map((s) => {
-            const mlProb = Math.min(0.9999, 0.55 + s.recall_score * 0.25);
+            const mlProb = Math.min(0.9999, predictWinProbability({ structure_score: s.structure_score, order_flow_score: s.order_flow_score, recall_score: s.recall_score, final_quality: s.final_quality_with_claude, setup_type: s.setup_type, regime: s.recall_features?.regime ?? "ranging", direction: s.direction }).probability);
             return {
               instrument:    s.instrument,
               setup_type:    s.setup_type,
@@ -999,9 +1001,10 @@ router.post("/alpaca/backtest", async (req, res) => {
       const finalQuality = computeFinalQuality(detected.structure, detected.orderFlow, recallScore, {
         recall,
         direction: detected.direction,
+        setup_type: setup,
       });
       const threshold = getQualityThreshold(recall.regime, setup);
-      const mlProbability = Math.min(1, 0.55 + recallScore * 0.25);
+      const mlProbability = Math.min(1, predictWinProbability({ structure_score: detected.structure, order_flow_score: detected.orderFlow, recall_score: recallScore, final_quality: finalQuality, setup_type: setup, regime: recall.regime, direction: detected.direction }).probability);
 
       // Dollar P&L: tick_size derived from price level (crypto: BTC ~$5/tick, ETH ~$1/tick)
       const tickValue = entryPrice > 10000 ? 5 : entryPrice > 1000 ? 1 : 0.25;
@@ -1401,6 +1404,7 @@ router.post("/alpaca/backtest-batch", async (req, res) => {
           const finalQuality = computeFinalQuality(detected.structure, detected.orderFlow, recallScore, {
             recall,
             direction: detected.direction,
+            setup_type: setup,
           });
           const threshold = getQualityThreshold(recall.regime, setup);
 
@@ -1645,6 +1649,7 @@ router.post("/alpaca/recall-build", async (req, res) => {
           const finalQuality = computeFinalQuality(detected.structure, detected.orderFlow, recallScore, {
             recall,
             direction: detected.direction,
+            setup_type: setup,
           });
           const { takeProfit, stopLoss, tpTicks, slTicks } = computeTPSL(entryPrice, detected.direction, atr, recall.regime);
           const forwardBars = bars.slice(i, i + FORWARD);
@@ -1887,10 +1892,11 @@ router.get("/system/diagnostics", async (req, res) => {
     layers.recall_engine = { status: "offline", detail: String(e) };
   }
 
-  // Layer 6: ML Model (stub — Claude reasoning layer)
+  // Layer 6: ML Model — trained logistic regression or heuristic fallback
+  const mlStatus = getModelStatus();
   layers.ml_model = {
-    status: "degraded",
-    detail: "ML layer using heuristic scoring — train a model to upgrade",
+    status: mlStatus.status === "active" ? "live" : "degraded",
+    detail: mlStatus.message,
   };
 
   layers.claude_reasoning = isClaudeAvailable()

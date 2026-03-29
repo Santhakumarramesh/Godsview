@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { trainModel } from "./lib/ml_model";
 
 const rawPort = process.env["PORT"];
 
@@ -22,4 +23,7 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
+
+  // Train ML model from accuracy_results data (non-blocking)
+  trainModel().catch((err) => logger.error({ err }, "ML model training failed"));
 });
