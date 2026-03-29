@@ -92,6 +92,10 @@ function normaliseBar(b: Record<string, unknown>): AlpacaBar {
   };
 }
 
+// ── Global bar cache to prevent Alpaca 429 rate limits ──────────────────────
+const _barCache: Map<string, { bars: AlpacaBar[]; ts: number }> = new Map();
+const BAR_CACHE_TTL = 8_000; // 8 seconds — fast enough for live trading, slow enough to avoid 429
+
 export async function getBars(
   symbol: string,
   timeframe: AlpacaTimeframe,
@@ -99,6 +103,14 @@ export async function getBars(
   start?: string,
   end?: string
 ): Promise<AlpacaBar[]> {
+  // Cache key: symbol+timeframe+limit (skip cache if custom start/end range)
+  const cacheKey = start || end ? "" : `${symbol}:${timeframe}:${limit}`;
+  if (cacheKey) {
+    const cached = _barCache.get(cacheKey);
+    if (cached && Date.now() - cached.ts < BAR_CACHE_TTL) {
+      return cached.bars;
+    }
+  }
   const safeLimit = Math.min(limit, 1000);
   const normalizedSymbol = normalizeMarketSymbol(symbol);
 
@@ -115,7 +127,9 @@ export async function getBars(
     const url = `${CRYPTO_BASE}/bars?${params}`;
     const data = await alpacaFetch(url, false) as { bars: Record<string, Record<string, unknown>[]> };
     const barsArr = data.bars?.[cryptoSymbol] ?? [];
-    return barsArr.map(normaliseBar);
+    const result = barsArr.map(normaliseBar);
+    if (cacheKey) _barCache.set(cacheKey, { bars: result, ts: Date.now() });
+    return result;
   }
 
   if (!hasValidTradingKey) {
@@ -136,7 +150,9 @@ export async function getBars(
 
     const url = `${DATA_BASE}/v2/stocks/${normalizedSymbol}/bars?${params}`;
   const data = await alpacaFetch(url, true) as { bars: Record<string, unknown>[] };
-  return (data.bars ?? []).map(normaliseBar);
+  const result = (data.bars ?? []).map(normaliseBar);
+  if (cacheKey) _barCache.set(cacheKey, { bars: result, ts: Date.now() });
+  return result;
 }
 
 // Paginated historical fetch — collects ALL bars across multiple API pages
