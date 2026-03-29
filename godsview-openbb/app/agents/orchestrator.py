@@ -12,6 +12,7 @@ from app.agents.reasoning_agent import ReasoningAgent
 from app.agents.risk_agent import RiskAgent
 from app.agents.signal_agent import SignalAgent
 from app.config import settings
+from app.learning.replay import run_replay
 from app.utils import write_json
 
 
@@ -30,6 +31,8 @@ def run_orchestrator(
     symbol: str,
     live: bool = False,
     dry_run: bool = True,
+    with_replay: bool = False,
+    replay_timeframe: str | None = None,
 ) -> dict[str, Any]:
     state = AgentState(
         symbol=symbol.upper(),
@@ -53,6 +56,16 @@ def run_orchestrator(
         "errors": state.errors,
         "data": state.data,
     }
+    if with_replay:
+        try:
+            payload["replay"] = run_replay(
+                symbol=state.symbol,
+                timeframe=(replay_timeframe or settings.timeframe),
+                max_steps=400,
+                screenshot_interval=50,
+            )
+        except Exception as err:  # noqa: BLE001
+            payload["replay"] = {"error": str(err)}
     write_json("data/processed/latest_orchestrator_run.json", payload)
     return payload
 
@@ -71,6 +84,8 @@ def _parse_args() -> argparse.Namespace:
         default=settings.dry_run,
         help="Force dry-run simulation mode.",
     )
+    parser.add_argument("--with-replay", action="store_true", help="Run replay learning pass after agent pipeline.")
+    parser.add_argument("--replay-timeframe", type=str, default=None, help="Optional replay timeframe override.")
     return parser.parse_args()
 
 
@@ -84,6 +99,7 @@ if __name__ == "__main__":
         symbol=args.symbol,
         live=bool(args.live),
         dry_run=effective_dry_run,
+        with_replay=bool(args.with_replay),
+        replay_timeframe=args.replay_timeframe,
     )
     print(result)
-

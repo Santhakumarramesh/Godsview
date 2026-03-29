@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 from datetime import datetime, timezone
 
 import joblib
@@ -24,8 +25,10 @@ def _build_model() -> RandomForestClassifier:
     )
 
 
-def train_model() -> dict[str, float | int | str]:
-    df = fetch_price_history(settings.symbol, settings.timeframe)
+def train_model(symbol: str | None = None, timeframe: str | None = None) -> dict[str, float | int | str]:
+    run_symbol = (symbol or settings.symbol).upper()
+    run_timeframe = (timeframe or settings.timeframe).upper()
+    df = fetch_price_history(run_symbol, run_timeframe)
     feature_df = add_features(df)
 
     if len(feature_df) < 160:
@@ -47,8 +50,8 @@ def train_model() -> dict[str, float | int | str]:
     preds = (prob_up >= 0.5).astype(int)
 
     metrics = {
-        "symbol": settings.symbol,
-        "timeframe": settings.timeframe,
+        "symbol": run_symbol,
+        "timeframe": run_timeframe,
         "train_rows": int(len(train_df)),
         "test_rows": int(len(test_df)),
         "accuracy": float(accuracy_score(y_test, preds)),
@@ -72,5 +75,8 @@ def train_model() -> dict[str, float | int | str]:
 
 
 if __name__ == "__main__":
-    train_model()
-
+    parser = argparse.ArgumentParser(description="Train Godsview research model")
+    parser.add_argument("--symbol", type=str, default=settings.symbol)
+    parser.add_argument("--timeframe", type=str, default=settings.timeframe)
+    args = parser.parse_args()
+    train_model(symbol=args.symbol, timeframe=args.timeframe)

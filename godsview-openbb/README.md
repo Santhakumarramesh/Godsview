@@ -27,7 +27,7 @@ cp .env.example .env
 Train model:
 
 ```bash
-python -m app.train
+python -m app.train --symbol AAPL --timeframe 1D
 ```
 
 Generate latest signal:
@@ -47,12 +47,19 @@ Run multi-agent orchestration:
 ```bash
 python -m app.agents.orchestrator --symbol AAPL
 python -m app.agents.orchestrator --symbol BTCUSD --live
+python -m app.agents.orchestrator --symbol AAPL --with-replay --replay-timeframe 1D
 ```
 
 Run lightweight backtest report:
 
 ```bash
 python -m app.backtest
+```
+
+Run replay learning engine directly:
+
+```bash
+python -m app.learning.replay --symbol AAPL --timeframe 1D --max-steps 400
 ```
 
 ## Files
@@ -70,6 +77,9 @@ python -m app.backtest
 - `app/brain/schema.py`: entity/relationship/memory models.
 - `app/brain/memory.py`: persistent brain memory store.
 - `app/agents/*`: 6-agent pipeline (`data`, `signal`, `reasoning`, `risk`, `execution`, `monitor`) and orchestrator.
+- `app/analysis/*`: structure, order-block, FVG, and multi-timeframe intelligence modules.
+- `app/learning/replay.py`: no-lookahead replay runner with memory feedback.
+- `app/visuals/*`: chart plotting and screenshot outputs.
 
 ## Output Artifacts
 
@@ -77,6 +87,8 @@ python -m app.backtest
 - Metadata: `models/signal_model_meta.json`
 - Latest signal: `data/processed/latest_signal.json`
 - Backtest summary: `data/processed/backtest_summary.json`
+- Replay report: `data/processed/replay_latest.json`
+- Replay screenshots: `charts/*.png`
 
 ## Safety Defaults
 

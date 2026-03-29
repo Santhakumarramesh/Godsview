@@ -14,6 +14,7 @@ class ReasoningAgent(Agent):
 
         signal = state.data.get("signal")
         market = state.data.get("market", {})
+        mtf = state.data.get("mtf", {})
         if not isinstance(signal, dict):
             state.set_blocked("missing_signal")
             return state
@@ -34,12 +35,20 @@ class ReasoningAgent(Agent):
             context["degraded_data"] = True
 
         decision = ai_trade_filter(signal, context)
+        confluence = float(mtf.get("summary", {}).get("confluence", 0.0)) if isinstance(mtf, dict) else 0.0
+        if confluence < 0.45 and decision.approved:
+            # Low MTF alignment forces caution.
+            decision = ai_trade_filter(
+                {**signal, "action": "skip"},
+                {"degraded_data": True},
+            )
         reasoning = {
             "approved": decision.approved,
             "final_action": decision.final_action,
             "reasons": decision.reasons,
             "recent_loss_rate": recent_loss_rate,
             "recent_trades": recent_total,
+            "mtf_confluence": confluence,
         }
         state.data["reasoning"] = reasoning
 
@@ -58,4 +67,3 @@ class ReasoningAgent(Agent):
             state.set_blocked("reasoning_veto")
 
         return state
-

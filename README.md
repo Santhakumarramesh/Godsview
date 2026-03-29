@@ -154,6 +154,7 @@ It provides a separate workflow for:
 - inference + filter + risk checks
 - optional Alpaca paper order submission
 - multi-agent orchestration with persistent brain memory
+- replay-based chart intelligence (structure/BOS/CHOCH/order blocks/FVG) with screenshot artifacts
 
 Bridge endpoint in API:
 

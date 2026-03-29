@@ -9,6 +9,13 @@ from dotenv import load_dotenv
 ROOT_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT_DIR / ".env")
 
+mpl_config_dir = os.getenv("MPLCONFIGDIR", "").strip() or ".cache/matplotlib"
+mpl_path = Path(mpl_config_dir)
+if not mpl_path.is_absolute():
+    mpl_path = ROOT_DIR / mpl_path
+mpl_path.mkdir(parents=True, exist_ok=True)
+os.environ["MPLCONFIGDIR"] = str(mpl_path)
+
 
 def _as_bool(name: str, default: bool) -> bool:
     raw = os.getenv(name)
@@ -64,4 +71,3 @@ class Settings:
 
 
 settings = Settings()
-

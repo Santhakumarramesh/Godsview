@@ -3,6 +3,7 @@ from __future__ import annotations
 from statistics import mean, pstdev
 
 from app.agents.base import Agent, AgentState
+from app.analysis.multi_timeframe import analyze_multi_timeframes
 from app.brain.schema import AssetEntity, SemanticMemory
 from app.data_fetch import fetch_price_history
 
@@ -44,6 +45,11 @@ class DataAgent(Agent):
                 "volatility_100": float(vol),
                 "regime": regime,
             }
+            # Build lightweight multi-timeframe context for downstream agents.
+            state.data["mtf"] = analyze_multi_timeframes(
+                state.symbol,
+                timeframes=["15m", "1h", "4h", "1d"],
+            )
 
             entity = AssetEntity(
                 symbol=state.symbol,
@@ -72,4 +78,3 @@ class DataAgent(Agent):
             state.add_error(f"data_agent_error: {err}")
             state.set_blocked("data_agent_failed")
             return state
-
