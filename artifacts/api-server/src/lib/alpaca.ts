@@ -155,6 +155,18 @@ function normaliseBar(b: Record<string, unknown>): AlpacaBar {
 // ── Global bar cache to prevent Alpaca 429 rate limits ──────────────────────
 const _barCache: Map<string, { bars: AlpacaBar[]; ts: number }> = new Map();
 const BAR_CACHE_TTL = 8_000; // 8 seconds — fast enough for live trading, slow enough to avoid 429
+const _barInflight = new Map<string, Promise<AlpacaBar[]>>();
+
+function buildBarsCacheKey(
+  symbol: string,
+  timeframe: AlpacaTimeframe,
+  limit: number,
+  start?: string,
+  end?: string
+): string {
+  const normalizedSymbol = normalizeMarketSymbol(symbol);
+  return [normalizedSymbol, timeframe, String(limit), start ?? "", end ?? ""].join("|");
+}
 
 export async function getBars(
   symbol: string,
@@ -163,56 +175,73 @@ export async function getBars(
   start?: string,
   end?: string
 ): Promise<AlpacaBar[]> {
-  // Cache key: symbol+timeframe+limit (skip cache if custom start/end range)
-  const cacheKey = start || end ? "" : `${symbol}:${timeframe}:${limit}`;
-  if (cacheKey) {
-    const cached = _barCache.get(cacheKey);
-    if (cached && Date.now() - cached.ts < BAR_CACHE_TTL) {
-      return cached.bars;
-    }
-  }
   const safeLimit = Math.min(limit, 1000);
   const normalizedSymbol = normalizeMarketSymbol(symbol);
+  const cacheKey = buildBarsCacheKey(normalizedSymbol, timeframe, safeLimit, start, end);
+  const cached = _barCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < BAR_CACHE_TTL) {
+    return cached.bars;
+  }
 
-  if (isCryptoSymbol(normalizedSymbol)) {
-    const cryptoSymbol = toAlpacaSlash(normalizedSymbol);
+  const inflight = _barInflight.get(cacheKey);
+  if (inflight) {
+    return inflight;
+  }
+
+  const loadPromise = (async (): Promise<AlpacaBar[]> => {
+    if (isCryptoSymbol(normalizedSymbol)) {
+      const cryptoSymbol = toAlpacaSlash(normalizedSymbol);
+      const params = new URLSearchParams({
+        symbols: cryptoSymbol,
+        timeframe: TF_MAP[timeframe],
+        limit: String(safeLimit),
+      });
+      if (start) params.set("start", start);
+      if (end) params.set("end", end);
+
+      const url = `${CRYPTO_BASE}/bars?${params}`;
+      const data = await alpacaFetch(url, false) as { bars: Record<string, Record<string, unknown>[]> };
+      const barsArr = data.bars?.[cryptoSymbol] ?? [];
+      const result = barsArr.map(normaliseBar);
+      _barCache.set(cacheKey, { bars: result, ts: Date.now() });
+      return result;
+    }
+
+    if (!hasValidTradingKey) {
+      throw new Error(
+        "Stock market data requires Trading API keys (starting with PK or AK). " +
+        "Please generate keys from app.alpaca.markets → API Keys."
+      );
+    }
+
     const params = new URLSearchParams({
-      symbols: cryptoSymbol,
-      timeframe: TF_MAP[timeframe],
+      timeframe,
       limit: String(safeLimit),
+      adjustment: "raw",
+      feed: "iex",
     });
     if (start) params.set("start", start);
     if (end) params.set("end", end);
 
-    const url = `${CRYPTO_BASE}/bars?${params}`;
-    const data = await alpacaFetch(url, false) as { bars: Record<string, Record<string, unknown>[]> };
-    const barsArr = data.bars?.[cryptoSymbol] ?? [];
-    const result = barsArr.map(normaliseBar);
-    if (cacheKey) _barCache.set(cacheKey, { bars: result, ts: Date.now() });
-    return result;
-  }
-
-  if (!hasValidTradingKey) {
-    throw new Error(
-      "Stock market data requires Trading API keys (starting with PK or AK). " +
-      "Please generate keys from app.alpaca.markets → API Keys."
-    );
-  }
-
-  const params = new URLSearchParams({
-    timeframe,
-    limit: String(safeLimit),
-    adjustment: "raw",
-    feed: "iex",
-  });
-  if (start) params.set("start", start);
-  if (end) params.set("end", end);
-
     const url = `${DATA_BASE}/v2/stocks/${normalizedSymbol}/bars?${params}`;
-  const data = await alpacaFetch(url, true) as { bars: Record<string, unknown>[] };
-  const result = (data.bars ?? []).map(normaliseBar);
-  if (cacheKey) _barCache.set(cacheKey, { bars: result, ts: Date.now() });
-  return result;
+    const data = await alpacaFetch(url, true) as { bars: Record<string, unknown>[] };
+    const result = (data.bars ?? []).map(normaliseBar);
+    _barCache.set(cacheKey, { bars: result, ts: Date.now() });
+    return result;
+  })();
+
+  _barInflight.set(cacheKey, loadPromise);
+  try {
+    return await loadPromise;
+  } catch (err) {
+    const stale = _barCache.get(cacheKey);
+    if (stale && stale.bars.length > 0) {
+      return stale.bars;
+    }
+    throw err;
+  } finally {
+    _barInflight.delete(cacheKey);
+  }
 }
 
 // Paginated historical fetch — collects ALL bars across multiple API pages
