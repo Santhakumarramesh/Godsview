@@ -18,6 +18,7 @@
 
 import { Router } from "express";
 import { orderBookManager } from "../lib/market/orderbook";
+import { orderBookRecorder } from "../lib/market/orderbook_recorder";
 import { computeLiquidityZones, computeMicrostructure } from "../lib/market/liquidityMap";
 import { isCryptoSymbol, normalizeMarketSymbol } from "../lib/market/symbols";
 import { getBars } from "../lib/alpaca";
@@ -27,6 +28,25 @@ const router = Router();
 function validateSymbol(sym: string): string {
   const normalized = normalizeMarketSymbol(sym, "BTCUSD");
   return isCryptoSymbol(normalized) ? normalized : "BTCUSD";
+}
+
+function parseBoundedInt(raw: unknown, fallback: number, min: number, max: number): number {
+  const parsed = Number.parseInt(String(raw ?? ""), 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(max, parsed));
+}
+
+function parseTimeMs(raw: unknown, fallbackMs: number): number {
+  const value = String(raw ?? "").trim();
+  if (!value) return fallbackMs;
+
+  if (/^\d+$/.test(value)) {
+    const ms = Number.parseInt(value, 10);
+    return Number.isFinite(ms) ? ms : Number.NaN;
+  }
+
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
 }
 
 // ─── GET /api/orderbook/snapshot ──────────────────────────────────────────────
@@ -107,6 +127,65 @@ router.get("/orderbook/stream", (req, res) => {
     clearInterval(heartbeat);
     orderBookManager.unsubscribe(symbol, listener);
   });
+});
+
+// ─── GET /api/orderbook/replay ───────────────────────────────────────────────
+// Returns recorded orderbook frames and optional trade ticks for a time window.
+router.get("/orderbook/replay", (req, res) => {
+  const symbol = validateSymbol(String(req.query.symbol ?? "BTCUSD"));
+  const endMs = parseTimeMs(req.query.end, Date.now());
+  const startMs = parseTimeMs(req.query.start, endMs - 15 * 60_000);
+
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) {
+    res.status(400).json({
+      error: "invalid_time_window",
+      message: "start/end must be unix-ms timestamps or ISO-8601 strings",
+    });
+    return;
+  }
+
+  if (startMs >= endMs) {
+    res.status(400).json({
+      error: "invalid_time_window",
+      message: "start must be lower than end",
+    });
+    return;
+  }
+
+  const durationMs = endMs - startMs;
+  const maxDurationMs = 48 * 60 * 60 * 1000;
+  if (durationMs > maxDurationMs) {
+    res.status(400).json({
+      error: "window_too_large",
+      message: "maximum replay window is 48 hours",
+      durationMs,
+      maxDurationMs,
+    });
+    return;
+  }
+
+  const downsampleMsRaw = parseBoundedInt(req.query.downsample_ms, 0, 0, 3_600_000);
+  const downsampleMs = downsampleMsRaw > 0 ? downsampleMsRaw : undefined;
+  const maxFrames = parseBoundedInt(req.query.max_frames, 1_500, 50, 10_000);
+  const maxTicks = parseBoundedInt(req.query.max_ticks, 5_000, 50, 25_000);
+  const includeTicks = String(req.query.include_ticks ?? "true").toLowerCase() !== "false";
+
+  const replay = orderBookRecorder.getReplayWindow({
+    symbol,
+    startMs,
+    endMs,
+    downsampleMs,
+    maxFrames,
+    maxTicks,
+    includeTicks,
+  });
+
+  res.json(replay);
+});
+
+// ─── GET /api/orderbook/recorder/status ──────────────────────────────────────
+router.get("/orderbook/recorder/status", (_req, res) => {
+  res.json(orderBookRecorder.getStatus());
 });
 
 // ─── GET /api/market/microstructure ──────────────────────────────────────────

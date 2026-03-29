@@ -17,6 +17,7 @@
 import https from "https";
 import type { OrderBookSnapshot, OrderBookListener, PriceLevel } from "./types";
 import { normalizeMarketSymbol, toAlpacaSlash } from "./symbols";
+import { orderBookRecorder } from "./orderbook_recorder";
 
 const ALPACA_DATA_URL = "data.alpaca.markets";
 const KEY_ID          = process.env.ALPACA_API_KEY    ?? "";
@@ -88,7 +89,7 @@ class OrderBookManager {
   async fetchSnapshot(symbol: string): Promise<OrderBookSnapshot> {
     symbol = normalizeMarketSymbol(symbol);
     const snap = await this.restFetch(symbol);
-    this.snapshots.set(symbol, snap);
+    this.ingestSnapshot(symbol, snap, false);
     return snap;
   }
 
@@ -123,23 +124,20 @@ class OrderBookManager {
       receivedAt: Date.now(),
       source:     "ws",
     };
-    this.snapshots.set(symbol, updated);
-    this.broadcast(symbol, updated);
+    this.ingestSnapshot(symbol, updated, true);
   }
 
   private ensurePoll(symbol: string): void {
     if (this.pollTimers.has(symbol)) return;
     // Immediate first fetch
     this.restFetch(symbol).then((snap) => {
-      this.snapshots.set(symbol, snap);
-      this.broadcast(symbol, snap);
+      this.ingestSnapshot(symbol, snap, true);
     }).catch((e) => console.error(`[orderbook] initial fetch error ${symbol}:`, e));
 
     const timer = setInterval(async () => {
       try {
         const snap = await this.restFetch(symbol);
-        this.snapshots.set(symbol, snap);
-        this.broadcast(symbol, snap);
+        this.ingestSnapshot(symbol, snap, true);
       } catch (e) {
         console.error(`[orderbook] poll error ${symbol}:`, e);
       }
@@ -154,6 +152,12 @@ class OrderBookManager {
     for (const fn of set) {
       try { fn(snap); } catch { /* ignore */ }
     }
+  }
+
+  private ingestSnapshot(symbol: string, snap: OrderBookSnapshot, broadcast: boolean): void {
+    this.snapshots.set(symbol, snap);
+    orderBookRecorder.recordSnapshot(snap);
+    if (broadcast) this.broadcast(symbol, snap);
   }
 
   private restFetch(symbol: string): Promise<OrderBookSnapshot> {

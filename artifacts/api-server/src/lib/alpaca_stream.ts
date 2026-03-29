@@ -4,6 +4,7 @@
 
 import WebSocket from "ws";
 import { orderBookManager } from "./market/orderbook";
+import { orderBookRecorder } from "./market/orderbook_recorder";
 import { fromAlpacaSlash, isCryptoSymbol, normalizeMarketSymbol, toAlpacaSlash } from "./market/symbols";
 
 const WS_URL = "wss://stream.data.alpaca.markets/v1beta3/crypto/us";
@@ -230,6 +231,14 @@ class AlpacaStreamManager {
         console.log(`[stream] TRADE tick #${this.ticksReceived} ${symbol} $${price} @ ${timestamp}`);
       }
 
+      orderBookRecorder.recordTradeTick({
+        symbol,
+        price,
+        size: volume,
+        timestamp,
+        source: "ws_trade",
+      });
+
       this.broadcastPrice(symbol, price, volume, timestamp);
     }
 
@@ -359,6 +368,14 @@ class AlpacaStreamManager {
       const prev = this.lastTrade.get(symbol);
       if (prev && prev.ts === trade.timestamp) return;
       this.lastTrade.set(symbol, { price: trade.price, ts: trade.timestamp });
+
+      orderBookRecorder.recordTradeTick({
+        symbol,
+        price: trade.price,
+        size: 0,
+        timestamp: trade.timestamp,
+        source: "poll_trade",
+      });
 
       this.broadcastPrice(symbol, trade.price, 0, trade.timestamp);
     } catch { /* silent */ }
