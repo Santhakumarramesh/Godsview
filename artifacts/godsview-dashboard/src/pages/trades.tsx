@@ -275,7 +275,7 @@ function PositionsTab() {
 
   useEffect(() => {
     fetchPositions();
-    intervalRef.current = setInterval(fetchPositions, 5000);
+    intervalRef.current = setInterval(fetchPositions, 15_000);
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [fetchPositions]);
 

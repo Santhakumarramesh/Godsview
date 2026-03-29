@@ -49,12 +49,12 @@ export default function Dashboard() {
   const { data: diagnostics, isError: diagError, refetch: refetchDiag } = useQuery<DiagnosticsPayload>({
     queryKey: ["system-diagnostics"],
     queryFn: () => fetch("/api/system/diagnostics").then((r) => r.json()),
-    refetchInterval: 15000,
-    staleTime: 10000,
+    refetchInterval: 30_000,
+    staleTime: 25_000,
     retry: 2,
   });
 
-  // Fallback manual interval (belt & braces)
+  // Fallback manual interval — 30 s to avoid Alpaca 429 rate limits
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
     intervalRef.current = setInterval(() => {
@@ -62,7 +62,7 @@ export default function Dashboard() {
       refetchPerf();
       refetchSigs();
       refetchDiag();
-    }, 5000);
+    }, 30_000);
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [refetchStatus, refetchPerf, refetchSigs, refetchDiag]);
 

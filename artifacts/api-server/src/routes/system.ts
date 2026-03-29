@@ -5,16 +5,31 @@ import { getTypedPositions, getAccount, hasValidTradingKey, isBrokerKey } from "
 
 const router: IRouter = Router();
 
+// ── Server-side cache for Alpaca data (avoid 429 rate limits) ───────────────
+let _alpacaCache: { positions: any[]; account: any; ts: number } = { positions: [], account: null, ts: 0 };
+const ALPACA_CACHE_TTL = 15_000; // 15 seconds
+
+async function getCachedAlpacaData() {
+  if (Date.now() - _alpacaCache.ts < ALPACA_CACHE_TTL) {
+    return { positions: _alpacaCache.positions, account: _alpacaCache.account };
+  }
+  const [positions, account] = await Promise.all([
+    getTypedPositions().catch(() => [] as Awaited<ReturnType<typeof getTypedPositions>>),
+    getAccount().catch(() => null),
+  ]);
+  _alpacaCache = { positions, account, ts: Date.now() };
+  return { positions, account };
+}
+
 router.get("/system/status", async (req, res) => {
   try {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const [signalsRow, tradesRow, positions, account] = await Promise.all([
+    const [signalsRow, tradesRow, { positions, account }] = await Promise.all([
       db.select({ count: sql<number>`count(*)` }).from(signalsTable).where(gte(signalsTable.created_at, today)),
       db.select({ count: sql<number>`count(*)` }).from(tradesTable).where(gte(tradesTable.created_at, today)),
-      getTypedPositions().catch(() => [] as Awaited<ReturnType<typeof getTypedPositions>>),
-      getAccount().catch(() => null),
+      getCachedAlpacaData(),
     ]);
 
     const unrealizedPnl = positions.reduce((sum, p) => sum + parseFloat(p.unrealized_pl ?? "0"), 0);

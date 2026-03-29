@@ -344,7 +344,7 @@ export default function LiveCandleChart({
       }
     };
 
-    const interval = setInterval(poll, 3000);
+    const interval = setInterval(poll, 10_000);
     poll(); // immediate first tick
     return () => {
       cancelled = true;

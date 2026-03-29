@@ -417,8 +417,18 @@ router.get("/alpaca/stream", (req, res) => {
 
 // ─── GET /api/alpaca/ticker — live prices for multiple symbols ────────────────
 // Polls Alpaca latest bar + 24h change. No auth required for crypto.
+// ── Ticker cache (avoid Alpaca 429 rate limits) ─────────────────────────────
+const _tickerCache: Map<string, { data: any; ts: number }> = new Map();
+const TICKER_CACHE_TTL = 8_000; // 8 seconds
+
 router.get("/alpaca/ticker", async (req, res) => {
   const symbolsParam = String(req.query.symbols ?? "BTCUSD,ETHUSD");
+  const cacheKey = symbolsParam;
+  const cached = _tickerCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < TICKER_CACHE_TTL) {
+    return res.json(cached.data);
+  }
+
   const symbols = symbolsParam.split(",").map((s) => s.trim()).filter(Boolean);
 
   const results = await Promise.allSettled(
@@ -465,7 +475,9 @@ router.get("/alpaca/ticker", async (req, res) => {
   );
 
   const tickers = results.map((r) => (r.status === "fulfilled" ? r.value : { error: "fetch_failed" }));
-  res.json({ tickers, fetched_at: new Date().toISOString() });
+  const payload = { tickers, fetched_at: new Date().toISOString() };
+  _tickerCache.set(cacheKey, { data: payload, ts: Date.now() });
+  res.json(payload);
 });
 
 // ─── GET /api/alpaca/account ──────────────────────────────────────────────────

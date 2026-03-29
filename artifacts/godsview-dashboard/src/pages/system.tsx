@@ -81,8 +81,8 @@ export default function System() {
   const { data: streamStatus } = useQuery<StreamStatus>({
     queryKey: ["stream-status"],
     queryFn: () => fetch("/api/alpaca/stream-status").then((r) => r.json()),
-    refetchInterval: 10000,
-    staleTime: 8000,
+    refetchInterval: 30_000,
+    staleTime: 25_000,
   });
 
   if (isLoading || !data) {

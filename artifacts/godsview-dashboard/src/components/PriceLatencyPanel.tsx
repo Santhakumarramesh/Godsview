@@ -99,7 +99,7 @@ export default function PriceLatencyPanel({ symbol = "BTCUSD" }: Props) {
       } catch { /* ignore */ }
     };
     poll();
-    const id = setInterval(poll, 5_000);
+    const id = setInterval(poll, 15_000);
     return () => clearInterval(id);
   }, [symbol]);
 

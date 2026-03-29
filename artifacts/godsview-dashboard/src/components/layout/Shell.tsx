@@ -109,7 +109,7 @@ function useLiveTicker() {
     fetchTickers(true);
     const interval = setInterval(() => {
       void fetchTickers();
-    }, 2_000);
+    }, 10_000);
     return () => {
       cancelled = true;
       clearInterval(interval);
