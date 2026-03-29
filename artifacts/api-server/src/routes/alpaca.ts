@@ -427,7 +427,8 @@ router.get("/alpaca/ticker", async (req, res) => {
   const cacheKey = symbolsParam;
   const cached = _tickerCache.get(cacheKey);
   if (cached && Date.now() - cached.ts < TICKER_CACHE_TTL) {
-    return res.json(cached.data);
+    res.json(cached.data);
+    return;
   }
 
   const symbols = symbolsParam.split(",").map((s) => s.trim()).filter(Boolean);

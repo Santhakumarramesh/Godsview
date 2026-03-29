@@ -265,6 +265,76 @@ function computeCalibration(rows: StrictBacktestRow[], binCount: number): {
   };
 }
 
+function computeStrictReportMetrics(
+  rows: StrictBacktestRow[],
+  calibrationBins: number,
+): {
+  summary: {
+    detectedSignals: number;
+    eligibleSignals: number;
+    blockedSignals: number;
+    closedSignals: number;
+    wins: number;
+    losses: number;
+    winRatePct: number;
+    avgConfidence: number;
+    avgPredictedProbability: number;
+    expectancyR: number;
+  };
+  gateAttribution: {
+    passRatePct: number;
+    blockedByReason: Array<{ reason: string; count: number; sharePct: number }>;
+  };
+  attribution: {
+    bySession: KeyMetricRow[];
+    byRegime: KeyMetricRow[];
+    byDirection: KeyMetricRow[];
+  };
+  calibration: ReturnType<typeof computeCalibration>;
+  recentSignals: StrictBacktestRow[];
+} {
+  const eligible = rows.filter((row) => row.tradeAllowed);
+  const closed = eligible.filter((row) => row.outcome !== "open");
+  const wins = closed.filter((row) => row.outcome === "win");
+  const losses = closed.filter((row) => row.outcome === "loss");
+  const winRate = closed.length > 0 ? wins.length / closed.length : 0;
+  const avgConfidence = eligible.length > 0
+    ? eligible.reduce((sum, row) => sum + row.confidenceScore, 0) / eligible.length
+    : 0;
+  const avgPredicted = closed.length > 0
+    ? closed.reduce((sum, row) => sum + row.predictedProbability, 0) / closed.length
+    : 0;
+  const expectancyR = closed.length > 0
+    ? closed.reduce((sum, row) => sum + (row.outcome === "win" ? row.riskReward : row.outcome === "loss" ? -1 : 0), 0) / closed.length
+    : 0;
+
+  return {
+    summary: {
+      detectedSignals: rows.length,
+      eligibleSignals: eligible.length,
+      blockedSignals: rows.length - eligible.length,
+      closedSignals: closed.length,
+      wins: wins.length,
+      losses: losses.length,
+      winRatePct: Number((winRate * 100).toFixed(3)),
+      avgConfidence: Number(avgConfidence.toFixed(4)),
+      avgPredictedProbability: Number(avgPredicted.toFixed(4)),
+      expectancyR: Number(expectancyR.toFixed(4)),
+    },
+    gateAttribution: {
+      passRatePct: Number((rows.length > 0 ? (eligible.length / rows.length) * 100 : 0).toFixed(3)),
+      blockedByReason: computeBlockedReasonStats(rows),
+    },
+    attribution: {
+      bySession: computeKeyMetrics(rows, (row) => row.session),
+      byRegime: computeKeyMetrics(rows, (row) => row.regime),
+      byDirection: computeKeyMetrics(rows, (row) => row.direction),
+    },
+    calibration: computeCalibration(rows, calibrationBins),
+    recentSignals: rows.slice(-200),
+  };
+}
+
 function buildOptions(req: Request): StrictSweepReclaimOptions {
   const nowMs = Date.now();
   const queryNewsLockout = parseBoolean(req.query.news_lockout, false);
@@ -383,33 +453,7 @@ router.get("/market/strict-setup/report", async (req, res) => {
     }
 
     const rows = runStrictBacktestRows(symbol, bars, forwardBars, options);
-    const eligible = rows.filter((row) => row.tradeAllowed);
-    const closed = eligible.filter((row) => row.outcome !== "open");
-    const wins = closed.filter((row) => row.outcome === "win");
-    const losses = closed.filter((row) => row.outcome === "loss");
-    const winRate = closed.length > 0 ? wins.length / closed.length : 0;
-    const avgConfidence = eligible.length > 0
-      ? eligible.reduce((sum, row) => sum + row.confidenceScore, 0) / eligible.length
-      : 0;
-    const avgPredicted = closed.length > 0
-      ? closed.reduce((sum, row) => sum + row.predictedProbability, 0) / closed.length
-      : 0;
-    const expectancyR = closed.length > 0
-      ? closed.reduce((sum, row) => sum + (row.outcome === "win" ? row.riskReward : row.outcome === "loss" ? -1 : 0), 0) / closed.length
-      : 0;
-
-    const summary = {
-      detectedSignals: rows.length,
-      eligibleSignals: eligible.length,
-      blockedSignals: rows.length - eligible.length,
-      closedSignals: closed.length,
-      wins: wins.length,
-      losses: losses.length,
-      winRatePct: Number((winRate * 100).toFixed(3)),
-      avgConfidence: Number(avgConfidence.toFixed(4)),
-      avgPredictedProbability: Number(avgPredicted.toFixed(4)),
-      expectancyR: Number(expectancyR.toFixed(4)),
-    };
+    const metrics = computeStrictReportMetrics(rows, calibrationBins);
 
     const response = {
       setup: "sweep_reclaim_v1",
@@ -417,18 +461,11 @@ router.get("/market/strict-setup/report", async (req, res) => {
       barsScanned: bars.length,
       forwardBars,
       options,
-      summary,
-      gateAttribution: {
-        passRatePct: Number((rows.length > 0 ? (eligible.length / rows.length) * 100 : 0).toFixed(3)),
-        blockedByReason: computeBlockedReasonStats(rows),
-      },
-      attribution: {
-        bySession: computeKeyMetrics(rows, (row) => row.session),
-        byRegime: computeKeyMetrics(rows, (row) => row.regime),
-        byDirection: computeKeyMetrics(rows, (row) => row.direction),
-      },
-      calibration: computeCalibration(rows, calibrationBins),
-      recentSignals: rows.slice(-200),
+      summary: metrics.summary,
+      gateAttribution: metrics.gateAttribution,
+      attribution: metrics.attribution,
+      calibration: metrics.calibration,
+      recentSignals: metrics.recentSignals,
       ...(includeRows ? { results: rows } : {}),
     };
 
@@ -437,6 +474,90 @@ router.get("/market/strict-setup/report", async (req, res) => {
     req.log.error({ err, symbol }, "strict setup report failed");
     res.status(500).json({
       error: "strict_setup_report_failed",
+      message: String(err),
+    });
+  }
+});
+
+// ─── GET /api/market/strict-setup/promotion-check ────────────────────────────
+router.get("/market/strict-setup/promotion-check", async (req, res) => {
+  const symbol = normalizeStrictSymbol(String(req.query.symbol ?? "BTCUSD"));
+  const barsCount = Math.round(parseNumber(req.query.bars, 5000, 1000, 10000));
+  const forwardBars = Math.round(parseNumber(req.query.forward_bars, 30, 5, 200));
+  const calibrationBins = Math.round(parseNumber(req.query.calibration_bins, 10, 4, 20));
+  const options = buildOptions(req);
+  options.requireOrderbook = false;
+
+  const thresholds = {
+    minClosedSignals: Math.round(parseNumber(req.query.min_closed_signals, 120, 20, 10000)),
+    minWinRatePct: parseNumber(req.query.min_win_rate_pct, 54, 1, 100),
+    minExpectancyR: parseNumber(req.query.min_expectancy_r, 0.12, -1, 10),
+    minPassRatePct: parseNumber(req.query.min_pass_rate_pct, 20, 0, 100),
+    minAvgConfidence: parseNumber(req.query.min_avg_confidence, 0.5, 0, 1),
+    maxEce: parseNumber(req.query.max_ece, 0.12, 0, 1),
+    maxBrier: parseNumber(req.query.max_brier, 0.26, 0, 1),
+  };
+
+  try {
+    const bars = await getBars(symbol, "1Min", barsCount);
+    if (bars.length < 240) {
+      res.status(400).json({
+        error: "insufficient_data",
+        message: "Need at least 240 one-minute bars for promotion check",
+      });
+      return;
+    }
+
+    const rows = runStrictBacktestRows(symbol, bars, forwardBars, options);
+    const metrics = computeStrictReportMetrics(rows, calibrationBins);
+    const failedChecks: Array<{ check: string; actual: number; required: number; comparator: ">=" | "<=" }> = [];
+
+    const requireMin = (check: string, actual: number, required: number): void => {
+      if (actual < required) failedChecks.push({ check, actual, required, comparator: ">=" });
+    };
+    const requireMax = (check: string, actual: number, required: number): void => {
+      if (actual > required) failedChecks.push({ check, actual, required, comparator: "<=" });
+    };
+
+    requireMin("closed_signals", metrics.summary.closedSignals, thresholds.minClosedSignals);
+    requireMin("win_rate_pct", metrics.summary.winRatePct, thresholds.minWinRatePct);
+    requireMin("expectancy_r", metrics.summary.expectancyR, thresholds.minExpectancyR);
+    requireMin("pass_rate_pct", metrics.gateAttribution.passRatePct, thresholds.minPassRatePct);
+    requireMin("avg_confidence", metrics.summary.avgConfidence, thresholds.minAvgConfidence);
+    requireMax("ece", metrics.calibration.expectedCalibrationError, thresholds.maxEce);
+    requireMax("brier_score", metrics.calibration.brierScore, thresholds.maxBrier);
+
+    const promote = failedChecks.length === 0;
+
+    res.json({
+      setup: "sweep_reclaim_v1",
+      symbol,
+      barsScanned: bars.length,
+      forwardBars,
+      options,
+      thresholds,
+      promote,
+      decision: promote ? "PROMOTE" : "HOLD",
+      failedChecks,
+      metrics: {
+        summary: metrics.summary,
+        gateAttribution: metrics.gateAttribution,
+        calibration: metrics.calibration,
+      },
+      nextActions: promote
+        ? [
+            "Promote strict setup policy to wider paper-run scope.",
+            "Enable incremental risk budget increase under monitoring.",
+          ]
+        : [
+            "Keep setup in hold state and gather more closed signals.",
+            "Inspect blocked reasons and session/regime attribution to refine gates.",
+          ],
+    });
+  } catch (err) {
+    req.log.error({ err, symbol }, "strict setup promotion check failed");
+    res.status(500).json({
+      error: "strict_setup_promotion_check_failed",
       message: String(err),
     });
   }

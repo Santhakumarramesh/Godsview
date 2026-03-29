@@ -35,6 +35,17 @@ interface TrainingRow {
   outcome: string; // "win" | "loss"
 }
 
+interface RawTrainingRow {
+  structure_score: unknown;
+  order_flow_score: unknown;
+  recall_score: unknown;
+  final_quality: unknown;
+  setup_type: string | null;
+  regime: string | null;
+  direction: string | null;
+  outcome: string | null;
+}
+
 // ── Feature Engineering ────────────────────────────────────────────────────────
 
 const SETUP_TYPES = ["absorption_reversal", "sweep_reclaim", "continuation_pullback", "cvd_divergence", "breakout_failure"] as const;
@@ -227,7 +238,7 @@ export async function trainModel(): Promise<void> {
 
   try {
     // Fetch labeled training data (win/loss only, skip "open")
-    const rows = await db
+    const rows: RawTrainingRow[] = await db
       .select({
         structure_score: accuracyResultsTable.structure_score,
         order_flow_score: accuracyResultsTable.order_flow_score,
@@ -257,8 +268,8 @@ export async function trainModel(): Promise<void> {
       return;
     }
 
-    const wins = rows.filter(r => r.outcome === "win").length;
-    const losses = rows.filter(r => r.outcome === "loss").length;
+    const wins = rows.filter((r: RawTrainingRow) => r.outcome === "win").length;
+    const losses = rows.filter((r: RawTrainingRow) => r.outcome === "loss").length;
     const winRate = wins / (wins + losses);
     console.log(`[ml] Training data: ${rows.length} samples (${wins} wins, ${losses} losses, ${(winRate * 100).toFixed(1)}% win rate)`);
 
