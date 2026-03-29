@@ -2,6 +2,7 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { claudeVeto, isClaudeAvailable, type ClaudeVetoResult, type SetupContext } from "../lib/claude";
 import { getBars, getBarsHistorical, getLatestBar, getLatestTrade, getAccount, getPositions, hasValidTradingKey, isBrokerKey, placeOrder, getOrders, cancelOrder, cancelAllOrders, closePosition, getTypedPositions, calcPositionSize, getTodayFills, computeRoundTrips, type AlpacaBar, type AlpacaTimeframe, type AlpacaPosition, type AlpacaFillActivity, type PlaceOrderRequest } from "../lib/alpaca";
 import { alpacaStream, type TickListener } from "../lib/alpaca_stream";
+import { isCryptoSymbol } from "../lib/market/symbols";
 import { getRiskEngineSnapshot, isKillSwitchActive } from "../lib/risk_engine";
 import {
   buildRecallFeatures,
@@ -77,6 +78,30 @@ const CREATE_AUDIT_EVENTS_TABLE_SQL = `
   );
 `;
 let auditEventsTableReady = false;
+const DATA_HEALTH_CACHE_TTL_MS = 10_000;
+const MAX_STALE_BAR_AGE_MS = (() => {
+  const parsed = Number.parseInt(process.env.GODSVIEW_MAX_STALE_BAR_AGE_MS ?? "180000", 10);
+  if (!Number.isFinite(parsed)) return 180_000;
+  return Math.max(30_000, Math.min(parsed, 20 * 60_000));
+})();
+
+type DataHealthAssessment = {
+  symbol: string;
+  checkedAt: string;
+  healthy: boolean;
+  reasons: string[];
+  stream: {
+    pollingMode: boolean;
+    authenticated: boolean;
+    wsState: number;
+    ticksReceived: number;
+    quotesReceived: number;
+  };
+  lastBarTime: string | null;
+  latestBarAgeMs: number | null;
+};
+
+const dataHealthCache = new Map<string, { data: DataHealthAssessment; ts: number }>();
 
 function isAlpacaRateLimitError(error: unknown): boolean {
   const message = String(error ?? "");
@@ -250,6 +275,66 @@ async function getBarsWithRateLimitFallback(
       throw retryError;
     }
   }
+}
+
+async function assessDataHealth(
+  symbol: string,
+  options?: { req?: Request },
+): Promise<DataHealthAssessment> {
+  const normalized = toAlpacaSymbol(symbol);
+  const now = Date.now();
+  const cached = dataHealthCache.get(normalized);
+  if (cached && now - cached.ts < DATA_HEALTH_CACHE_TTL_MS) {
+    return cached.data;
+  }
+
+  const streamStatus = alpacaStream.status();
+  const reasons: string[] = [];
+  const crypto = isCryptoSymbol(normalized);
+  if (crypto) {
+    if (streamStatus.pollingMode) reasons.push("stream_polling_fallback");
+    if (!streamStatus.authenticated || streamStatus.wsState !== 1) reasons.push("stream_not_ready");
+  }
+
+  let lastBarTime: string | null = null;
+  let latestBarAgeMs: number | null = null;
+  try {
+    const bars = await getBarsWithRateLimitFallback(normalized, "1Min", 2, options?.req ? { req: options.req } : undefined);
+    const latest = bars[bars.length - 1];
+    if (!latest) {
+      reasons.push("bars_unavailable");
+    } else {
+      lastBarTime = latest.Timestamp;
+      const parsedTs = Date.parse(latest.Timestamp);
+      if (Number.isFinite(parsedTs)) {
+        latestBarAgeMs = Math.max(0, now - parsedTs);
+        if (latestBarAgeMs > MAX_STALE_BAR_AGE_MS) reasons.push("bars_stale");
+      } else {
+        reasons.push("bars_timestamp_invalid");
+      }
+    }
+  } catch (err) {
+    reasons.push("bars_fetch_failed");
+    options?.req?.log.warn({ err, symbol: normalized }, "data health check failed to fetch bars");
+  }
+
+  const health: DataHealthAssessment = {
+    symbol: normalized,
+    checkedAt: new Date(now).toISOString(),
+    healthy: reasons.length === 0,
+    reasons,
+    stream: {
+      pollingMode: Boolean(streamStatus.pollingMode),
+      authenticated: Boolean(streamStatus.authenticated),
+      wsState: Number(streamStatus.wsState ?? -1),
+      ticksReceived: Number(streamStatus.ticksReceived ?? 0),
+      quotesReceived: Number(streamStatus.quotesReceived ?? 0),
+    },
+    lastBarTime,
+    latestBarAgeMs,
+  };
+  dataHealthCache.set(normalized, { data: health, ts: now });
+  return health;
 }
 
 function toAlpacaSymbol(instrument: string): string {
@@ -602,6 +687,35 @@ async function enforceTradeRiskRails(
       system_mode: SYSTEM_MODE,
     });
     return false;
+  }
+
+  const controls = getRiskEngineSnapshot().config;
+  if (controls.blockOnDegradedData) {
+    const dataHealth = await assessDataHealth(orderReq.symbol, { req });
+    if (!dataHealth.healthy) {
+      void writeAuditEvent(req, {
+        eventType: "ORDER_RISK_BLOCKED",
+        decisionState: "DEGRADED_DATA",
+        actor: "api",
+        instrument: orderReq.symbol,
+        symbol: orderReq.symbol,
+        reason: "degraded_data_block",
+        payload: {
+          reasons: dataHealth.reasons,
+          data_health: dataHealth,
+        },
+      });
+      res.status(503).json({
+        error: "degraded_data_block",
+        message: "Market data health is degraded. Trade blocked by safety policy.",
+        decision_state: "DEGRADED_DATA",
+        system_mode: SYSTEM_MODE,
+        gate_reasons: dataHealth.reasons,
+        data_health: dataHealth,
+        risk: snapshot,
+      });
+      return false;
+    }
   }
 
   if (snapshot.limits.maxDailyLossUsd > 0 && snapshot.realizedPnlTodayUsd <= -snapshot.limits.maxDailyLossUsd) {
@@ -1219,8 +1333,9 @@ router.post("/alpaca/orders", async (req, res) => {
 });
 
 // ─── GET /api/alpaca/risk/status — live risk rail snapshot ───────────────────
-router.get("/alpaca/risk/status", async (_req, res) => {
+router.get("/alpaca/risk/status", async (req, res) => {
   try {
+    const symbol = toAlpacaSymbol(String(req.query.symbol ?? "BTCUSD"));
     const snapshot = await computeTradingRiskSnapshot();
     if (!snapshot) {
       res.status(503).json({
@@ -1232,20 +1347,40 @@ router.get("/alpaca/risk/status", async (_req, res) => {
       return;
     }
 
+    const controls = getRiskEngineSnapshot().config;
     const killSwitchActive = isKillSwitchActive();
+    const dataHealth = controls.blockOnDegradedData
+      ? await assessDataHealth(symbol, { req })
+      : null;
+    const gateReasons: string[] = [];
+    if (killSwitchActive) gateReasons.push("kill_switch_active");
+    if (!canWriteOrders(SYSTEM_MODE)) gateReasons.push("system_mode_read_only");
+    if (snapshot.limits.maxDailyLossUsd > 0 && snapshot.realizedPnlTodayUsd <= -snapshot.limits.maxDailyLossUsd) {
+      gateReasons.push("daily_loss_limit_reached");
+    }
+    if (snapshot.cooldownActive) gateReasons.push("cooldown_active_after_loss_streak");
+    if (snapshot.limits.maxOpenExposurePct > 0 && snapshot.openExposurePct > snapshot.limits.maxOpenExposurePct) {
+      gateReasons.push("max_open_exposure_exceeded");
+    }
+    if (snapshot.limits.maxConcurrentPositions > 0 && snapshot.openPositions >= snapshot.limits.maxConcurrentPositions) {
+      gateReasons.push("max_concurrent_positions_reached");
+    }
+    if (snapshot.limits.maxTradesPerSession > 0 && snapshot.closedTradesToday >= snapshot.limits.maxTradesPerSession) {
+      gateReasons.push("max_trades_per_session_reached");
+    }
+    if (dataHealth && !dataHealth.healthy) {
+      for (const reason of dataHealth.reasons) gateReasons.push(reason);
+    }
+
     res.json({
+      symbol,
       system_mode: SYSTEM_MODE,
       trading_kill_switch: killSwitchActive,
       live_writes_enabled: canWriteOrders(SYSTEM_MODE) && !killSwitchActive,
       risk: snapshot,
-      gate_state:
-        (snapshot.limits.maxDailyLossUsd > 0 && snapshot.realizedPnlTodayUsd <= -snapshot.limits.maxDailyLossUsd) ||
-        snapshot.cooldownActive ||
-        (snapshot.limits.maxOpenExposurePct > 0 && snapshot.openExposurePct > snapshot.limits.maxOpenExposurePct) ||
-        (snapshot.limits.maxConcurrentPositions > 0 && snapshot.openPositions >= snapshot.limits.maxConcurrentPositions) ||
-        (snapshot.limits.maxTradesPerSession > 0 && snapshot.closedTradesToday >= snapshot.limits.maxTradesPerSession)
-          ? "BLOCKED_BY_RISK"
-          : "PASS",
+      data_health: dataHealth,
+      gate_reasons: gateReasons,
+      gate_state: gateReasons.length > 0 ? "BLOCKED_BY_RISK" : "PASS",
     });
   } catch (err) {
     res.status(500).json({ error: "risk_status_failed", message: String(err) });

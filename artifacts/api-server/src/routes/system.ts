@@ -67,7 +67,11 @@ router.get("/system/status", async (req, res) => {
       ? positions[0].symbol.replace("/", "")
       : "BTCUSD";
 
+    const killSwitchActive = isKillSwitchActive();
     const tradingApiStatus = hasValidTradingKey ? "active" : isBrokerKey ? "warning" : "error";
+    const riskLayerStatus = killSwitchActive || !canWriteOrders(SYSTEM_MODE)
+      ? ("warning" as const)
+      : tradingApiStatus;
     const claudeOnline = Boolean(process.env.ANTHROPIC_API_KEY);
     const layers = [
       { name: "TradingView Structure", status: "active" as const, message: "Monitoring order blocks, S/R, VWAP, session levels", last_update: new Date().toISOString() },
@@ -96,8 +100,12 @@ router.get("/system/status", async (req, res) => {
       },
       {
         name: "Risk Engine",
-        status: tradingApiStatus,
-        message: hasValidTradingKey
+        status: riskLayerStatus,
+        message: killSwitchActive
+          ? "Runtime kill switch is active — all trading write actions are blocked"
+          : !canWriteOrders(SYSTEM_MODE)
+          ? `System mode '${SYSTEM_MODE}' is read-only — trading writes are disabled`
+          : hasValidTradingKey
           ? "Position sizing, daily loss limits, and execution controls active"
           : isBrokerKey
           ? "Broker keys detected — switch to Trading API keys for full execution controls"
@@ -116,7 +124,6 @@ router.get("/system/status", async (req, res) => {
     if (hour >= 13 && hour < 22) active_session = "NY";
     else if (hour >= 7 && hour < 13) active_session = "London";
     else if (hour >= 0 && hour < 7) active_session = "Asian";
-    const killSwitchActive = isKillSwitchActive();
 
     res.json({
       overall,

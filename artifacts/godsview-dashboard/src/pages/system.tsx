@@ -72,10 +72,18 @@ type LiveRiskSnapshot = {
   };
 };
 type LiveRiskStatus = {
+  symbol?: string;
   system_mode: string;
   trading_kill_switch: boolean;
   live_writes_enabled: boolean;
   gate_state: "PASS" | "BLOCKED_BY_RISK";
+  gate_reasons?: string[];
+  data_health?: {
+    healthy: boolean;
+    reasons: string[];
+    latestBarAgeMs: number | null;
+    lastBarTime: string | null;
+  } | null;
   risk: LiveRiskSnapshot;
 };
 type AuditEventRow = {
@@ -586,6 +594,25 @@ export default function System() {
                   className="w-full rounded px-2 py-1 bg-[#111113] border border-[#333] text-zinc-100"
                 />
               </label>
+              <label className="text-[10px] space-y-1" style={{ color: C.muted }}>
+                Cooldown After Losses
+                <input
+                  type="number"
+                  step="1"
+                  value={draft.cooldownAfterLosses}
+                  onChange={(e) => setDraft({ ...draft, cooldownAfterLosses: Number(e.target.value) })}
+                  className="w-full rounded px-2 py-1 bg-[#111113] border border-[#333] text-zinc-100"
+                />
+              </label>
+              <label className="text-[10px] flex items-center gap-2 col-span-2 mt-1" style={{ color: C.muted }}>
+                <input
+                  type="checkbox"
+                  checked={draft.blockOnDegradedData}
+                  onChange={(e) => setDraft({ ...draft, blockOnDegradedData: e.target.checked })}
+                  className="accent-emerald-400"
+                />
+                Block Trading On Degraded Data
+              </label>
             </div>
           ) : (
             <div className="text-xs" style={{ color: C.muted }}>
@@ -637,6 +664,16 @@ export default function System() {
           {liveRisk?.risk?.cooldownActive && (
             <div className="mt-3 rounded p-2 text-[10px]" style={{ border: "1px solid rgba(255,113,98,0.35)", backgroundColor: "rgba(255,113,98,0.12)", color: C.tertiary }}>
               Cooldown active: {formatDurationMs(liveRisk.risk.cooldownRemainingMs)} remaining
+            </div>
+          )}
+          {(liveRisk?.gate_reasons?.length ?? 0) > 0 && (
+            <div className="mt-3 rounded p-2 text-[10px]" style={{ border: "1px solid rgba(251,191,36,0.35)", backgroundColor: "rgba(251,191,36,0.12)", color: "#fbbf24" }}>
+              Gate reasons: {liveRisk?.gate_reasons?.join(", ")}
+            </div>
+          )}
+          {liveRisk?.data_health && (
+            <div className="mt-3 text-[10px]" style={{ color: C.muted }}>
+              Data health: {liveRisk.data_health.healthy ? "healthy" : "degraded"} · bar age {formatDurationMs(liveRisk.data_health.latestBarAgeMs ?? 0)}
             </div>
           )}
         </div>
