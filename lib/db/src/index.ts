@@ -2,27 +2,28 @@
  * Smart database driver: uses PostgreSQL if DATABASE_URL is set,
  * otherwise falls back to PGlite (in-process WASM PostgreSQL).
  */
-import { drizzle } from "drizzle-orm/node-postgres";
-import pg from "pg";
 import * as schema from "./schema";
 
-const { Pool } = pg;
-
-let db: ReturnType<typeof drizzle>;
-let pool: InstanceType<typeof Pool> | null = null;
+let db: any;
+let pool: any = null;
 
 const DATABASE_URL = process.env.DATABASE_URL?.trim();
 
 if (DATABASE_URL) {
-  // -- PostgreSQL mode --
+  // ── PostgreSQL mode ──
+  const { drizzle } = await import("drizzle-orm/node-postgres");
+  const pg = await import("pg");
+  const { Pool } = pg.default;
   pool = new Pool({ connectionString: DATABASE_URL });
   db = drizzle(pool, { schema });
   console.log("[db] Connected to PostgreSQL");
 } else {
-  // -- PGlite mode (zero-setup, in-process) --
+  // ── PGlite mode (zero-setup, in-process) ──
   const { PGlite } = await import("@electric-sql/pglite");
+  const { drizzle } = await import("drizzle-orm/pglite");
   const pglite = new PGlite();
 
+  // Auto-create tables matching the Drizzle schema
   await pglite.exec(`
     CREATE TABLE IF NOT EXISTS signals (
       id SERIAL PRIMARY KEY,
@@ -45,6 +46,7 @@ if (DATABASE_URL) {
       news_lockout BOOLEAN NOT NULL DEFAULT FALSE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
     CREATE TABLE IF NOT EXISTS trades (
       id SERIAL PRIMARY KEY,
       signal_id INTEGER,
@@ -69,6 +71,7 @@ if (DATABASE_URL) {
       exit_time TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
     CREATE TABLE IF NOT EXISTS market_bars (
       id SERIAL PRIMARY KEY,
       symbol TEXT NOT NULL,
@@ -82,6 +85,7 @@ if (DATABASE_URL) {
       vwap NUMERIC(14,6),
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
     CREATE TABLE IF NOT EXISTS accuracy_results (
       id SERIAL PRIMARY KEY,
       symbol TEXT NOT NULL,
@@ -104,10 +108,10 @@ if (DATABASE_URL) {
     );
   `);
 
-  // @ts-ignore
-  db = drizzle(pglite as any, { schema });
-  console.log("[db] Using PGlite (in-process) -- tables auto-created");
+  db = drizzle(pglite, { schema });
+  console.log("[db] Using PGlite (in-process) — tables auto-created");
 }
 
 export { db, pool };
 export * from "./schema";
+
