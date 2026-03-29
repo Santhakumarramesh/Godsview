@@ -1,4 +1,4 @@
-import { Router, type Request } from "express";
+import { Router, type Request, type Response } from "express";
 import { getBars } from "../lib/alpaca";
 import { evaluateStrictSweepReclaim, type StrictSweepReclaimOptions } from "../lib/strict_setup_engine";
 import { orderBookManager } from "../lib/market/orderbook";
@@ -7,6 +7,8 @@ import type { AlpacaBar } from "../lib/alpaca";
 import type { StrictSweepReclaimDecision } from "../lib/strict_setup_engine";
 
 const router = Router();
+const strictRouteCache = new Map<string, { data: unknown; ts: number }>();
+const strictRouteInflight = new Map<string, Promise<unknown>>();
 
 function normalizeStrictSymbol(raw: string): string {
   const symbol = normalizeMarketSymbol(raw, "BTCUSD");
@@ -26,6 +28,75 @@ function parseNumber(raw: unknown, fallback: number, min: number, max: number): 
   const value = Number.parseFloat(String(raw ?? ""));
   if (!Number.isFinite(value)) return fallback;
   return Math.max(min, Math.min(max, value));
+}
+
+function parseEnvInt(name: string, fallback: number, min: number, max: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(max, parsed));
+}
+
+const STRICT_SETUP_CACHE_TTL_MS = parseEnvInt("STRICT_SETUP_CACHE_TTL_MS", 3_000, 500, 60_000);
+const STRICT_BACKTEST_CACHE_TTL_MS = parseEnvInt("STRICT_BACKTEST_CACHE_TTL_MS", 12_000, 1_000, 120_000);
+const STRICT_REPORT_CACHE_TTL_MS = parseEnvInt("STRICT_REPORT_CACHE_TTL_MS", 15_000, 1_000, 180_000);
+const STRICT_PROMOTION_CACHE_TTL_MS = parseEnvInt("STRICT_PROMOTION_CACHE_TTL_MS", 15_000, 1_000, 180_000);
+const STRICT_MATRIX_CACHE_TTL_MS = parseEnvInt("STRICT_MATRIX_CACHE_TTL_MS", 15_000, 1_000, 180_000);
+
+async function serveCachedJson<T>(
+  req: Request,
+  res: Response,
+  keyPrefix: string,
+  ttlMs: number,
+  loader: () => Promise<T>,
+): Promise<void> {
+  const cacheKey = `${keyPrefix}:${req.originalUrl}`;
+  const cached = strictRouteCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < ttlMs) {
+    res.setHeader("X-Cache", "HIT");
+    res.json(cached.data);
+    return;
+  }
+
+  const inFlight = strictRouteInflight.get(cacheKey);
+  if (inFlight) {
+    const data = await inFlight;
+    res.setHeader("X-Cache", "INFLIGHT");
+    res.json(data);
+    return;
+  }
+
+  const promise = loader();
+  strictRouteInflight.set(cacheKey, promise as Promise<unknown>);
+  try {
+    const data = await promise;
+    strictRouteCache.set(cacheKey, { data, ts: Date.now() });
+    res.setHeader("X-Cache", "MISS");
+    res.json(data);
+  } finally {
+    strictRouteInflight.delete(cacheKey);
+  }
+}
+
+type StrictRouteError = {
+  statusCode: number;
+  error: string;
+  message: string;
+};
+
+function strictRouteError(statusCode: number, error: string, message: string): StrictRouteError {
+  return { statusCode, error, message };
+}
+
+function isStrictRouteError(value: unknown): value is StrictRouteError {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<StrictRouteError>;
+  return (
+    Number.isFinite(candidate.statusCode) &&
+    typeof candidate.error === "string" &&
+    typeof candidate.message === "string"
+  );
 }
 
 function detectNewsLockoutFromEnv(nowMs: number): boolean {
@@ -428,21 +499,30 @@ router.get("/market/strict-setup", async (req, res) => {
   const options = buildOptions(req);
 
   try {
-    const bars = await getBars(symbol, "1Min", barsCount);
-    const latestSnapshot = orderBookManager.getSnapshot(symbol);
-    const snapshot = latestSnapshot && Date.now() - latestSnapshot.receivedAt < 12_000
-      ? latestSnapshot
-      : await orderBookManager.fetchSnapshot(symbol).catch(() => null);
+    await serveCachedJson(req, res, "strict_setup", STRICT_SETUP_CACHE_TTL_MS, async () => {
+      const bars = await getBars(symbol, "1Min", barsCount);
+      const latestSnapshot = orderBookManager.getSnapshot(symbol);
+      const snapshot = latestSnapshot && Date.now() - latestSnapshot.receivedAt < 12_000
+        ? latestSnapshot
+        : await orderBookManager.fetchSnapshot(symbol).catch(() => null);
 
-    const decision = evaluateStrictSweepReclaim(symbol, bars, snapshot, options);
+      const decision = evaluateStrictSweepReclaim(symbol, bars, snapshot, options);
 
-    res.json({
-      ...decision,
-      barsUsed: bars.length,
-      orderbookTimestamp: snapshot?.timestamp ?? null,
-      orderbookReceivedAt: snapshot?.receivedAt ?? null,
+      return {
+        ...decision,
+        barsUsed: bars.length,
+        orderbookTimestamp: snapshot?.timestamp ?? null,
+        orderbookReceivedAt: snapshot?.receivedAt ?? null,
+      };
     });
   } catch (err) {
+    if (isStrictRouteError(err)) {
+      res.status(err.statusCode).json({
+        error: err.error,
+        message: err.message,
+      });
+      return;
+    }
     req.log.error({ err, symbol }, "strict setup evaluation failed");
     res.status(500).json({
       error: "strict_setup_failed",
@@ -460,37 +540,46 @@ router.get("/market/strict-setup/backtest", async (req, res) => {
   options.requireOrderbook = false;
 
   try {
-    const bars = await getBars(symbol, "1Min", barsCount);
-    if (bars.length < 120) {
-      res.status(400).json({
-        error: "insufficient_data",
-        message: "Need at least 120 one-minute bars for strict backtest",
+    await serveCachedJson(req, res, "strict_setup_backtest", STRICT_BACKTEST_CACHE_TTL_MS, async () => {
+      const bars = await getBars(symbol, "1Min", barsCount);
+      if (bars.length < 120) {
+        throw strictRouteError(
+          400,
+          "insufficient_data",
+          "Need at least 120 one-minute bars for strict backtest",
+        );
+      }
+
+      const rows = runStrictBacktestRows(symbol, bars, forwardBars, options);
+      const eligible = rows.filter((row) => row.tradeAllowed);
+      const closed = eligible.filter((row) => row.outcome !== "open");
+      const wins = closed.filter((row) => row.outcome === "win");
+      const losses = closed.filter((row) => row.outcome === "loss");
+      const winRate = closed.length > 0 ? (wins.length / closed.length) * 100 : 0;
+
+      return {
+        setup: "sweep_reclaim_v1",
+        symbol,
+        barsScanned: bars.length,
+        forwardBars,
+        totalSignals: rows.length,
+        eligibleSignals: eligible.length,
+        closedSignals: closed.length,
+        wins: wins.length,
+        losses: losses.length,
+        winRate: Number(winRate.toFixed(3)),
+        options,
+        results: rows,
+      };
+    });
+  } catch (err) {
+    if (isStrictRouteError(err)) {
+      res.status(err.statusCode).json({
+        error: err.error,
+        message: err.message,
       });
       return;
     }
-
-    const rows = runStrictBacktestRows(symbol, bars, forwardBars, options);
-    const eligible = rows.filter((row) => row.tradeAllowed);
-    const closed = eligible.filter((row) => row.outcome !== "open");
-    const wins = closed.filter((row) => row.outcome === "win");
-    const losses = closed.filter((row) => row.outcome === "loss");
-    const winRate = closed.length > 0 ? (wins.length / closed.length) * 100 : 0;
-
-    res.json({
-      setup: "sweep_reclaim_v1",
-      symbol,
-      barsScanned: bars.length,
-      forwardBars,
-      totalSignals: rows.length,
-      eligibleSignals: eligible.length,
-      closedSignals: closed.length,
-      wins: wins.length,
-      losses: losses.length,
-      winRate: Number(winRate.toFixed(3)),
-      options,
-      results: rows,
-    });
-  } catch (err) {
     req.log.error({ err, symbol }, "strict setup backtest failed");
     res.status(500).json({
       error: "strict_setup_backtest_failed",
@@ -510,34 +599,41 @@ router.get("/market/strict-setup/report", async (req, res) => {
   options.requireOrderbook = false;
 
   try {
-    const bars = await getBars(symbol, "1Min", barsCount);
-    if (bars.length < 180) {
-      res.status(400).json({
-        error: "insufficient_data",
-        message: "Need at least 180 one-minute bars for strict report",
+    await serveCachedJson(req, res, "strict_setup_report", STRICT_REPORT_CACHE_TTL_MS, async () => {
+      const bars = await getBars(symbol, "1Min", barsCount);
+      if (bars.length < 180) {
+        throw strictRouteError(
+          400,
+          "insufficient_data",
+          "Need at least 180 one-minute bars for strict report",
+        );
+      }
+
+      const rows = runStrictBacktestRows(symbol, bars, forwardBars, options);
+      const metrics = computeStrictReportMetrics(rows, calibrationBins);
+
+      return {
+        setup: "sweep_reclaim_v1",
+        symbol,
+        barsScanned: bars.length,
+        forwardBars,
+        options,
+        summary: metrics.summary,
+        gateAttribution: metrics.gateAttribution,
+        attribution: metrics.attribution,
+        calibration: metrics.calibration,
+        recentSignals: metrics.recentSignals,
+        ...(includeRows ? { results: rows } : {}),
+      };
+    });
+  } catch (err) {
+    if (isStrictRouteError(err)) {
+      res.status(err.statusCode).json({
+        error: err.error,
+        message: err.message,
       });
       return;
     }
-
-    const rows = runStrictBacktestRows(symbol, bars, forwardBars, options);
-    const metrics = computeStrictReportMetrics(rows, calibrationBins);
-
-    const response = {
-      setup: "sweep_reclaim_v1",
-      symbol,
-      barsScanned: bars.length,
-      forwardBars,
-      options,
-      summary: metrics.summary,
-      gateAttribution: metrics.gateAttribution,
-      attribution: metrics.attribution,
-      calibration: metrics.calibration,
-      recentSignals: metrics.recentSignals,
-      ...(includeRows ? { results: rows } : {}),
-    };
-
-    res.json(response);
-  } catch (err) {
     req.log.error({ err, symbol }, "strict setup report failed");
     res.status(500).json({
       error: "strict_setup_report_failed",
@@ -558,46 +654,55 @@ router.get("/market/strict-setup/promotion-check", async (req, res) => {
   const thresholds = parsePromotionThresholds(req);
 
   try {
-    const bars = await getBars(symbol, "1Min", barsCount);
-    if (bars.length < 240) {
-      res.status(400).json({
-        error: "insufficient_data",
-        message: "Need at least 240 one-minute bars for promotion check",
+    await serveCachedJson(req, res, "strict_setup_promotion", STRICT_PROMOTION_CACHE_TTL_MS, async () => {
+      const bars = await getBars(symbol, "1Min", barsCount);
+      if (bars.length < 240) {
+        throw strictRouteError(
+          400,
+          "insufficient_data",
+          "Need at least 240 one-minute bars for promotion check",
+        );
+      }
+
+      const rows = runStrictBacktestRows(symbol, bars, forwardBars, options);
+      const metrics = computeStrictReportMetrics(rows, calibrationBins);
+      const promotion = evaluatePromotionReadiness(metrics, thresholds);
+      const promote = promotion.promote;
+
+      return {
+        setup: "sweep_reclaim_v1",
+        symbol,
+        barsScanned: bars.length,
+        forwardBars,
+        options,
+        thresholds,
+        promote,
+        decision: promote ? "PROMOTE" : "HOLD",
+        failedChecks: promotion.failedChecks,
+        metrics: {
+          summary: metrics.summary,
+          gateAttribution: metrics.gateAttribution,
+          calibration: metrics.calibration,
+        },
+        nextActions: promote
+          ? [
+              "Promote strict setup policy to wider paper-run scope.",
+              "Enable incremental risk budget increase under monitoring.",
+            ]
+          : [
+              "Keep setup in hold state and gather more closed signals.",
+              "Inspect blocked reasons and session/regime attribution to refine gates.",
+            ],
+      };
+    });
+  } catch (err) {
+    if (isStrictRouteError(err)) {
+      res.status(err.statusCode).json({
+        error: err.error,
+        message: err.message,
       });
       return;
     }
-
-    const rows = runStrictBacktestRows(symbol, bars, forwardBars, options);
-    const metrics = computeStrictReportMetrics(rows, calibrationBins);
-    const promotion = evaluatePromotionReadiness(metrics, thresholds);
-    const promote = promotion.promote;
-
-    res.json({
-      setup: "sweep_reclaim_v1",
-      symbol,
-      barsScanned: bars.length,
-      forwardBars,
-      options,
-      thresholds,
-      promote,
-      decision: promote ? "PROMOTE" : "HOLD",
-      failedChecks: promotion.failedChecks,
-      metrics: {
-        summary: metrics.summary,
-        gateAttribution: metrics.gateAttribution,
-        calibration: metrics.calibration,
-      },
-      nextActions: promote
-        ? [
-            "Promote strict setup policy to wider paper-run scope.",
-            "Enable incremental risk budget increase under monitoring.",
-          ]
-        : [
-            "Keep setup in hold state and gather more closed signals.",
-            "Inspect blocked reasons and session/regime attribution to refine gates.",
-          ],
-    });
-  } catch (err) {
     req.log.error({ err, symbol }, "strict setup promotion check failed");
     res.status(500).json({
       error: "strict_setup_promotion_check_failed",
@@ -621,98 +726,107 @@ router.get("/market/strict-setup/matrix", async (req, res) => {
   const thresholds = parsePromotionThresholds(req);
 
   try {
-    const matrixRows: Array<{
-      symbol: string;
-      liveDecision: StrictSweepReclaimDecision;
-      metrics: ReturnType<typeof computeStrictReportMetrics>;
-      promotion: ReturnType<typeof evaluatePromotionReadiness>;
-      barsScanned: number;
-      orderbookTimestamp: string | null;
-      orderbookReceivedAt: number | null;
-      rows?: StrictBacktestRow[];
-    }> = [];
+    await serveCachedJson(req, res, "strict_setup_matrix", STRICT_MATRIX_CACHE_TTL_MS, async () => {
+      const matrixRows: Array<{
+        symbol: string;
+        liveDecision: StrictSweepReclaimDecision;
+        metrics: ReturnType<typeof computeStrictReportMetrics>;
+        promotion: ReturnType<typeof evaluatePromotionReadiness>;
+        barsScanned: number;
+        orderbookTimestamp: string | null;
+        orderbookReceivedAt: number | null;
+        rows?: StrictBacktestRow[];
+      }> = [];
 
-    for (const symbol of symbols) {
-      const bars = await getBars(symbol, "1Min", barsCount);
-      const latestSnapshot = orderBookManager.getSnapshot(symbol);
-      const snapshot = latestSnapshot && Date.now() - latestSnapshot.receivedAt < 12_000
-        ? latestSnapshot
-        : await orderBookManager.fetchSnapshot(symbol).catch(() => null);
+      for (const symbol of symbols) {
+        const bars = await getBars(symbol, "1Min", barsCount);
+        const latestSnapshot = orderBookManager.getSnapshot(symbol);
+        const snapshot = latestSnapshot && Date.now() - latestSnapshot.receivedAt < 12_000
+          ? latestSnapshot
+          : await orderBookManager.fetchSnapshot(symbol).catch(() => null);
 
-      const liveDecision = evaluateStrictSweepReclaim(symbol, bars, snapshot, decisionOptions);
-      const rows = runStrictBacktestRows(symbol, bars, forwardBars, backtestOptions);
-      const metrics = computeStrictReportMetrics(rows, calibrationBins);
-      const promotion = evaluatePromotionReadiness(metrics, thresholds);
+        const liveDecision = evaluateStrictSweepReclaim(symbol, bars, snapshot, decisionOptions);
+        const rows = runStrictBacktestRows(symbol, bars, forwardBars, backtestOptions);
+        const metrics = computeStrictReportMetrics(rows, calibrationBins);
+        const promotion = evaluatePromotionReadiness(metrics, thresholds);
 
-      matrixRows.push({
-        symbol,
-        liveDecision,
-        metrics,
-        promotion,
-        barsScanned: bars.length,
-        orderbookTimestamp: snapshot?.timestamp ?? null,
-        orderbookReceivedAt: snapshot?.receivedAt ?? null,
-        ...(includeRows ? { rows } : {}),
-      });
-    }
+        matrixRows.push({
+          symbol,
+          liveDecision,
+          metrics,
+          promotion,
+          barsScanned: bars.length,
+          orderbookTimestamp: snapshot?.timestamp ?? null,
+          orderbookReceivedAt: snapshot?.receivedAt ?? null,
+          ...(includeRows ? { rows } : {}),
+        });
+      }
 
-    const ranked = [...matrixRows]
-      .sort((a, b) => {
-        const aScore =
-          (a.liveDecision.tradeAllowed ? 1 : 0) * 2 +
-          (a.liveDecision.confidenceScore ?? 0) * 1.5 +
-          a.metrics.summary.expectancyR * 0.7 +
-          (a.promotion.promote ? 1 : 0);
-        const bScore =
-          (b.liveDecision.tradeAllowed ? 1 : 0) * 2 +
-          (b.liveDecision.confidenceScore ?? 0) * 1.5 +
-          b.metrics.summary.expectancyR * 0.7 +
-          (b.promotion.promote ? 1 : 0);
-        return bScore - aScore;
-      })
-      .map((row) => ({
-        symbol: row.symbol,
-        liveTradeAllowed: row.liveDecision.tradeAllowed,
-        direction: row.liveDecision.direction,
-        confidenceScore: row.liveDecision.confidenceScore,
-        expectedWinProbability: row.liveDecision.expectedWinProbability,
-        blockedReasons: row.liveDecision.blockedReasons,
-        promotionDecision: row.promotion.promote ? "PROMOTE" : "HOLD",
-        winRatePct: row.metrics.summary.winRatePct,
-        expectancyR: row.metrics.summary.expectancyR,
-        closedSignals: row.metrics.summary.closedSignals,
-      }));
+      const ranked = [...matrixRows]
+        .sort((a, b) => {
+          const aScore =
+            (a.liveDecision.tradeAllowed ? 1 : 0) * 2 +
+            (a.liveDecision.confidenceScore ?? 0) * 1.5 +
+            a.metrics.summary.expectancyR * 0.7 +
+            (a.promotion.promote ? 1 : 0);
+          const bScore =
+            (b.liveDecision.tradeAllowed ? 1 : 0) * 2 +
+            (b.liveDecision.confidenceScore ?? 0) * 1.5 +
+            b.metrics.summary.expectancyR * 0.7 +
+            (b.promotion.promote ? 1 : 0);
+          return bScore - aScore;
+        })
+        .map((row) => ({
+          symbol: row.symbol,
+          liveTradeAllowed: row.liveDecision.tradeAllowed,
+          direction: row.liveDecision.direction,
+          confidenceScore: row.liveDecision.confidenceScore,
+          expectedWinProbability: row.liveDecision.expectedWinProbability,
+          blockedReasons: row.liveDecision.blockedReasons,
+          promotionDecision: row.promotion.promote ? "PROMOTE" : "HOLD",
+          winRatePct: row.metrics.summary.winRatePct,
+          expectancyR: row.metrics.summary.expectancyR,
+          closedSignals: row.metrics.summary.closedSignals,
+        }));
 
-    res.json({
-      setup: "sweep_reclaim_v1",
-      symbols,
-      barsRequested: barsCount,
-      forwardBars,
-      options: {
-        decision: decisionOptions,
-        backtest: backtestOptions,
-      },
-      thresholds,
-      ranked,
-      results: matrixRows.map((row) => ({
-        symbol: row.symbol,
-        barsScanned: row.barsScanned,
-        orderbookTimestamp: row.orderbookTimestamp,
-        orderbookReceivedAt: row.orderbookReceivedAt,
-        liveDecision: row.liveDecision,
-        summary: row.metrics.summary,
-        gateAttribution: row.metrics.gateAttribution,
-        calibration: row.metrics.calibration,
-        promotion: {
-          promote: row.promotion.promote,
-          decision: row.promotion.promote ? "PROMOTE" : "HOLD",
-          failedChecks: row.promotion.failedChecks,
+      return {
+        setup: "sweep_reclaim_v1",
+        symbols,
+        barsRequested: barsCount,
+        forwardBars,
+        options: {
+          decision: decisionOptions,
+          backtest: backtestOptions,
         },
-        attribution: row.metrics.attribution,
-        ...(includeRows ? { rows: row.rows ?? [] } : {}),
-      })),
+        thresholds,
+        ranked,
+        results: matrixRows.map((row) => ({
+          symbol: row.symbol,
+          barsScanned: row.barsScanned,
+          orderbookTimestamp: row.orderbookTimestamp,
+          orderbookReceivedAt: row.orderbookReceivedAt,
+          liveDecision: row.liveDecision,
+          summary: row.metrics.summary,
+          gateAttribution: row.metrics.gateAttribution,
+          calibration: row.metrics.calibration,
+          promotion: {
+            promote: row.promotion.promote,
+            decision: row.promotion.promote ? "PROMOTE" : "HOLD",
+            failedChecks: row.promotion.failedChecks,
+          },
+          attribution: row.metrics.attribution,
+          ...(includeRows ? { rows: row.rows ?? [] } : {}),
+        })),
+      };
     });
   } catch (err) {
+    if (isStrictRouteError(err)) {
+      res.status(err.statusCode).json({
+        error: err.error,
+        message: err.message,
+      });
+      return;
+    }
     req.log.error({ err, symbols }, "strict setup matrix failed");
     res.status(500).json({
       error: "strict_setup_matrix_failed",
