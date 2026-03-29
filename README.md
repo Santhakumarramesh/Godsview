@@ -139,3 +139,20 @@ Detailed production architecture and phase plan:
 
 - [docs/market-ready-architecture.md](./docs/market-ready-architecture.md)
 - [docs/production-runbook.md](./docs/production-runbook.md)
+
+## OpenBB Research Integration
+
+A Python-side OpenBB research and paper-execution scaffold is included at:
+
+- [godsview-openbb/README.md](./godsview-openbb/README.md)
+
+It provides a separate workflow for:
+
+- OpenBB-first historical data ingestion
+- feature engineering + ML training
+- inference + filter + risk checks
+- optional Alpaca paper order submission
+
+Bridge endpoint in API:
+
+- `GET /api/research/openbb/latest` (reads generated artifacts from `godsview-openbb/data/processed`)

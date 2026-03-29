@@ -1,0 +1,67 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+import os
+
+from dotenv import load_dotenv
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(ROOT_DIR / ".env")
+
+
+def _as_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == "":
+        return default
+    normalized = raw.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"Invalid boolean for {name}: {raw}")
+
+
+def _as_int(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == "":
+        return default
+    return int(raw)
+
+
+def _as_float(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == "":
+        return default
+    return float(raw)
+
+
+@dataclass(frozen=True)
+class Settings:
+    alpaca_api_key: str = os.getenv("ALPACA_API_KEY", "").strip()
+    alpaca_secret_key: str = os.getenv("ALPACA_SECRET_KEY", "").strip()
+    alpaca_paper: bool = _as_bool("ALPACA_PAPER", True)
+    alpaca_data_feed: str = os.getenv("ALPACA_DATA_FEED", "iex").strip().lower()
+
+    symbol: str = os.getenv("SYMBOL", "BTCUSD").strip().upper()
+    timeframe: str = os.getenv("TIMEFRAME", "1D").strip().upper()
+    lookback: int = _as_int("LOOKBACK", 500)
+    openbb_provider: str = os.getenv("OPENBB_PROVIDER", "yfinance").strip()
+
+    model_type: str = os.getenv("MODEL_TYPE", "random_forest").strip().lower()
+    model_threshold_buy: float = _as_float("MODEL_THRESHOLD_BUY", 0.60)
+    model_threshold_sell: float = _as_float("MODEL_THRESHOLD_SELL", 0.40)
+
+    max_risk_per_trade: float = _as_float("MAX_RISK_PER_TRADE", 0.01)
+    max_daily_loss: float = _as_float("MAX_DAILY_LOSS", 0.03)
+    default_stop_pct: float = _as_float("DEFAULT_STOP_PCT", 0.015)
+
+    dry_run: bool = _as_bool("DRY_RUN", True)
+
+    @property
+    def has_alpaca_keys(self) -> bool:
+        return bool(self.alpaca_api_key and self.alpaca_secret_key)
+
+
+settings = Settings()
+
