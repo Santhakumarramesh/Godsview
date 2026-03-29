@@ -1,29 +1,90 @@
+import type { AddressInfo } from "node:net";
 import app from "./app";
 import { logger } from "./lib/logger";
 import { trainModel } from "./lib/ml_model";
+import { runtimeConfig, getRuntimeConfigForLog } from "./lib/runtime_config";
+import {
+  markMlBootstrapFailed,
+  markMlBootstrapReady,
+  markMlBootstrapRunning,
+} from "./lib/startup_state";
+import { pool } from "@workspace/db";
 
-const rawPort = process.env["PORT"];
-
-if (!rawPort) {
-  throw new Error(
-    "PORT environment variable is required but was not provided.",
-  );
-}
-
-const port = Number(rawPort);
-
-if (Number.isNaN(port) || port <= 0) {
-  throw new Error(`Invalid PORT value: "${rawPort}"`);
-}
-
-app.listen(port, (err) => {
+const server = app.listen(runtimeConfig.port, (err) => {
   if (err) {
     logger.error({ err }, "Error listening on port");
     process.exit(1);
   }
 
-  logger.info({ port }, "Server listening");
+  const address = server.address() as AddressInfo | null;
+  logger.info(
+    {
+      port: address?.port ?? runtimeConfig.port,
+      config: getRuntimeConfigForLog(),
+    },
+    "Server listening",
+  );
 
-  // Train ML model from accuracy_results data (non-blocking)
-  trainModel().catch((err) => logger.error({ err }, "ML model training failed"));
+  markMlBootstrapRunning();
+  trainModel()
+    .then(() => {
+      markMlBootstrapReady();
+      logger.info("ML bootstrap completed");
+    })
+    .catch((bootstrapErr) => {
+      markMlBootstrapFailed(bootstrapErr);
+      logger.error({ err: bootstrapErr }, "ML model training failed during bootstrap");
+    });
+});
+
+server.requestTimeout = runtimeConfig.requestTimeoutMs;
+server.keepAliveTimeout = runtimeConfig.keepAliveTimeoutMs;
+server.headersTimeout = runtimeConfig.headersTimeoutMs;
+server.maxRequestsPerSocket = runtimeConfig.maxRequestsPerSocket;
+
+let isShuttingDown = false;
+
+async function shutdown(signal: NodeJS.Signals): Promise<void> {
+  if (isShuttingDown) {
+    return;
+  }
+  isShuttingDown = true;
+  logger.warn({ signal }, "Graceful shutdown initiated");
+
+  const forceExitTimer = setTimeout(() => {
+    logger.error(
+      { timeoutMs: runtimeConfig.shutdownTimeoutMs, signal },
+      "Graceful shutdown timeout exceeded; forcing exit",
+    );
+    process.exit(1);
+  }, runtimeConfig.shutdownTimeoutMs);
+  forceExitTimer.unref();
+
+  await new Promise<void>((resolve) => {
+    server.close(() => resolve());
+  });
+
+  try {
+    await pool.end();
+    logger.info("Database pool closed");
+  } catch (err) {
+    logger.error({ err }, "Failed to close database pool during shutdown");
+  } finally {
+    clearTimeout(forceExitTimer);
+  }
+
+  logger.info({ signal }, "Shutdown complete");
+  process.exit(0);
+}
+
+process.on("SIGTERM", () => {
+  void shutdown("SIGTERM");
+});
+
+process.on("SIGINT", () => {
+  void shutdown("SIGINT");
+});
+
+process.on("unhandledRejection", (reason) => {
+  logger.error({ err: reason }, "Unhandled promise rejection");
 });

@@ -111,13 +111,22 @@ Current implementation prioritizes:
 - deterministic trade gating,
 - observable audit trails,
 - measurable performance outputs,
-- strict mode/risk controls.
+- strict mode/risk controls,
+- fail-fast runtime config validation,
+- graceful shutdown and startup bootstrapping,
+- request safety (security headers, body limits, API rate limits),
+- dedicated liveness/readiness probes.
+
+Operational endpoints:
+
+- `/api/healthz` (liveness)
+- `/api/readyz` (readiness with DB + mode/dependency checks)
 
 Next recommended milestones:
 
 1. Expand proof dashboard with stronger out-of-sample reporting.
 2. Add replay UI for orderbook and decision attribution.
-3. Add deployment health checks and operator runbooks.
+3. Add operator runbooks for incident response and rollback.
 4. Add onboarding defaults and tighter product packaging.
 
 ## Disclaimer
@@ -129,3 +138,4 @@ This software is for research and trading-assistance workflows. It does not guar
 Detailed production architecture and phase plan:
 
 - [docs/market-ready-architecture.md](./docs/market-ready-architecture.md)
+- [docs/production-runbook.md](./docs/production-runbook.md)
