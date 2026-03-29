@@ -4,6 +4,9 @@
   "files": [],
   "references": [
     {
+      "path": "./lib/strategy-core"
+    },
+    {
       "path": "./lib/db"
     },
     {

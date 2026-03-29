@@ -24,6 +24,7 @@ import {
 } from "../lib/strategy_engine";
 import { getModelStatus, predictWinProbability } from "../lib/ml_model";
 import { db, accuracyResultsTable, marketBarsTable, signalsTable } from "@workspace/db";
+import { DEFAULT_SETUPS, isSetupType } from "@workspace/strategy-core";
 import { eq, desc, and, count, sql, inArray, gte } from "drizzle-orm";
 
 const router: IRouter = Router();
@@ -833,13 +834,11 @@ router.post("/alpaca/analyze", async (req, res) => {
   try {
     const instrument = String(req.body.instrument ?? "BTCUSDT");
     const indicatorHints = parseIndicatorHints(req.body);
-    const setups: SetupType[] = req.body.setups ?? [
-      "absorption_reversal",
-      "sweep_reclaim",
-      "continuation_pullback",
-      "cvd_divergence",
-      "breakout_failure",
-    ];
+    const rawSetups: unknown[] = Array.isArray(req.body.setups) ? req.body.setups : DEFAULT_SETUPS;
+    const parsedSetups: SetupType[] = rawSetups
+      .map((value) => String(value ?? "").trim())
+      .filter((value): value is SetupType => isSetupType(value));
+    const setups: SetupType[] = parsedSetups.length > 0 ? Array.from(new Set(parsedSetups)) : DEFAULT_SETUPS;
     const cooldowns: SetupCooldowns = req.body.cooldowns ?? {};
     const alpacaSymbol = toAlpacaSymbol(instrument);
 
@@ -1064,14 +1063,6 @@ function runSetupDetector(
   if (setup === "breakout_failure") return detectBreakoutFailure(bars1m, bars5m, recall);
   return detectContinuationPullback(bars1m, bars5m, recall);
 }
-
-const DEFAULT_SETUPS: SetupType[] = [
-  "absorption_reversal",
-  "sweep_reclaim",
-  "continuation_pullback",
-  "cvd_divergence",
-  "breakout_failure",
-];
 
 // ─── POST /api/alpaca/backtest — walk-forward on recent bars ──────────────────
 router.post("/alpaca/backtest", async (req, res) => {
@@ -1453,8 +1444,8 @@ router.post("/alpaca/backtest-batch", async (req, res) => {
 
     const rawSetups: unknown[] = Array.isArray(req.body.setups) ? req.body.setups : DEFAULT_SETUPS;
     const setups = rawSetups
-      .map((value) => String(value ?? "").trim() as SetupType)
-      .filter((value): value is SetupType => DEFAULT_SETUPS.includes(value));
+      .map((value) => String(value ?? "").trim())
+      .filter((value): value is SetupType => isSetupType(value));
     const setupList: SetupType[] = setups.length > 0 ? Array.from(new Set(setups)) : DEFAULT_SETUPS;
 
     const days = Math.min(Math.max(Number(req.body.days ?? 5), 1), 60);
@@ -1773,13 +1764,7 @@ router.post("/alpaca/recall-build", async (req, res) => {
     const timeframe = (req.body.timeframe ?? "15Min") as "5Min" | "15Min" | "1Hour";
     const yearsBack = Math.min(Number(req.body.years ?? 1), 2);
     const indicatorHints = parseIndicatorHints(req.body);
-    const setupTypes: SetupType[] = [
-      "absorption_reversal",
-      "sweep_reclaim",
-      "continuation_pullback",
-      "cvd_divergence",
-      "breakout_failure",
-    ];
+    const setupTypes: SetupType[] = DEFAULT_SETUPS;
 
     const end = new Date().toISOString();
     const start = new Date();

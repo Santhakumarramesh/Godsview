@@ -1,14 +1,11 @@
 import type { AlpacaBar } from "./alpaca";
 import { predictWinProbability } from "./ml_model";
+import { DEFAULT_SETUPS, SETUP_CATALOG, computeFinalQualityScore } from "@workspace/strategy-core";
+import type { SetupType } from "@workspace/strategy-core";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type SetupType =
-  | "absorption_reversal"
-  | "sweep_reclaim"
-  | "continuation_pullback"
-  | "cvd_divergence"
-  | "breakout_failure";
+export type { SetupType };
 
 export type Regime = "trending_bull" | "trending_bear" | "ranging" | "volatile" | "chop";
 
@@ -674,22 +671,20 @@ export function applyNoTradeFilters(
   // SK zone filter: relaxed in replay mode (0.55 instead of 0.35)
   // Equivalent to the SK zone miss being less strict during historical scan
   const skZoneCap = replayMode ? 0.55 : 0.35;
-  const skGatedSetups: SetupType[] = ["absorption_reversal", "sweep_reclaim", "breakout_failure"];
-  if (skGatedSetups.includes(setup) && recall.sk.zone_distance_pct > skZoneCap) {
+  const setupDef = SETUP_CATALOG[setup];
+  if (setupDef.requiresSkZone && recall.sk.zone_distance_pct > skZoneCap) {
     return { blocked: true, reason: "sk_zone_miss" };
   }
 
-  // SK bias conflict: only enforce in live mode
-  if (!replayMode && recall.sk.bias !== "neutral" && !recall.sk.correction_complete) {
-    if (setup === "continuation_pullback") {
-      const slopeUp = recall.trend_slope_5m > 0;
-      if (recall.sk.bias === "bear" && slopeUp) return { blocked: true, reason: "sk_bias_conflict" };
-      if (recall.sk.bias === "bull" && !slopeUp) return { blocked: true, reason: "sk_bias_conflict" };
-    }
+  // SK bias conflict: enforce for any setup requiring bias alignment in live mode.
+  if (!replayMode && setupDef.requiresBiasAlignment && recall.sk.bias !== "neutral" && !recall.sk.correction_complete) {
+    const slopeUp = recall.trend_slope_5m > 0;
+    if (recall.sk.bias === "bear" && slopeUp) return { blocked: true, reason: "sk_bias_conflict" };
+    if (recall.sk.bias === "bull" && !slopeUp) return { blocked: true, reason: "sk_bias_conflict" };
   }
 
   // CVD divergence gate: only enforce in live mode
-  if (!replayMode && setup === "cvd_divergence" && !recall.cvd.cvd_divergence) {
+  if (!replayMode && setupDef.requiresCvdDivergence && !recall.cvd.cvd_divergence) {
     return { blocked: true, reason: "cvd_not_ready" };
   }
 
@@ -698,42 +693,53 @@ export function applyNoTradeFilters(
 
 // ─── Per-Setup Per-Regime Thresholds ─────────────────────────────────────────
 
+function withCatalogFloors(
+  thresholds: Record<SetupType, number>,
+): Record<SetupType, number> {
+  const result = { ...thresholds };
+  for (const setup of DEFAULT_SETUPS) {
+    result[setup] = Math.max(result[setup], SETUP_CATALOG[setup].minFinalQuality);
+  }
+  return result;
+}
+
+// Regime thresholds with setup-level minimum floors from shared setup catalog.
 const REGIME_THRESHOLDS: Record<Regime, Record<SetupType, number>> = {
-  trending_bull: {
-    continuation_pullback: 0.55,
-    sweep_reclaim: 0.60,
-    absorption_reversal: 0.72,
-    cvd_divergence: 0.65,
-    breakout_failure: 0.68,
-  },
-  trending_bear: {
-    continuation_pullback: 0.55,
-    sweep_reclaim: 0.60,
-    absorption_reversal: 0.72,
-    cvd_divergence: 0.65,
-    breakout_failure: 0.68,
-  },
-  ranging: {
-    absorption_reversal: 0.60,
-    sweep_reclaim: 0.65,
-    continuation_pullback: 0.70,
-    cvd_divergence: 0.60,
-    breakout_failure: 0.62,
-  },
-  volatile: {
-    sweep_reclaim: 0.70,
+  trending_bull: withCatalogFloors({
+    continuation_pullback: 0.58,
+    sweep_reclaim: 0.63,
     absorption_reversal: 0.75,
-    continuation_pullback: 0.78,
-    cvd_divergence: 0.72,
-    breakout_failure: 0.75,
-  },
-  chop: {
+    cvd_divergence: 0.68,
+    breakout_failure: 0.70,
+  }),
+  trending_bear: withCatalogFloors({
+    continuation_pullback: 0.58,
+    sweep_reclaim: 0.63,
+    absorption_reversal: 0.75,
+    cvd_divergence: 0.68,
+    breakout_failure: 0.70,
+  }),
+  ranging: withCatalogFloors({
+    absorption_reversal: 0.65,
+    sweep_reclaim: 0.70,
+    continuation_pullback: 0.75,
+    cvd_divergence: 0.65,
+    breakout_failure: 0.67,
+  }),
+  volatile: withCatalogFloors({
+    sweep_reclaim: 0.75,
+    absorption_reversal: 0.78,
+    continuation_pullback: 0.82,
+    cvd_divergence: 0.76,
+    breakout_failure: 0.78,
+  }),
+  chop: withCatalogFloors({
     absorption_reversal: 1.0,
     sweep_reclaim: 1.0,
     continuation_pullback: 1.0,
     cvd_divergence: 1.0,
     breakout_failure: 1.0,
-  },
+  }),
 };
 
 export function getQualityThreshold(regime: Regime, setup: SetupType): number {
@@ -1278,9 +1284,24 @@ export function scoreRecall(
     if ((direction === "long" && rsi <= 45) || (direction === "short" && rsi >= 55)) score += 0.03;
   }
 
-  const fakeEntryPenaltyWeight = setup === "continuation_pullback" ? 0.14 : 0.10;
+  const fakeEntryPenaltyWeight = setup === "continuation_pullback" ? 0.18 : 0.14;
   score -= recall.fake_entry_risk * fakeEntryPenaltyWeight;
-  score -= recall.volatility_zscore * 0.05;
+  score -= recall.volatility_zscore * 0.07;
+
+  // v2: Multi-timeframe trend disagreement penalty
+  const tf1m = Math.sign(recall.trend_slope_1m);
+  const tf5m = Math.sign(recall.trend_slope_5m);
+  const tf15m = Math.sign(recall.trend_slope_15m);
+  const tfDisagreement = (tf1m !== tf5m ? 1 : 0) + (tf5m !== tf15m ? 1 : 0) + (tf1m !== tf15m ? 1 : 0);
+  if (tfDisagreement >= 2) score -= 0.06;
+
+  // v2: SK zone + bias alignment super-bonus
+  if (recall.sk.in_zone && recall.sk.correction_complete) {
+    const biasAligned =
+      (direction === "long" && recall.sk.bias === "bull") ||
+      (direction === "short" && recall.sk.bias === "bear");
+    if (biasAligned) score += 0.08;
+  }
 
   return clamp(score);
 }
@@ -1305,30 +1326,17 @@ export function computeFinalQuality(
     regime: context?.recall?.regime ?? "ranging",
     direction: context?.direction,
   });
-  const ml = mlPred.probability;
-
-  const claude = 0.52 + (safeStructure + safeOrderFlow) * 0.22;
-  let quality = 0.30 * safeStructure + 0.25 * safeOrderFlow + 0.20 * safeRecall + 0.15 * ml + 0.10 * claude;
-
-  // Coherence bonus: strong when structure and order-flow tell the same story.
-  const coherence = 1 - Math.abs(safeStructure - safeOrderFlow);
-  quality += (coherence - 0.5) * 0.06;
-
-  if (context?.recall) {
-    quality += (context.recall.trend_consensus - 0.5) * 0.05;
-    quality += (context.recall.flow_alignment - 0.5) * 0.05;
-    quality -= context.recall.fake_entry_risk * 0.08;
-    quality -= context.recall.volatility_zscore * 0.04;
-
-    if (context.direction && context.recall.sk.bias !== "neutral") {
-      const biasAligned =
-        (context.direction === "long" && context.recall.sk.bias === "bull") ||
-        (context.direction === "short" && context.recall.sk.bias === "bear");
-      quality += biasAligned ? 0.02 : -0.03;
-    }
-  }
-
-  return clamp(quality);
+  const ml = clamp(mlPred.probability);
+  const claude = clamp(0.52 + (safeStructure + safeOrderFlow) * 0.22);
+  return clamp(
+    computeFinalQualityScore({
+      structure: safeStructure,
+      orderflow: safeOrderFlow,
+      recall: safeRecall,
+      ml,
+      claude,
+    }),
+  );
 }
 
 // ─── Chart Overlay Events ─────────────────────────────────────────────────────
