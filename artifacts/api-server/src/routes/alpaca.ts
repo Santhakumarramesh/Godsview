@@ -24,7 +24,7 @@ import {
 } from "../lib/strategy_engine";
 import { getModelStatus, predictWinProbability } from "../lib/ml_model";
 import { db, accuracyResultsTable, marketBarsTable, signalsTable } from "@workspace/db";
-import { eq, desc, and, count, sql, inArray } from "drizzle-orm";
+import { eq, desc, and, count, sql, inArray, gte } from "drizzle-orm";
 
 const router: IRouter = Router();
 const LIVE_TRADING_ENABLED = String(process.env.GODSVIEW_ENABLE_LIVE_TRADING ?? "").toLowerCase() === "true";
@@ -39,6 +39,123 @@ const SUPPORTED_SYMBOLS: Record<string, string> = {
   BTCUSDT: "BTCUSD",
   ETHUSDT: "ETHUSD",
 };
+
+const BAR_TIMEFRAME_MS: Record<AlpacaTimeframe, number> = {
+  "1Min": 60_000,
+  "5Min": 5 * 60_000,
+  "15Min": 15 * 60_000,
+  "1Hour": 60 * 60_000,
+  "1Day": 24 * 60 * 60_000,
+};
+
+function isAlpacaRateLimitError(error: unknown): boolean {
+  const message = String(error ?? "");
+  return message.includes("Alpaca API 429") || message.toLowerCase().includes("too many requests");
+}
+
+function delayMs(ms: number): Promise<void> {
+  if (!Number.isFinite(ms) || ms <= 0) return Promise.resolve();
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function readBarsFromCacheStore(
+  symbol: string,
+  timeframe: AlpacaTimeframe,
+  limit: number
+): Promise<AlpacaBar[]> {
+  if (!(timeframe === "1Min" || timeframe === "5Min" || timeframe === "15Min")) {
+    return [];
+  }
+
+  const lookbackMs = Math.min(
+    Math.max(BAR_TIMEFRAME_MS[timeframe] * Math.max(limit + 20, 120), 60 * 60_000),
+    48 * 60 * 60_000
+  );
+  const minBarTime = new Date(Date.now() - lookbackMs);
+
+  const rows = await db
+    .select()
+    .from(marketBarsTable)
+    .where(
+      and(
+        eq(marketBarsTable.symbol, symbol),
+        eq(marketBarsTable.timeframe, timeframe),
+        gte(marketBarsTable.bar_time, minBarTime),
+      ),
+    )
+    .orderBy(desc(marketBarsTable.bar_time))
+    .limit(limit);
+
+  if (!rows.length) return [];
+
+  const normalized: AlpacaBar[] = [];
+  for (const row of [...rows].reverse()) {
+    const timestamp = new Date(row.bar_time).toISOString();
+    const open = Number(row.open);
+    const high = Number(row.high);
+    const low = Number(row.low);
+    const close = Number(row.close);
+    const volume = Number(row.volume);
+    const vwapRaw = row.vwap === null || row.vwap === undefined ? null : Number(row.vwap);
+    if (!Number.isFinite(open) || !Number.isFinite(high) || !Number.isFinite(low) || !Number.isFinite(close) || !Number.isFinite(volume)) {
+      continue;
+    }
+    const vwap = vwapRaw !== null && Number.isFinite(vwapRaw) ? vwapRaw : undefined;
+    normalized.push({
+      t: timestamp,
+      o: open,
+      h: high,
+      l: low,
+      c: close,
+      v: volume,
+      vw: vwap,
+      Timestamp: timestamp,
+      Open: open,
+      High: high,
+      Low: low,
+      Close: close,
+      Volume: volume,
+      VWAP: vwap,
+    });
+  }
+  return normalized;
+}
+
+async function getBarsWithRateLimitFallback(
+  symbol: string,
+  timeframe: AlpacaTimeframe,
+  limit: number,
+  options?: {
+    req?: Request;
+    start?: string;
+    end?: string;
+  }
+): Promise<AlpacaBar[]> {
+  try {
+    return await getBars(symbol, timeframe, limit, options?.start, options?.end);
+  } catch (error) {
+    if (!isAlpacaRateLimitError(error)) throw error;
+    await delayMs(550);
+    try {
+      const reducedLimit = Math.max(Math.min(limit, 150), Math.floor(limit * 0.75));
+      return await getBars(symbol, timeframe, reducedLimit, options?.start, options?.end);
+    } catch (retryError) {
+      if (!isAlpacaRateLimitError(retryError)) throw retryError;
+      if (options?.start || options?.end) {
+        throw retryError;
+      }
+      const cachedBars = await readBarsFromCacheStore(symbol, timeframe, limit);
+      if (cachedBars.length >= Math.min(limit, timeframe === "1Min" ? 80 : 40)) {
+        options?.req?.log.warn(
+          { symbol, timeframe, requestedBars: limit, fallbackBars: cachedBars.length },
+          "alpaca 429 fallback to cached market_bars",
+        );
+        return cachedBars;
+      }
+      throw retryError;
+    }
+  }
+}
 
 function toAlpacaSymbol(instrument: string): string {
   const normalized = instrument
@@ -322,7 +439,7 @@ router.get("/alpaca/candles", async (req, res) => {
     // Fetch candles going back enough to fill the chart
     const hoursBack = timeframe === "1Min" ? 4 : timeframe === "5Min" ? 24 : timeframe === "15Min" ? 72 : timeframe === "1Hour" ? 30 * 24 : 365 * 24;
     const start = new Date(Date.now() - hoursBack * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const bars = await getBars(alpacaSym, timeframe, limit, start);
+    const bars = await getBarsWithRateLimitFallback(alpacaSym, timeframe, limit, { req, start });
 
     // Normalise to lightweight-charts format { time, open, high, low, close, volume }
     const formatted = bars
@@ -447,7 +564,9 @@ async function getTickerDailyReference(symbol: string): Promise<{
   }
 
   const fiveDaysAgo = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const dailyBars = await getBars(symbol, "1Day", 10, fiveDaysAgo).catch(() => [] as AlpacaBar[]);
+  const dailyBars = await getBarsWithRateLimitFallback(symbol, "1Day", 10, { start: fiveDaysAgo }).catch(
+    () => [] as AlpacaBar[],
+  );
   const sortedBars = [...dailyBars].sort((a, b) => new Date(a.Timestamp).getTime() - new Date(b.Timestamp).getTime());
   const closedBars = sortedBars.filter((b) => b.Timestamp.slice(0, 10) < today);
   const prevClose = closedBars.length > 0 ? closedBars[closedBars.length - 1]!.Close : null;
@@ -696,7 +815,12 @@ router.get("/alpaca/bars", async (req, res) => {
     const symbol = String(req.query.symbol ?? "BTCUSD");
     const timeframe = (req.query.timeframe as string) ?? "5Min";
     const limit = Math.min(Number(req.query.limit ?? 100), 1000);
-    const bars = await getBars(symbol, timeframe as "1Min" | "5Min" | "15Min" | "1Hour" | "1Day", limit);
+    const bars = await getBarsWithRateLimitFallback(
+      symbol,
+      timeframe as "1Min" | "5Min" | "15Min" | "1Hour" | "1Day",
+      limit,
+      { req },
+    );
     res.json({ symbol, timeframe, bars });
   } catch (err) {
     req.log.error({ err }, "Failed to get bars");
@@ -722,9 +846,9 @@ router.post("/alpaca/analyze", async (req, res) => {
     // Fetch deeper bar history for better recall engine context
     // 200 × 1m = 3h 20m · 100 × 5m = 8h 20m · 60 × 15m = 15h
     const [bars1m, bars5m, bars15m] = await Promise.all([
-      getBars(alpacaSymbol, "1Min", 200),
-      getBars(alpacaSymbol, "5Min", 100),
-      getBars(alpacaSymbol, "15Min", 60),
+      getBarsWithRateLimitFallback(alpacaSymbol, "1Min", 200, { req }),
+      getBarsWithRateLimitFallback(alpacaSymbol, "5Min", 100, { req }),
+      getBarsWithRateLimitFallback(alpacaSymbol, "15Min", 60, { req }),
     ]);
 
     // Asynchronously cache bars to DB (fire-and-forget — never blocks the scan)
@@ -1888,8 +2012,8 @@ async function getCachedDiagBars(): Promise<{ bars1m: AlpacaBar[]; bars5m: Alpac
     return { bars1m: _diagBarsCache.bars1m, bars5m: _diagBarsCache.bars5m };
   }
   const [bars1m, bars5m] = await Promise.all([
-    getBars("BTCUSD", "1Min", 5).catch(() => [] as AlpacaBar[]),
-    getBars("BTCUSD", "5Min", 40).catch(() => [] as AlpacaBar[]),
+    getBarsWithRateLimitFallback("BTCUSD", "1Min", 5).catch(() => [] as AlpacaBar[]),
+    getBarsWithRateLimitFallback("BTCUSD", "5Min", 40).catch(() => [] as AlpacaBar[]),
   ]);
   _diagBarsCache = { bars1m, bars5m, ts: Date.now() };
   return { bars1m, bars5m };
