@@ -31,6 +31,8 @@ export interface StrictSweepReclaimDecision {
   supported: boolean;
   detected: boolean;
   tradeAllowed: boolean;
+  confidenceScore: number | null;
+  expectedWinProbability: number | null;
   direction: "long" | "short" | null;
   session: "asian" | "london" | "new_york" | "ny_overlap";
   timestamp: string | null;
@@ -70,6 +72,11 @@ const SUPPORTED_SYMBOLS = new Set<string>(["BTCUSD", "ETHUSD"]);
 
 function clampPositive(value: number, fallback: number): number {
   return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function clamp01(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(1, value));
 }
 
 function computeATR14(bars: AlpacaBar[]): number {
@@ -183,6 +190,8 @@ export function evaluateStrictSweepReclaim(
       supported: false,
       detected: false,
       tradeAllowed: false,
+      confidenceScore: null,
+      expectedWinProbability: null,
       direction: null,
       session: defaultSession,
       timestamp: null,
@@ -212,6 +221,8 @@ export function evaluateStrictSweepReclaim(
       supported: true,
       detected: false,
       tradeAllowed: false,
+      confidenceScore: null,
+      expectedWinProbability: null,
       direction: null,
       session: defaultSession,
       timestamp: null,
@@ -337,12 +348,40 @@ export function evaluateStrictSweepReclaim(
     spreadValid,
   };
 
+  let confidenceScore: number | null = null;
+  let expectedWinProbability: number | null = null;
+  if (detected) {
+    const wickScore = clamp01(((sweepWickRatio ?? minSweepWickRatio) - minSweepWickRatio) / Math.max(0.9 - minSweepWickRatio, 0.05));
+    const regimeScore = regime === "ranging" ? 1 : regime === "volatile" ? 0.8 : 0.35;
+    const atrPct = entryPrice && atr14 > 0 ? atr14 / entryPrice : 0;
+    const atrScore = atrPct > 0 ? clamp01(1 - Math.abs(atrPct - 0.0025) / 0.006) : 0.5;
+    const spreadScore = liq.spreadBps !== null ? clamp01(1 - liq.spreadBps / Math.max(maxSpreadBps * 1.25, 1)) : 0.5;
+    const liquidityScore = liq.topBookNotionalUsd !== null
+      ? clamp01(liq.topBookNotionalUsd / Math.max(minTopBookNotionalUsd * 2, 1))
+      : 0.5;
+    const rrScore = riskReward !== null ? clamp01(riskReward / 3) : 0.5;
+    const gatePenalty = blockedReasons.length === 0 ? 1 : Math.max(0.25, 1 - blockedReasons.length * 0.2);
+
+    const blended =
+      wickScore * 0.28 +
+      regimeScore * 0.18 +
+      atrScore * 0.14 +
+      spreadScore * 0.14 +
+      liquidityScore * 0.14 +
+      rrScore * 0.12;
+
+    confidenceScore = clamp01(blended * gatePenalty);
+    expectedWinProbability = clamp01(0.38 + confidenceScore * 0.47);
+  }
+
   return {
     setup: "sweep_reclaim_v1",
     symbol: normalizedSymbol,
     supported: true,
     detected,
     tradeAllowed: blockedReasons.length === 0,
+    confidenceScore,
+    expectedWinProbability,
     direction,
     session,
     timestamp: reclaimBar.Timestamp,
