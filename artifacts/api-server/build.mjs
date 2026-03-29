@@ -46,6 +46,7 @@ async function buildAll() {
       "dtrace-provider",
       "isolated-vm",
       "lightningcss",
+      "@electric-sql/pglite",
       "pg-native",
       "oracledb",
       "mongodb-client-encryption",
