@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from app.agents.base import Agent, AgentState
 from app.infer import get_latest_signal
+from app.strategy.hard_gates import evaluate_hard_gates
+from app.strategy.scoring_engine import score_setup_pipeline
 from app.strategy.setup_engine import generate_setup_candidate
 from app.strategy.validator import validate_candidate
 
@@ -35,15 +37,35 @@ class SignalAgent(Agent):
             market = state.data.get("market", {})
             bars = state.data.get("bars")
             session = state.data.get("session", {})
-            if isinstance(session, dict) and not bool(session.get("allowed", False)):
-                state.set_blocked("session_not_allowed")
-                state.data["signal"] = {"action": "skip", "reason": "session_not_allowed"}
-                return state
+            macro = state.data.get("macro", {})
+            sentiment = state.data.get("sentiment", {})
 
             setup_candidate = None
             setup_validation = {"valid": False, "reason": "missing_setup_candidate"}
+            hard_gates = {
+                "pass": False,
+                "checks": [],
+                "failed_reasons": ["missing_bars_for_hard_gates"],
+                "pass_ratio": 0.0,
+            }
+            scoring = {
+                "pass": False,
+                "final_score": 0.0,
+                "grade": "C",
+                "reasons": ["scoring_not_computed"],
+            }
             if bars is not None:
-                setup_candidate = generate_setup_candidate(bars)
+                hard_gates = evaluate_hard_gates(
+                    bars=bars,
+                    market=market if isinstance(market, dict) else {},
+                    session=session if isinstance(session, dict) else {},
+                    macro=macro if isinstance(macro, dict) else {},
+                    sentiment=sentiment if isinstance(sentiment, dict) else {},
+                )
+                setup_candidate = generate_setup_candidate(
+                    bars,
+                    session=session if isinstance(session, dict) else None,
+                )
                 setup_validation = validate_candidate(setup_candidate)
 
             setup = _infer_setup(signal, market)
@@ -52,10 +74,35 @@ class SignalAgent(Agent):
             signal["setup"] = setup
             signal["setup_candidate"] = setup_candidate
             signal["setup_validation"] = setup_validation
+            scoring = score_setup_pipeline(
+                signal=signal,
+                setup_candidate=setup_candidate if isinstance(setup_candidate, dict) else None,
+                market=market if isinstance(market, dict) else None,
+                hard_gates=hard_gates if isinstance(hard_gates, dict) else None,
+                validation=setup_validation,
+            )
+            signal["scoring"] = scoring
+            signal["pipeline_stage"] = {
+                "hard_gates_pass": bool(hard_gates.get("pass", False)),
+                "setup_valid": bool(setup_validation.get("valid", False)),
+                "scoring_pass": bool(scoring.get("pass", False)),
+            }
             state.data["signal"] = signal
+            state.data["hard_gates"] = hard_gates
+            state.data["scoring"] = scoring
 
+            if not hard_gates.get("pass", False):
+                failed = hard_gates.get("failed_reasons", [])
+                first = failed[0] if isinstance(failed, list) and failed else "hard_gate_failed"
+                state.set_blocked(f"hard_gate_failed:{first}")
+                return state
             if not setup_validation.get("valid", False):
                 state.set_blocked(f"invalid_setup:{setup_validation.get('reason', 'unknown')}")
+                return state
+            if not scoring.get("pass", False):
+                reasons = scoring.get("reasons", [])
+                first = reasons[0] if isinstance(reasons, list) and reasons else "score_rejected"
+                state.set_blocked(f"scoring_rejected:{first}")
                 return state
             if str(signal.get("action", "skip")) == "skip":
                 state.set_blocked("neutral_signal")

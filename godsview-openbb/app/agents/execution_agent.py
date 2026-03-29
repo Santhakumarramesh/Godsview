@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.agents.base import Agent, AgentState
 from app.broker import place_market_order
+from app.config import settings
 
 
 class ExecutionAgent(Agent):
@@ -26,6 +27,18 @@ class ExecutionAgent(Agent):
             state.data["execution"] = {"status": "blocked", "reason": state.block_reason}
             return state
 
+        human_approval = bool(state.data.get("human_approval", False))
+        if state.live and settings.human_approval_required and not human_approval:
+            state.set_blocked("awaiting_human_approval")
+            state.data["execution"] = {
+                "status": "pending_human_approval",
+                "reason": state.block_reason,
+                "side": action,
+                "qty": qty,
+                "requires_human_approval": True,
+            }
+            return state
+
         if state.dry_run or not state.live:
             state.data["execution"] = {
                 "status": "simulated",
@@ -48,4 +61,3 @@ class ExecutionAgent(Agent):
             state.set_blocked("execution_failed")
             state.data["execution"] = {"status": "error", "reason": str(err)}
             return state
-

@@ -17,6 +17,7 @@ class ReasoningAgent(Agent):
         mtf = state.data.get("mtf", {})
         sentiment = state.data.get("sentiment", {})
         macro = state.data.get("macro", {})
+        scoring = state.data.get("scoring", {})
         setup_candidate = None
         if isinstance(signal, dict):
             setup_candidate = signal.get("setup_candidate")
@@ -33,6 +34,7 @@ class ReasoningAgent(Agent):
             symbol=state.symbol,
             signal=signal,
             setup_candidate=setup_candidate if isinstance(setup_candidate, dict) else None,
+            scoring=scoring if isinstance(scoring, dict) else None,
             sentiment=sentiment if isinstance(sentiment, dict) else None,
             macro=macro if isinstance(macro, dict) else None,
             memory_tail=memory_tail,
@@ -51,8 +53,16 @@ class ReasoningAgent(Agent):
             "recent_loss_rate": recent_loss_rate,
             "recent_trades": recent_total,
             "mtf_confluence": confluence,
+            "final_score": float(decision.get("final_score", 0.0)),
+            "challenge_points": decision.get("challenge_points", []),
+            "past_episode_stats": decision.get("past_episode_stats", {}),
             "inputs": decision.get("inputs", {}),
         }
+        reasoning["explanation"] = (
+            f"action={reasoning['final_action']} approved={reasoning['approved']} "
+            f"score={reasoning['final_score']:.3f} "
+            f"recent_loss_rate={reasoning['recent_loss_rate']:.2f}"
+        )
         state.data["reasoning"] = reasoning
 
         state.brain.add_memory(

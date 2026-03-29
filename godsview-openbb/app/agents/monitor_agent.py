@@ -6,6 +6,7 @@ from app.agents.base import Agent, AgentState, utc_now_iso
 from app.brain.learning import build_learning_summary
 from app.brain.schema import TradeMemory
 from app.execution.journal import append_journal_entry
+from app.utils import write_json
 
 
 class MonitorAgent(Agent):
@@ -17,6 +18,8 @@ class MonitorAgent(Agent):
         reasoning = state.data.get("reasoning", {})
         risk = state.data.get("risk", {})
         execution = state.data.get("execution", {})
+        hard_gates = state.data.get("hard_gates", {})
+        scoring = state.data.get("scoring", {})
 
         action = str(reasoning.get("final_action", signal.get("action", "skip")))
         setup = str(signal.get("setup", "unknown"))
@@ -24,7 +27,7 @@ class MonitorAgent(Agent):
         status = str(execution.get("status", "blocked"))
 
         outcome = "open"
-        if status in {"blocked", "error"}:
+        if status in {"blocked", "error", "pending_human_approval"}:
             outcome = "skipped"
 
         trade_memory = TradeMemory(
@@ -37,6 +40,8 @@ class MonitorAgent(Agent):
                 "execution": execution,
                 "risk": risk,
                 "reasoning": reasoning,
+                "hard_gates": hard_gates,
+                "scoring": scoring,
             },
             trade_id=str(uuid.uuid4()),
             signal_action=action,
@@ -56,6 +61,9 @@ class MonitorAgent(Agent):
                 "execution": execution,
                 "risk": risk,
                 "reasoning": reasoning,
+                "hard_gates": hard_gates,
+                "scoring": scoring,
+                "block_reason": state.block_reason,
             }
         )
 
@@ -75,4 +83,20 @@ class MonitorAgent(Agent):
             "learning": build_learning_summary(state.brain, state.symbol),
             "trade_outcome": outcome,
         }
+        review_snapshot = {
+            "symbol": state.symbol,
+            "recorded_at": utc_now_iso(),
+            "setup": setup,
+            "regime": regime,
+            "action": action,
+            "status": status,
+            "block_reason": state.block_reason,
+            "hard_gates": hard_gates,
+            "scoring": scoring,
+            "reasoning": reasoning,
+            "risk": risk,
+            "execution": execution,
+        }
+        write_json("data/processed/latest_review_snapshot.json", review_snapshot)
+        state.data["review_snapshot"] = review_snapshot
         return state
