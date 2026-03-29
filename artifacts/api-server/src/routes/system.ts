@@ -3,8 +3,14 @@ import { db, signalsTable, tradesTable } from "@workspace/db";
 import { gte, sql } from "drizzle-orm";
 import { getTypedPositions, getAccount, hasValidTradingKey, isBrokerKey } from "../lib/alpaca";
 import { getModelStatus, retrainModel } from "../lib/ml_model";
+import { resolveSystemMode, canWriteOrders, isLiveMode } from "@workspace/strategy-core";
 
 const router: IRouter = Router();
+const LEGACY_LIVE_TRADING_ENABLED = String(process.env.GODSVIEW_ENABLE_LIVE_TRADING ?? "").toLowerCase() === "true";
+const SYSTEM_MODE = resolveSystemMode(process.env.GODSVIEW_SYSTEM_MODE, {
+  liveTradingEnabled: LEGACY_LIVE_TRADING_ENABLED,
+});
+const TRADING_KILL_SWITCH = String(process.env.GODSVIEW_KILL_SWITCH ?? "").toLowerCase() === "true";
 
 // ── Server-side cache for Alpaca data (avoid 429 rate limits) ───────────────
 let _alpacaCache: { positions: any[]; account: any; ts: number } = { positions: [], account: null, ts: 0 };
@@ -97,6 +103,10 @@ router.get("/system/status", async (req, res) => {
 
     res.json({
       overall,
+      system_mode: SYSTEM_MODE,
+      live_writes_enabled: canWriteOrders(SYSTEM_MODE) && !TRADING_KILL_SWITCH,
+      live_mode: isLiveMode(SYSTEM_MODE),
+      trading_kill_switch: TRADING_KILL_SWITCH,
       layers,
       news_lockout_active: false,
       active_instrument: activeInstrument,

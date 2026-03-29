@@ -10,6 +10,7 @@ export type Direction = "long" | "short";
 export type RiskModel = "reversal" | "continuation" | "breakout-fade";
 
 export type SystemMode = "demo" | "paper" | "live_disabled" | "live_enabled";
+export type DecisionState = "TRADE" | "PASS" | "REJECTED" | "BLOCKED_BY_RISK" | "DEGRADED_DATA";
 
 export interface SetupDefinition {
   type: SetupType;

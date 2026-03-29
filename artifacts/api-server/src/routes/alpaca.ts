@@ -24,11 +24,15 @@ import {
 } from "../lib/strategy_engine";
 import { getModelStatus, predictWinProbability } from "../lib/ml_model";
 import { db, accuracyResultsTable, marketBarsTable, signalsTable } from "@workspace/db";
-import { DEFAULT_SETUPS, isSetupType } from "@workspace/strategy-core";
+import { DEFAULT_SETUPS, isSetupType, resolveSystemMode, canWriteOrders, isLiveMode, deriveDecisionState } from "@workspace/strategy-core";
 import { eq, desc, and, count, sql, inArray, gte } from "drizzle-orm";
 
 const router: IRouter = Router();
-const LIVE_TRADING_ENABLED = String(process.env.GODSVIEW_ENABLE_LIVE_TRADING ?? "").toLowerCase() === "true";
+const LEGACY_LIVE_TRADING_ENABLED = String(process.env.GODSVIEW_ENABLE_LIVE_TRADING ?? "").toLowerCase() === "true";
+const SYSTEM_MODE = resolveSystemMode(process.env.GODSVIEW_SYSTEM_MODE, {
+  liveTradingEnabled: LEGACY_LIVE_TRADING_ENABLED,
+});
+const TRADING_KILL_SWITCH = String(process.env.GODSVIEW_KILL_SWITCH ?? "").toLowerCase() === "true";
 const OPERATOR_TOKEN = (process.env.GODSVIEW_OPERATOR_TOKEN ?? "").trim();
 type AccuracyResultRow = typeof accuracyResultsTable.$inferSelect;
 
@@ -232,10 +236,20 @@ function getProvidedOperatorToken(req: Request): string | null {
 }
 
 function ensureTradingWriteAccess(req: Request, res: Response): boolean {
-  if (!LIVE_TRADING_ENABLED) {
+  if (TRADING_KILL_SWITCH) {
+    res.status(423).json({
+      error: "kill_switch_active",
+      message: "Trading writes are blocked by kill switch. Set GODSVIEW_KILL_SWITCH=false to resume.",
+      system_mode: SYSTEM_MODE,
+    });
+    return false;
+  }
+
+  if (!canWriteOrders(SYSTEM_MODE)) {
     res.status(403).json({
       error: "trading_disabled",
-      message: "Trading write actions are disabled by server policy. Set GODSVIEW_ENABLE_LIVE_TRADING=true to enable.",
+      message: `Trading write actions are disabled in system mode '${SYSTEM_MODE}'.`,
+      system_mode: SYSTEM_MODE,
     });
     return false;
   }
@@ -254,6 +268,7 @@ function ensureTradingWriteAccess(req: Request, res: Response): boolean {
     res.status(401).json({
       error: "unauthorized",
       message: "Missing or invalid operator token.",
+      system_mode: SYSTEM_MODE,
     });
     return false;
   }
@@ -874,13 +889,17 @@ router.post("/alpaca/analyze", async (req, res) => {
     const regime = recall.regime;
 
     const detectedSetups = [];
-    const blockedSetups = [];
+    const blockedSetups: Array<{ setup_type: SetupType; reason: string; decision_state: string }> = [];
 
     for (const setup of setups) {
       // Apply no-trade filters first
       const noTrade = applyNoTradeFilters(bars1m, recall, setup, cooldowns);
       if (noTrade.blocked) {
-        blockedSetups.push({ setup_type: setup, reason: noTrade.reason });
+        blockedSetups.push({
+          setup_type: setup,
+          reason: noTrade.reason,
+          decision_state: deriveDecisionState({ blocked: true, meetsThreshold: false }),
+        });
         continue;
       }
 
@@ -980,6 +999,7 @@ router.post("/alpaca/analyze", async (req, res) => {
       const cv = claudeResults[i];
       // Claude can escalate or downgrade meets_threshold
       const claudeApproved = cv.verdict === "APPROVED" || cv.verdict === "CAUTION";
+      const meetsThreshold = s.meets_threshold && claudeApproved;
       return {
         ...s,
         claude: {
@@ -995,9 +1015,17 @@ router.post("/alpaca/analyze", async (req, res) => {
           s.final_quality * 0.90 + cv.claude_score * 0.10
         ),
         // A setup is high-conviction only if it passes ALL layers including Claude
-        meets_threshold: s.meets_threshold && claudeApproved,
+        meets_threshold: meetsThreshold,
+        decision_state: deriveDecisionState({ blocked: false, meetsThreshold }),
       };
     });
+
+    const decisionSummary = enrichedSetups.reduce<Record<string, number>>((acc, setup) => {
+      const key = setup.decision_state;
+      acc[key] = (acc[key] ?? 0) + 1;
+      return acc;
+    }, {});
+    decisionSummary.BLOCKED_BY_RISK = (decisionSummary.BLOCKED_BY_RISK ?? 0) + blockedSetups.length;
 
     // Persist detected setups to signals table so Mission Control can count them
     if (enrichedSetups.length > 0) {
@@ -1033,6 +1061,8 @@ router.post("/alpaca/analyze", async (req, res) => {
     res.json({
       instrument,
       alpaca_symbol: alpacaSymbol,
+      system_mode: SYSTEM_MODE,
+      trading_kill_switch: TRADING_KILL_SWITCH,
       indicator_hints: recall.indicator_hints,
       analyzed_at: new Date().toISOString(),
       regime,
@@ -1043,6 +1073,7 @@ router.post("/alpaca/analyze", async (req, res) => {
       setups_blocked:   blockedSetups,
       setups:           enrichedSetups,
       high_conviction:  enrichedSetups.filter((s) => s.meets_threshold),
+      decision_summary: decisionSummary,
       claude_active:    isClaudeAvailable(),
     });
   } catch (err) {
@@ -2110,6 +2141,10 @@ router.get("/system/diagnostics", async (req, res) => {
   res.json({
     system_status: systemStatus,
     timestamp: new Date().toISOString(),
+    system_mode: SYSTEM_MODE,
+    live_writes_enabled: canWriteOrders(SYSTEM_MODE),
+    live_mode: isLiveMode(SYSTEM_MODE),
+    trading_kill_switch: TRADING_KILL_SWITCH,
     layers,
     recommendations: [
       ...(!hasValidTradingKey ? ["Add Trading API keys (PK/AK) from app.alpaca.markets to unlock stock data"] : []),
