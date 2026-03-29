@@ -401,6 +401,12 @@ type TradingRiskSnapshot = {
   openExposurePct: number;
   openPositions: number;
   closedTradesToday: number;
+  consecutiveLosses: number;
+  cooldownThreshold: number;
+  cooldownMinutes: number;
+  cooldownActive: boolean;
+  cooldownRemainingMs: number;
+  cooldownUntil: string | null;
   limits: {
     maxDailyLossUsd: number;
     maxOpenExposurePct: number;
@@ -408,6 +414,103 @@ type TradingRiskSnapshot = {
     maxTradesPerSession: number;
   };
 };
+
+type RoundTripClose = {
+  closedAtMs: number;
+  pnl: number;
+};
+
+function buildRoundTripCloses(fills: AlpacaFillActivity[]): RoundTripClose[] {
+  if (!fills.length) return [];
+  const bySymbol: Record<string, AlpacaFillActivity[]> = {};
+  for (const fill of fills) {
+    const key = fill.symbol;
+    if (!bySymbol[key]) bySymbol[key] = [];
+    bySymbol[key].push(fill);
+  }
+
+  const closes: RoundTripClose[] = [];
+  for (const symbolFills of Object.values(bySymbol)) {
+    symbolFills.sort((a, b) => a.transaction_time.localeCompare(b.transaction_time));
+    const queue: Array<{ price: number; qty: number }> = [];
+
+    for (const fill of symbolFills) {
+      const price = Number(fill.price);
+      let qty = Number(fill.qty);
+      if (!Number.isFinite(price) || !Number.isFinite(qty) || qty <= 0) continue;
+
+      if (fill.side === "buy") {
+        queue.push({ price, qty });
+        continue;
+      }
+
+      const closedAtMs = Date.parse(fill.transaction_time);
+      const ts = Number.isFinite(closedAtMs) ? closedAtMs : Date.now();
+      while (qty > 1e-10 && queue.length > 0) {
+        const lot = queue[0];
+        const matched = Math.min(qty, lot.qty);
+        closes.push({
+          closedAtMs: ts,
+          pnl: (price - lot.price) * matched,
+        });
+        lot.qty -= matched;
+        qty -= matched;
+        if (lot.qty <= 1e-10) queue.shift();
+      }
+    }
+  }
+
+  return closes.sort((a, b) => a.closedAtMs - b.closedAtMs);
+}
+
+function deriveLossCooldownState(
+  closes: RoundTripClose[],
+  cooldownAfterLosses: number,
+  cooldownMinutes: number,
+): {
+  consecutiveLosses: number;
+  cooldownActive: boolean;
+  cooldownRemainingMs: number;
+  cooldownUntil: string | null;
+} {
+  if (!closes.length) {
+    return {
+      consecutiveLosses: 0,
+      cooldownActive: false,
+      cooldownRemainingMs: 0,
+      cooldownUntil: null,
+    };
+  }
+
+  let consecutiveLosses = 0;
+  for (let i = closes.length - 1; i >= 0; i--) {
+    const close = closes[i];
+    if (close && close.pnl < 0) {
+      consecutiveLosses += 1;
+      continue;
+    }
+    break;
+  }
+
+  if (consecutiveLosses < cooldownAfterLosses) {
+    return {
+      consecutiveLosses,
+      cooldownActive: false,
+      cooldownRemainingMs: 0,
+      cooldownUntil: null,
+    };
+  }
+
+  const lastClose = closes[closes.length - 1];
+  const cooldownUntilMs = lastClose.closedAtMs + cooldownMinutes * 60_000;
+  const cooldownRemainingMs = Math.max(0, cooldownUntilMs - Date.now());
+  return {
+    consecutiveLosses,
+    cooldownActive: cooldownRemainingMs > 0,
+    cooldownRemainingMs,
+    cooldownUntil: new Date(cooldownUntilMs).toISOString(),
+  };
+}
 
 async function computeTradingRiskSnapshot(): Promise<TradingRiskSnapshot | null> {
   const [accountRaw, positions, fills]: [unknown, AlpacaPosition[], AlpacaFillActivity[]] = await Promise.all([
@@ -426,8 +529,14 @@ async function computeTradingRiskSnapshot(): Promise<TradingRiskSnapshot | null>
   }, 0);
   const openExposurePct = openExposureUsd / equity;
   const dailySummary = computeRoundTrips(fills);
+  const closes = buildRoundTripCloses(fills);
 
   const controls = getRiskEngineSnapshot().config;
+  const lossCooldown = deriveLossCooldownState(
+    closes,
+    controls.cooldownAfterLosses,
+    controls.cooldownMinutes,
+  );
   return {
     accountEquityUsd: equity,
     realizedPnlTodayUsd: dailySummary.totalPnl,
@@ -435,6 +544,12 @@ async function computeTradingRiskSnapshot(): Promise<TradingRiskSnapshot | null>
     openExposurePct: Number.isFinite(openExposurePct) ? openExposurePct : 0,
     openPositions: positions.length,
     closedTradesToday: dailySummary.trades,
+    consecutiveLosses: lossCooldown.consecutiveLosses,
+    cooldownThreshold: controls.cooldownAfterLosses,
+    cooldownMinutes: controls.cooldownMinutes,
+    cooldownActive: lossCooldown.cooldownActive,
+    cooldownRemainingMs: lossCooldown.cooldownRemainingMs,
+    cooldownUntil: lossCooldown.cooldownUntil,
     limits: {
       maxDailyLossUsd: controls.maxDailyLossUsd,
       maxOpenExposurePct: controls.maxOpenExposurePct,
@@ -502,6 +617,26 @@ async function enforceTradeRiskRails(
     res.status(403).json({
       error: "daily_loss_limit_reached",
       message: "Daily realized loss limit reached. Trade blocked.",
+      decision_state: "BLOCKED_BY_RISK",
+      system_mode: SYSTEM_MODE,
+      risk: snapshot,
+    });
+    return false;
+  }
+
+  if (snapshot.cooldownActive) {
+    void writeAuditEvent(req, {
+      eventType: "ORDER_RISK_BLOCKED",
+      decisionState: "BLOCKED_BY_RISK",
+      actor: "api",
+      instrument: orderReq.symbol,
+      symbol: orderReq.symbol,
+      reason: "cooldown_active_after_loss_streak",
+      payload: snapshot,
+    });
+    res.status(403).json({
+      error: "cooldown_active_after_loss_streak",
+      message: "Cooldown active after consecutive losses. Trade blocked.",
       decision_state: "BLOCKED_BY_RISK",
       system_mode: SYSTEM_MODE,
       risk: snapshot,
@@ -1105,6 +1240,7 @@ router.get("/alpaca/risk/status", async (_req, res) => {
       risk: snapshot,
       gate_state:
         (snapshot.limits.maxDailyLossUsd > 0 && snapshot.realizedPnlTodayUsd <= -snapshot.limits.maxDailyLossUsd) ||
+        snapshot.cooldownActive ||
         (snapshot.limits.maxOpenExposurePct > 0 && snapshot.openExposurePct > snapshot.limits.maxOpenExposurePct) ||
         (snapshot.limits.maxConcurrentPositions > 0 && snapshot.openPositions >= snapshot.limits.maxConcurrentPositions) ||
         (snapshot.limits.maxTradesPerSession > 0 && snapshot.closedTradesToday >= snapshot.limits.maxTradesPerSession)

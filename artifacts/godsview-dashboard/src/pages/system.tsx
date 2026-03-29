@@ -51,6 +51,47 @@ type RuntimeRiskSnapshot = {
   config: RiskConfig;
   fetched_at?: string;
 };
+type LiveRiskSnapshot = {
+  accountEquityUsd: number;
+  realizedPnlTodayUsd: number;
+  openExposureUsd: number;
+  openExposurePct: number;
+  openPositions: number;
+  closedTradesToday: number;
+  consecutiveLosses: number;
+  cooldownThreshold: number;
+  cooldownMinutes: number;
+  cooldownActive: boolean;
+  cooldownRemainingMs: number;
+  cooldownUntil: string | null;
+  limits: {
+    maxDailyLossUsd: number;
+    maxOpenExposurePct: number;
+    maxConcurrentPositions: number;
+    maxTradesPerSession: number;
+  };
+};
+type LiveRiskStatus = {
+  system_mode: string;
+  trading_kill_switch: boolean;
+  live_writes_enabled: boolean;
+  gate_state: "PASS" | "BLOCKED_BY_RISK";
+  risk: LiveRiskSnapshot;
+};
+type AuditEventRow = {
+  id: number;
+  event_type: string;
+  decision_state: string | null;
+  symbol: string | null;
+  reason: string | null;
+  created_at: string;
+};
+type AuditResponse = {
+  events: AuditEventRow[];
+  count: number;
+  limit: number;
+  fetched_at: string;
+};
 
 const LAYER_LABELS: Record<string, string> = {
   data_feed: "Data Feed (Alpaca)",
@@ -88,6 +129,17 @@ function StatusPill({ status }: { status: string }) {
   );
 }
 
+function formatDurationMs(ms: number): string {
+  if (!Number.isFinite(ms) || ms <= 0) return "0m";
+  const totalSeconds = Math.floor(ms / 1000);
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
 const PIPELINE_ICONS = ["sensors", "account_tree", "psychology", "smart_toy", "auto_awesome", "shield"];
 
 export default function System() {
@@ -112,6 +164,26 @@ export default function System() {
       return r.json();
     },
     refetchInterval: 30_000,
+  });
+  const { data: liveRisk } = useQuery<LiveRiskStatus>({
+    queryKey: ["live-risk-status"],
+    queryFn: async () => {
+      const r = await fetch("/api/alpaca/risk/status");
+      if (!r.ok) throw new Error(`live risk status fetch failed: ${r.status}`);
+      return r.json();
+    },
+    refetchInterval: 15_000,
+    staleTime: 10_000,
+  });
+  const { data: audit } = useQuery<AuditResponse>({
+    queryKey: ["system-audit-feed"],
+    queryFn: async () => {
+      const r = await fetch("/api/system/audit?limit=12");
+      if (!r.ok) throw new Error(`audit feed fetch failed: ${r.status}`);
+      return r.json();
+    },
+    refetchInterval: 20_000,
+    staleTime: 15_000,
   });
   const [draft, setDraft] = useState<RiskConfig | null>(null);
   useEffect(() => {
@@ -144,6 +216,7 @@ export default function System() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["system-risk-controls"] });
       queryClient.invalidateQueries({ queryKey: ["system-status"] });
+      queryClient.invalidateQueries({ queryKey: ["live-risk-status"] });
     },
   });
   const saveRiskMutation = useMutation({
@@ -158,6 +231,7 @@ export default function System() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["system-risk-controls"] });
+      queryClient.invalidateQueries({ queryKey: ["live-risk-status"] });
     },
   });
   const resetRuntimeMutation = useMutation({
@@ -168,6 +242,7 @@ export default function System() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["system-risk-controls"] });
+      queryClient.invalidateQueries({ queryKey: ["live-risk-status"] });
     },
   });
 
@@ -517,6 +592,86 @@ export default function System() {
               Loading risk controls...
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Live Risk + Audit Observability */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <div className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+          <div className="flex items-center justify-between mb-3">
+            <MicroLabel>Live Session Risk</MicroLabel>
+            <StatusPill status={liveRisk?.gate_state === "PASS" ? "live" : "degraded"} />
+          </div>
+          {liveRisk?.risk ? (
+            <div className="grid grid-cols-2 gap-2 text-[10px]">
+              <div className="rounded p-2" style={{ backgroundColor: "#0f0f10", border: `1px solid ${C.border}` }}>
+                <MicroLabel>Daily PnL</MicroLabel>
+                <div className="mt-1 font-mono" style={{ color: liveRisk.risk.realizedPnlTodayUsd >= 0 ? C.primary : C.tertiary }}>
+                  ${liveRisk.risk.realizedPnlTodayUsd.toFixed(2)}
+                </div>
+              </div>
+              <div className="rounded p-2" style={{ backgroundColor: "#0f0f10", border: `1px solid ${C.border}` }}>
+                <MicroLabel>Exposure</MicroLabel>
+                <div className="mt-1 font-mono" style={{ color: C.muted }}>
+                  {(liveRisk.risk.openExposurePct * 100).toFixed(1)}%
+                </div>
+              </div>
+              <div className="rounded p-2" style={{ backgroundColor: "#0f0f10", border: `1px solid ${C.border}` }}>
+                <MicroLabel>Closed Trades</MicroLabel>
+                <div className="mt-1 font-mono" style={{ color: C.secondary }}>
+                  {liveRisk.risk.closedTradesToday}
+                </div>
+              </div>
+              <div className="rounded p-2" style={{ backgroundColor: "#0f0f10", border: `1px solid ${C.border}` }}>
+                <MicroLabel>Loss Streak</MicroLabel>
+                <div className="mt-1 font-mono" style={{ color: liveRisk.risk.consecutiveLosses >= liveRisk.risk.cooldownThreshold ? C.tertiary : C.muted }}>
+                  {liveRisk.risk.consecutiveLosses} / {liveRisk.risk.cooldownThreshold}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-xs" style={{ color: C.muted }}>
+              Live risk status unavailable.
+            </div>
+          )}
+          {liveRisk?.risk?.cooldownActive && (
+            <div className="mt-3 rounded p-2 text-[10px]" style={{ border: "1px solid rgba(255,113,98,0.35)", backgroundColor: "rgba(255,113,98,0.12)", color: C.tertiary }}>
+              Cooldown active: {formatDurationMs(liveRisk.risk.cooldownRemainingMs)} remaining
+            </div>
+          )}
+        </div>
+
+        <div className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+          <div className="flex items-center justify-between mb-3">
+            <MicroLabel>Recent Audit Events</MicroLabel>
+            <span style={{ fontSize: "10px", color: C.outlineVar }}>
+              {audit?.count ?? 0} events
+            </span>
+          </div>
+          <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+            {(audit?.events ?? []).map((event) => (
+              <div
+                key={event.id}
+                className="rounded p-2"
+                style={{ backgroundColor: "#0f0f10", border: `1px solid ${C.border}` }}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span style={{ fontSize: "10px", fontWeight: 700, color: C.secondary }}>{event.event_type}</span>
+                  <span style={{ fontSize: "9px", color: C.outlineVar }}>
+                    {format(new Date(event.created_at), "HH:mm:ss")}
+                  </span>
+                </div>
+                <div style={{ fontSize: "9px", marginTop: "3px", color: C.muted }}>
+                  {event.symbol ?? "N/A"} · {event.decision_state ?? "n/a"} · {event.reason ?? "no-reason"}
+                </div>
+              </div>
+            ))}
+            {(audit?.events?.length ?? 0) === 0 && (
+              <div className="text-xs" style={{ color: C.muted }}>
+                No recent audit events.
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
