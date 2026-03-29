@@ -28,6 +28,9 @@ import { getModelStatus, predictWinProbability } from "../lib/ml_model";
 import { db, accuracyResultsTable, auditEventsTable, marketBarsTable, signalsTable } from "@workspace/db";
 import {
   DEFAULT_SETUPS,
+  getSetupDefinition,
+  evaluateC4Decision,
+  getC4SizeMultiplier,
   isSetupType,
   resolveSystemMode,
   canWriteOrders,
@@ -1627,14 +1630,46 @@ router.post("/alpaca/analyze", async (req, res) => {
 
       if (!result.detected) continue;
 
+      const setupDef = getSetupDefinition(setup);
       const recallScore = scoreRecall(recall, setup, result.direction);
+      const c4ContextScore = computeC4ContextScore(recallScore, recall);
+      const c4ConfirmationScore = computeC4ConfirmationScore(setupDef, result, recall);
+      const c4 = evaluateC4Decision({
+        setup: setupDef,
+        scores: {
+          structure: result.structure,
+          orderflow: result.orderFlow,
+          context: c4ContextScore,
+          confirmation: c4ConfirmationScore,
+        },
+        gates: {
+          sessionAllowed,
+          newsClear: !controls.newsLockoutActive,
+          degradedData: false,
+          inSkZone: recall.sk.in_zone,
+          biasAligned: isSetupBiasAligned(setupDef, recall),
+          cvdReady: recall.cvd.cvd_divergence,
+          confirmationValid: c4ConfirmationScore >= 0.5,
+          orderFlowConfirmed: result.orderFlow >= setupDef.minOrderFlowScore,
+          regime: recall.regime,
+        },
+      });
+      if (c4.blocked) {
+        blockedSetups.push({
+          setup_type: setup,
+          reason: c4.block_reasons[0] ?? "c4_gate_block",
+          decision_state: deriveDecisionState({ blocked: true, meetsThreshold: false }),
+        });
+        continue;
+      }
+
       const finalQuality = computeFinalQuality(result.structure, result.orderFlow, recallScore, {
         recall,
         direction: result.direction,
         setup_type: setup,
       });
       const threshold = getQualityThreshold(regime, setup);
-      const meetsThreshold = finalQuality >= threshold;
+      const meetsThreshold = finalQuality >= threshold && c4.decision !== "REJECT";
 
       const { takeProfit, stopLoss, tpTicks, slTicks } = computeTPSL(entryPrice, result.direction, atr, regime);
 
@@ -1663,6 +1698,16 @@ router.post("/alpaca/analyze", async (req, res) => {
         sk: recall.sk,
         cvd: recall.cvd,
         recall_features: recall,
+        c4: {
+          category: setupDef.c4Category,
+          decision: c4.decision,
+          score: c4.score,
+          context_score: c4ContextScore,
+          confirmation_score: c4ConfirmationScore,
+          weights: c4.weights,
+          block_reasons: c4.block_reasons,
+          size_multiplier: getC4SizeMultiplier(c4.decision),
+        },
         overlay,
         last_bar: lastBar,
         atr,
@@ -1708,7 +1753,8 @@ router.post("/alpaca/analyze", async (req, res) => {
       const cv = claudeResults[i];
       // Claude can escalate or downgrade meets_threshold
       const claudeApproved = cv.verdict === "APPROVED" || cv.verdict === "CAUTION";
-      const meetsThreshold = s.meets_threshold && claudeApproved;
+      const c4Allows = s.c4.decision !== "REJECT";
+      const meetsThreshold = s.meets_threshold && claudeApproved && c4Allows;
       return {
         ...s,
         claude: {
@@ -1725,6 +1771,8 @@ router.post("/alpaca/analyze", async (req, res) => {
         ),
         // A setup is high-conviction only if it passes ALL layers including Claude
         meets_threshold: meetsThreshold,
+        execution_mode: s.c4.decision === "CONDITIONAL" ? "reduced_size" : "full_size",
+        size_multiplier: getC4SizeMultiplier(s.c4.decision),
         decision_state: deriveDecisionState({ blocked: false, meetsThreshold }),
       };
     });
@@ -1735,9 +1783,12 @@ router.post("/alpaca/analyze", async (req, res) => {
       return acc;
     }, {});
     decisionSummary.BLOCKED_BY_RISK = (decisionSummary.BLOCKED_BY_RISK ?? 0) + blockedSetups.length;
-    const highConvictionSetups = enrichedSetups.filter((s) => s.meets_threshold);
+    const highConvictionSetups = enrichedSetups.filter((s) => s.meets_threshold && s.c4.decision === "TRADE");
+    const conditionalSetups = enrichedSetups.filter((s) => s.meets_threshold && s.c4.decision === "CONDITIONAL");
+    const executableSetups = [...highConvictionSetups, ...conditionalSetups];
+    decisionSummary.C4_CONDITIONAL = conditionalSetups.length;
     const analyzeDecisionState: DecisionState =
-      highConvictionSetups.length > 0
+      executableSetups.length > 0
         ? "TRADE"
         : enrichedSetups.length > 0
           ? "REJECTED"
@@ -1782,13 +1833,14 @@ router.post("/alpaca/analyze", async (req, res) => {
       actor: "system",
       instrument,
       symbol: alpacaSymbol,
-      reason: highConvictionSetups.length > 0 ? "high_conviction_available" : "no_executable_setup",
+      reason: executableSetups.length > 0 ? "high_or_conditional_setup_available" : "no_executable_setup",
       payload: {
         regime,
         setups_requested: setups.length,
         setups_detected: enrichedSetups.length,
         setups_blocked: blockedSetups.length,
         high_conviction_count: highConvictionSetups.length,
+        conditional_count: conditionalSetups.length,
         decision_summary: decisionSummary,
         bars_analyzed: { "1m": bars1m.length, "5m": bars5m.length, "15m": bars15m.length },
       },
@@ -1813,6 +1865,7 @@ router.post("/alpaca/analyze", async (req, res) => {
       setups_blocked:   blockedSetups,
       setups:           enrichedSetups,
       high_conviction:  highConvictionSetups,
+      conditional_setups: conditionalSetups,
       decision_summary: decisionSummary,
       claude_active:    isClaudeAvailable(),
     });
@@ -1845,12 +1898,53 @@ function runSetupDetector(
   return detectContinuationPullback(bars1m, bars5m, recall);
 }
 
+function clamp01(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(1, value));
+}
+
+function isSetupBiasAligned(
+  setupDef: ReturnType<typeof getSetupDefinition>,
+  recall: RecallFeatures,
+): boolean {
+  if (!setupDef.requiresBiasAlignment) return true;
+  if (recall.sk.bias === "neutral") return true;
+  const slopeUp = recall.trend_slope_5m > 0;
+  if (recall.sk.bias === "bull") return slopeUp;
+  if (recall.sk.bias === "bear") return !slopeUp;
+  return true;
+}
+
+function computeC4ContextScore(recallScore: number, recall: RecallFeatures): number {
+  const fakeEntrySafety = 1 - clamp01(recall.fake_entry_risk);
+  const persistence = clamp01(recall.directional_persistence);
+  return clamp01(recallScore * 0.65 + fakeEntrySafety * 0.2 + persistence * 0.15);
+}
+
+function computeC4ConfirmationScore(
+  setupDef: ReturnType<typeof getSetupDefinition>,
+  detected: { structure: number; orderFlow: number },
+  recall: RecallFeatures,
+): number {
+  const reclaimBonus = setupDef.requiresReclaim ? (detected.structure >= setupDef.minStructureScore ? 1 : 0.35) : 0.7;
+  const flowConfirm = detected.orderFlow >= setupDef.minOrderFlowScore ? 1 : 0.4;
+  const earlyRiskPenalty = 1 - clamp01(recall.fake_entry_risk);
+  return clamp01(
+    detected.structure * 0.35 +
+    detected.orderFlow * 0.35 +
+    reclaimBonus * 0.2 +
+    flowConfirm * 0.05 +
+    earlyRiskPenalty * 0.05,
+  );
+}
+
 // ─── POST /api/alpaca/backtest — walk-forward on recent bars ──────────────────
 router.post("/alpaca/backtest", async (req, res) => {
   try {
     const instrument = String(req.body.instrument ?? "BTCUSDT");
     const indicatorHints = parseIndicatorHints(req.body);
     const setup: SetupType = req.body.setup_type ?? "absorption_reversal";
+    const setupDef = getSetupDefinition(setup);
     const days = Math.min(Math.max(Number(req.body.days ?? 5), 1), 60);
     const includeClaudeHistory = String(req.body.include_claude_history ?? "true").toLowerCase() !== "false";
     const claudeHistoryMax = Math.min(Math.max(Number(req.body.claude_history_max ?? 40), 0), 120);
@@ -1904,6 +1998,10 @@ router.post("/alpaca/backtest", async (req, res) => {
       is_fake_entry: boolean;
       fake_entry_reason: string | null;
       adverse_move_pct: number;
+      c4_decision: "TRADE" | "CONDITIONAL" | "REJECT";
+      c4_score: number;
+      c4_context_score: number;
+      c4_confirmation_score: number;
     }> = [];
     const positionTrace: PositionTrace[] = [];
     const claudeCandidates: Array<{
@@ -1950,6 +2048,29 @@ router.post("/alpaca/backtest", async (req, res) => {
       const fakeEntry = detectFakeEntry(detected.direction, entryPrice, atr, forwardBars);
 
       const recallScore = scoreRecall(recall, setup, detected.direction);
+      const c4ContextScore = computeC4ContextScore(recallScore, recall);
+      const c4ConfirmationScore = computeC4ConfirmationScore(setupDef, detected, recall);
+      const c4 = evaluateC4Decision({
+        setup: setupDef,
+        scores: {
+          structure: detected.structure,
+          orderflow: detected.orderFlow,
+          context: c4ContextScore,
+          confirmation: c4ConfirmationScore,
+        },
+        gates: {
+          sessionAllowed: true,
+          newsClear: true,
+          degradedData: false,
+          inSkZone: recall.sk.in_zone,
+          biasAligned: isSetupBiasAligned(setupDef, recall),
+          cvdReady: recall.cvd.cvd_divergence,
+          confirmationValid: c4ConfirmationScore >= 0.5,
+          orderFlowConfirmed: detected.orderFlow >= setupDef.minOrderFlowScore,
+          regime: recall.regime,
+        },
+      });
+      if (c4.blocked) continue;
       const finalQuality = computeFinalQuality(detected.structure, detected.orderFlow, recallScore, {
         recall,
         direction: detected.direction,
@@ -1979,7 +2100,7 @@ router.post("/alpaca/backtest", async (req, res) => {
         ml_probability: mlProbability,
         final_quality: finalQuality,
         quality_threshold: threshold,
-        meets_threshold: finalQuality >= threshold,
+        meets_threshold: finalQuality >= threshold && c4.decision !== "REJECT",
         regime: recall.regime,
         tp: takeProfit,
         sl: stopLoss,
@@ -1992,6 +2113,10 @@ router.post("/alpaca/backtest", async (req, res) => {
         is_fake_entry: fakeEntry.isFakeEntry,
         fake_entry_reason: fakeEntry.reason,
         adverse_move_pct: fakeEntry.adverseMovePct,
+        c4_decision: c4.decision,
+        c4_score: c4.score,
+        c4_context_score: c4ContextScore,
+        c4_confirmation_score: c4ConfirmationScore,
       });
       positionTrace.push({
         entry_time: entryBar.Timestamp,
@@ -2142,7 +2267,8 @@ router.post("/alpaca/backtest", async (req, res) => {
     const claudeWins = claudeClosed.filter((r) => r.outcome === "win");
     const traceFakeEntries = positionTrace.filter((p) => p.is_fake_entry);
 
-    const hq = results.filter((r) => r.meets_threshold);
+    const hq = results.filter((r) => r.meets_threshold && r.c4_decision === "TRADE");
+    const conditional = results.filter((r) => r.meets_threshold && r.c4_decision === "CONDITIONAL");
     const hqClosed = hq.filter((r) => r.outcome !== "open");
     const hqWins = hqClosed.filter((r) => r.outcome === "win");
 
@@ -2180,6 +2306,7 @@ router.post("/alpaca/backtest", async (req, res) => {
       claude_reviewed_signals: claudeReviewed.length,
       claude_win_rate: claudeClosed.length > 0 ? claudeWins.length / claudeClosed.length : 0,
       high_conviction_signals: hq.length,
+      conditional_signals: conditional.length,
       high_conviction_win_rate: hqClosed.length > 0 ? hqWins.length / hqClosed.length : 0,
       equity_curve: equityCurve,
       by_regime: Object.entries(byRegime).map(([regime, d]) => ({
@@ -2306,11 +2433,13 @@ router.post("/alpaca/backtest-batch", async (req, res) => {
       const setupSummaries: BatchSetupSummary[] = [];
 
       for (const setup of setupList) {
+        const setupDef = getSetupDefinition(setup);
         const results: Array<{
           entry_time: string;
           direction: "long" | "short";
           final_quality: number;
           meets_threshold: boolean;
+          c4_decision: "TRADE" | "CONDITIONAL" | "REJECT";
           outcome: "win" | "loss" | "open";
           tp_ticks: number;
           sl_ticks: number;
@@ -2353,6 +2482,30 @@ router.post("/alpaca/backtest-batch", async (req, res) => {
           const fakeEntry = detectFakeEntry(detected.direction, entryPrice, atr, forwardBars);
 
           const recallScore = scoreRecall(recall, setup, detected.direction);
+          const c4ContextScore = computeC4ContextScore(recallScore, recall);
+          const c4ConfirmationScore = computeC4ConfirmationScore(setupDef, detected, recall);
+          const c4 = evaluateC4Decision({
+            setup: setupDef,
+            scores: {
+              structure: detected.structure,
+              orderflow: detected.orderFlow,
+              context: c4ContextScore,
+              confirmation: c4ConfirmationScore,
+            },
+            gates: {
+              sessionAllowed: true,
+              newsClear: true,
+              degradedData: false,
+              inSkZone: recall.sk.in_zone,
+              biasAligned: isSetupBiasAligned(setupDef, recall),
+              cvdReady: recall.cvd.cvd_divergence,
+              confirmationValid: c4ConfirmationScore >= 0.5,
+              orderFlowConfirmed: detected.orderFlow >= setupDef.minOrderFlowScore,
+              regime: recall.regime,
+            },
+          });
+          if (c4.blocked) continue;
+
           const finalQuality = computeFinalQuality(detected.structure, detected.orderFlow, recallScore, {
             recall,
             direction: detected.direction,
@@ -2371,7 +2524,8 @@ router.post("/alpaca/backtest-batch", async (req, res) => {
             entry_time: entryBar.Timestamp,
             direction: detected.direction,
             final_quality: finalQuality,
-            meets_threshold: finalQuality >= threshold,
+            meets_threshold: finalQuality >= threshold && c4.decision !== "REJECT",
+            c4_decision: c4.decision,
             outcome: outcome.outcome,
             tp_ticks: tpTicks,
             sl_ticks: slTicks,
@@ -2429,7 +2583,7 @@ router.post("/alpaca/backtest-batch", async (req, res) => {
         const avgLossDollars = losses.length > 0 ? Math.abs(losses.reduce((sum, result) => sum + result.pnl_dollars, 0) / losses.length) : 0;
         const expectancyDollars = closed.length > 0 ? (winRate * avgWinDollars) - ((1 - winRate) * avgLossDollars) : 0;
         const fakeEntries = results.filter((result) => result.is_fake_entry);
-        const highConviction = results.filter((result) => result.meets_threshold);
+        const highConviction = results.filter((result) => result.meets_threshold && result.c4_decision === "TRADE");
         const highConvictionClosed = highConviction.filter((result) => result.outcome !== "open");
         const highConvictionWins = highConvictionClosed.filter((result) => result.outcome === "win");
         const highConvictionWinRate = highConvictionClosed.length > 0 ? highConvictionWins.length / highConvictionClosed.length : 0;

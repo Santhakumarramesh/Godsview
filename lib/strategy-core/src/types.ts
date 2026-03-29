@@ -8,6 +8,7 @@ export type SetupType =
 export type Direction = "long" | "short";
 
 export type RiskModel = "reversal" | "continuation" | "breakout-fade";
+export type C4Category = "reversal" | "continuation" | "breakout" | "trap";
 
 export type SystemMode = "demo" | "paper" | "live_disabled" | "live_enabled";
 export type DecisionState = "TRADE" | "PASS" | "REJECTED" | "BLOCKED_BY_RISK" | "DEGRADED_DATA";
@@ -15,6 +16,8 @@ export type DecisionState = "TRADE" | "PASS" | "REJECTED" | "BLOCKED_BY_RISK" | 
 export interface SetupDefinition {
   type: SetupType;
   label: string;
+  c4Category: C4Category;
+  allowedRegimes?: string[];
   requiresSkZone: boolean;
   requiresBiasAlignment: boolean;
   requiresCvdDivergence: boolean;

@@ -4,6 +4,8 @@ export const SETUP_CATALOG = {
   absorption_reversal: {
     type: "absorption_reversal",
     label: "Absorption Reversal",
+    c4Category: "reversal",
+    allowedRegimes: ["ranging", "volatile", "trending_bull", "trending_bear"],
     requiresSkZone: true,
     requiresBiasAlignment: true,
     requiresCvdDivergence: false,
@@ -17,6 +19,8 @@ export const SETUP_CATALOG = {
   sweep_reclaim: {
     type: "sweep_reclaim",
     label: "Sweep Reclaim",
+    c4Category: "reversal",
+    allowedRegimes: ["ranging", "volatile", "trending_bull", "trending_bear"],
     requiresSkZone: true,
     requiresBiasAlignment: true,
     requiresCvdDivergence: false,
@@ -30,6 +34,8 @@ export const SETUP_CATALOG = {
   continuation_pullback: {
     type: "continuation_pullback",
     label: "Continuation Pullback",
+    c4Category: "continuation",
+    allowedRegimes: ["trending_bull", "trending_bear"],
     requiresSkZone: false,
     requiresBiasAlignment: true,
     requiresCvdDivergence: false,
@@ -43,6 +49,8 @@ export const SETUP_CATALOG = {
   cvd_divergence: {
     type: "cvd_divergence",
     label: "CVD Divergence",
+    c4Category: "reversal",
+    allowedRegimes: ["ranging", "volatile", "trending_bull", "trending_bear"],
     requiresSkZone: true,
     requiresBiasAlignment: false,
     requiresCvdDivergence: true,
@@ -56,6 +64,8 @@ export const SETUP_CATALOG = {
   breakout_failure: {
     type: "breakout_failure",
     label: "Breakout Failure",
+    c4Category: "trap",
+    allowedRegimes: ["ranging", "volatile", "trending_bull", "trending_bear"],
     requiresSkZone: true,
     requiresBiasAlignment: false,
     requiresCvdDivergence: false,

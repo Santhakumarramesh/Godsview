@@ -36,6 +36,7 @@ type AnalyzeResult = {
   indicator_hints?: string[];
   bars_analyzed: Record<string, number>; recall_features: Record<string, any>;
   setups_detected: number; setups_blocked: Array<{ setup_type: string; reason: string }>;
+  conditional_setups?: Array<SetupResult>;
   high_conviction: Array<SetupResult>; setups: Array<SetupResult>;
 };
 type ClaudeVeto = {
@@ -50,6 +51,18 @@ type SetupResult = {
   setup_type: string; direction: string; structure_score: number; order_flow_score: number;
   recall_score: number; final_quality: number; final_quality_with_claude: number;
   quality_threshold: number; meets_threshold: boolean;
+  execution_mode?: "full_size" | "reduced_size";
+  size_multiplier?: number;
+  c4?: {
+    category: "reversal" | "continuation" | "breakout" | "trap";
+    decision: "TRADE" | "CONDITIONAL" | "REJECT";
+    score: number;
+    context_score: number;
+    confirmation_score: number;
+    weights: { structure: number; orderflow: number; context: number; confirmation: number };
+    block_reasons: string[];
+    size_multiplier: number;
+  };
   entry_price: number; stop_loss: number; take_profit: number; tp_ticks: number; sl_ticks: number;
   bar_time: string; atr: number; claude?: ClaudeVeto;
 };
@@ -417,7 +430,10 @@ export default function AlpacaPage() {
   const btData = backtestMutation.data;
   const batchData = batchBacktestMutation.data;
   const recallData = recallBuildMutation.data;
-  const displaySetups = analyzeData ? (showAllSetups ? analyzeData.setups : analyzeData.high_conviction) : [];
+  const executableSetups = analyzeData
+    ? [...analyzeData.high_conviction, ...(analyzeData.conditional_setups ?? [])]
+    : [];
+  const displaySetups = analyzeData ? (showAllSetups ? analyzeData.setups : executableSetups) : [];
   const indicatorFeatures = (analyzeData?.recall_features as Record<string, any> | undefined)?.indicators as
     | {
         rsi_14?: number;
@@ -749,7 +765,7 @@ export default function AlpacaPage() {
                 {[
                   { label: "Market Regime", value: <RegimeBadge regime={analyzeData.regime} /> },
                   { label: "Bars Loaded", value: <span className="font-headline font-bold text-sm">{Object.values(analyzeData.bars_analyzed).join("/")} <span style={{ fontSize: "9px", color: C.muted }}>1m/5m/15m</span></span> },
-                  { label: "High Conviction", value: <span className="font-headline font-bold text-sm" style={{ color: analyzeData.high_conviction.length > 0 ? C.primary : C.muted }}>{analyzeData.high_conviction.length} <span style={{ fontSize: "9px", color: C.muted }}>/ {analyzeData.setups_detected}</span></span> },
+                  { label: "Executable", value: <span className="font-headline font-bold text-sm" style={{ color: (analyzeData.high_conviction.length + (analyzeData.conditional_setups?.length ?? 0)) > 0 ? C.primary : C.muted }}>{analyzeData.high_conviction.length + (analyzeData.conditional_setups?.length ?? 0)} <span style={{ fontSize: "9px", color: C.muted }}>/ {analyzeData.setups_detected}</span> <span style={{ fontSize: "8px", color: C.secondary }}>({analyzeData.conditional_setups?.length ?? 0} conditional)</span></span> },
                   { label: "Blocked", value: <span className="font-headline font-bold text-sm" style={{ color: analyzeData.setups_blocked.length > 0 ? "#fbbf24" : C.muted }}>{analyzeData.setups_blocked.length}</span> },
                   { label: "Scanned At", value: <span style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace" }}>{new Date(analyzeData.analyzed_at).toLocaleTimeString()}</span> },
                 ].map((s, i) => (
@@ -826,9 +842,9 @@ export default function AlpacaPage() {
               {/* Toggle */}
               {analyzeData.setups_detected > 0 && (
                 <div className="flex items-center justify-between">
-                  <MicroLabel>{showAllSetups ? "All detected setups" : "High-conviction only"}</MicroLabel>
+                  <MicroLabel>{showAllSetups ? "All detected setups" : "Executable only (C4 + thresholds)"}</MicroLabel>
                   <button onClick={() => setShowAllSetups(!showAllSetups)} style={{ fontSize: "9px", color: C.secondary, fontFamily: "Space Grotesk", cursor: "pointer" }}>
-                    {showAllSetups ? "Show high-conviction only ↑" : "Show all detections ↓"}
+                    {showAllSetups ? "Show executable only ↑" : "Show all detections ↓"}
                   </button>
                 </div>
               )}
@@ -859,9 +875,13 @@ export default function AlpacaPage() {
                       <span className="font-headline font-bold text-sm">{setup.setup_type.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}</span>
                       <RegimeBadge regime={analyzeData.regime} />
                     </div>
-                    {setup.meets_threshold ? (
+                    {setup.meets_threshold && setup.c4?.decision === "TRADE" ? (
                       <span className="flex items-center gap-1 px-2 py-0.5 rounded" style={{ fontSize: "8px", fontFamily: "Space Grotesk", fontWeight: 700, color: C.primary, backgroundColor: "rgba(156,255,147,0.08)", border: "1px solid rgba(156,255,147,0.2)" }}>
                         <span className="material-symbols-outlined" style={{ fontSize: "11px" }}>check_circle</span> High Conviction
+                      </span>
+                    ) : setup.meets_threshold && setup.c4?.decision === "CONDITIONAL" ? (
+                      <span className="flex items-center gap-1 px-2 py-0.5 rounded" style={{ fontSize: "8px", fontFamily: "Space Grotesk", fontWeight: 700, color: C.secondary, backgroundColor: "rgba(102,157,255,0.08)", border: "1px solid rgba(102,157,255,0.2)" }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: "11px" }}>tune</span> Conditional (Reduced Size)
                       </span>
                     ) : (
                       <span className="flex items-center gap-1 px-2 py-0.5 rounded" style={{ fontSize: "8px", fontFamily: "Space Grotesk", fontWeight: 700, color: "#fbbf24", backgroundColor: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.2)" }}>
@@ -890,6 +910,40 @@ export default function AlpacaPage() {
                     </div>
                     <QualityBar value={setup.final_quality_with_claude ?? setup.final_quality} threshold={setup.quality_threshold} />
                   </div>
+
+                  {setup.c4 && (
+                    <div className="rounded p-3 space-y-2" style={{ backgroundColor: "#0e0e0f", border: "1px solid rgba(102,157,255,0.18)" }}>
+                      <div className="flex items-center justify-between">
+                        <MicroLabel>C4 Decision Layer</MicroLabel>
+                        <span style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: setup.c4.decision === "TRADE" ? C.primary : setup.c4.decision === "CONDITIONAL" ? C.secondary : C.tertiary }}>
+                          {setup.c4.decision} · {(setup.c4.score * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { label: "Structure", value: setup.structure_score },
+                          { label: "Order Flow", value: setup.order_flow_score },
+                          { label: "Context", value: setup.c4.context_score },
+                          { label: "Confirmation", value: setup.c4.confirmation_score },
+                        ].map((row) => (
+                          <div key={row.label}>
+                            <MicroLabel>{row.label}</MicroLabel>
+                            <div className="mt-1"><QualityBar value={row.value} /></div>
+                          </div>
+                        ))}
+                      </div>
+                      {setup.c4.block_reasons.length > 0 && (
+                        <div style={{ fontSize: "9px", color: "#fbbf24" }}>
+                          C4 Block Reasons: {setup.c4.block_reasons.join(", ")}
+                        </div>
+                      )}
+                      {setup.execution_mode === "reduced_size" && (
+                        <div style={{ fontSize: "9px", color: C.secondary }}>
+                          Reduced-size execution active ({((setup.size_multiplier ?? setup.c4.size_multiplier) * 100).toFixed(0)}% size)
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Claude Reasoning Veto Panel */}
                   {setup.claude && (
