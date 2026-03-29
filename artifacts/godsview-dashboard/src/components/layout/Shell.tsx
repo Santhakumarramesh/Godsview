@@ -1,9 +1,17 @@
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
-import { useState, useEffect } from "react";
-import { DEFAULT_WATCH_SYMBOLS, normalizeMarketSymbol, toDisplaySymbol } from "@/lib/market/symbols";
+import { useEffect, useMemo, useState } from "react";
+import {
+  SIDEBAR_SECTION_ORDER,
+  SIDEBAR_WATCHLIST,
+  type AssetClass,
+  normalizeMarketSymbol,
+  toAlpacaSymbol,
+} from "@/lib/market/symbols";
 
-type TickerEntry = {
+type FeedMode = "sse" | "poll" | "hybrid";
+
+type TickerSnapshot = {
   symbol: string;
   price: number;
   change: number;
@@ -12,112 +20,289 @@ type TickerEntry = {
   error?: string;
 };
 
+type LiveTickerRow = {
+  symbol: string;
+  label: string;
+  assetClass: AssetClass;
+  tvSymbol: string;
+  price: number;
+  change: number;
+  change_pct: number;
+  direction: "up" | "down";
+};
+
+type SetupMarker = {
+  setupType: string;
+  qualityPct: number;
+};
+
+const CATEGORY_META: Record<AssetClass, { label: string; color: string; icon: string; hotThreshold: number }> = {
+  crypto: { label: "Crypto", color: "#9cff93", icon: "currency_bitcoin", hotThreshold: 0.6 },
+  forex: { label: "Forex", color: "#67e8f9", icon: "currency_exchange", hotThreshold: 0.45 },
+  futures: { label: "Futures", color: "#fbbf24", icon: "timeline", hotThreshold: 0.45 },
+  stocks: { label: "Stocks", color: "#669dff", icon: "monitoring", hotThreshold: 0.75 },
+};
+
+function parseQualityPercent(value: unknown): number | null {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  if (parsed <= 1) return Math.round(parsed * 100);
+  if (parsed <= 100) return Math.round(parsed);
+  return null;
+}
+
+function formatPrice(price: number): string {
+  if (price >= 1000) {
+    return price.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  }
+  if (price >= 1) {
+    return price.toFixed(2);
+  }
+  return price.toFixed(4);
+}
+
+function humanizeSetupType(raw: string): string {
+  return raw
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 function useLiveTicker() {
-  const [tickers, setTickers] = useState<TickerEntry[]>([]);
+  const [tickerBySymbol, setTickerBySymbol] = useState<Record<string, LiveTickerRow>>({});
+  const [setupBySymbol, setSetupBySymbol] = useState<Record<string, SetupMarker>>({});
   const [lastUpdated, setLastUpdated] = useState<string>("");
-  const [feedMode, setFeedMode] = useState<"sse" | "poll">("poll");
+  const [feedMode, setFeedMode] = useState<FeedMode>("poll");
 
   useEffect(() => {
     let cancelled = false;
     let sseConnected = false;
     let lastSseAt = 0;
-    const watchSymbols = DEFAULT_WATCH_SYMBOLS.slice(0, 6).map((symbol) => normalizeMarketSymbol(symbol));
-    const watchSymbolSet = new Set(watchSymbols);
 
-    const upsertTicker = (symbol: string, price: number) => {
-      setTickers((prev) => {
-        const bySymbol = new Map(prev.map((row) => [normalizeMarketSymbol(row.symbol), row]));
-        const existing = bySymbol.get(symbol);
+    const watchSymbols = Array.from(
+      new Set(SIDEBAR_WATCHLIST.map((item) => normalizeMarketSymbol(item.apiSymbol, ""))),
+    ).filter(Boolean);
 
-        if (existing) {
-          const direction: "up" | "down" = price >= existing.price ? "up" : "down";
-          bySymbol.set(symbol, { ...existing, symbol, price, direction });
-        } else {
-          bySymbol.set(symbol, {
-            symbol,
-            price,
-            change: 0,
-            change_pct: 0,
-            direction: "up",
-          });
-        }
+    const cryptoSymbols = Array.from(
+      new Set(
+        SIDEBAR_WATCHLIST
+          .filter((item) => item.assetClass === "crypto")
+          .map((item) => normalizeMarketSymbol(item.apiSymbol, "")),
+      ),
+    ).filter(Boolean);
 
-        return watchSymbols
-          .map((sym) => bySymbol.get(sym))
-          .filter((row): row is TickerEntry => Boolean(row));
-      });
-      setLastUpdated(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+    const hasCrossAssetPolling = watchSymbols.some((symbol) => !cryptoSymbols.includes(symbol));
+
+    const watchMetaBySymbol = new Map(
+      SIDEBAR_WATCHLIST.map((item) => [
+        normalizeMarketSymbol(item.apiSymbol, ""),
+        {
+          label: item.label,
+          assetClass: item.assetClass,
+          tvSymbol: item.tvSymbol,
+        },
+      ]),
+    );
+    const POLL_INTERVAL_MS = 2_000;
+    const SETUP_REFRESH_MS = 20_000;
+    const STREAM_STALE_MS = 3_500;
+
+    const touchUpdatedAt = () => {
+      setLastUpdated(
+        new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        }),
+      );
     };
 
-    const fetchTickers = async (force = false) => {
-      if (!force && sseConnected && Date.now() - lastSseAt < 4_000) {
-        return;
-      }
+    const upsertPriceTick = (rawSymbol: string, price: number) => {
+      const symbol = normalizeMarketSymbol(rawSymbol, "");
+      const meta = watchMetaBySymbol.get(symbol);
+      if (!symbol || !meta || !Number.isFinite(price)) return;
 
+      setTickerBySymbol((prev) => {
+        const existing = prev[symbol];
+        const direction: "up" | "down" = existing ? (price >= existing.price ? "up" : "down") : "up";
+
+        return {
+          ...prev,
+          [symbol]: {
+            symbol,
+            label: meta.label,
+            assetClass: meta.assetClass,
+            tvSymbol: meta.tvSymbol,
+            price,
+            change: existing?.change ?? 0,
+            change_pct: existing?.change_pct ?? 0,
+            direction,
+          },
+        };
+      });
+
+      touchUpdatedAt();
+    };
+
+    const fetchTickers = async () => {
       try {
         const res = await fetch(`/api/alpaca/ticker?symbols=${watchSymbols.join(",")}`);
         if (!res.ok) return;
-        const data = await res.json() as { tickers?: TickerEntry[] };
-        if (!cancelled && data.tickers) {
-          const rows = data.tickers
-            .filter((t: TickerEntry) => !t.error)
-            .map((t) => ({ ...t, symbol: normalizeMarketSymbol(t.symbol) }));
 
-          const bySymbol = new Map(rows.map((row) => [row.symbol, row]));
-          setTickers(
-            watchSymbols
-              .map((symbol) => bySymbol.get(symbol))
-              .filter((row): row is TickerEntry => Boolean(row))
-          );
-          setFeedMode("poll");
-          setLastUpdated(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
-        }
+        const data = (await res.json()) as { tickers?: TickerSnapshot[] };
+        if (cancelled || !Array.isArray(data.tickers)) return;
+
+        setTickerBySymbol((prev) => {
+          const next = { ...prev };
+
+          for (const row of data.tickers ?? []) {
+            if (!row || row.error) continue;
+
+            const symbol = normalizeMarketSymbol(String(row.symbol ?? ""), "");
+            const meta = watchMetaBySymbol.get(symbol);
+            if (!symbol || !meta) continue;
+
+            const fallbackDirection: "up" | "down" = (prev[symbol]?.price ?? row.price) <= row.price ? "up" : "down";
+            const direction = row.direction === "up" || row.direction === "down" ? row.direction : fallbackDirection;
+
+            next[symbol] = {
+              symbol,
+              label: meta.label,
+              assetClass: meta.assetClass,
+              tvSymbol: meta.tvSymbol,
+              price: row.price,
+              change: row.change,
+              change_pct: row.change_pct,
+              direction,
+            };
+          }
+
+          return next;
+        });
+
+        setFeedMode(sseConnected ? "hybrid" : "poll");
+        touchUpdatedAt();
       } catch {
         // silent fail
       }
     };
 
-    const es = new EventSource(`/api/alpaca/stream?symbols=${encodeURIComponent(watchSymbols.join(","))}&timeframe=1Min`);
+    const fetchSetupMarkers = async () => {
+      const nextMarkers: Record<string, SetupMarker> = {};
 
-    es.onopen = () => {
-      if (cancelled) return;
-      sseConnected = true;
-      setFeedMode("sse");
-    };
+      const assignMarker = (rawSymbol: unknown, rawSetup: unknown, rawQuality: unknown) => {
+        const symbol = normalizeMarketSymbol(toAlpacaSymbol(String(rawSymbol ?? "")), "");
+        if (!symbol || nextMarkers[symbol] || !watchMetaBySymbol.has(symbol)) return;
 
-    es.onmessage = (evt) => {
-      if (cancelled) return;
+        const setupType = String(rawSetup ?? "").trim();
+        if (!setupType) return;
+
+        const qualityPct = parseQualityPercent(rawQuality);
+        if (qualityPct === null || qualityPct < 60) return;
+
+        nextMarkers[symbol] = {
+          setupType,
+          qualityPct,
+        };
+      };
+
       try {
-        const payload = JSON.parse(evt.data) as { type?: string; symbol?: string; price?: number };
-        if (payload.type !== "tick" || typeof payload.price !== "number") return;
-        const symbol = normalizeMarketSymbol(payload.symbol ?? "");
-        if (!watchSymbolSet.has(symbol)) return;
-        sseConnected = true;
-        lastSseAt = Date.now();
-        setFeedMode("sse");
-        upsertTicker(symbol, payload.price);
+        const signalsRes = await fetch("/api/signals?limit=120");
+        if (signalsRes.ok) {
+          const signalsData = (await signalsRes.json()) as {
+            signals?: Array<Record<string, unknown>>;
+          };
+
+          for (const sig of signalsData.signals ?? []) {
+            assignMarker(sig.instrument, sig.setup_type, sig.final_quality);
+          }
+        }
       } catch {
-        // ignore malformed frames
+        // ignore and try accuracy fallback
+      }
+
+      // Fallback / enrichment from historical recall rows.
+      if (Object.keys(nextMarkers).length < 3) {
+        try {
+          const accuracyRes = await fetch("/api/alpaca/accuracy");
+          if (accuracyRes.ok) {
+            const accuracyData = (await accuracyRes.json()) as {
+              recent?: Array<Record<string, unknown>>;
+            };
+
+            for (const row of accuracyData.recent ?? []) {
+              assignMarker(row.symbol, row.setup_type, row.final_quality);
+              if (Object.keys(nextMarkers).length >= watchSymbols.length) break;
+            }
+          }
+        } catch {
+          // silent
+        }
+      }
+
+      if (!cancelled) {
+        setSetupBySymbol(nextMarkers);
       }
     };
 
-    es.onerror = () => {
-      if (cancelled) return;
-      setFeedMode("poll");
-    };
+    let stream: EventSource | null = null;
 
-    fetchTickers(true);
-    const interval = setInterval(() => {
-      void fetchTickers();
-    }, 10_000);
+    if (cryptoSymbols.length > 0) {
+      stream = new EventSource(
+        `/api/alpaca/stream?symbols=${encodeURIComponent(cryptoSymbols.join(","))}&timeframe=1Min`,
+      );
+
+      stream.onopen = () => {
+        if (cancelled) return;
+        sseConnected = true;
+        setFeedMode(hasCrossAssetPolling ? "hybrid" : "sse");
+      };
+
+      stream.onmessage = (evt) => {
+        if (cancelled) return;
+        try {
+          const payload = JSON.parse(evt.data) as { type?: string; symbol?: string; price?: number };
+          if (payload.type !== "tick" || typeof payload.symbol !== "string" || typeof payload.price !== "number") {
+            return;
+          }
+
+          sseConnected = true;
+          lastSseAt = Date.now();
+          upsertPriceTick(payload.symbol, payload.price);
+          setFeedMode(hasCrossAssetPolling ? "hybrid" : "sse");
+        } catch {
+          // ignore malformed frames
+        }
+      };
+
+      stream.onerror = () => {
+        if (cancelled) return;
+        setFeedMode("poll");
+      };
+    }
+
+    void fetchTickers();
+    void fetchSetupMarkers();
+
+    const tickerInterval = setInterval(() => {
+      const streamStale = Date.now() - lastSseAt > STREAM_STALE_MS;
+      if (!sseConnected || hasCrossAssetPolling || streamStale) {
+        void fetchTickers();
+      }
+    }, POLL_INTERVAL_MS);
+
+    const setupInterval = setInterval(() => {
+      void fetchSetupMarkers();
+    }, SETUP_REFRESH_MS);
+
     return () => {
       cancelled = true;
-      clearInterval(interval);
-      es.close();
+      clearInterval(tickerInterval);
+      clearInterval(setupInterval);
+      stream?.close();
     };
   }, []);
 
-  return { tickers, lastUpdated, feedMode };
+  return { tickerBySymbol, setupBySymbol, lastUpdated, feedMode };
 }
 
 const navItems = [
@@ -133,7 +318,35 @@ const navItems = [
 export function Shell({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { tickers, lastUpdated, feedMode } = useLiveTicker();
+  const { tickerBySymbol, setupBySymbol, lastUpdated, feedMode } = useLiveTicker();
+
+  const groupedTickers = useMemo(() => {
+    return SIDEBAR_SECTION_ORDER.map((assetClass) => {
+      const rows = SIDEBAR_WATCHLIST
+        .filter((item) => item.assetClass === assetClass)
+        .map((item) => {
+          const apiSymbol = normalizeMarketSymbol(item.apiSymbol, "");
+          const ticker = tickerBySymbol[apiSymbol];
+          const setup = setupBySymbol[apiSymbol];
+          const moveMagnitude = Math.abs(ticker?.change_pct ?? 0);
+
+          return {
+            ...item,
+            apiSymbol,
+            ticker,
+            setup,
+            moveMagnitude,
+          };
+        })
+        .sort((a, b) => b.moveMagnitude - a.moveMagnitude)
+        .slice(0, 4);
+
+      return {
+        assetClass,
+        rows,
+      };
+    });
+  }, [tickerBySymbol, setupBySymbol]);
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row" style={{ backgroundColor: "#0e0e0f", color: "#ffffff" }}>
@@ -169,7 +382,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-3 py-4 space-y-1">
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           <div style={{ fontSize: "8px", color: "#484849", letterSpacing: "0.25em", textTransform: "uppercase", fontFamily: "Space Grotesk", fontWeight: 700, padding: "0 8px 12px" }}>
             Pipeline Control
           </div>
@@ -202,43 +415,86 @@ export function Shell({ children }: { children: React.ReactNode }) {
               </Link>
             );
           })}
-        </nav>
 
-        {/* Live Price Ticker */}
-        {tickers.length > 0 && (
-          <div className="px-3 py-3 border-t" style={{ borderColor: "rgba(72,72,73,0.15)" }}>
-            <div style={{ fontSize: "8px", color: "#484849", letterSpacing: "0.2em", textTransform: "uppercase", fontFamily: "Space Grotesk", fontWeight: 700, marginBottom: "8px", paddingLeft: "4px" }}>
-              Live Prices
+          {/* Grouped Live Movers */}
+          <div className="pt-3 mt-3 border-t" style={{ borderColor: "rgba(72,72,73,0.15)" }}>
+            <div style={{ fontSize: "8px", color: "#484849", letterSpacing: "0.2em", textTransform: "uppercase", fontFamily: "Space Grotesk", fontWeight: 700, marginBottom: "8px", padding: "0 4px" }}>
+              Live Movers · TradingView Universe
             </div>
-            <div className="space-y-1.5">
-              {tickers.map((t) => {
-                const up = t.direction === "up";
-                const color = up ? "#9cff93" : "#ff7162";
-                const sym = toDisplaySymbol(t.symbol);
+
+            <div className="space-y-2">
+              {groupedTickers.map(({ assetClass, rows }) => {
+                const meta = CATEGORY_META[assetClass];
                 return (
-                  <div key={t.symbol} className="flex items-center justify-between px-3 py-2 rounded" style={{ backgroundColor: "rgba(255,255,255,0.025)", border: "1px solid rgba(72,72,73,0.18)" }}>
-                    <div className="flex items-center gap-2">
-                      <span className="font-headline font-bold" style={{ fontSize: "10px", color: "#ffffff" }}>{sym}</span>
+                  <div key={assetClass} className="rounded px-2 py-2" style={{ backgroundColor: "rgba(255,255,255,0.02)", border: "1px solid rgba(72,72,73,0.18)" }}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="material-symbols-outlined" style={{ fontSize: "13px", color: meta.color }}>{meta.icon}</span>
+                        <span style={{ fontSize: "8px", fontFamily: "Space Grotesk", color: meta.color, letterSpacing: "0.12em", textTransform: "uppercase", fontWeight: 700 }}>
+                          {meta.label}
+                        </span>
+                      </div>
+                      <span style={{ fontSize: "7px", color: "#484849", fontFamily: "JetBrains Mono, monospace" }}>
+                        {rows.filter((row) => !!row.ticker).length}/{rows.length}
+                      </span>
                     </div>
-                    <div className="text-right">
-                      <div style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: "#ffffff", fontWeight: 700 }}>
-                        ${t.price > 1000 ? t.price.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 }) : t.price.toFixed(2)}
-                      </div>
-                      <div style={{ fontSize: "8px", fontFamily: "JetBrains Mono, monospace", color, fontWeight: 700 }}>
-                        {up ? "▲" : "▼"} {Math.abs(t.change_pct).toFixed(2)}%
-                      </div>
+
+                    <div className="space-y-1">
+                      {rows.map((row) => {
+                        const ticker = row.ticker;
+                        const setup = row.setup;
+                        const hasLive = !!ticker && Number.isFinite(ticker.price);
+                        const up = ticker?.direction === "up";
+                        const pct = Math.abs(ticker?.change_pct ?? 0);
+                        const isHot = hasLive && pct >= meta.hotThreshold;
+                        const priceColor = up ? "#9cff93" : "#ff7162";
+                        const setupColor = (setup?.qualityPct ?? 0) >= 70 ? "#9cff93" : "#fbbf24";
+
+                        return (
+                          <div key={row.id} className="flex items-start justify-between gap-2 px-1 py-1 rounded" style={{ backgroundColor: "rgba(255,255,255,0.02)" }}>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="font-headline font-bold truncate" style={{ fontSize: "9px", color: "#ffffff" }}>{row.label}</span>
+                                {isHot && (
+                                  <span style={{ fontSize: "6px", fontFamily: "Space Grotesk", color: "#ff7162", border: "1px solid rgba(255,113,98,0.45)", backgroundColor: "rgba(255,113,98,0.12)", borderRadius: "3px", padding: "0 3px", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 700 }}>
+                                    Hot
+                                  </span>
+                                )}
+                              </div>
+                              <div className="truncate" style={{ fontSize: "7px", color: "#484849", fontFamily: "JetBrains Mono, monospace" }}>
+                                {row.tvSymbol}
+                              </div>
+                              {setup && (
+                                <div className="truncate" style={{ fontSize: "7px", color: setupColor, fontFamily: "Space Grotesk", letterSpacing: "0.06em", textTransform: "uppercase", marginTop: "1px" }}>
+                                  Setup {humanizeSetupType(setup.setupType)} · {setup.qualityPct}%
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="text-right shrink-0">
+                              <div style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: "#ffffff", fontWeight: 700 }}>
+                                {hasLive ? `$${formatPrice(ticker.price)}` : "—"}
+                              </div>
+                              <div style={{ fontSize: "7px", fontFamily: "JetBrains Mono, monospace", color: hasLive ? priceColor : "#484849", fontWeight: 700 }}>
+                                {hasLive ? `${up ? "▲" : "▼"} ${pct.toFixed(2)}%` : "No feed"}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 );
               })}
             </div>
+
             {lastUpdated && (
-              <div style={{ fontSize: "7px", color: "#484849", fontFamily: "JetBrains Mono, monospace", marginTop: "6px", paddingLeft: "4px" }}>
-                {lastUpdated} · {feedMode === "sse" ? "SSE live" : "REST snapshot"}
+              <div style={{ fontSize: "7px", color: "#484849", fontFamily: "JetBrains Mono, monospace", marginTop: "8px", paddingLeft: "4px" }}>
+                {lastUpdated} · {feedMode === "sse" ? "SSE live" : feedMode === "hybrid" ? "SSE+REST" : "REST snapshot"}
               </div>
             )}
           </div>
-        )}
+        </nav>
 
         {/* System Status */}
         <div className="px-3 pb-4 border-t pt-4" style={{ borderColor: "rgba(72,72,73,0.15)" }}>

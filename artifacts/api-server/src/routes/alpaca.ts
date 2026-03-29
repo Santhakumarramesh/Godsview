@@ -420,14 +420,55 @@ router.get("/alpaca/stream", (req, res) => {
 // Polls Alpaca latest bar + 24h change. No auth required for crypto.
 // ── Ticker cache (avoid Alpaca 429 rate limits) ─────────────────────────────
 const _tickerCache: Map<string, { data: any; ts: number }> = new Map();
-const TICKER_CACHE_TTL = 8_000; // 8 seconds
+const _tickerDailyRefCache: Map<string, { data: { prevClose: number | null; high: number | null; low: number | null; volume: number | null }; ts: number }> = new Map();
+const TICKER_CACHE_TTL = clampEnvInt("TICKER_CACHE_TTL_MS", 2_500, 800, 15_000);
+const TICKER_DAILY_REF_TTL = clampEnvInt("TICKER_DAILY_REF_TTL_MS", 90_000, 15_000, 15 * 60_000);
 const _tickerInFlight: Map<string, Promise<{ tickers: unknown[]; fetched_at: string }>> = new Map();
+
+function clampEnvInt(name: string, fallback: number, min: number, max: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(max, parsed));
+}
+
+async function getTickerDailyReference(symbol: string): Promise<{
+  prevClose: number | null;
+  high: number | null;
+  low: number | null;
+  volume: number | null;
+}> {
+  const today = new Date().toISOString().slice(0, 10);
+  const cacheKey = `${symbol}:${today}`;
+  const cached = _tickerDailyRefCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < TICKER_DAILY_REF_TTL) {
+    return cached.data;
+  }
+
+  const fiveDaysAgo = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const dailyBars = await getBars(symbol, "1Day", 10, fiveDaysAgo).catch(() => [] as AlpacaBar[]);
+  const sortedBars = [...dailyBars].sort((a, b) => new Date(a.Timestamp).getTime() - new Date(b.Timestamp).getTime());
+  const closedBars = sortedBars.filter((b) => b.Timestamp.slice(0, 10) < today);
+  const prevClose = closedBars.length > 0 ? closedBars[closedBars.length - 1]!.Close : null;
+
+  const todayBar = sortedBars.find((b) => b.Timestamp.slice(0, 10) === today) ?? sortedBars[sortedBars.length - 1];
+  const reference = {
+    prevClose,
+    high: todayBar?.High ?? null,
+    low: todayBar?.Low ?? null,
+    volume: todayBar?.Volume ?? null,
+  };
+  _tickerDailyRefCache.set(cacheKey, { data: reference, ts: Date.now() });
+  return reference;
+}
 
 router.get("/alpaca/ticker", async (req, res) => {
   const symbolsParam = String(req.query.symbols ?? "BTCUSD,ETHUSD");
   const cacheKey = symbolsParam;
   const cached = _tickerCache.get(cacheKey);
   if (cached && Date.now() - cached.ts < TICKER_CACHE_TTL) {
+    res.setHeader("X-Cache", "HIT");
     res.json(cached.data);
     return;
   }
@@ -449,29 +490,19 @@ router.get("/alpaca/ticker", async (req, res) => {
   const loadPromise: Promise<{ tickers: unknown[]; fetched_at: string }> = (async () => {
     const results = await Promise.allSettled(
       symbols.map(async (sym) => {
-        const alpacaSym = toAlpacaSymbol(sym) === sym ? sym : toAlpacaSymbol(sym);
-
-        // Fetch real-time trade price + 5 days of daily bars (ensures prev close available)
-        const fiveDaysAgo = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-        const [trade, dailyBars] = await Promise.all([
+        const alpacaSym = toAlpacaSymbol(sym);
+        const [trade, dailyRef] = await Promise.all([
           getLatestTrade(alpacaSym),
-          getBars(alpacaSym, "1Day", 10, fiveDaysAgo).catch(() => [] as AlpacaBar[]),
+          getTickerDailyReference(alpacaSym),
         ]);
 
         if (!trade) return { symbol: sym, error: "no_data" };
 
         const price = trade.price;
-
-        // Sort oldest → newest; separate today's (still forming) from completed bars
-        const sortedBars = [...dailyBars].sort((a, b) => new Date(a.Timestamp).getTime() - new Date(b.Timestamp).getTime());
-        const todayStr = new Date().toISOString().slice(0, 10);
-        const closedBars = sortedBars.filter((b) => b.Timestamp.slice(0, 10) < todayStr);
-        const prevClose = closedBars.length > 0 ? closedBars[closedBars.length - 1].Close : null;
-
-        const todayBar = sortedBars.find((b) => b.Timestamp.slice(0, 10) === todayStr) ?? sortedBars[sortedBars.length - 1];
-        const high = todayBar?.High ?? price;
-        const low = todayBar?.Low ?? price;
-        const volume = todayBar?.Volume ?? 0;
+        const prevClose = dailyRef.prevClose;
+        const high = dailyRef.high ?? price;
+        const low = dailyRef.low ?? price;
+        const volume = dailyRef.volume ?? 0;
 
         const change = prevClose ? price - prevClose : 0;
         const changePct = prevClose ? (change / prevClose) * 100 : 0;
