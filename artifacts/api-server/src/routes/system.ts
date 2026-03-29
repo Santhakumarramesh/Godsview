@@ -302,4 +302,70 @@ router.get("/system/audit", async (req, res) => {
   }
 });
 
+// ─── GET /api/system/audit/summary — aggregate audit health metrics ─────────
+router.get("/system/audit/summary", async (req, res) => {
+  try {
+    if (!auditEventsTableReady) {
+      await db.execute(sql.raw(CREATE_AUDIT_EVENTS_TABLE_SQL));
+      auditEventsTableReady = true;
+    }
+    const hoursRaw = Number(req.query.hours ?? 24);
+    const hours = Math.min(Math.max(Number.isFinite(hoursRaw) ? Math.trunc(hoursRaw) : 24, 1), 24 * 30);
+    const since = new Date(Date.now() - hours * 60 * 60 * 1000);
+    const rows = await db
+      .select()
+      .from(auditEventsTable)
+      .where(gte(auditEventsTable.created_at, since))
+      .orderBy(desc(auditEventsTable.created_at))
+      .limit(3000);
+
+    const totals = {
+      events: rows.length,
+      trade: 0,
+      blocked: 0,
+      rejected: 0,
+      degraded: 0,
+      pass: 0,
+    };
+    const byEventType: Record<string, number> = {};
+    const byReason: Record<string, number> = {};
+
+    for (const row of rows) {
+      const decision = String(row.decision_state ?? "");
+      if (decision === "TRADE") totals.trade += 1;
+      if (decision === "BLOCKED_BY_RISK") totals.blocked += 1;
+      if (decision === "REJECTED") totals.rejected += 1;
+      if (decision === "DEGRADED_DATA") totals.degraded += 1;
+      if (decision === "PASS") totals.pass += 1;
+
+      const eventType = String(row.event_type ?? "unknown");
+      byEventType[eventType] = (byEventType[eventType] ?? 0) + 1;
+
+      const reason = String(row.reason ?? "").trim();
+      if (reason) byReason[reason] = (byReason[reason] ?? 0) + 1;
+    }
+
+    const topReasons = Object.entries(byReason)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([reason, count]) => ({ reason, count }));
+    const topEventTypes = Object.entries(byEventType)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([event_type, count]) => ({ event_type, count }));
+
+    res.json({
+      hours,
+      since: since.toISOString(),
+      totals,
+      top_reasons: topReasons,
+      top_event_types: topEventTypes,
+      fetched_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch audit summary");
+    res.status(500).json({ error: "audit_summary_failed", message: "Failed to fetch audit summary" });
+  }
+});
+
 export default router;

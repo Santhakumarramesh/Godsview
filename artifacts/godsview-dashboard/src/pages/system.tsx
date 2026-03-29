@@ -100,6 +100,21 @@ type AuditResponse = {
   limit: number;
   fetched_at: string;
 };
+type AuditSummary = {
+  hours: number;
+  since: string;
+  totals: {
+    events: number;
+    trade: number;
+    blocked: number;
+    rejected: number;
+    degraded: number;
+    pass: number;
+  };
+  top_reasons: Array<{ reason: string; count: number }>;
+  top_event_types: Array<{ event_type: string; count: number }>;
+  fetched_at: string;
+};
 
 const LAYER_LABELS: Record<string, string> = {
   data_feed: "Data Feed (Alpaca)",
@@ -193,6 +208,16 @@ export default function System() {
     refetchInterval: 20_000,
     staleTime: 15_000,
   });
+  const { data: auditSummary } = useQuery<AuditSummary>({
+    queryKey: ["system-audit-summary"],
+    queryFn: async () => {
+      const r = await fetch("/api/system/audit/summary?hours=24");
+      if (!r.ok) throw new Error(`audit summary fetch failed: ${r.status}`);
+      return r.json();
+    },
+    refetchInterval: 30_000,
+    staleTime: 20_000,
+  });
   const [draft, setDraft] = useState<RiskConfig | null>(null);
   useEffect(() => {
     if (riskSnapshot && !draft) {
@@ -225,6 +250,7 @@ export default function System() {
       queryClient.invalidateQueries({ queryKey: ["system-risk-controls"] });
       queryClient.invalidateQueries({ queryKey: ["system-status"] });
       queryClient.invalidateQueries({ queryKey: ["live-risk-status"] });
+      queryClient.invalidateQueries({ queryKey: ["system-audit-summary"] });
     },
   });
   const saveRiskMutation = useMutation({
@@ -240,6 +266,7 @@ export default function System() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["system-risk-controls"] });
       queryClient.invalidateQueries({ queryKey: ["live-risk-status"] });
+      queryClient.invalidateQueries({ queryKey: ["system-audit-summary"] });
     },
   });
   const resetRuntimeMutation = useMutation({
@@ -251,6 +278,7 @@ export default function System() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["system-risk-controls"] });
       queryClient.invalidateQueries({ queryKey: ["live-risk-status"] });
+      queryClient.invalidateQueries({ queryKey: ["system-audit-summary"] });
     },
   });
 
@@ -685,6 +713,27 @@ export default function System() {
               {audit?.count ?? 0} events
             </span>
           </div>
+          {auditSummary && (
+            <div className="mb-3 grid grid-cols-3 gap-2 text-[10px]">
+              <div className="rounded p-2" style={{ backgroundColor: "#0f0f10", border: `1px solid ${C.border}` }}>
+                <MicroLabel>Trades</MicroLabel>
+                <div className="mt-1 font-mono" style={{ color: C.primary }}>{auditSummary.totals.trade}</div>
+              </div>
+              <div className="rounded p-2" style={{ backgroundColor: "#0f0f10", border: `1px solid ${C.border}` }}>
+                <MicroLabel>Blocked</MicroLabel>
+                <div className="mt-1 font-mono" style={{ color: C.tertiary }}>{auditSummary.totals.blocked}</div>
+              </div>
+              <div className="rounded p-2" style={{ backgroundColor: "#0f0f10", border: `1px solid ${C.border}` }}>
+                <MicroLabel>Degraded</MicroLabel>
+                <div className="mt-1 font-mono" style={{ color: "#fbbf24" }}>{auditSummary.totals.degraded}</div>
+              </div>
+              {auditSummary.top_reasons.length > 0 && (
+                <div className="col-span-3 text-[9px]" style={{ color: C.muted }}>
+                  Top reasons: {auditSummary.top_reasons.slice(0, 3).map((r) => `${r.reason} (${r.count})`).join(", ")}
+                </div>
+              )}
+            </div>
+          )}
           <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
             {(audit?.events ?? []).map((event) => (
               <div
