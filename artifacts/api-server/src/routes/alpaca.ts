@@ -1824,15 +1824,41 @@ router.get("/alpaca/accuracy", async (req, res) => {
   }
 });
 
+// ─── Diagnostics bar cache (prevent 429 from repeated getBars calls) ─────────
+let _diagBarsCache: { bars1m: AlpacaBar[]; bars5m: AlpacaBar[]; ts: number } = { bars1m: [], bars5m: [], ts: 0 };
+const DIAG_BARS_TTL = 30_000; // 30 seconds — matches frontend polling interval
+
+async function getCachedDiagBars(): Promise<{ bars1m: AlpacaBar[]; bars5m: AlpacaBar[] }> {
+  if (Date.now() - _diagBarsCache.ts < DIAG_BARS_TTL) {
+    return { bars1m: _diagBarsCache.bars1m, bars5m: _diagBarsCache.bars5m };
+  }
+  const [bars1m, bars5m] = await Promise.all([
+    getBars("BTCUSD", "1Min", 5).catch(() => [] as AlpacaBar[]),
+    getBars("BTCUSD", "5Min", 40).catch(() => [] as AlpacaBar[]),
+  ]);
+  _diagBarsCache = { bars1m, bars5m, ts: Date.now() };
+  return { bars1m, bars5m };
+}
+
 // ─── GET /api/system/diagnostics ─────────────────────────────────────────────
 router.get("/system/diagnostics", async (req, res) => {
   const layers: Record<string, { status: "live" | "degraded" | "offline"; detail: string }> = {};
 
+  // Fetch bars once (cached) for both data-feed and strategy-engine checks
+  let bars1m: AlpacaBar[] = [];
+  let bars5m: AlpacaBar[] = [];
+  try {
+    const cached = await getCachedDiagBars();
+    bars1m = cached.bars1m;
+    bars5m = cached.bars5m;
+  } catch (_) {
+    // handled per-layer below
+  }
+
   // Layer 1: Data Feed (Alpaca crypto — always available)
   try {
-    const test = await getBars("BTCUSD", "1Min", 5);
-    layers.data_feed = test.length > 0
-      ? { status: "live", detail: `Crypto feed active — ${test.length} bars returned` }
+    layers.data_feed = bars1m.length > 0
+      ? { status: "live", detail: `Crypto feed active — ${bars1m.length} bars returned` }
       : { status: "degraded", detail: "Feed responded but returned no bars" };
   } catch (e) {
     layers.data_feed = { status: "offline", detail: String(e) };
@@ -1845,18 +1871,17 @@ router.get("/system/diagnostics", async (req, res) => {
     ? { status: "degraded", detail: "Broker API keys detected — stock data unavailable, use Trading API keys" }
     : { status: "offline", detail: "No API keys configured" };
 
-  // Layer 3: Strategy Engine
+  // Layer 3: Strategy Engine (uses cached 5m bars)
   try {
-    const testBars = await getBars("BTCUSD", "5Min", 40);
-    if (testBars.length >= 20) {
-      const recall = buildRecallFeatures(testBars, testBars.slice(-20));
-      const regime = detectRegime(testBars);
+    if (bars5m.length >= 20) {
+      const recall = buildRecallFeatures(bars5m, bars5m.slice(-20));
+      const regime = detectRegime(bars5m);
       layers.strategy_engine = {
         status: "live",
         detail: `Regime detection: ${regime} · Recall features: ${Object.keys(recall).length} features`,
       };
     } else {
-      layers.strategy_engine = { status: "degraded", detail: "Not enough bars for full engine" };
+      layers.strategy_engine = { status: "degraded", detail: bars5m.length === 0 ? "Alpaca feed unavailable" : "Not enough bars for full engine" };
     }
   } catch (e) {
     layers.strategy_engine = { status: "offline", detail: String(e) };
