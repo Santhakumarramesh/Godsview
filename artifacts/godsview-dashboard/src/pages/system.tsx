@@ -122,6 +122,86 @@ type AuditSummary = {
   top_event_types: Array<{ event_type: string; count: number }>;
   fetched_at: string;
 };
+type ProofBucketRow = {
+  key: string;
+  totalSignals: number;
+  closedSignals: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  profitFactor: number;
+  expectancyR: number;
+  avgFinalQuality: number;
+};
+type ProofResponse = {
+  days: number;
+  since: string;
+  totalRows: number;
+  minSignals: number;
+  overall: {
+    totalSignals: number;
+    closedSignals: number;
+    wins: number;
+    losses: number;
+    winRate: number;
+    profitFactor: number;
+    expectancyR: number;
+    avgFinalQuality: number;
+  };
+  rows: ProofBucketRow[];
+  fetched_at: string;
+};
+type OosResponse = {
+  lookbackDays: number;
+  oosDays: number;
+  deltas: {
+    winRateDelta: number;
+    expectancyDeltaR: number;
+    avgFinalQualityDelta: number;
+  };
+};
+type ModelDiagnostics = {
+  status: {
+    status: "active" | "warning" | "error";
+    message: string;
+    meta: {
+      samples: number;
+      accuracy: number;
+      auc: number;
+      winRate: number;
+      purgedCv: {
+        folds: number;
+        embargoPct: number;
+        purgeWindow: number;
+        evaluatedSamples: number;
+        accuracy: number;
+        auc: number;
+      } | null;
+      trainedAt: string;
+    } | null;
+  };
+  validation: {
+    folds: number;
+    embargoPct: number;
+    purgeWindow: number;
+    evaluatedSamples: number;
+    accuracy: number;
+    auc: number;
+  } | null;
+  drift: {
+    status: "stable" | "watch" | "drift";
+    sampleRecent: number;
+    sampleBaseline: number;
+    recentWinRate: number;
+    baselineWinRate: number;
+    winRateDelta: number;
+    recentAvgQuality: number;
+    baselineAvgQuality: number;
+    qualityDelta: number;
+    computedAt: string;
+  } | null;
+  fetched_at: string;
+};
 
 const LAYER_LABELS: Record<string, string> = {
   data_feed: "Data Feed (Alpaca)",
@@ -225,6 +305,46 @@ export default function System() {
     refetchInterval: 30_000,
     staleTime: 20_000,
   });
+  const { data: modelDiagnostics } = useQuery<ModelDiagnostics>({
+    queryKey: ["system-model-diagnostics"],
+    queryFn: async () => {
+      const r = await fetch("/api/system/model/diagnostics");
+      if (!r.ok) throw new Error(`model diagnostics fetch failed: ${r.status}`);
+      return r.json();
+    },
+    refetchInterval: 45_000,
+    staleTime: 30_000,
+  });
+  const { data: proofBySetup } = useQuery<ProofResponse>({
+    queryKey: ["proof-by-setup"],
+    queryFn: async () => {
+      const r = await fetch("/api/system/proof/by-setup?days=30&min_signals=20");
+      if (!r.ok) throw new Error(`proof by setup fetch failed: ${r.status}`);
+      return r.json();
+    },
+    refetchInterval: 60_000,
+    staleTime: 45_000,
+  });
+  const { data: proofByRegime } = useQuery<ProofResponse>({
+    queryKey: ["proof-by-regime"],
+    queryFn: async () => {
+      const r = await fetch("/api/system/proof/by-regime?days=30&min_signals=20");
+      if (!r.ok) throw new Error(`proof by regime fetch failed: ${r.status}`);
+      return r.json();
+    },
+    refetchInterval: 60_000,
+    staleTime: 45_000,
+  });
+  const { data: oosProof } = useQuery<OosResponse>({
+    queryKey: ["proof-oos-vs-is"],
+    queryFn: async () => {
+      const r = await fetch("/api/system/proof/oos-vs-is?lookback_days=90&oos_days=14&min_signals=20");
+      if (!r.ok) throw new Error(`proof oos fetch failed: ${r.status}`);
+      return r.json();
+    },
+    refetchInterval: 60_000,
+    staleTime: 45_000,
+  });
   const [draft, setDraft] = useState<RiskConfig | null>(null);
   useEffect(() => {
     if (riskSnapshot && !draft) {
@@ -241,6 +361,10 @@ export default function System() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["diagnostics"] });
       queryClient.invalidateQueries({ queryKey: ["system-status"] });
+      queryClient.invalidateQueries({ queryKey: ["system-model-diagnostics"] });
+      queryClient.invalidateQueries({ queryKey: ["proof-by-setup"] });
+      queryClient.invalidateQueries({ queryKey: ["proof-by-regime"] });
+      queryClient.invalidateQueries({ queryKey: ["proof-oos-vs-is"] });
     },
   });
   const toggleKillSwitchMutation = useMutation({
@@ -383,6 +507,103 @@ export default function System() {
             <MicroLabel>Listeners</MicroLabel>
             <div style={{ marginTop: "6px", fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: C.secondary }}>
               {streamStatus?.listenersCount ?? 0}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Proof + Drift */}
+      <div className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined" style={{ fontSize: "14px", color: C.secondary }}>analytics</span>
+            <MicroLabel>Proof Of Edge + Drift</MicroLabel>
+          </div>
+          <span style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: C.outlineVar }}>
+            {modelDiagnostics?.drift?.computedAt ? format(new Date(modelDiagnostics.drift.computedAt), "HH:mm:ss") : "n/a"}
+          </span>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+          <div className="rounded p-2.5" style={{ backgroundColor: "#0e0e0f", border: `1px solid ${C.border}` }}>
+            <MicroLabel>Model</MicroLabel>
+            <div style={{ marginTop: "6px", fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: modelDiagnostics?.status.status === "active" ? C.primary : modelDiagnostics?.status.status === "warning" ? "#fbbf24" : C.tertiary }}>
+              {(modelDiagnostics?.status.status ?? "unknown").toUpperCase()}
+            </div>
+          </div>
+          <div className="rounded p-2.5" style={{ backgroundColor: "#0e0e0f", border: `1px solid ${C.border}` }}>
+            <MicroLabel>Purged CV AUC</MicroLabel>
+            <div style={{ marginTop: "6px", fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: C.secondary }}>
+              {modelDiagnostics?.validation ? modelDiagnostics.validation.auc.toFixed(3) : "n/a"}
+            </div>
+          </div>
+          <div className="rounded p-2.5" style={{ backgroundColor: "#0e0e0f", border: `1px solid ${C.border}` }}>
+            <MicroLabel>Drift Status</MicroLabel>
+            <div style={{
+              marginTop: "6px",
+              fontSize: "10px",
+              fontFamily: "JetBrains Mono, monospace",
+              color: modelDiagnostics?.drift?.status === "drift" ? C.tertiary : modelDiagnostics?.drift?.status === "watch" ? "#fbbf24" : C.primary,
+            }}>
+              {(modelDiagnostics?.drift?.status ?? "n/a").toUpperCase()}
+            </div>
+          </div>
+          <div className="rounded p-2.5" style={{ backgroundColor: "#0e0e0f", border: `1px solid ${C.border}` }}>
+            <MicroLabel>OOS Win Δ</MicroLabel>
+            <div style={{
+              marginTop: "6px",
+              fontSize: "10px",
+              fontFamily: "JetBrains Mono, monospace",
+              color: (oosProof?.deltas.winRateDelta ?? 0) >= 0 ? C.primary : C.tertiary,
+            }}>
+              {oosProof ? `${(oosProof.deltas.winRateDelta * 100).toFixed(2)}%` : "n/a"}
+            </div>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 mt-3">
+          <div className="rounded p-3" style={{ backgroundColor: "#0f0f10", border: `1px solid ${C.border}` }}>
+            <div className="flex items-center justify-between mb-2">
+              <MicroLabel>Top Setups (30d)</MicroLabel>
+              <span style={{ fontSize: "9px", color: C.outlineVar, fontFamily: "JetBrains Mono, monospace" }}>
+                {proofBySetup?.overall.closedSignals ?? 0} closed
+              </span>
+            </div>
+            <div className="space-y-1.5">
+              {(proofBySetup?.rows ?? []).slice(0, 5).map((row) => (
+                <div key={row.key} className="rounded px-2 py-1.5 flex items-center justify-between" style={{ border: `1px solid ${C.border}`, backgroundColor: "#131314" }}>
+                  <div>
+                    <div style={{ fontSize: "10px", fontFamily: "Space Grotesk", fontWeight: 700 }}>{row.key.replace(/_/g, " ")}</div>
+                    <div style={{ fontSize: "9px", color: C.muted, fontFamily: "JetBrains Mono, monospace" }}>
+                      {(row.winRate * 100).toFixed(1)}% win · PF {row.profitFactor.toFixed(2)}
+                    </div>
+                  </div>
+                  <span style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: row.expectancyR >= 0 ? C.primary : C.tertiary }}>
+                    {row.expectancyR >= 0 ? "+" : ""}{row.expectancyR.toFixed(2)}R
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="rounded p-3" style={{ backgroundColor: "#0f0f10", border: `1px solid ${C.border}` }}>
+            <div className="flex items-center justify-between mb-2">
+              <MicroLabel>Top Regimes (30d)</MicroLabel>
+              <span style={{ fontSize: "9px", color: C.outlineVar, fontFamily: "JetBrains Mono, monospace" }}>
+                {proofByRegime?.overall.closedSignals ?? 0} closed
+              </span>
+            </div>
+            <div className="space-y-1.5">
+              {(proofByRegime?.rows ?? []).slice(0, 5).map((row) => (
+                <div key={row.key} className="rounded px-2 py-1.5 flex items-center justify-between" style={{ border: `1px solid ${C.border}`, backgroundColor: "#131314" }}>
+                  <div>
+                    <div style={{ fontSize: "10px", fontFamily: "Space Grotesk", fontWeight: 700 }}>{row.key.replace(/_/g, " ")}</div>
+                    <div style={{ fontSize: "9px", color: C.muted, fontFamily: "JetBrains Mono, monospace" }}>
+                      {(row.winRate * 100).toFixed(1)}% win · PF {row.profitFactor.toFixed(2)}
+                    </div>
+                  </div>
+                  <span style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: row.expectancyR >= 0 ? C.primary : C.tertiary }}>
+                    {row.expectancyR >= 0 ? "+" : ""}{row.expectancyR.toFixed(2)}R
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
         </div>

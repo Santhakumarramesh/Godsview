@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, auditEventsTable, signalsTable, tradesTable } from "@workspace/db";
-import { and, desc, eq, gte, sql } from "drizzle-orm";
+import { db, accuracyResultsTable, auditEventsTable, signalsTable, tradesTable } from "@workspace/db";
+import { and, desc, eq, gte, isNotNull, or, sql } from "drizzle-orm";
 import { getTypedPositions, getAccount, hasValidTradingKey, isBrokerKey } from "../lib/alpaca";
 import { getModelDiagnostics, getModelStatus, retrainModel } from "../lib/ml_model";
 import { resolveSystemMode, canWriteOrders, isLiveMode } from "@workspace/strategy-core";
@@ -42,6 +42,129 @@ async function getCachedAlpacaData() {
   ]);
   _alpacaCache = { positions, account, ts: Date.now() };
   return { positions, account };
+}
+
+type AccuracyProofRow = {
+  setup_type: string;
+  regime: string | null;
+  symbol: string;
+  outcome: string | null;
+  tp_ticks: number | null;
+  sl_ticks: number | null;
+  final_quality: unknown;
+  created_at: Date;
+};
+
+type CohortMetrics = {
+  totalSignals: number;
+  closedSignals: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  profitFactor: number;
+  expectancyR: number;
+  avgFinalQuality: number;
+};
+
+function parseIntRange(raw: unknown, fallback: number, min: number, max: number): number {
+  const parsed = Number.parseInt(String(raw ?? ""), 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(max, parsed));
+}
+
+function parseNumberSafe(value: unknown): number {
+  const n = Number.parseFloat(String(value ?? "0"));
+  return Number.isFinite(n) ? n : 0;
+}
+
+function computeCohortMetrics(rows: AccuracyProofRow[]): CohortMetrics {
+  if (!rows.length) {
+    return {
+      totalSignals: 0,
+      closedSignals: 0,
+      wins: 0,
+      losses: 0,
+      winRate: 0,
+      profitFactor: 0,
+      expectancyR: 0,
+      avgFinalQuality: 0,
+    };
+  }
+
+  let wins = 0;
+  let losses = 0;
+  let grossWinTicks = 0;
+  let grossLossTicks = 0;
+  let expectancySum = 0;
+  let qualitySum = 0;
+
+  for (const row of rows) {
+    const outcome = String(row.outcome ?? "");
+    const tpTicks = Number(row.tp_ticks ?? 0);
+    const slTicks = Number(row.sl_ticks ?? 0);
+    const rr = slTicks > 0 ? tpTicks / slTicks : 1;
+    qualitySum += parseNumberSafe(row.final_quality);
+
+    if (outcome === "win") {
+      wins += 1;
+      grossWinTicks += tpTicks;
+      expectancySum += rr;
+    } else if (outcome === "loss") {
+      losses += 1;
+      grossLossTicks += Math.max(slTicks, 1);
+      expectancySum -= 1;
+    }
+  }
+
+  const closedSignals = wins + losses;
+  const winRate = closedSignals > 0 ? wins / closedSignals : 0;
+  const profitFactor = grossLossTicks > 0 ? grossWinTicks / grossLossTicks : grossWinTicks > 0 ? 999 : 0;
+  const expectancyR = closedSignals > 0 ? expectancySum / closedSignals : 0;
+  const avgFinalQuality = rows.length > 0 ? qualitySum / rows.length : 0;
+
+  return {
+    totalSignals: rows.length,
+    closedSignals,
+    wins,
+    losses,
+    winRate,
+    profitFactor,
+    expectancyR,
+    avgFinalQuality,
+  };
+}
+
+function bucketizeProofRows(
+  rows: AccuracyProofRow[],
+  keySelector: (row: AccuracyProofRow) => string,
+  minSignals: number,
+): Array<{
+  key: string;
+  totalSignals: number;
+  closedSignals: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  profitFactor: number;
+  expectancyR: number;
+  avgFinalQuality: number;
+}> {
+  const groups = new Map<string, AccuracyProofRow[]>();
+  for (const row of rows) {
+    const key = keySelector(row);
+    const existing = groups.get(key) ?? [];
+    existing.push(row);
+    groups.set(key, existing);
+  }
+
+  return Array.from(groups.entries())
+    .map(([key, groupedRows]) => ({ key, ...computeCohortMetrics(groupedRows) }))
+    .filter((row) => row.closedSignals >= minSignals)
+    .sort((a, b) => {
+      if (b.expectancyR !== a.expectancyR) return b.expectancyR - a.expectancyR;
+      if (b.winRate !== a.winRate) return b.winRate - a.winRate;
+      return b.closedSignals - a.closedSignals;
+    });
 }
 
 router.get("/system/status", async (req, res) => {
@@ -174,6 +297,179 @@ router.get("/system/model/diagnostics", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to fetch model diagnostics");
     res.status(500).json({ error: "model_diagnostics_failed", message: "Failed to fetch model diagnostics" });
+  }
+});
+
+// ─── GET /api/system/proof/by-setup — proof metrics bucketed by setup ──────
+router.get("/system/proof/by-setup", async (req, res) => {
+  try {
+    const days = parseIntRange(req.query.days, 30, 3, 365);
+    const minSignals = parseIntRange(req.query.min_signals, 20, 1, 5000);
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+    const rows: AccuracyProofRow[] = await db
+      .select({
+        setup_type: accuracyResultsTable.setup_type,
+        regime: accuracyResultsTable.regime,
+        symbol: accuracyResultsTable.symbol,
+        outcome: accuracyResultsTable.outcome,
+        tp_ticks: accuracyResultsTable.tp_ticks,
+        sl_ticks: accuracyResultsTable.sl_ticks,
+        final_quality: accuracyResultsTable.final_quality,
+        created_at: accuracyResultsTable.created_at,
+      })
+      .from(accuracyResultsTable)
+      .where(
+        and(
+          gte(accuracyResultsTable.created_at, since),
+          or(eq(accuracyResultsTable.outcome, "win"), eq(accuracyResultsTable.outcome, "loss")),
+          isNotNull(accuracyResultsTable.final_quality),
+        ),
+      )
+      .orderBy(desc(accuracyResultsTable.created_at))
+      .limit(120_000);
+
+    const buckets = bucketizeProofRows(rows, (row) => String(row.setup_type ?? "unknown"), minSignals);
+
+    res.json({
+      days,
+      since: since.toISOString(),
+      totalRows: rows.length,
+      minSignals,
+      overall: computeCohortMetrics(rows),
+      rows: buckets,
+      fetched_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch proof metrics by setup");
+    res.status(500).json({ error: "proof_by_setup_failed", message: "Failed to fetch proof metrics by setup" });
+  }
+});
+
+// ─── GET /api/system/proof/by-regime — proof metrics bucketed by regime ─────
+router.get("/system/proof/by-regime", async (req, res) => {
+  try {
+    const days = parseIntRange(req.query.days, 30, 3, 365);
+    const minSignals = parseIntRange(req.query.min_signals, 20, 1, 5000);
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+    const rows: AccuracyProofRow[] = await db
+      .select({
+        setup_type: accuracyResultsTable.setup_type,
+        regime: accuracyResultsTable.regime,
+        symbol: accuracyResultsTable.symbol,
+        outcome: accuracyResultsTable.outcome,
+        tp_ticks: accuracyResultsTable.tp_ticks,
+        sl_ticks: accuracyResultsTable.sl_ticks,
+        final_quality: accuracyResultsTable.final_quality,
+        created_at: accuracyResultsTable.created_at,
+      })
+      .from(accuracyResultsTable)
+      .where(
+        and(
+          gte(accuracyResultsTable.created_at, since),
+          or(eq(accuracyResultsTable.outcome, "win"), eq(accuracyResultsTable.outcome, "loss")),
+          isNotNull(accuracyResultsTable.final_quality),
+        ),
+      )
+      .orderBy(desc(accuracyResultsTable.created_at))
+      .limit(120_000);
+
+    const buckets = bucketizeProofRows(rows, (row) => String(row.regime ?? "unknown"), minSignals);
+
+    res.json({
+      days,
+      since: since.toISOString(),
+      totalRows: rows.length,
+      minSignals,
+      overall: computeCohortMetrics(rows),
+      rows: buckets,
+      fetched_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch proof metrics by regime");
+    res.status(500).json({ error: "proof_by_regime_failed", message: "Failed to fetch proof metrics by regime" });
+  }
+});
+
+// ─── GET /api/system/proof/oos-vs-is — in-sample vs out-of-sample view ─────
+router.get("/system/proof/oos-vs-is", async (req, res) => {
+  try {
+    const lookbackDays = parseIntRange(req.query.lookback_days, 90, 14, 730);
+    const oosDays = parseIntRange(req.query.oos_days, 14, 3, 120);
+    const minSignals = parseIntRange(req.query.min_signals, 10, 1, 5000);
+    const since = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000);
+    const oosSince = new Date(Date.now() - oosDays * 24 * 60 * 60 * 1000);
+
+    const rows: AccuracyProofRow[] = await db
+      .select({
+        setup_type: accuracyResultsTable.setup_type,
+        regime: accuracyResultsTable.regime,
+        symbol: accuracyResultsTable.symbol,
+        outcome: accuracyResultsTable.outcome,
+        tp_ticks: accuracyResultsTable.tp_ticks,
+        sl_ticks: accuracyResultsTable.sl_ticks,
+        final_quality: accuracyResultsTable.final_quality,
+        created_at: accuracyResultsTable.created_at,
+      })
+      .from(accuracyResultsTable)
+      .where(
+        and(
+          gte(accuracyResultsTable.created_at, since),
+          or(eq(accuracyResultsTable.outcome, "win"), eq(accuracyResultsTable.outcome, "loss")),
+          isNotNull(accuracyResultsTable.final_quality),
+        ),
+      )
+      .orderBy(desc(accuracyResultsTable.created_at))
+      .limit(150_000);
+
+    const inSampleRows = rows.filter((row) => row.created_at < oosSince);
+    const outOfSampleRows = rows.filter((row) => row.created_at >= oosSince);
+    const inSample = computeCohortMetrics(inSampleRows);
+    const outOfSample = computeCohortMetrics(outOfSampleRows);
+
+    const inSampleBySetup = bucketizeProofRows(inSampleRows, (row) => String(row.setup_type ?? "unknown"), minSignals).slice(0, 12);
+    const outOfSampleBySetup = bucketizeProofRows(outOfSampleRows, (row) => String(row.setup_type ?? "unknown"), minSignals).slice(0, 12);
+    const oosMap = new Map(outOfSampleBySetup.map((row) => [row.key, row]));
+
+    const setupDelta = inSampleBySetup.map((isRow) => {
+      const oosRow = oosMap.get(isRow.key);
+      return {
+        setup: isRow.key,
+        inSampleWinRate: Number(isRow.winRate.toFixed(4)),
+        outOfSampleWinRate: Number((oosRow?.winRate ?? 0).toFixed(4)),
+        winRateDelta: Number(((oosRow?.winRate ?? 0) - isRow.winRate).toFixed(4)),
+        inSampleExpectancyR: Number(isRow.expectancyR.toFixed(4)),
+        outOfSampleExpectancyR: Number((oosRow?.expectancyR ?? 0).toFixed(4)),
+        expectancyDeltaR: Number(((oosRow?.expectancyR ?? 0) - isRow.expectancyR).toFixed(4)),
+        inSampleClosed: isRow.closedSignals,
+        outOfSampleClosed: oosRow?.closedSignals ?? 0,
+      };
+    });
+
+    res.json({
+      lookbackDays,
+      oosDays,
+      since: since.toISOString(),
+      oosSince: oosSince.toISOString(),
+      totalRows: rows.length,
+      inSample,
+      outOfSample,
+      deltas: {
+        winRateDelta: Number((outOfSample.winRate - inSample.winRate).toFixed(4)),
+        expectancyDeltaR: Number((outOfSample.expectancyR - inSample.expectancyR).toFixed(4)),
+        avgFinalQualityDelta: Number((outOfSample.avgFinalQuality - inSample.avgFinalQuality).toFixed(4)),
+      },
+      bySetup: {
+        inSample: inSampleBySetup,
+        outOfSample: outOfSampleBySetup,
+        delta: setupDelta,
+      },
+      fetched_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch OOS vs IS proof metrics");
+    res.status(500).json({ error: "proof_oos_vs_is_failed", message: "Failed to fetch OOS vs IS proof metrics" });
   }
 });
 
