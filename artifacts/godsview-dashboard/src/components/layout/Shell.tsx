@@ -19,7 +19,10 @@ function useLiveTicker() {
 
   useEffect(() => {
     let cancelled = false;
+    let sseConnected = false;
+    let lastSseAt = 0;
     const watchSymbols = DEFAULT_WATCH_SYMBOLS.slice(0, 6).map((symbol) => normalizeMarketSymbol(symbol));
+    const watchSymbolSet = new Set(watchSymbols);
 
     const upsertTicker = (symbol: string, price: number) => {
       setTickers((prev) => {
@@ -46,7 +49,11 @@ function useLiveTicker() {
       setLastUpdated(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
     };
 
-    const fetchTickers = async () => {
+    const fetchTickers = async (force = false) => {
+      if (!force && sseConnected && Date.now() - lastSseAt < 4_000) {
+        return;
+      }
+
       try {
         const res = await fetch(`/api/alpaca/ticker?symbols=${watchSymbols.join(",")}`);
         if (!res.ok) return;
@@ -62,6 +69,7 @@ function useLiveTicker() {
               .map((symbol) => bySymbol.get(symbol))
               .filter((row): row is TickerEntry => Boolean(row))
           );
+          setFeedMode("poll");
           setLastUpdated(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
         }
       } catch {
@@ -69,30 +77,43 @@ function useLiveTicker() {
       }
     };
 
-    const streams = watchSymbols.map((symbol) => {
-      const es = new EventSource(`/api/alpaca/stream?symbol=${encodeURIComponent(symbol)}&timeframe=1Min`);
+    const es = new EventSource(`/api/alpaca/stream?symbols=${encodeURIComponent(watchSymbols.join(","))}&timeframe=1Min`);
 
-      es.onmessage = (evt) => {
-        if (cancelled) return;
-        try {
-          const payload = JSON.parse(evt.data) as { type?: string; price?: number };
-          if (payload.type !== "tick" || typeof payload.price !== "number") return;
-          setFeedMode("sse");
-          upsertTicker(symbol, payload.price);
-        } catch {
-          // ignore malformed frames
-        }
-      };
+    es.onopen = () => {
+      if (cancelled) return;
+      sseConnected = true;
+      setFeedMode("sse");
+    };
 
-      return es;
-    });
+    es.onmessage = (evt) => {
+      if (cancelled) return;
+      try {
+        const payload = JSON.parse(evt.data) as { type?: string; symbol?: string; price?: number };
+        if (payload.type !== "tick" || typeof payload.price !== "number") return;
+        const symbol = normalizeMarketSymbol(payload.symbol ?? "");
+        if (!watchSymbolSet.has(symbol)) return;
+        sseConnected = true;
+        lastSseAt = Date.now();
+        setFeedMode("sse");
+        upsertTicker(symbol, payload.price);
+      } catch {
+        // ignore malformed frames
+      }
+    };
 
-    fetchTickers();
-    const interval = setInterval(fetchTickers, 10_000);
+    es.onerror = () => {
+      if (cancelled) return;
+      setFeedMode("poll");
+    };
+
+    fetchTickers(true);
+    const interval = setInterval(() => {
+      void fetchTickers();
+    }, 2_000);
     return () => {
       cancelled = true;
       clearInterval(interval);
-      for (const stream of streams) stream.close();
+      es.close();
     };
   }, []);
 

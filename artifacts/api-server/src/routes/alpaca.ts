@@ -354,8 +354,23 @@ router.get("/alpaca/stream-status", (_req, res) => {
 });
 
 router.get("/alpaca/stream", (req, res) => {
-  const symbol = String(req.query.symbol ?? "BTCUSD");
   const timeframe = String(req.query.timeframe ?? "5Min");
+  const symbolsQuery = String(req.query.symbols ?? "");
+  const fallbackSymbol = String(req.query.symbol ?? "");
+  const rawSymbols = symbolsQuery || fallbackSymbol || "BTCUSD";
+  const symbols = Array.from(
+    new Set(
+      rawSymbols
+        .split(",")
+        .map((raw) => toAlpacaSymbol(raw))
+        .map((raw) => raw.trim().toUpperCase())
+        .filter(Boolean),
+    ),
+  ).slice(0, 24);
+
+  if (symbols.length === 0) {
+    symbols.push("BTCUSD");
+  }
 
   // SSE headers — X-Accel-Buffering: no disables nginx/proxy buffering
   res.setHeader("Content-Type", "text/event-stream");
@@ -377,18 +392,25 @@ router.get("/alpaca/stream", (req, res) => {
 
   send(`: connected\n\n`);
 
-  const listener: TickListener = (payload) => {
-    send(`data: ${JSON.stringify(payload)}\n\n`);
-  };
+  const listeners = new Map<string, TickListener>();
+  for (const symbol of symbols) {
+    const listener: TickListener = (payload) => {
+      send(`data: ${JSON.stringify(payload)}\n\n`);
+    };
+    listeners.set(symbol, listener);
+    alpacaStream.subscribe(symbol, timeframe, listener);
+  }
 
-  alpacaStream.subscribe(symbol, timeframe, listener);
+  send(`event: stream-info\ndata: ${JSON.stringify({ type: "stream-info", symbols, timeframe })}\n\n`);
 
   // Heartbeat every 10s to keep proxies alive and detect stale connections
   const heartbeat = setInterval(() => send(": ping\n\n"), 10_000);
 
   req.on("close", () => {
     clearInterval(heartbeat);
-    alpacaStream.unsubscribe(symbol, timeframe, listener);
+    for (const [symbol, listener] of listeners) {
+      alpacaStream.unsubscribe(symbol, timeframe, listener);
+    }
   });
 });
 
