@@ -42,6 +42,13 @@ Run full decision pipeline:
 python -m app.main
 ```
 
+Run multi-agent orchestration:
+
+```bash
+python -m app.agents.orchestrator --symbol AAPL
+python -m app.agents.orchestrator --symbol BTCUSD --live
+```
+
 Run lightweight backtest report:
 
 ```bash
@@ -60,6 +67,9 @@ python -m app.backtest
 - `app/broker.py`: Alpaca paper order bridge.
 - `app/main.py`: orchestrator.
 - `app/backtest.py`: walk-forward style scoring summary.
+- `app/brain/schema.py`: entity/relationship/memory models.
+- `app/brain/memory.py`: persistent brain memory store.
+- `app/agents/*`: 6-agent pipeline (`data`, `signal`, `reasoning`, `risk`, `execution`, `monitor`) and orchestrator.
 
 ## Output Artifacts
 

@@ -1,0 +1,89 @@
+from __future__ import annotations
+
+import argparse
+from datetime import datetime, timezone
+from typing import Any
+
+from app.agents.base import AgentState
+from app.agents.data_agent import DataAgent
+from app.agents.execution_agent import ExecutionAgent
+from app.agents.monitor_agent import MonitorAgent
+from app.agents.reasoning_agent import ReasoningAgent
+from app.agents.risk_agent import RiskAgent
+from app.agents.signal_agent import SignalAgent
+from app.config import settings
+from app.utils import write_json
+
+
+PIPELINE = [
+    DataAgent(),
+    SignalAgent(),
+    ReasoningAgent(),
+    RiskAgent(),
+    ExecutionAgent(),
+    MonitorAgent(),
+]
+
+
+def run_orchestrator(
+    *,
+    symbol: str,
+    live: bool = False,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    state = AgentState(
+        symbol=symbol.upper(),
+        live=live,
+        dry_run=dry_run,
+    )
+
+    for agent in PIPELINE:
+        state = agent.run(state)
+        # execution+monitor still run even when blocked for logging/traceability
+        if state.blocked and agent.name not in {"execution_agent", "monitor_agent"}:
+            continue
+
+    payload = {
+        "symbol": state.symbol,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "live": state.live,
+        "dry_run": state.dry_run,
+        "blocked": state.blocked,
+        "block_reason": state.block_reason,
+        "errors": state.errors,
+        "data": state.data,
+    }
+    write_json("data/processed/latest_orchestrator_run.json", payload)
+    return payload
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Godsview multi-agent orchestrator")
+    parser.add_argument("--symbol", type=str, default=settings.symbol, help="Symbol to evaluate (e.g. AAPL, BTCUSD)")
+    parser.add_argument(
+        "--live",
+        action="store_true",
+        help="Enable live execution path (requires ALPACA keys and DRY_RUN=false).",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=settings.dry_run,
+        help="Force dry-run simulation mode.",
+    )
+    return parser.parse_args()
+
+
+if __name__ == "__main__":
+    args = _parse_args()
+    # Safety first: if --live passed but env still dry-run true, stay dry-run.
+    effective_dry_run = bool(args.dry_run)
+    if args.live and settings.dry_run and not args.dry_run:
+        effective_dry_run = True
+    result = run_orchestrator(
+        symbol=args.symbol,
+        live=bool(args.live),
+        dry_run=effective_dry_run,
+    )
+    print(result)
+

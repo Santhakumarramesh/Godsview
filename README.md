@@ -153,6 +153,7 @@ It provides a separate workflow for:
 - feature engineering + ML training
 - inference + filter + risk checks
 - optional Alpaca paper order submission
+- multi-agent orchestration with persistent brain memory
 
 Bridge endpoint in API:
 
