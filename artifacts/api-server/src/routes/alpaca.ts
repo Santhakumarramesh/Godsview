@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { claudeVeto, isClaudeAvailable, type ClaudeVetoResult, type SetupContext } from "../lib/claude";
-import { getBars, getBarsHistorical, getLatestBar, getLatestTrade, getAccount, getPositions, hasValidTradingKey, isBrokerKey, placeOrder, getOrders, cancelOrder, cancelAllOrders, closePosition, getTypedPositions, calcPositionSize, type AlpacaBar, type AlpacaTimeframe, type PlaceOrderRequest } from "../lib/alpaca";
+import { getBars, getBarsHistorical, getLatestBar, getLatestTrade, getAccount, getPositions, hasValidTradingKey, isBrokerKey, placeOrder, getOrders, cancelOrder, cancelAllOrders, closePosition, getTypedPositions, calcPositionSize, getTodayFills, computeRoundTrips, type AlpacaBar, type AlpacaTimeframe, type AlpacaPosition, type AlpacaFillActivity, type PlaceOrderRequest } from "../lib/alpaca";
 import { alpacaStream, type TickListener } from "../lib/alpaca_stream";
 import {
   buildRecallFeatures,
@@ -33,6 +33,8 @@ const SYSTEM_MODE = resolveSystemMode(process.env.GODSVIEW_SYSTEM_MODE, {
   liveTradingEnabled: LEGACY_LIVE_TRADING_ENABLED,
 });
 const TRADING_KILL_SWITCH = String(process.env.GODSVIEW_KILL_SWITCH ?? "").toLowerCase() === "true";
+const MAX_DAILY_LOSS_USD = parseEnvFloat("GODSVIEW_MAX_DAILY_LOSS_USD", 250, 0, 5_000_000);
+const MAX_OPEN_EXPOSURE_PCT = parseEnvFloat("GODSVIEW_MAX_OPEN_EXPOSURE_PCT", 0.6, 0, 5);
 const OPERATOR_TOKEN = (process.env.GODSVIEW_OPERATOR_TOKEN ?? "").trim();
 type AccuracyResultRow = typeof accuracyResultsTable.$inferSelect;
 
@@ -56,6 +58,14 @@ const BAR_TIMEFRAME_MS: Record<AlpacaTimeframe, number> = {
 function isAlpacaRateLimitError(error: unknown): boolean {
   const message = String(error ?? "");
   return message.includes("Alpaca API 429") || message.toLowerCase().includes("too many requests");
+}
+
+function parseEnvFloat(name: string, fallback: number, min: number, max: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const parsed = Number.parseFloat(raw);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(max, parsed));
 }
 
 function delayMs(ms: number): Promise<void> {
@@ -269,6 +279,118 @@ function ensureTradingWriteAccess(req: Request, res: Response): boolean {
       error: "unauthorized",
       message: "Missing or invalid operator token.",
       system_mode: SYSTEM_MODE,
+    });
+    return false;
+  }
+
+  return true;
+}
+
+type TradingRiskSnapshot = {
+  accountEquityUsd: number;
+  realizedPnlTodayUsd: number;
+  openExposureUsd: number;
+  openExposurePct: number;
+  limits: {
+    maxDailyLossUsd: number;
+    maxOpenExposurePct: number;
+  };
+};
+
+async function computeTradingRiskSnapshot(): Promise<TradingRiskSnapshot | null> {
+  const [accountRaw, positions, fills]: [unknown, AlpacaPosition[], AlpacaFillActivity[]] = await Promise.all([
+    getAccount().catch(() => null as unknown),
+    getTypedPositions().catch(() => [] as AlpacaPosition[]),
+    getTodayFills().catch(() => [] as AlpacaFillActivity[]),
+  ]);
+
+  const accountObj = (typeof accountRaw === "object" && accountRaw !== null ? accountRaw : {}) as Record<string, unknown>;
+  const equity = Number(accountObj.equity ?? accountObj.portfolio_value ?? 0);
+  if (!Number.isFinite(equity) || equity <= 0) return null;
+
+  const openExposureUsd = positions.reduce((sum, position) => {
+    const marketValue = Number(position.market_value ?? 0);
+    return Number.isFinite(marketValue) ? sum + Math.abs(marketValue) : sum;
+  }, 0);
+  const openExposurePct = openExposureUsd / equity;
+  const dailySummary = computeRoundTrips(fills);
+
+  return {
+    accountEquityUsd: equity,
+    realizedPnlTodayUsd: dailySummary.totalPnl,
+    openExposureUsd,
+    openExposurePct: Number.isFinite(openExposurePct) ? openExposurePct : 0,
+    limits: {
+      maxDailyLossUsd: MAX_DAILY_LOSS_USD,
+      maxOpenExposurePct: MAX_OPEN_EXPOSURE_PCT,
+    },
+  };
+}
+
+async function estimateOrderNotionalUsd(orderReq: PlaceOrderRequest): Promise<number> {
+  if (Number.isFinite(orderReq.notional) && Number(orderReq.notional) > 0) {
+    return Math.abs(Number(orderReq.notional));
+  }
+
+  const qty = Number(orderReq.qty ?? 0);
+  if (!Number.isFinite(qty) || qty <= 0) return 0;
+
+  const directPriceCandidates = [
+    Number(orderReq.limit_price ?? NaN),
+    Number(orderReq.stop_price ?? NaN),
+    Number(orderReq.stop_loss_price ?? NaN),
+    Number(orderReq.take_profit_price ?? NaN),
+  ];
+  const directPrice = directPriceCandidates.find((price) => Number.isFinite(price) && price > 0);
+  if (Number.isFinite(directPrice)) return Math.abs(qty * Number(directPrice));
+
+  const latestTrade = await getLatestTrade(orderReq.symbol).catch(() => null);
+  if (!latestTrade || !Number.isFinite(latestTrade.price) || latestTrade.price <= 0) return 0;
+  return Math.abs(qty * latestTrade.price);
+}
+
+async function enforceTradeRiskRails(
+  req: Request,
+  res: Response,
+  orderReq: PlaceOrderRequest,
+): Promise<boolean> {
+  const snapshot = await computeTradingRiskSnapshot();
+  if (!snapshot) {
+    res.status(503).json({
+      error: "risk_data_unavailable",
+      message: "Unable to fetch account equity for risk checks. Trade blocked for safety.",
+      system_mode: SYSTEM_MODE,
+    });
+    return false;
+  }
+
+  if (snapshot.limits.maxDailyLossUsd > 0 && snapshot.realizedPnlTodayUsd <= -snapshot.limits.maxDailyLossUsd) {
+    res.status(403).json({
+      error: "daily_loss_limit_reached",
+      message: "Daily realized loss limit reached. Trade blocked.",
+      decision_state: "BLOCKED_BY_RISK",
+      system_mode: SYSTEM_MODE,
+      risk: snapshot,
+    });
+    return false;
+  }
+
+  const incomingNotionalUsd = await estimateOrderNotionalUsd(orderReq);
+  const projectedExposureUsd = snapshot.openExposureUsd + incomingNotionalUsd;
+  const projectedExposurePct = snapshot.accountEquityUsd > 0 ? projectedExposureUsd / snapshot.accountEquityUsd : 0;
+
+  if (snapshot.limits.maxOpenExposurePct > 0 && projectedExposurePct > snapshot.limits.maxOpenExposurePct) {
+    res.status(403).json({
+      error: "max_open_exposure_exceeded",
+      message: "Projected open exposure exceeds configured risk limit. Trade blocked.",
+      decision_state: "BLOCKED_BY_RISK",
+      system_mode: SYSTEM_MODE,
+      risk: {
+        ...snapshot,
+        incomingNotionalUsd,
+        projectedExposureUsd,
+        projectedExposurePct,
+      },
     });
     return false;
   }
@@ -732,12 +854,44 @@ router.post("/alpaca/orders", async (req, res) => {
     if (req.body.stop_loss_price !== undefined) orderReq.stop_loss_price = Number(req.body.stop_loss_price);
     if (req.body.take_profit_price !== undefined) orderReq.take_profit_price = Number(req.body.take_profit_price);
 
+    if (!(await enforceTradeRiskRails(req, res, orderReq))) return;
+
     const order = await placeOrder(orderReq);
     req.log.info({ order_id: order.id, symbol: order.symbol, side: order.side }, "Order placed");
     res.json({ success: true, order });
   } catch (err) {
     req.log.error({ err }, "Failed to place order");
     res.status(500).json({ error: "order_failed", message: String(err) });
+  }
+});
+
+// ─── GET /api/alpaca/risk/status — live risk rail snapshot ───────────────────
+router.get("/alpaca/risk/status", async (_req, res) => {
+  try {
+    const snapshot = await computeTradingRiskSnapshot();
+    if (!snapshot) {
+      res.status(503).json({
+        error: "risk_data_unavailable",
+        message: "Unable to compute risk snapshot.",
+        system_mode: SYSTEM_MODE,
+        trading_kill_switch: TRADING_KILL_SWITCH,
+      });
+      return;
+    }
+
+    res.json({
+      system_mode: SYSTEM_MODE,
+      trading_kill_switch: TRADING_KILL_SWITCH,
+      live_writes_enabled: canWriteOrders(SYSTEM_MODE) && !TRADING_KILL_SWITCH,
+      risk: snapshot,
+      gate_state:
+        (snapshot.limits.maxDailyLossUsd > 0 && snapshot.realizedPnlTodayUsd <= -snapshot.limits.maxDailyLossUsd) ||
+        (snapshot.limits.maxOpenExposurePct > 0 && snapshot.openExposurePct > snapshot.limits.maxOpenExposurePct)
+          ? "BLOCKED_BY_RISK"
+          : "PASS",
+    });
+  } catch (err) {
+    res.status(500).json({ error: "risk_status_failed", message: String(err) });
   }
 });
 
