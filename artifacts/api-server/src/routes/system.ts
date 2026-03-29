@@ -4,7 +4,7 @@ import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { getTypedPositions, getAccount, hasValidTradingKey, isBrokerKey } from "../lib/alpaca";
 import { getModelStatus, retrainModel } from "../lib/ml_model";
 import { resolveSystemMode, canWriteOrders, isLiveMode } from "@workspace/strategy-core";
-import { getRiskEngineSnapshot, isKillSwitchActive, resetRiskEngineRuntime, setKillSwitchActive, updateRiskConfig } from "../lib/risk_engine";
+import { getCurrentTradingSession, getRiskEngineSnapshot, isKillSwitchActive, isSessionAllowed, resetRiskEngineRuntime, setKillSwitchActive, updateRiskConfig } from "../lib/risk_engine";
 
 const router: IRouter = Router();
 const LEGACY_LIVE_TRADING_ENABLED = String(process.env.GODSVIEW_ENABLE_LIVE_TRADING ?? "").toLowerCase() === "true";
@@ -67,6 +67,10 @@ router.get("/system/status", async (req, res) => {
       ? positions[0].symbol.replace("/", "")
       : "BTCUSD";
 
+    const riskState = getRiskEngineSnapshot();
+    const controls = riskState.config;
+    const active_session = getCurrentTradingSession();
+    const session_allowed = isSessionAllowed(active_session, controls);
     const killSwitchActive = isKillSwitchActive();
     const tradingApiStatus = hasValidTradingKey ? "active" : isBrokerKey ? "warning" : "error";
     const riskLayerStatus = killSwitchActive || !canWriteOrders(SYSTEM_MODE)
@@ -103,6 +107,10 @@ router.get("/system/status", async (req, res) => {
         status: riskLayerStatus,
         message: killSwitchActive
           ? "Runtime kill switch is active — all trading write actions are blocked"
+          : controls.newsLockoutActive
+          ? "News lockout is active — trade entry is blocked by policy"
+          : !session_allowed
+          ? `Session allowlist blocked current '${active_session}' window`
           : !canWriteOrders(SYSTEM_MODE)
           ? `System mode '${SYSTEM_MODE}' is read-only — trading writes are disabled`
           : hasValidTradingKey
@@ -119,12 +127,6 @@ router.get("/system/status", async (req, res) => {
       ? "degraded"
       : "healthy";
 
-    const hour = new Date().getUTCHours();
-    let active_session = "Overnight";
-    if (hour >= 13 && hour < 22) active_session = "NY";
-    else if (hour >= 7 && hour < 13) active_session = "London";
-    else if (hour >= 0 && hour < 7) active_session = "Asian";
-
     res.json({
       overall,
       system_mode: SYSTEM_MODE,
@@ -132,9 +134,10 @@ router.get("/system/status", async (req, res) => {
       live_mode: isLiveMode(SYSTEM_MODE),
       trading_kill_switch: killSwitchActive,
       layers,
-      news_lockout_active: false,
+      news_lockout_active: controls.newsLockoutActive,
       active_instrument: activeInstrument,
       active_session,
+      session_allowed,
       signals_today: Number(signalsRow[0].count),
       trades_today: Number(tradesRow[0].count),
       unrealized_pnl: unrealizedPnl,
@@ -181,6 +184,10 @@ router.put("/system/risk", (req, res) => {
       cooldownAfterLosses: body.cooldownAfterLosses as number | undefined,
       cooldownMinutes: body.cooldownMinutes as number | undefined,
       blockOnDegradedData: body.blockOnDegradedData as boolean | undefined,
+      allowAsianSession: body.allowAsianSession as boolean | undefined,
+      allowLondonSession: body.allowLondonSession as boolean | undefined,
+      allowNySession: body.allowNySession as boolean | undefined,
+      newsLockoutActive: body.newsLockoutActive as boolean | undefined,
     });
     res.json({
       ...updated,

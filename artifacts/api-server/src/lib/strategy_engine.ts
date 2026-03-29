@@ -97,6 +97,8 @@ export type NoTradeReason =
   | "low_volatility"
   | "high_volatility_extreme"
   | "conflicting_flow"
+  | "bad_session"
+  | "news_lockout"
   | "sk_zone_miss"
   | "sk_bias_conflict"
   | "cvd_not_ready"
@@ -623,6 +625,8 @@ export function detectRegime(bars: AlpacaBar[]): Regime {
 export type NoTradeFilterOptions = {
   cooldowns?: SetupCooldowns;
   replayMode?: boolean;
+  sessionAllowed?: boolean;
+  newsLockoutActive?: boolean;
 };
 
 export function applyNoTradeFilters(
@@ -634,10 +638,14 @@ export function applyNoTradeFilters(
   // Handle both legacy (cooldowns object) and new options object
   let cooldowns: SetupCooldowns = {};
   let replayMode = false;
+  let sessionAllowed = true;
+  let newsLockoutActive = false;
   if ("replayMode" in optionsOrCooldowns || "cooldowns" in optionsOrCooldowns) {
     const opts = optionsOrCooldowns as NoTradeFilterOptions;
     cooldowns = opts.cooldowns ?? {};
     replayMode = opts.replayMode ?? false;
+    sessionAllowed = opts.sessionAllowed ?? true;
+    newsLockoutActive = opts.newsLockoutActive ?? false;
   } else {
     cooldowns = optionsOrCooldowns as SetupCooldowns;
   }
@@ -650,6 +658,9 @@ export function applyNoTradeFilters(
   const atrHighCap = replayMode ? 0.08 : 0.055;
   if (recall.atr_pct > atrHighCap) return { blocked: true, reason: "high_volatility_extreme" };
   if (recall.atr_pct < 0.001 && recall.avg_range_1m < 0.5) return { blocked: true, reason: "low_volatility" };
+
+  if (!replayMode && !sessionAllowed) return { blocked: true, reason: "bad_session" };
+  if (!replayMode && newsLockoutActive) return { blocked: true, reason: "news_lockout" };
 
   // Setup cooldown — only in live mode (replay has unlimited concurrent/daily)
   if (!replayMode) {

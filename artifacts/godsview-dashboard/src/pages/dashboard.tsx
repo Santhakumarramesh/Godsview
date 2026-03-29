@@ -127,6 +127,9 @@ export default function Dashboard() {
             Godsview · Mission Control
           </div>
           <h1 className="font-headline font-bold text-2xl tracking-tight">Pipeline Overview</h1>
+          <div style={{ fontSize: "10px", color: C.muted, fontFamily: "Space Grotesk", marginTop: "6px", letterSpacing: "0.04em" }}>
+            AI-assisted order-flow terminal for discretionary traders: structure-first filtering, order-flow confirmation, recall memory, and risk-gated execution.
+          </div>
         </div>
         <div className="flex items-center gap-3">
           {systemStatus?.news_lockout_active && (

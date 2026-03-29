@@ -7,7 +7,13 @@ type MutableRiskConfig = {
   cooldownAfterLosses: number;
   cooldownMinutes: number;
   blockOnDegradedData: boolean;
+  allowAsianSession: boolean;
+  allowLondonSession: boolean;
+  allowNySession: boolean;
+  newsLockoutActive: boolean;
 };
+
+export type TradingSession = "Asian" | "London" | "NY";
 
 type RuntimeRiskState = {
   killSwitchActive: boolean;
@@ -50,6 +56,10 @@ const config: MutableRiskConfig = {
   cooldownAfterLosses: parseIntEnv("GODSVIEW_COOLDOWN_AFTER_LOSSES", 3, 1, 50),
   cooldownMinutes: parseIntEnv("GODSVIEW_COOLDOWN_MINUTES", 30, 1, 24 * 60),
   blockOnDegradedData: parseBooleanEnv("GODSVIEW_BLOCK_ON_DEGRADED_DATA", true),
+  allowAsianSession: parseBooleanEnv("GODSVIEW_ALLOW_SESSION_ASIAN", true),
+  allowLondonSession: parseBooleanEnv("GODSVIEW_ALLOW_SESSION_LONDON", true),
+  allowNySession: parseBooleanEnv("GODSVIEW_ALLOW_SESSION_NY", true),
+  newsLockoutActive: parseBooleanEnv("GODSVIEW_NEWS_LOCKOUT_ACTIVE", false),
 };
 
 const runtime: RuntimeRiskState = {
@@ -90,6 +100,18 @@ function sanitizePatch(patch: Partial<MutableRiskConfig>): Partial<MutableRiskCo
   if (patch.blockOnDegradedData !== undefined) {
     next.blockOnDegradedData = Boolean(patch.blockOnDegradedData);
   }
+  if (patch.allowAsianSession !== undefined) {
+    next.allowAsianSession = Boolean(patch.allowAsianSession);
+  }
+  if (patch.allowLondonSession !== undefined) {
+    next.allowLondonSession = Boolean(patch.allowLondonSession);
+  }
+  if (patch.allowNySession !== undefined) {
+    next.allowNySession = Boolean(patch.allowNySession);
+  }
+  if (patch.newsLockoutActive !== undefined) {
+    next.newsLockoutActive = Boolean(patch.newsLockoutActive);
+  }
   return next;
 }
 
@@ -108,6 +130,26 @@ export function setKillSwitchActive(active: boolean): RiskEngineSnapshot {
 
 export function isKillSwitchActive(): boolean {
   return runtime.killSwitchActive;
+}
+
+export function getCurrentTradingSession(at: Date = new Date()): TradingSession {
+  const hour = at.getUTCHours();
+  if (hour >= 13 && hour < 22) return "NY";
+  if (hour >= 7 && hour < 13) return "London";
+  return "Asian";
+}
+
+export function isSessionAllowed(
+  session: TradingSession,
+  source: Pick<MutableRiskConfig, "allowAsianSession" | "allowLondonSession" | "allowNySession"> = config,
+): boolean {
+  if (session === "Asian") return source.allowAsianSession;
+  if (session === "London") return source.allowLondonSession;
+  return source.allowNySession;
+}
+
+export function isNewsLockoutActive(): boolean {
+  return config.newsLockoutActive;
 }
 
 export function updateRiskConfig(patch: Partial<MutableRiskConfig>): RiskEngineSnapshot {

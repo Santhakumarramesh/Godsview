@@ -3,7 +3,7 @@ import { claudeVeto, isClaudeAvailable, type ClaudeVetoResult, type SetupContext
 import { getBars, getBarsHistorical, getLatestBar, getLatestTrade, getAccount, getPositions, hasValidTradingKey, isBrokerKey, placeOrder, getOrders, cancelOrder, cancelAllOrders, closePosition, getTypedPositions, calcPositionSize, getTodayFills, computeRoundTrips, type AlpacaBar, type AlpacaTimeframe, type AlpacaPosition, type AlpacaFillActivity, type PlaceOrderRequest } from "../lib/alpaca";
 import { alpacaStream, type TickListener } from "../lib/alpaca_stream";
 import { isCryptoSymbol } from "../lib/market/symbols";
-import { getRiskEngineSnapshot, isKillSwitchActive } from "../lib/risk_engine";
+import { getCurrentTradingSession, getRiskEngineSnapshot, isKillSwitchActive, isSessionAllowed } from "../lib/risk_engine";
 import {
   buildRecallFeatures,
   detectAbsorptionReversal,
@@ -690,6 +690,54 @@ async function enforceTradeRiskRails(
   }
 
   const controls = getRiskEngineSnapshot().config;
+  const activeSession = getCurrentTradingSession();
+  const sessionAllowed = isSessionAllowed(activeSession, controls);
+  if (!sessionAllowed) {
+    void writeAuditEvent(req, {
+      eventType: "ORDER_RISK_BLOCKED",
+      decisionState: "BLOCKED_BY_RISK",
+      actor: "api",
+      instrument: orderReq.symbol,
+      symbol: orderReq.symbol,
+      reason: "session_not_allowed",
+      payload: {
+        active_session: activeSession,
+      },
+    });
+    res.status(403).json({
+      error: "session_not_allowed",
+      message: `Trading is disabled for session '${activeSession}'. Update runtime session allowlist controls to enable.`,
+      decision_state: "BLOCKED_BY_RISK",
+      system_mode: SYSTEM_MODE,
+      active_session: activeSession,
+      risk: snapshot,
+    });
+    return false;
+  }
+
+  if (controls.newsLockoutActive) {
+    void writeAuditEvent(req, {
+      eventType: "ORDER_RISK_BLOCKED",
+      decisionState: "BLOCKED_BY_RISK",
+      actor: "api",
+      instrument: orderReq.symbol,
+      symbol: orderReq.symbol,
+      reason: "news_lockout_active",
+      payload: {
+        active_session: activeSession,
+      },
+    });
+    res.status(403).json({
+      error: "news_lockout_active",
+      message: "News lockout is active. Trading is blocked by policy.",
+      decision_state: "BLOCKED_BY_RISK",
+      system_mode: SYSTEM_MODE,
+      active_session: activeSession,
+      risk: snapshot,
+    });
+    return false;
+  }
+
   if (controls.blockOnDegradedData) {
     const dataHealth = await assessDataHealth(orderReq.symbol, { req });
     if (!dataHealth.healthy) {
@@ -1348,6 +1396,8 @@ router.get("/alpaca/risk/status", async (req, res) => {
     }
 
     const controls = getRiskEngineSnapshot().config;
+    const activeSession = getCurrentTradingSession();
+    const sessionAllowed = isSessionAllowed(activeSession, controls);
     const killSwitchActive = isKillSwitchActive();
     const dataHealth = controls.blockOnDegradedData
       ? await assessDataHealth(symbol, { req })
@@ -1368,6 +1418,8 @@ router.get("/alpaca/risk/status", async (req, res) => {
     if (snapshot.limits.maxTradesPerSession > 0 && snapshot.closedTradesToday >= snapshot.limits.maxTradesPerSession) {
       gateReasons.push("max_trades_per_session_reached");
     }
+    if (!sessionAllowed) gateReasons.push("session_not_allowed");
+    if (controls.newsLockoutActive) gateReasons.push("news_lockout_active");
     if (dataHealth && !dataHealth.healthy) {
       for (const reason of dataHealth.reasons) gateReasons.push(reason);
     }
@@ -1377,6 +1429,9 @@ router.get("/alpaca/risk/status", async (req, res) => {
       system_mode: SYSTEM_MODE,
       trading_kill_switch: killSwitchActive,
       live_writes_enabled: canWriteOrders(SYSTEM_MODE) && !killSwitchActive,
+      active_session: activeSession,
+      session_allowed: sessionAllowed,
+      news_lockout_active: controls.newsLockoutActive,
       risk: snapshot,
       data_health: dataHealth,
       gate_reasons: gateReasons,
@@ -1533,13 +1588,21 @@ router.post("/alpaca/analyze", async (req, res) => {
     const atr = computeATR(bars1m);
     const entryPrice = Number(lastBar.Close);
     const regime = recall.regime;
+    const controls = getRiskEngineSnapshot().config;
+    const activeSession = getCurrentTradingSession();
+    const sessionAllowed = isSessionAllowed(activeSession, controls);
 
     const detectedSetups = [];
     const blockedSetups: Array<{ setup_type: SetupType; reason: string; decision_state: string }> = [];
 
     for (const setup of setups) {
       // Apply no-trade filters first
-      const noTrade = applyNoTradeFilters(bars1m, recall, setup, cooldowns);
+      const noTrade = applyNoTradeFilters(bars1m, recall, setup, {
+        cooldowns,
+        replayMode: false,
+        sessionAllowed,
+        newsLockoutActive: controls.newsLockoutActive,
+      });
       if (noTrade.blocked) {
         blockedSetups.push({
           setup_type: setup,
@@ -1740,6 +1803,9 @@ router.post("/alpaca/analyze", async (req, res) => {
       indicator_hints: recall.indicator_hints,
       analyzed_at: new Date().toISOString(),
       regime,
+      active_session: activeSession,
+      session_allowed: sessionAllowed,
+      news_lockout_active: controls.newsLockoutActive,
       regime_label:     regime.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
       bars_analyzed:    { "1m": bars1m.length, "5m": bars5m.length, "15m": bars15m.length },
       recall_features:  recall,

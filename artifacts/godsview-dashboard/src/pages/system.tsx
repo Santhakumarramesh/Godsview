@@ -42,6 +42,10 @@ type RiskConfig = {
   cooldownAfterLosses: number;
   cooldownMinutes: number;
   blockOnDegradedData: boolean;
+  allowAsianSession: boolean;
+  allowLondonSession: boolean;
+  allowNySession: boolean;
+  newsLockoutActive: boolean;
 };
 type RuntimeRiskSnapshot = {
   runtime: {
@@ -76,6 +80,9 @@ type LiveRiskStatus = {
   system_mode: string;
   trading_kill_switch: boolean;
   live_writes_enabled: boolean;
+  active_session?: "Asian" | "London" | "NY";
+  session_allowed?: boolean;
+  news_lockout_active?: boolean;
   gate_state: "PASS" | "BLOCKED_BY_RISK";
   gate_reasons?: string[];
   data_health?: {
@@ -641,6 +648,47 @@ export default function System() {
                 />
                 Block Trading On Degraded Data
               </label>
+              <label className="text-[10px] flex items-center gap-2 col-span-2" style={{ color: C.muted }}>
+                <input
+                  type="checkbox"
+                  checked={Boolean(draft.newsLockoutActive)}
+                  onChange={(e) => setDraft({ ...draft, newsLockoutActive: e.target.checked })}
+                  className="accent-red-400"
+                />
+                News Lockout Active (block new trades)
+              </label>
+              <div className="col-span-2 mt-1">
+                <MicroLabel>Session Allowlist</MicroLabel>
+                <div className="mt-2 flex flex-wrap gap-3 text-[10px]" style={{ color: C.muted }}>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(draft.allowAsianSession)}
+                      onChange={(e) => setDraft({ ...draft, allowAsianSession: e.target.checked })}
+                      className="accent-emerald-400"
+                    />
+                    Asian
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(draft.allowLondonSession)}
+                      onChange={(e) => setDraft({ ...draft, allowLondonSession: e.target.checked })}
+                      className="accent-emerald-400"
+                    />
+                    London
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(draft.allowNySession)}
+                      onChange={(e) => setDraft({ ...draft, allowNySession: e.target.checked })}
+                      className="accent-emerald-400"
+                    />
+                    New York
+                  </label>
+                </div>
+              </div>
             </div>
           ) : (
             <div className="text-xs" style={{ color: C.muted }}>
@@ -704,6 +752,9 @@ export default function System() {
               Data health: {liveRisk.data_health.healthy ? "healthy" : "degraded"} · bar age {formatDurationMs(liveRisk.data_health.latestBarAgeMs ?? 0)}
             </div>
           )}
+          <div className="mt-3 text-[10px]" style={{ color: C.muted }}>
+            Session: {liveRisk?.active_session ?? "n/a"} · {liveRisk?.session_allowed === false ? "blocked" : "allowed"} · News lockout: {liveRisk?.news_lockout_active ? "on" : "off"}
+          </div>
         </div>
 
         <div className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
