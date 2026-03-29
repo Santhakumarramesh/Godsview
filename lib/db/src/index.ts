@@ -1,30 +1,33 @@
-/**
- * Smart database driver: uses PostgreSQL if DATABASE_URL is set,
- * otherwise falls back to PGlite (in-process WASM PostgreSQL).
- */
 import * as schema from "./schema";
 
+/**
+ * Smart DB driver selection:
+ * - If DATABASE_URL is set → use real PostgreSQL (Replit, Neon, etc.)
+ * - If DATABASE_URL is empty/missing → use PGlite (in-process, zero setup)
+ *
+ * PGlite auto-creates tables on first run.
+ */
+
 let db: any;
-let pool: any = null;
+let pool: any = { end: async () => {} };
 
-const DATABASE_URL = process.env.DATABASE_URL?.trim();
+const dbUrl = process.env.DATABASE_URL?.trim();
 
-if (DATABASE_URL) {
-  // ── PostgreSQL mode ──
+if (dbUrl) {
   const { drizzle } = await import("drizzle-orm/node-postgres");
   const pg = await import("pg");
-  const { Pool } = pg.default;
-  pool = new Pool({ connectionString: DATABASE_URL });
+  const { Pool } = pg.default ?? pg;
+  pool = new Pool({ connectionString: dbUrl });
   db = drizzle(pool, { schema });
   console.log("[db] Connected to PostgreSQL");
 } else {
-  // ── PGlite mode (zero-setup, in-process) ──
-  const { PGlite } = await import("@electric-sql/pglite");
   const { drizzle } = await import("drizzle-orm/pglite");
-  const pglite = new PGlite();
+  const { PGlite } = await import("@electric-sql/pglite");
+  const dataDir = process.env.PGLITE_DATA_DIR?.trim() || undefined;
+  const client = new PGlite(dataDir);
 
-  // Auto-create tables matching the Drizzle schema
-  await pglite.exec(`
+  // Auto-create tables for PGlite on first run
+  await client.exec(`
     CREATE TABLE IF NOT EXISTS signals (
       id SERIAL PRIMARY KEY,
       instrument TEXT NOT NULL,
@@ -43,10 +46,9 @@ if (DATABASE_URL) {
       take_profit NUMERIC(12,4),
       session TEXT,
       regime TEXT,
-      news_lockout BOOLEAN NOT NULL DEFAULT FALSE,
+      news_lockout BOOLEAN NOT NULL DEFAULT false,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
-
     CREATE TABLE IF NOT EXISTS trades (
       id SERIAL PRIMARY KEY,
       signal_id INTEGER,
@@ -71,7 +73,6 @@ if (DATABASE_URL) {
       exit_time TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
-
     CREATE TABLE IF NOT EXISTS market_bars (
       id SERIAL PRIMARY KEY,
       symbol TEXT NOT NULL,
@@ -85,7 +86,6 @@ if (DATABASE_URL) {
       vwap NUMERIC(14,6),
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
-
     CREATE TABLE IF NOT EXISTS accuracy_results (
       id SERIAL PRIMARY KEY,
       symbol TEXT NOT NULL,
@@ -106,12 +106,24 @@ if (DATABASE_URL) {
       direction TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    CREATE TABLE IF NOT EXISTS audit_events (
+      id SERIAL PRIMARY KEY,
+      event_type TEXT NOT NULL,
+      decision_state TEXT,
+      system_mode TEXT,
+      instrument TEXT,
+      setup_type TEXT,
+      symbol TEXT,
+      actor TEXT NOT NULL DEFAULT 'system',
+      reason TEXT,
+      payload_json TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
   `);
 
-  db = drizzle(pglite, { schema });
+  db = drizzle(client, { schema });
   console.log("[db] Using PGlite (in-process) — tables auto-created");
 }
 
 export { db, pool };
 export * from "./schema";
-
