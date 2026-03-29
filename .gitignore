@@ -47,3 +47,9 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Local secrets / accidental nested workspace copy
+.env
+.env.*
+!.env.example
+Godsview/
