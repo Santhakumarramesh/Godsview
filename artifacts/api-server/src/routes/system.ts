@@ -63,6 +63,11 @@ function parseIntSafe(value: unknown, fallback = 0): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function asRecord(value: unknown): JsonRecord | null {
+  if (typeof value === "object" && value !== null) return value as JsonRecord;
+  return null;
+}
+
 function toTupleReasonList(value: unknown): Array<{ reason: string; count: number }> {
   if (!Array.isArray(value)) return [];
   return value
@@ -996,6 +1001,126 @@ router.get("/system/governance/overview", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to fetch governance overview");
     res.status(500).json({ error: "governance_overview_failed", message: "Failed to fetch governance overview" });
+  }
+});
+
+// ─── GET /api/system/pipeline/latest — latest staged decision trace ─────────
+router.get("/system/pipeline/latest", async (req, res) => {
+  try {
+    const [orchestratorArtifact, reviewArtifact] = await Promise.all([
+      readJsonArtifact("latest_orchestrator_run.json"),
+      readJsonArtifact("latest_review_snapshot.json"),
+    ]);
+
+    const orchestrator = orchestratorArtifact.data;
+    const reviewSnapshot = reviewArtifact.data;
+    const pipeline = asRecord(orchestrator?.pipeline) ?? {};
+    const data = asRecord(orchestrator?.data) ?? {};
+    const signal = asRecord(data.signal) ?? {};
+    const scoring = asRecord(data.scoring) ?? {};
+    const reasoning = asRecord(data.reasoning) ?? {};
+    const hardGates = asRecord(data.hard_gates) ?? {};
+    const risk = asRecord(data.risk) ?? {};
+    const execution = asRecord(data.execution) ?? {};
+    const monitor = asRecord(data.monitor) ?? {};
+    const stageOrder = [
+      { id: "market_data_news_sentiment", label: "Market Data + News + Sentiment" },
+      { id: "hard_gates", label: "Hard Gates" },
+      { id: "setup_engine", label: "Setup Engine" },
+      { id: "scoring_engine", label: "Scoring Engine" },
+      { id: "ai_reasoner", label: "AI Reasoner" },
+      { id: "risk_policy_engine", label: "Risk Policy Engine" },
+      { id: "approval_or_execution", label: "Human Approval or Paper Execution" },
+      { id: "journal_memory_review", label: "Journal + Memory + Review" },
+    ];
+    const stages = stageOrder.map(({ id, label }) => {
+      const raw = asRecord(pipeline[id]) ?? {};
+      const status = String(raw.status ?? "unknown");
+      return {
+        id,
+        label,
+        status,
+        details: raw,
+      };
+    });
+    const failedStageIds = stages
+      .filter((stage) => {
+        const normalized = stage.status.toLowerCase();
+        return ["fail", "failed", "blocked", "error"].includes(normalized);
+      })
+      .map((stage) => stage.id);
+
+    res.json({
+      has_data: orchestratorArtifact.exists,
+      generated_at: String(orchestrator?.generated_at ?? ""),
+      symbol: String(orchestrator?.symbol ?? ""),
+      live: Boolean(orchestrator?.live ?? false),
+      dry_run: Boolean(orchestrator?.dry_run ?? true),
+      human_approval: Boolean(orchestrator?.human_approval ?? false),
+      blocked: Boolean(orchestrator?.blocked ?? false),
+      block_reason: String(orchestrator?.block_reason ?? ""),
+      errors: Array.isArray(orchestrator?.errors) ? orchestrator?.errors : [],
+      failed_stages: failedStageIds,
+      stages,
+      summary: {
+        signal: {
+          action: String(signal.action ?? "skip"),
+          setup: String(signal.setup ?? "unknown"),
+          confidence: Number(parseNum(signal.confidence, 0).toFixed(6)),
+          close_price: Number(parseNum(signal.close_price, 0).toFixed(6)),
+        },
+        hard_gates: {
+          pass: Boolean(hardGates.pass ?? false),
+          failed_reasons: Array.isArray(hardGates.failed_reasons) ? hardGates.failed_reasons : [],
+          pass_ratio: Number(parseNum(hardGates.pass_ratio, 0).toFixed(6)),
+        },
+        scoring: {
+          pass: Boolean(scoring.pass ?? false),
+          final_score: Number(parseNum(scoring.final_score, 0).toFixed(6)),
+          grade: String(scoring.grade ?? "C"),
+          reasons: Array.isArray(scoring.reasons) ? scoring.reasons : [],
+        },
+        reasoning: {
+          approved: Boolean(reasoning.approved ?? false),
+          final_action: String(reasoning.final_action ?? "skip"),
+          final_score: Number(parseNum(reasoning.final_score, 0).toFixed(6)),
+          reasons: Array.isArray(reasoning.reasons) ? reasoning.reasons : [],
+          challenge_points: Array.isArray(reasoning.challenge_points) ? reasoning.challenge_points : [],
+        },
+        risk: {
+          allowed: Boolean(risk.allowed ?? false),
+          reason: String(risk.reason ?? ""),
+          qty: parseIntSafe(risk.qty, 0),
+        },
+        execution: {
+          status: String(execution.status ?? "unknown"),
+          side: String(execution.side ?? ""),
+          qty: parseIntSafe(execution.qty, 0),
+          order_id: String(execution.order_id ?? ""),
+        },
+        monitor: {
+          recorded_at: String(monitor.recorded_at ?? ""),
+          trade_outcome: String(monitor.trade_outcome ?? ""),
+        },
+      },
+      review_snapshot: reviewSnapshot,
+      sources: {
+        orchestrator: {
+          exists: orchestratorArtifact.exists,
+          path: orchestratorArtifact.path,
+          error: orchestratorArtifact.error,
+        },
+        review_snapshot: {
+          exists: reviewArtifact.exists,
+          path: reviewArtifact.path,
+          error: reviewArtifact.error,
+        },
+      },
+      fetched_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch latest pipeline trace");
+    res.status(500).json({ error: "pipeline_trace_failed", message: "Failed to fetch latest pipeline trace" });
   }
 });
 

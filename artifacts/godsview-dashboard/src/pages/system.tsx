@@ -267,6 +267,80 @@ type GovernanceOverview = {
     };
   };
 };
+type PipelineStage = {
+  id: string;
+  label: string;
+  status: string;
+  details: Record<string, unknown>;
+};
+type PipelineTraceResponse = {
+  has_data: boolean;
+  generated_at: string;
+  symbol: string;
+  live: boolean;
+  dry_run: boolean;
+  human_approval: boolean;
+  blocked: boolean;
+  block_reason: string;
+  errors: string[];
+  failed_stages: string[];
+  stages: PipelineStage[];
+  summary: {
+    signal: {
+      action: string;
+      setup: string;
+      confidence: number;
+      close_price: number;
+    };
+    hard_gates: {
+      pass: boolean;
+      failed_reasons: string[];
+      pass_ratio: number;
+    };
+    scoring: {
+      pass: boolean;
+      final_score: number;
+      grade: string;
+      reasons: string[];
+    };
+    reasoning: {
+      approved: boolean;
+      final_action: string;
+      final_score: number;
+      reasons: string[];
+      challenge_points: string[];
+    };
+    risk: {
+      allowed: boolean;
+      reason: string;
+      qty: number;
+    };
+    execution: {
+      status: string;
+      side: string;
+      qty: number;
+      order_id: string;
+    };
+    monitor: {
+      recorded_at: string;
+      trade_outcome: string;
+    };
+  };
+  review_snapshot: Record<string, unknown> | null;
+  sources: {
+    orchestrator: {
+      exists: boolean;
+      path: string;
+      error: string | null;
+    };
+    review_snapshot: {
+      exists: boolean;
+      path: string;
+      error: string | null;
+    };
+  };
+  fetched_at: string;
+};
 
 const LAYER_LABELS: Record<string, string> = {
   data_feed: "Data Feed (Alpaca)",
@@ -420,6 +494,16 @@ export default function System() {
     refetchInterval: 45_000,
     staleTime: 30_000,
   });
+  const { data: pipelineTrace } = useQuery<PipelineTraceResponse>({
+    queryKey: ["system-pipeline-trace"],
+    queryFn: async () => {
+      const r = await fetch("/api/system/pipeline/latest");
+      if (!r.ok) throw new Error(`pipeline trace fetch failed: ${r.status}`);
+      return r.json();
+    },
+    refetchInterval: 20_000,
+    staleTime: 12_000,
+  });
   const [draft, setDraft] = useState<RiskConfig | null>(null);
   useEffect(() => {
     if (riskSnapshot && !draft) {
@@ -441,6 +525,7 @@ export default function System() {
       queryClient.invalidateQueries({ queryKey: ["proof-by-regime"] });
       queryClient.invalidateQueries({ queryKey: ["proof-oos-vs-is"] });
       queryClient.invalidateQueries({ queryKey: ["system-governance-overview"] });
+      queryClient.invalidateQueries({ queryKey: ["system-pipeline-trace"] });
     },
   });
   const toggleKillSwitchMutation = useMutation({
@@ -459,6 +544,7 @@ export default function System() {
       queryClient.invalidateQueries({ queryKey: ["live-risk-status"] });
       queryClient.invalidateQueries({ queryKey: ["system-audit-summary"] });
       queryClient.invalidateQueries({ queryKey: ["system-governance-overview"] });
+      queryClient.invalidateQueries({ queryKey: ["system-pipeline-trace"] });
     },
   });
   const saveRiskMutation = useMutation({
@@ -476,6 +562,7 @@ export default function System() {
       queryClient.invalidateQueries({ queryKey: ["live-risk-status"] });
       queryClient.invalidateQueries({ queryKey: ["system-audit-summary"] });
       queryClient.invalidateQueries({ queryKey: ["system-governance-overview"] });
+      queryClient.invalidateQueries({ queryKey: ["system-pipeline-trace"] });
     },
   });
   const resetRuntimeMutation = useMutation({
@@ -489,6 +576,7 @@ export default function System() {
       queryClient.invalidateQueries({ queryKey: ["live-risk-status"] });
       queryClient.invalidateQueries({ queryKey: ["system-audit-summary"] });
       queryClient.invalidateQueries({ queryKey: ["system-governance-overview"] });
+      queryClient.invalidateQueries({ queryKey: ["system-pipeline-trace"] });
     },
   });
 
@@ -786,6 +874,118 @@ export default function System() {
         ) : (
           <div className="text-xs" style={{ color: C.muted }}>
             Governance overview unavailable.
+          </div>
+        )}
+      </div>
+
+      {/* Latest Pipeline Trace */}
+      <div className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined" style={{ fontSize: "14px", color: pipelineTrace?.blocked ? "#fbbf24" : C.primary }}>route</span>
+            <MicroLabel>Latest Pipeline Trace</MicroLabel>
+            <StatusPill status={pipelineTrace && !pipelineTrace.blocked && (pipelineTrace.failed_stages?.length ?? 0) === 0 ? "live" : "degraded"} />
+          </div>
+          <span style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: C.outlineVar }}>
+            {pipelineTrace?.generated_at ? format(new Date(pipelineTrace.generated_at), "HH:mm:ss") : "n/a"}
+          </span>
+        </div>
+        {pipelineTrace?.has_data ? (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+              <div className="rounded p-2.5" style={{ backgroundColor: "#0e0e0f", border: `1px solid ${C.border}` }}>
+                <MicroLabel>Symbol</MicroLabel>
+                <div style={{ marginTop: "6px", fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: C.secondary }}>
+                  {pipelineTrace.symbol || "n/a"}
+                </div>
+              </div>
+              <div className="rounded p-2.5" style={{ backgroundColor: "#0e0e0f", border: `1px solid ${C.border}` }}>
+                <MicroLabel>Execution Mode</MicroLabel>
+                <div style={{ marginTop: "6px", fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: pipelineTrace.live ? "#fbbf24" : C.primary }}>
+                  {pipelineTrace.live ? "LIVE" : "PAPER"}
+                </div>
+              </div>
+              <div className="rounded p-2.5" style={{ backgroundColor: "#0e0e0f", border: `1px solid ${C.border}` }}>
+                <MicroLabel>Score / Grade</MicroLabel>
+                <div style={{ marginTop: "6px", fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: pipelineTrace.summary.scoring.pass ? C.primary : C.tertiary }}>
+                  {pipelineTrace.summary.scoring.final_score.toFixed(3)} · {pipelineTrace.summary.scoring.grade}
+                </div>
+              </div>
+              <div className="rounded p-2.5" style={{ backgroundColor: "#0e0e0f", border: `1px solid ${C.border}` }}>
+                <MicroLabel>Execution Status</MicroLabel>
+                <div style={{ marginTop: "6px", fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: pipelineTrace.summary.execution.status === "submitted" || pipelineTrace.summary.execution.status === "simulated" ? C.primary : "#fbbf24" }}>
+                  {pipelineTrace.summary.execution.status}
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 rounded p-3" style={{ backgroundColor: "#0f0f10", border: `1px solid ${C.border}` }}>
+              <div className="flex items-center justify-between mb-2">
+                <MicroLabel>Stage Outcomes</MicroLabel>
+                <span style={{ fontSize: "9px", color: C.outlineVar, fontFamily: "JetBrains Mono, monospace" }}>
+                  failed: {pipelineTrace.failed_stages.length}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-1.5">
+                {pipelineTrace.stages.map((stage) => {
+                  const normalized = stage.status.toLowerCase();
+                  const status = normalized === "pass" || normalized === "submitted" || normalized === "simulated"
+                    ? "live"
+                    : normalized === "unknown"
+                    ? "offline"
+                    : "degraded";
+                  return (
+                    <div key={stage.id} className="rounded px-2 py-1.5 flex items-center justify-between" style={{ border: `1px solid ${C.border}`, backgroundColor: "#131314" }}>
+                      <div>
+                        <div style={{ fontSize: "10px", fontFamily: "Space Grotesk", fontWeight: 700 }}>{stage.label}</div>
+                        <div style={{ fontSize: "9px", color: C.muted, fontFamily: "JetBrains Mono, monospace" }}>
+                          {stage.status}
+                        </div>
+                      </div>
+                      <StatusPill status={status} />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 mt-3">
+              <div className="rounded p-3" style={{ backgroundColor: "#0f0f10", border: `1px solid ${C.border}` }}>
+                <MicroLabel>Decision Summary</MicroLabel>
+                <div className="mt-2 text-[10px] font-mono" style={{ color: C.muted }}>
+                  {pipelineTrace.summary.signal.action} · {pipelineTrace.summary.signal.setup} · conf {(pipelineTrace.summary.signal.confidence * 100).toFixed(1)}%
+                </div>
+                <div className="mt-1 text-[10px] font-mono" style={{ color: pipelineTrace.summary.reasoning.approved ? C.primary : C.tertiary }}>
+                  reasoner: {pipelineTrace.summary.reasoning.final_action} · score {pipelineTrace.summary.reasoning.final_score.toFixed(3)}
+                </div>
+                <div className="mt-1 text-[10px] font-mono" style={{ color: pipelineTrace.summary.risk.allowed ? C.primary : C.tertiary }}>
+                  risk: {pipelineTrace.summary.risk.allowed ? "allowed" : "blocked"} · qty {pipelineTrace.summary.risk.qty}
+                </div>
+                {pipelineTrace.block_reason && (
+                  <div className="mt-1 text-[10px] font-mono" style={{ color: "#fbbf24" }}>
+                    block reason: {pipelineTrace.block_reason}
+                  </div>
+                )}
+              </div>
+              <div className="rounded p-3" style={{ backgroundColor: "#0f0f10", border: `1px solid ${C.border}` }}>
+                <MicroLabel>Trace Sources</MicroLabel>
+                <div className="space-y-1.5 mt-2">
+                  {Object.entries(pipelineTrace.sources).map(([key, source]) => (
+                    <div key={key} className="rounded px-2 py-1.5 flex items-center justify-between" style={{ border: `1px solid ${C.border}`, backgroundColor: "#131314" }}>
+                      <span style={{ fontSize: "10px", fontFamily: "Space Grotesk", fontWeight: 700 }}>{key.replace(/_/g, " ")}</span>
+                      <StatusPill status={source.exists ? "live" : "offline"} />
+                    </div>
+                  ))}
+                </div>
+                {(pipelineTrace.summary.reasoning.challenge_points?.length ?? 0) > 0 && (
+                  <div className="mt-2 text-[9px]" style={{ color: C.muted }}>
+                    challenge points: {pipelineTrace.summary.reasoning.challenge_points.join(", ")}
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="text-xs" style={{ color: C.muted }}>
+            Pipeline trace unavailable. Run orchestrator to generate `latest_orchestrator_run.json`.
           </div>
         )}
       </div>
