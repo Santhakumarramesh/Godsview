@@ -3,6 +3,7 @@ import { db, accuracyResultsTable, auditEventsTable, signalsTable, tradesTable }
 import { and, desc, eq, gte, isNotNull, or, sql } from "drizzle-orm";
 import { readFile } from "node:fs/promises";
 import * as path from "node:path";
+import { StockBrainStateSchema, type StockBrainState } from "@workspace/common-types";
 import { getTypedPositions, getAccount, hasValidTradingKey, isBrokerKey } from "../lib/alpaca";
 import { getModelDiagnostics, getModelStatus, retrainModel } from "../lib/ml_model";
 import { resolveSystemMode, canWriteOrders, isLiveMode } from "@workspace/strategy-core";
@@ -58,6 +59,11 @@ function parseNum(value: unknown, fallback = 0): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function parseNumOrNull(value: unknown): number | null {
+  const parsed = Number.parseFloat(String(value ?? ""));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function parseIntSafe(value: unknown, fallback = 0): number {
   const parsed = Number.parseInt(String(value ?? ""), 10);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -72,6 +78,37 @@ function parseIsoToMs(value: unknown): number | null {
   if (typeof value !== "string" || value.trim() === "") return null;
   const ts = Date.parse(value);
   return Number.isFinite(ts) ? ts : null;
+}
+
+function clamp01(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(1, Math.max(0, value));
+}
+
+function normalizeSession(raw: unknown): "premarket" | "open" | "midday" | "power_hour" | "after_hours" | "closed" {
+  const key = String(raw ?? "").toLowerCase();
+  if (key.includes("open")) return "open";
+  if (key.includes("power")) return "power_hour";
+  if (key.includes("pre")) return "premarket";
+  if (key.includes("after")) return "after_hours";
+  if (key.includes("mid")) return "midday";
+  return "closed";
+}
+
+function normalizeRegime(raw: unknown): "risk_on" | "risk_off" | "neutral" | "high_vol" | "low_vol" {
+  const key = String(raw ?? "").toLowerCase();
+  if (key.includes("bull") || key.includes("trend")) return "risk_on";
+  if (key.includes("bear")) return "risk_off";
+  if (key.includes("high")) return "high_vol";
+  if (key.includes("low")) return "low_vol";
+  return "neutral";
+}
+
+function toReasoningVerdict(rawAction: string, approved: boolean): "strong_long" | "watch_long" | "strong_short" | "watch_short" | "wait" | "block" {
+  if (!approved) return "block";
+  if (rawAction === "buy") return "watch_long";
+  if (rawAction === "sell") return "watch_short";
+  return "wait";
 }
 
 function toTupleReasonList(value: unknown): Array<{ reason: string; count: number }> {
@@ -1139,6 +1176,278 @@ router.get("/system/pipeline/latest", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to fetch latest pipeline trace");
     res.status(500).json({ error: "pipeline_trace_failed", message: "Failed to fetch latest pipeline trace" });
+  }
+});
+
+// ─── GET /api/system/consciousness/latest — normalized stock brain snapshot ─
+router.get("/system/consciousness/latest", async (req, res) => {
+  try {
+    const orchestratorArtifact = await readJsonArtifact("latest_orchestrator_run.json");
+    const orchestrator = orchestratorArtifact.data;
+    if (!orchestratorArtifact.exists || !orchestrator) {
+      res.json({
+        has_data: false,
+        generated_at: "",
+        board: [],
+        source: {
+          exists: orchestratorArtifact.exists,
+          path: orchestratorArtifact.path,
+          error: orchestratorArtifact.error,
+        },
+        fetched_at: new Date().toISOString(),
+      });
+      return;
+    }
+
+    const data = asRecord(orchestrator.data) ?? {};
+    const signal = asRecord(data.signal) ?? {};
+    const scoring = asRecord(data.scoring) ?? asRecord(signal.scoring) ?? {};
+    const scoringComponents = asRecord(scoring.components) ?? {};
+    const hardGates = asRecord(data.hard_gates) ?? {};
+    const session = asRecord(data.session) ?? {};
+    const market = asRecord(data.market) ?? {};
+    const sentiment = asRecord(data.sentiment) ?? {};
+    const macro = asRecord(data.macro) ?? {};
+    const reasoning = asRecord(data.reasoning) ?? {};
+    const risk = asRecord(data.risk) ?? {};
+    const monitor = asRecord(data.monitor) ?? {};
+    const learning = asRecord(monitor.learning) ?? {};
+
+    const symbol = String(orchestrator.symbol ?? signal.symbol ?? monitor.symbol ?? "UNKNOWN").toUpperCase();
+    const generatedAt = String(orchestrator.generated_at ?? new Date().toISOString());
+    const signalAction = String(signal.action ?? "skip").toLowerCase();
+    const decisionDirection = signalAction === "buy" ? "long" : signalAction === "sell" ? "short" : "none";
+    const sessionAllowed = Boolean(session.allowed ?? hardGates.session_allowed ?? false);
+    const macroBlackout = Boolean(macro.blackout ?? false);
+
+    const structureScore = clamp01(parseNum(scoringComponents.structure_score, 0));
+    const orderflowScore = clamp01(parseNum(hardGates.liquidity_score, parseNum(scoringComponents.setup_pattern_quality, 0)));
+    const sentimentScore = parseNum(sentiment.sentiment_score, 0);
+    const contextScore = clamp01(
+      (sessionAllowed ? 0.45 : 0.15) +
+        (macroBlackout ? 0.0 : 0.25) +
+        (1 - clamp01(Math.abs(sentimentScore))) * 0.3,
+    );
+    const memoryWinRate = clamp01(parseNum(learning.win_rate, 0));
+    const memorySamples = parseIntSafe(learning.trades, 0);
+    const memoryScore = memorySamples > 0 ? memoryWinRate : 0.25;
+    const reasoningScore = clamp01(parseNum(reasoning.final_score, parseNum(scoring.final_score, 0)));
+    const riskScore = clamp01(parseNum(scoring.risk_score, 0.5));
+    const attentionScore = clamp01(
+      structureScore * 0.30 +
+        orderflowScore * 0.22 +
+        contextScore * 0.12 +
+        memoryScore * 0.16 +
+        reasoningScore * 0.10 +
+        riskScore * 0.10,
+    );
+
+    const tradeAllowed = Boolean(risk.allowed ?? false);
+    const blockReasons = Array.isArray(reasoning.reasons)
+      ? reasoning.reasons.map((item) => String(item))
+      : orchestrator.blocked
+      ? [String(orchestrator.block_reason ?? "pipeline_blocked")]
+      : [];
+    const finalState: "allow" | "watch" | "block" = tradeAllowed && signalAction !== "skip" ? "allow" : orchestrator.blocked ? "block" : "watch";
+
+    const stockBrainCandidate = {
+      symbol,
+      ts: generatedAt,
+      session: normalizeSession(session.session),
+      timeframes: {
+        "1m": {
+          symbol,
+          timeframe: "1m",
+          ts: generatedAt,
+          bias: parseNum(market.trend_20, 0) >= 0 ? "bullish" : "bearish",
+          confidence: clamp01(parseNum(signal.confidence, 0)),
+          trendStrength: clamp01(Math.abs(parseNum(market.trend_20, 0)) * 5),
+          momentumScore: clamp01(Math.abs(parseNum(market.trend_20, 0)) * 8),
+          structureScore,
+          volatilityScore: clamp01(1 - parseNum(market.volatility_100, 0)),
+          invalidationLevel: null,
+          activeZone: null,
+          activeSetup: String(signal.setup ?? scoringComponents.setup ?? "none"),
+        },
+      },
+      tick: {
+        symbol,
+        ts: generatedAt,
+        lastPrice: parseNum(market.last_price, parseNum(signal.close_price, 0)),
+        bid: parseNum(market.last_price, parseNum(signal.close_price, 0)),
+        ask: parseNum(market.last_price, parseNum(signal.close_price, 0)),
+        spread: parseNum(hardGates.spread_quality_score, 0),
+        tickVelocity: clamp01(parseNum(market.volatility_100, 0) * 15),
+        aggressionScore: orderflowScore,
+        burstProbability: clamp01(parseNum(scoringComponents.model_confidence, 0)),
+        reversalProbability: clamp01(1 - parseNum(scoringComponents.model_confidence, 0)),
+        quoteImbalance: 0,
+        microVolatility: clamp01(parseNum(market.volatility_100, 0) * 10),
+      },
+      structure: {
+        symbol,
+        ts: generatedAt,
+        htfBias: parseNum(market.trend_20, 0) >= 0 ? "bullish" : "bearish",
+        itfBias: parseNum(market.trend_20, 0) >= 0 ? "bullish" : "bearish",
+        ltfBias: signalAction === "buy" ? "bullish_pullback" : signalAction === "sell" ? "bearish_pullback" : "neutral",
+        bosCount: 0,
+        chochDetected: false,
+        liquiditySweepDetected: String(signal.setup ?? "").toLowerCase().includes("sweep"),
+        sweepSide: "none",
+        orderBlockType: signalAction === "buy" ? "bullish" : signalAction === "sell" ? "bearish" : "none",
+        orderBlockTimeframe: null,
+        fairValueGapDetected: false,
+        premiumDiscountState: "equilibrium",
+        structureScore,
+        setupFamily: String(signal.setup ?? scoringComponents.setup ?? "none").toLowerCase().includes("sweep")
+          ? "sweep_reclaim"
+          : String(signal.setup ?? scoringComponents.setup ?? "none").toLowerCase().includes("continuation")
+          ? "breakout_continuation"
+          : "none",
+      },
+      orderflow: {
+        symbol,
+        ts: generatedAt,
+        deltaScore: orderflowScore,
+        cvdSlope: parseNum(market.trend_20, 0),
+        cvdTrend: parseNum(market.trend_20, 0) > 0 ? "up" : parseNum(market.trend_20, 0) < 0 ? "down" : "flat",
+        aggressionBuyScore: signalAction === "buy" ? orderflowScore : clamp01(orderflowScore * 0.5),
+        aggressionSellScore: signalAction === "sell" ? orderflowScore : clamp01(orderflowScore * 0.5),
+        imbalanceScore: clamp01(parseNum(hardGates.pass_ratio, 0)),
+        absorptionScore: clamp01(parseNum(scoringComponents.setup_pattern_quality, 0)),
+        exhaustionScore: clamp01(1 - parseNum(scoringComponents.model_confidence, 0)),
+        orderflowScore,
+        supportiveDirection: decisionDirection,
+      },
+      context: {
+        symbol,
+        ts: generatedAt,
+        session: normalizeSession(session.session),
+        marketRegime: normalizeRegime(market.regime),
+        sectorStrength: 0,
+        indexAlignmentScore: clamp01(parseNum(hardGates.pass_ratio, 0)),
+        earningsProximityMinutes: null,
+        macroPressure: macroBlackout ? "headwind" : "neutral",
+        newsHeatScore: clamp01(Math.abs(sentimentScore)),
+        newsSentimentScore: sentimentScore,
+        contextScore,
+      },
+      memory: {
+        symbol,
+        ts: generatedAt,
+        closestSetupCluster: String(signal.setup ?? scoringComponents.setup ?? "unknown"),
+        similarityScore: memorySamples > 0 ? clamp01(0.5 + memoryWinRate * 0.5) : 0.25,
+        historicalWinRate: memorySamples > 0 ? memoryWinRate : null,
+        historicalProfitFactor: null,
+        avgMAE: null,
+        avgMFE: null,
+        sampleSize: memorySamples,
+        personalityTag: "unknown",
+        memoryScore,
+      },
+      reasoning: {
+        symbol,
+        ts: generatedAt,
+        verdict: toReasoningVerdict(String(reasoning.final_action ?? signalAction), Boolean(reasoning.approved ?? !orchestrator.blocked)),
+        confidence: clamp01(parseNum(reasoning.confidence, parseNum(signal.confidence, 0))),
+        thesis: Array.isArray(reasoning.reasons) ? reasoning.reasons.map((item) => String(item)).join("; ") : "no_reasoning_output",
+        contradictions: Array.isArray(reasoning.challenge_points) ? reasoning.challenge_points.map((item) => String(item)) : [],
+        triggerConditions: signalAction === "buy" || signalAction === "sell" ? ["hard_gates_pass", "setup_valid", "risk_allowed"] : [],
+        blockConditions: blockReasons,
+        recommendedDirection: decisionDirection,
+        recommendedEntryType: signalAction === "skip" ? "none" : "market",
+        reasoningScore,
+      },
+      risk: {
+        symbol,
+        ts: generatedAt,
+        tradeAllowed,
+        blockReasons,
+        sizingMultiplier: tradeAllowed ? 1 : 0,
+        maxRiskDollars: parseNum(risk.account_equity, 0) * 0.01,
+        stopDistance: null,
+        targetDistance: null,
+        slippageRiskScore: clamp01(1 - parseNum(hardGates.spread_quality_score, 0)),
+        exposureRiskScore: clamp01(1 - riskScore),
+        drawdownGuardActive: !tradeAllowed && blockReasons.includes("risk_blocked"),
+        riskScore,
+      },
+      finalDecision: {
+        signalId: String(orchestrator.generated_at ?? generatedAt),
+        symbol,
+        ts: generatedAt,
+        direction: decisionDirection,
+        state: finalState,
+        setupFamily: String(signal.setup ?? scoringComponents.setup ?? "none"),
+        timeframe: "1m",
+        entryPrice: parseNumOrNull(signal.close_price),
+        stopPrice: null,
+        targetPrice: null,
+        confidence: clamp01(parseNum(signal.confidence, 0)),
+        attentionScore,
+        layerScores: {
+          structure: structureScore,
+          orderflow: orderflowScore,
+          context: contextScore,
+          memory: memoryScore,
+          reasoning: reasoningScore,
+          risk: riskScore,
+        },
+        explanation: Array.isArray(scoring.reasons) ? scoring.reasons.map((item) => String(item)).join("; ") : "no_explanation",
+        tags: [
+          `setup:${String(signal.setup ?? "none")}`,
+          `regime:${String(market.regime ?? "unknown")}`,
+          `session:${String(session.session ?? "OFF")}`,
+        ],
+      },
+    };
+
+    // Normalize with shared contracts so UI and backend agree on shapes.
+    const brainResult = StockBrainStateSchema.safeParse(stockBrainCandidate);
+    if (!brainResult.success) {
+      req.log.warn({ issues: brainResult.error.issues }, "Consciousness state validation failed");
+      res.status(500).json({
+        error: "consciousness_validation_failed",
+        message: "Failed to normalize latest stock brain state",
+      });
+      return;
+    }
+    const stockBrain: StockBrainState = brainResult.data;
+
+    const board = [
+      {
+        symbol: stockBrain.symbol,
+        attention_score: stockBrain.finalDecision?.attentionScore ?? attentionScore,
+        readiness: stockBrain.finalDecision?.state ?? "watch",
+        setup_family: stockBrain.structure.setupFamily,
+        direction: stockBrain.finalDecision?.direction ?? "none",
+        structure_score: stockBrain.structure.structureScore,
+        orderflow_score: stockBrain.orderflow.orderflowScore,
+        context_score: stockBrain.context.contextScore,
+        memory_score: stockBrain.memory.memoryScore,
+        reasoning_score: stockBrain.reasoning?.reasoningScore ?? 0,
+        risk_score: stockBrain.risk.riskScore,
+        reasoning_verdict: stockBrain.reasoning?.verdict ?? "wait",
+        risk_state: stockBrain.risk.tradeAllowed ? "allowed" : "blocked",
+        block_reason: orchestrator.block_reason ? String(orchestrator.block_reason) : "",
+      },
+    ];
+
+    res.json({
+      has_data: true,
+      generated_at: generatedAt,
+      board,
+      stock_brain: stockBrain,
+      source: {
+        exists: orchestratorArtifact.exists,
+        path: orchestratorArtifact.path,
+        error: orchestratorArtifact.error,
+      },
+      fetched_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to build consciousness board snapshot");
+    res.status(500).json({ error: "consciousness_snapshot_failed", message: "Failed to fetch consciousness snapshot" });
   }
 });
 

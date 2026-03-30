@@ -341,6 +341,33 @@ type PipelineTraceResponse = {
   };
   fetched_at: string;
 };
+type ConsciousnessBoardRow = {
+  symbol: string;
+  attention_score: number;
+  readiness: "allow" | "watch" | "block";
+  setup_family: string;
+  direction: "long" | "short" | "none";
+  structure_score: number;
+  orderflow_score: number;
+  context_score: number;
+  memory_score: number;
+  reasoning_score: number;
+  risk_score: number;
+  reasoning_verdict: string;
+  risk_state: "allowed" | "blocked";
+  block_reason: string;
+};
+type ConsciousnessSnapshot = {
+  has_data: boolean;
+  generated_at: string;
+  board: ConsciousnessBoardRow[];
+  fetched_at: string;
+  source: {
+    exists: boolean;
+    path: string;
+    error: string | null;
+  };
+};
 
 const LAYER_LABELS: Record<string, string> = {
   data_feed: "Data Feed (Alpaca)",
@@ -504,6 +531,16 @@ export default function System() {
     refetchInterval: 20_000,
     staleTime: 12_000,
   });
+  const { data: consciousness } = useQuery<ConsciousnessSnapshot>({
+    queryKey: ["system-consciousness-latest"],
+    queryFn: async () => {
+      const r = await fetch("/api/system/consciousness/latest");
+      if (!r.ok) throw new Error(`consciousness snapshot fetch failed: ${r.status}`);
+      return r.json();
+    },
+    refetchInterval: 20_000,
+    staleTime: 12_000,
+  });
   const [draft, setDraft] = useState<RiskConfig | null>(null);
   useEffect(() => {
     if (riskSnapshot && !draft) {
@@ -526,6 +563,7 @@ export default function System() {
       queryClient.invalidateQueries({ queryKey: ["proof-oos-vs-is"] });
       queryClient.invalidateQueries({ queryKey: ["system-governance-overview"] });
       queryClient.invalidateQueries({ queryKey: ["system-pipeline-trace"] });
+      queryClient.invalidateQueries({ queryKey: ["system-consciousness-latest"] });
     },
   });
   const toggleKillSwitchMutation = useMutation({
@@ -545,6 +583,7 @@ export default function System() {
       queryClient.invalidateQueries({ queryKey: ["system-audit-summary"] });
       queryClient.invalidateQueries({ queryKey: ["system-governance-overview"] });
       queryClient.invalidateQueries({ queryKey: ["system-pipeline-trace"] });
+      queryClient.invalidateQueries({ queryKey: ["system-consciousness-latest"] });
     },
   });
   const saveRiskMutation = useMutation({
@@ -563,6 +602,7 @@ export default function System() {
       queryClient.invalidateQueries({ queryKey: ["system-audit-summary"] });
       queryClient.invalidateQueries({ queryKey: ["system-governance-overview"] });
       queryClient.invalidateQueries({ queryKey: ["system-pipeline-trace"] });
+      queryClient.invalidateQueries({ queryKey: ["system-consciousness-latest"] });
     },
   });
   const resetRuntimeMutation = useMutation({
@@ -577,6 +617,7 @@ export default function System() {
       queryClient.invalidateQueries({ queryKey: ["system-audit-summary"] });
       queryClient.invalidateQueries({ queryKey: ["system-governance-overview"] });
       queryClient.invalidateQueries({ queryKey: ["system-pipeline-trace"] });
+      queryClient.invalidateQueries({ queryKey: ["system-consciousness-latest"] });
     },
   });
 
@@ -986,6 +1027,80 @@ export default function System() {
         ) : (
           <div className="text-xs" style={{ color: C.muted }}>
             Pipeline trace unavailable. Run orchestrator to generate `latest_orchestrator_run.json`.
+          </div>
+        )}
+      </div>
+
+      {/* Consciousness Board */}
+      <div className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined" style={{ fontSize: "14px", color: C.secondary }}>psychology_alt</span>
+            <MicroLabel>Consciousness Board</MicroLabel>
+            <StatusPill status={consciousness?.has_data ? "live" : "offline"} />
+          </div>
+          <span style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: C.outlineVar }}>
+            {consciousness?.generated_at ? format(new Date(consciousness.generated_at), "HH:mm:ss") : "n/a"}
+          </span>
+        </div>
+        {consciousness?.has_data ? (
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+            {(consciousness.board ?? []).map((row) => {
+              const readinessColor = row.readiness === "allow" ? C.primary : row.readiness === "watch" ? "#fbbf24" : C.tertiary;
+              const directionColor = row.direction === "long" ? C.primary : row.direction === "short" ? C.tertiary : C.muted;
+              return (
+                <div key={row.symbol} className="rounded p-3" style={{ backgroundColor: "#0f0f10", border: `1px solid ${C.border}` }}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div style={{ fontSize: "10px", fontFamily: "Space Grotesk", fontWeight: 700 }}>{row.symbol}</div>
+                      <div style={{ fontSize: "9px", color: C.muted, fontFamily: "JetBrains Mono, monospace" }}>
+                        setup {row.setup_family} · verdict {row.reasoning_verdict}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: readinessColor }}>
+                        {row.readiness.toUpperCase()}
+                      </div>
+                      <div style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: directionColor }}>
+                        {row.direction}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5 mt-2">
+                    <div className="rounded px-2 py-1" style={{ border: `1px solid ${C.border}`, backgroundColor: "#131314" }}>
+                      <MicroLabel>Attention</MicroLabel>
+                      <div style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: C.secondary }}>
+                        {(row.attention_score * 100).toFixed(1)}%
+                      </div>
+                    </div>
+                    <div className="rounded px-2 py-1" style={{ border: `1px solid ${C.border}`, backgroundColor: "#131314" }}>
+                      <MicroLabel>Risk</MicroLabel>
+                      <div style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: row.risk_state === "allowed" ? C.primary : C.tertiary }}>
+                        {row.risk_state}
+                      </div>
+                    </div>
+                    <div className="rounded px-2 py-1" style={{ border: `1px solid ${C.border}`, backgroundColor: "#131314" }}>
+                      <MicroLabel>Scores</MicroLabel>
+                      <div style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: C.muted }}>
+                        S {row.structure_score.toFixed(2)} · O {row.orderflow_score.toFixed(2)}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-2 text-[9px]" style={{ color: C.muted, fontFamily: "JetBrains Mono, monospace" }}>
+                    Ctx {row.context_score.toFixed(2)} · Mem {row.memory_score.toFixed(2)} · Rsn {row.reasoning_score.toFixed(2)} · Risk {row.risk_score.toFixed(2)}
+                  </div>
+                  {row.block_reason && (
+                    <div className="mt-1 text-[9px]" style={{ color: "#fbbf24", fontFamily: "JetBrains Mono, monospace" }}>
+                      block: {row.block_reason}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="text-xs" style={{ color: C.muted }}>
+            Consciousness snapshot unavailable. Run orchestrator to generate `latest_orchestrator_run.json`.
           </div>
         )}
       </div>

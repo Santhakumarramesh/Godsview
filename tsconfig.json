@@ -4,6 +4,9 @@
   "files": [],
   "references": [
     {
+      "path": "./lib/common-types"
+    },
+    {
       "path": "./lib/strategy-core"
     },
     {
