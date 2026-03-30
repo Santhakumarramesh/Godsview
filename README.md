@@ -140,6 +140,8 @@ Detailed production architecture and phase plan:
 - [docs/market-ready-architecture.md](./docs/market-ready-architecture.md)
 - [docs/production-runbook.md](./docs/production-runbook.md)
 - [docs/brain-schema.md](./docs/brain-schema.md)
+- [docs/brain-structure-v2.md](./docs/brain-structure-v2.md)
+- [docs/massive-brain-v1-spec.md](./docs/massive-brain-v1-spec.md)
 
 ## OpenBB Research Integration
 
