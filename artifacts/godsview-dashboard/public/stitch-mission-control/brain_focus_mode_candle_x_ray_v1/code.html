@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>GodsView Brain - Candle X-Ray</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100;300;400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#adc6ff",
+                        "outline": "#8c909f",
+                        "on-tertiary-fixed": "#00201a",
+                        "tertiary-fixed-dim": "#00dfc1",
+                        "on-secondary-fixed": "#1b1b1d",
+                        "error": "#ffb4ab",
+                        "surface-variant": "#353436",
+                        "surface-dim": "#131314",
+                        "error-container": "#93000a",
+                        "surface-bright": "#3a393a",
+                        "on-secondary-container": "#b6b4b7",
+                        "on-background": "#e5e2e3",
+                        "secondary": "#c8c6c8",
+                        "surface-container-high": "#2a2a2b",
+                        "primary-fixed": "#d8e2ff",
+                        "on-tertiary-container": "#003028",
+                        "inverse-primary": "#005ac2",
+                        "surface": "#131314",
+                        "tertiary-fixed": "#26fedc",
+                        "secondary-container": "#474649",
+                        "on-secondary-fixed-variant": "#474649",
+                        "on-tertiary": "#00382f",
+                        "secondary-fixed": "#e4e2e4",
+                        "inverse-on-surface": "#313031",
+                        "on-secondary": "#303032",
+                        "on-primary-fixed": "#001a41",
+                        "on-error-container": "#ffdad6",
+                        "surface-container-low": "#1c1b1c",
+                        "on-tertiary-fixed-variant": "#005144",
+                        "background": "#131314",
+                        "tertiary-container": "#00a38d",
+                        "tertiary": "#00dfc1",
+                        "surface-container-lowest": "#0e0e0f",
+                        "surface-container": "#201f20",
+                        "inverse-surface": "#e5e2e3",
+                        "on-primary-container": "#00285d",
+                        "surface-tint": "#adc6ff",
+                        "on-primary": "#002e69",
+                        "primary-container": "#4c8eff",
+                        "on-surface-variant": "#c2c6d6",
+                        "on-primary-fixed-variant": "#004494",
+                        "primary-fixed-dim": "#adc6ff",
+                        "outline-variant": "#414754",
+                        "surface-container-highest": "#353436",
+                        "secondary-fixed-dim": "#c8c6c8",
+                        "on-surface": "#e5e2e3",
+                        "on-error": "#690005"
+                    },
+                    fontFamily: {
+                        "headline": ["Inter"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .tabular-nums { font-variant-numeric: tabular-nums; }
+        .glass-panel {
+            background: rgba(53, 52, 54, 0.6);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+        }
+        .heat-gradient {
+            background: linear-gradient(90deg, transparent 0%, rgba(0, 223, 193, 0.1) 50%, rgba(0, 223, 193, 0.4) 100%);
+        }
+        .heat-gradient-red {
+            background: linear-gradient(270deg, transparent 0%, rgba(255, 180, 171, 0.1) 50%, rgba(255, 180, 171, 0.4) 100%);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body selection:bg-primary/30">
+<!-- Top App Bar -->
+<header class="fixed top-0 w-full z-50 flex justify-between items-center px-6 h-16 bg-[#131314] shadow-[0_4px_20px_rgba(173,198,255,0.05)] font-['Inter'] tabular-nums tracking-tight">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[#adc6ff]">insights</span>
+<span class="text-lg font-light tracking-[0.2em] text-[#adc6ff] uppercase">GODSVIEW BRAIN</span>
+</div>
+<div class="flex items-center gap-4">
+<div class="px-3 py-1 bg-surface-container-high rounded-sm border border-primary/10">
+<span class="text-[10px] uppercase tracking-widest text-primary font-bold">Latency: 4ms</span>
+</div>
+<div class="w-8 h-8 rounded-full bg-secondary-container flex items-center justify-center overflow-hidden border border-outline-variant/30">
+<img alt="Institutional User Avatar" class="w-full h-full object-cover" data-alt="close-up professional portrait of a tech executive in low key lighting with subtle blue rim light" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDvOWW1kFXJ0umJqueocscZ_M8t8ezlPZMFQteIsrav_htfzub04CMHg8n_a72QLnk6qkwycwjgpf1XJ_CgXkOhVCyN9wW-h7xl3TDkNPnm6i1SzCs_JP8hbBwouOfP6fb88gK09L932fSOWUKAyM_-Xki0NyTHu2p2FzTuEQBMQ2Ir8VFdVEHogWgFeMSJZwYOacu34Pgjo6ttgTUDVV7yCOnSN3_T2kVqHS_TP57LPQIHBqJloMJ2ACCYTJNi5iEXaERVpwO4ttk"/>
+</div>
+</div>
+</header>
+<!-- Background Content (Simulated Brain View) -->
+<main class="pt-16 pb-20 px-6 min-h-screen">
+<div class="grid grid-cols-12 gap-6 opacity-40 grayscale">
+<!-- Simulated Background Nodes -->
+<div class="col-span-8 bg-surface-container-low h-96 flex items-center justify-center">
+<span class="text-surface-variant font-headline text-4xl font-light tracking-tighter">NODE_SYSTEM_ACTIVE</span>
+</div>
+<div class="col-span-4 bg-surface-container-low h-96"></div>
+</div>
+</main>
+<!-- Full-Screen Bottom Sheet (Focus Mode) -->
+<div class="fixed inset-0 z-[60] flex flex-col justify-end">
+<!-- Backdrop Blur for Depth -->
+<div class="absolute inset-0 bg-background/60 backdrop-blur-sm"></div>
+<!-- The Sheet -->
+<div class="relative w-full h-[813px] bg-surface-dim rounded-t-xl border-t border-primary/20 shadow-[0_-20px_60px_rgba(0,0,0,0.8)] flex flex-col overflow-hidden">
+<!-- Handle -->
+<div class="w-full flex justify-center py-3">
+<div class="w-12 h-1 bg-surface-variant rounded-full"></div>
+</div>
+<!-- Candle Summary Card -->
+<div class="px-6 mb-4">
+<div class="glass-panel p-4 rounded border border-outline-variant/10 flex flex-wrap items-center justify-between gap-4">
+<div class="flex flex-col">
+<div class="flex items-center gap-3 mb-1">
+<span class="text-primary font-bold tracking-tight">NVDA</span>
+<span class="text-xs text-on-surface-variant font-medium bg-surface-container-highest px-2 py-0.5 rounded-sm">1m</span>
+<span class="text-xs text-on-surface-variant">10:31:04 AM</span>
+</div>
+<div class="flex gap-4 items-baseline">
+<div class="flex flex-col">
+<span class="text-[10px] text-on-surface-variant uppercase tracking-widest">O/H/L/C</span>
+<span class="text-sm tabular-nums font-semibold">124.52 / 125.10 / 124.40 / 124.98</span>
+</div>
+<div class="w-px h-8 bg-outline-variant/30"></div>
+<div class="flex flex-col">
+<span class="text-[10px] text-on-surface-variant uppercase tracking-widest">VOL</span>
+<span class="text-sm tabular-nums font-semibold">2.4M</span>
+</div>
+</div>
+</div>
+<div class="flex gap-4">
+<div class="px-4 py-2 bg-tertiary-container/10 border-l-2 border-tertiary rounded-sm">
+<span class="block text-[10px] text-tertiary uppercase tracking-widest font-bold">Aggression</span>
+<span class="text-lg text-tertiary font-headline font-light">Strong Buy</span>
+</div>
+<div class="px-4 py-2 bg-primary-container/10 border-l-2 border-primary rounded-sm">
+<span class="block text-[10px] text-primary uppercase tracking-widest font-bold">Event</span>
+<span class="text-lg text-primary font-headline font-light">Bullish Sweep Reclaim</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Tab Navigation -->
+<div class="px-6 flex gap-8 border-b border-surface-variant">
+<button class="pb-3 text-primary border-b-2 border-primary text-xs font-bold uppercase tracking-widest flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">view_in_ar</span> X-Ray
+                </button>
+<button class="pb-3 text-on-surface-variant hover:text-on-surface transition-colors text-xs font-bold uppercase tracking-widest flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">reorder</span> Order Book
+                </button>
+<button class="pb-3 text-on-surface-variant hover:text-on-surface transition-colors text-xs font-bold uppercase tracking-widest flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">layers</span> Liquidity
+                </button>
+<button class="pb-3 text-on-surface-variant hover:text-on-surface transition-colors text-xs font-bold uppercase tracking-widest flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">psychology</span> Reasoning
+                </button>
+</div>
+<!-- Main Scrollable Content -->
+<div class="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-hide">
+<!-- Bookmap / Heatmap Visualization -->
+<div class="relative w-full h-80 bg-surface-container-lowest rounded overflow-hidden">
+<!-- Heatmap Grid -->
+<div class="absolute inset-0 grid grid-cols-12 grid-rows-6 pointer-events-none opacity-40">
+<div class="border-[0.5px] border-outline-variant/10"></div>
+<div class="border-[0.5px] border-outline-variant/10"></div>
+<div class="border-[0.5px] border-outline-variant/10"></div>
+<div class="border-[0.5px] border-outline-variant/10"></div>
+<div class="border-[0.5px] border-outline-variant/10"></div>
+<div class="border-[0.5px] border-outline-variant/10 bg-tertiary/5"></div>
+<div class="border-[0.5px] border-outline-variant/10 bg-tertiary/10"></div>
+<div class="border-[0.5px] border-outline-variant/10 bg-tertiary/20"></div>
+<div class="border-[0.5px] border-outline-variant/10"></div>
+<div class="border-[0.5px] border-outline-variant/10"></div>
+<div class="border-[0.5px] border-outline-variant/10"></div>
+<div class="border-[0.5px] border-outline-variant/10"></div>
+</div>
+<!-- Price Path & Liquidity Intensity -->
+<div class="absolute inset-0 flex flex-col justify-center px-2">
+<!-- Heat Zones -->
+<div class="absolute top-1/4 left-0 w-full h-12 bg-tertiary/10 blur-xl"></div>
+<div class="absolute bottom-1/4 left-0 w-full h-8 bg-error/5 blur-lg"></div>
+<!-- Main Price Line -->
+<svg class="w-full h-full" viewbox="0 0 1000 400">
+<!-- Liquidity Clouds -->
+<rect fill="url(#heat-grad)" height="20" opacity="0.6" width="600" x="200" y="80"></rect>
+<rect fill="url(#cool-grad)" height="15" opacity="0.4" width="400" x="0" y="280"></rect>
+<!-- Price Trace -->
+<path d="M0,320 L100,310 L200,340 L300,280 L400,150 L500,120 L600,135 L700,90 L850,105 L1000,95" fill="none" stroke="#adc6ff" stroke-width="2"></path>
+<!-- Absorption Markers -->
+<circle class="animate-pulse" cx="400" cy="150" fill="#00dfc1" r="6"></circle>
+<text fill="#00dfc1" font-family="Inter" font-size="10" font-weight="bold" x="415" y="145">ABSORPTION @ 124.60</text>
+<defs>
+<lineargradient id="heat-grad" x1="0%" x2="100%" y1="0%" y2="0%">
+<stop offset="0%" stop-color="transparent"></stop>
+<stop offset="50%" stop-color="#00dfc1" stop-opacity="0.3"></stop>
+<stop offset="100%" stop-color="#00dfc1" stop-opacity="0.6"></stop>
+</lineargradient>
+<lineargradient id="cool-grad" x1="0%" x2="100%" y1="0%" y2="0%">
+<stop offset="0%" stop-color="#ffb4ab" stop-opacity="0.4"></stop>
+<stop offset="50%" stop-color="#ffb4ab" stop-opacity="0.1"></stop>
+<stop offset="100%" stop-color="transparent"></stop>
+</lineargradient>
+</defs>
+</svg>
+</div>
+<!-- Legend -->
+<div class="absolute bottom-4 left-4 flex gap-4 bg-surface-dim/80 backdrop-blur px-3 py-1.5 rounded-sm border border-outline-variant/20">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-tertiary"></div>
+<span class="text-[9px] uppercase tracking-tighter font-bold">High Liquidity</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-primary"></div>
+<span class="text-[9px] uppercase tracking-tighter font-bold">Price Path</span>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<!-- Order Book Ladder -->
+<div class="bg-surface-container-low rounded p-4">
+<div class="flex justify-between items-center mb-4">
+<span class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Order Book Ladder</span>
+<span class="text-[9px] text-tertiary bg-tertiary/10 px-2 py-0.5 rounded-sm">+14.2% Ask Imbalance</span>
+</div>
+<div class="space-y-1 font-mono text-xs">
+<!-- Asks -->
+<div class="flex items-center gap-2 group cursor-pointer hover:bg-surface-container-high transition-colors">
+<span class="w-12 text-error text-right">125.10</span>
+<div class="flex-1 h-5 flex justify-end">
+<div class="h-full bg-error/20 border-r-2 border-error w-3/4"></div>
+</div>
+<span class="w-12 tabular-nums">1.4K</span>
+</div>
+<div class="flex items-center gap-2 group">
+<span class="w-12 text-error text-right">125.05</span>
+<div class="flex-1 h-5 flex justify-end">
+<div class="h-full bg-error/10 border-r-2 border-error w-1/4"></div>
+</div>
+<span class="w-12 tabular-nums">450</span>
+</div>
+<!-- Current Price Spread -->
+<div class="py-1 my-1 border-y border-outline-variant/10 text-center text-[10px] text-on-surface-variant uppercase tracking-widest">
+                                Spread: 0.02
+                            </div>
+<!-- Bids -->
+<div class="flex items-center gap-2 group bg-tertiary/5">
+<span class="w-12 text-tertiary text-right">124.98</span>
+<div class="flex-1 h-5 flex justify-start">
+<div class="h-full bg-tertiary/40 border-l-2 border-tertiary w-[95%]"></div>
+</div>
+<span class="w-12 tabular-nums">4.2K</span>
+</div>
+<div class="flex items-center gap-2 group">
+<span class="w-12 text-tertiary text-right">124.95</span>
+<div class="flex-1 h-5 flex justify-start">
+<div class="h-full bg-tertiary/20 border-l-2 border-tertiary w-1/2"></div>
+</div>
+<span class="w-12 tabular-nums">2.1K</span>
+</div>
+</div>
+</div>
+<!-- AI Microstructure Reasoning -->
+<div class="bg-surface-container-high/50 border-l-4 border-primary rounded p-4 relative overflow-hidden">
+<div class="absolute top-0 right-0 p-2">
+<span class="material-symbols-outlined text-primary/20 text-4xl">memory</span>
+</div>
+<h4 class="text-[10px] font-bold uppercase tracking-widest text-primary mb-3">AI Reasoning Engine</h4>
+<div class="space-y-3">
+<p class="text-sm leading-relaxed text-on-surface">
+                                This candle swept <span class="text-tertiary font-semibold">sell-side liquidity</span> at the 124.40 psychological level before a rapid aggressive reclaim.
+                            </p>
+<p class="text-xs text-on-surface-variant leading-relaxed italic">
+                                Institutional buy-side aggression was confirmed by a <span class="text-primary">+400% delta spike</span> in the 10:31:02 subset. Large passive limit orders previously sitting at 125.10 were pulled, indicating an imminent breakout attempt.
+                            </p>
+<div class="pt-2 flex gap-2">
+<span class="px-2 py-0.5 bg-surface-container-highest text-[10px] font-bold text-on-surface-variant rounded-sm border border-outline-variant/30">HFT_SIGNAL: POSITIVE</span>
+<span class="px-2 py-0.5 bg-surface-container-highest text-[10px] font-bold text-on-surface-variant rounded-sm border border-outline-variant/30">VWAP_ALIGN: CONFLUENT</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Navigation Bar (Suppressed but logic applied for structure) -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-4 pt-2 bg-[#131314]/80 backdrop-blur-xl border-t border-[#adc6ff]/10">
+<div class="flex flex-col items-center justify-center text-[#353436] py-1 px-4">
+<span class="material-symbols-outlined">hub</span>
+<span class="text-[10px] font-medium uppercase tracking-widest mt-1">NODES</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#353436] py-1 px-4">
+<span class="material-symbols-outlined">candlestick_chart</span>
+<span class="text-[10px] font-medium uppercase tracking-widest mt-1">MARKETS</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#adc6ff] bg-[#adc6ff]/10 rounded-sm py-1 px-4">
+<span class="material-symbols-outlined">psychology</span>
+<span class="text-[10px] font-medium uppercase tracking-widest mt-1">INTELLIGENCE</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#353436] py-1 px-4">
+<span class="material-symbols-outlined">analytics</span>
+<span class="text-[10px] font-medium uppercase tracking-widest mt-1">REPORTS</span>
+</div>
+</nav>
+</body></html>
