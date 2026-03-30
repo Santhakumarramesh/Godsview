@@ -81,14 +81,6 @@ type ConsciousnessSnapshot = {
   };
 };
 
-const HERO_NODE_POSITIONS = [
-  { left: "16%", top: "56%" },
-  { left: "31%", top: "32%" },
-  { left: "50%", top: "58%" },
-  { left: "69%", top: "34%" },
-  { left: "84%", top: "52%" },
-];
-
 function buildNeuralCurvePath(targetX: number, targetY: number, i: number): string {
   const startX = 50;
   const startY = 50;
@@ -99,8 +91,41 @@ function buildNeuralCurvePath(targetX: number, targetY: number, i: number): stri
   return `M ${startX} ${startY} Q ${controlX} ${controlY} ${targetX} ${targetY}`;
 }
 
+function getSymbolSeed(symbol: string): number {
+  return [...symbol].reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+}
+
+function buildSparklineSeries(row: ConsciousnessBoardRow, length = 18): number[] {
+  const seed = getSymbolSeed(row.symbol);
+  const base = 30 + row.attention_score * 38;
+  const amplitude = 7 + row.orderflow_score * 10;
+  const trendBase = row.direction === "long" ? 0.85 : row.direction === "short" ? -0.85 : 0.2;
+  const trend = trendBase * (0.35 + row.structure_score * 0.45);
+  return Array.from({ length }, (_, i) => {
+    const wave1 = Math.sin((i + seed) * 0.55) * amplitude * 0.45;
+    const wave2 = Math.cos((i + seed * 0.17) * 0.24) * amplitude * 0.3;
+    const jitter = Math.sin((seed + i * 3) * 0.16) * 1.6;
+    return Math.min(96, Math.max(5, base + wave1 + wave2 + jitter + trend * i));
+  });
+}
+
+function buildSparklinePath(values: number[], width: number, height: number, padding = 2): string {
+  if (values.length === 0) return "";
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = Math.max(max - min, 1);
+  return values
+    .map((value, i) => {
+      const x = padding + (i / Math.max(values.length - 1, 1)) * (width - padding * 2);
+      const y = height - padding - ((value - min) / span) * (height - padding * 2);
+      return `${i === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
+    })
+    .join(" ");
+}
+
 export default function Dashboard() {
-  const [focusedSymbol, setFocusedSymbol] = useState<string | null>(null);
+  const [hoveredSymbol, setHoveredSymbol] = useState<string | null>(null);
+  const [pinnedSymbol, setPinnedSymbol] = useState<string | null>(null);
 
   // ── Data hooks — 5 s auto-refresh ────────────────────────────────────────
   const { data: systemStatus, isLoading: sysLoading, isError: sysError, refetch: refetchStatus } =
@@ -220,7 +245,7 @@ export default function Dashboard() {
     rawInstrument.includes("ETH") ? "ETHUSD" : "BTCUSD";
   const board = consciousness?.board ?? [];
   const rankedBoard = [...board].sort((a, b) => b.attention_score - a.attention_score);
-  const featuredBrainNodes = rankedBoard.slice(0, HERO_NODE_POSITIONS.length);
+  const featuredBrainNodes = rankedBoard.slice(0, 8);
   const avgAttention = rankedBoard.length > 0 ? rankedBoard.reduce((sum, row) => sum + row.attention_score, 0) / rankedBoard.length : 0;
   const avgRiskScore = rankedBoard.length > 0 ? rankedBoard.reduce((sum, row) => sum + row.risk_score, 0) / rankedBoard.length : 0;
   const avgStructureScore = rankedBoard.length > 0 ? rankedBoard.reduce((sum, row) => sum + row.structure_score, 0) / rankedBoard.length : 0;
@@ -242,18 +267,48 @@ export default function Dashboard() {
   const executionSlippageLabel = avgRiskScore < 0.35 ? "Low" : avgRiskScore < 0.65 ? "Moderate" : "High";
   const executionFillLabel = avgOrderflowScore > 0.7 ? "Excellent" : avgOrderflowScore > 0.5 ? "Good" : "Watch";
   const executionRiskLabel = avgRiskScore < 0.35 ? "Disciplined" : avgRiskScore < 0.65 ? "Moderate" : "Elevated";
-  const surgeTopSymbols = featuredBrainNodes
+  const orbitNodes = useMemo(
+    () => {
+      const count = Math.max(featuredBrainNodes.length, 1);
+      const angleStep = 360 / count;
+      return featuredBrainNodes.map((row, idx) => {
+        const attention = Math.max(0, Math.min(1, row.attention_score));
+        const angle = ((-90 + angleStep * idx) * Math.PI) / 180;
+        const radiusX = 24 + attention * 18;
+        const radiusY = 17 + attention * 12;
+        const jitter = (idx % 2 === 0 ? 1 : -1) * (1 - attention) * 2.5;
+        const left = 50 + Math.cos(angle) * radiusX + jitter;
+        const top = 50 + Math.sin(angle) * radiusY;
+        return {
+          row,
+          left,
+          top,
+          leftPct: `${left.toFixed(2)}%`,
+          topPct: `${top.toFixed(2)}%`,
+        };
+      });
+    },
+    [featuredBrainNodes]
+  );
+  const surgeTopSymbols = orbitNodes
     .slice()
-    .sort((a, b) => b.attention_score - a.attention_score)
+    .sort((a, b) => b.row.attention_score - a.row.attention_score)
     .slice(0, 3)
-    .map((row) => row.symbol);
+    .map((row) => row.row.symbol);
+  const activeFocusedSymbol = pinnedSymbol ?? hoveredSymbol;
   const focusedNode = useMemo(
     () =>
-      rankedBoard.find((row) => row.symbol === focusedSymbol) ??
-      featuredBrainNodes[0] ??
+      rankedBoard.find((row) => row.symbol === activeFocusedSymbol) ??
+      orbitNodes[0]?.row ??
       null,
-    [rankedBoard, focusedSymbol, featuredBrainNodes]
+    [rankedBoard, activeFocusedSymbol, orbitNodes]
   );
+
+  useEffect(() => {
+    if (pinnedSymbol && !rankedBoard.some((row) => row.symbol === pinnedSymbol)) {
+      setPinnedSymbol(null);
+    }
+  }, [pinnedSymbol, rankedBoard]);
 
   return (
     <div className="space-y-6">
@@ -367,11 +422,8 @@ export default function Dashboard() {
             <div className="relative rounded min-h-[300px] md:min-h-[360px] overflow-hidden gv-neural-grid" style={{ background: "radial-gradient(circle at 52% 52%, rgba(71,144,255,0.28), rgba(10,16,32,0.95) 60%), linear-gradient(140deg, rgba(16,22,38,0.98), rgba(10,14,26,0.98))", border: `1px solid rgba(102,157,255,0.2)` }}>
               <div className="absolute inset-0 opacity-70" style={{ backgroundImage: "radial-gradient(circle at 30% 20%, rgba(156,255,147,0.2), transparent 25%), radial-gradient(circle at 70% 80%, rgba(255,113,98,0.15), transparent 30%), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(0deg, rgba(255,255,255,0.04) 1px, transparent 1px)", backgroundSize: "auto, auto, 38px 38px, 38px 38px" }} />
               <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
-                {featuredBrainNodes.map((row, idx) => {
-                  const pos = HERO_NODE_POSITIONS[idx] ?? HERO_NODE_POSITIONS[0];
-                  const x = Number.parseFloat(pos.left);
-                  const y = Number.parseFloat(pos.top);
-                  const pathD = buildNeuralCurvePath(x, y, idx);
+                {orbitNodes.map(({ row, left, top }, idx) => {
+                  const pathD = buildNeuralCurvePath(left, top, idx);
                   const lineColor = row.direction === "long" ? "rgba(156,255,147,0.75)" : row.direction === "short" ? "rgba(255,113,98,0.75)" : "rgba(102,157,255,0.75)";
                   const strokeWidth = 0.22 + row.attention_score * 0.6;
                   const isSurge = surgeTopSymbols.includes(row.symbol);
@@ -408,32 +460,44 @@ export default function Dashboard() {
                   <div style={{ fontSize: "16px", fontFamily: "Space Grotesk", fontWeight: 700, color: "#100d08" }}>{sentimentLabel}</div>
                 </div>
               </div>
-              {featuredBrainNodes.map((row, idx) => {
-                const pos = HERO_NODE_POSITIONS[idx] ?? HERO_NODE_POSITIONS[0];
+              {orbitNodes.map(({ row, leftPct, topPct }) => {
                 const tone = row.direction === "long" ? C.primary : row.direction === "short" ? C.tertiary : C.secondary;
                 const nodeScale = 0.86 + row.attention_score * 0.5;
+                const isPinned = pinnedSymbol === row.symbol;
                 return (
                   <div
                     key={row.symbol}
-                    className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full px-4 py-2 gv-neural-node${surgeTopSymbols.includes(row.symbol) ? " gv-neural-node-surge" : ""}`}
+                    className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full px-4 py-2 gv-neural-node${surgeTopSymbols.includes(row.symbol) ? " gv-neural-node-surge" : ""}${isPinned ? " gv-neural-node-pinned" : ""}`}
                     style={{
-                      left: pos.left,
-                      top: pos.top,
+                      left: leftPct,
+                      top: topPct,
                       transform: `translate(-50%, -50%) scale(${nodeScale.toFixed(2)})`,
                       border: `1px solid ${tone}88`,
                       backgroundColor: `${tone}22`,
                       boxShadow: `0 0 24px ${tone}66`,
                     }}
-                    onMouseEnter={() => setFocusedSymbol(row.symbol)}
-                    onMouseLeave={() => setFocusedSymbol((prev) => (prev === row.symbol ? null : prev))}
-                    onFocus={() => setFocusedSymbol(row.symbol)}
-                    onBlur={() => setFocusedSymbol((prev) => (prev === row.symbol ? null : prev))}
+                    onMouseEnter={() => setHoveredSymbol(row.symbol)}
+                    onMouseLeave={() => setHoveredSymbol((prev) => (prev === row.symbol ? null : prev))}
+                    onClick={() => setPinnedSymbol((prev) => (prev === row.symbol ? null : row.symbol))}
+                    onFocus={() => setHoveredSymbol(row.symbol)}
+                    onBlur={() => setHoveredSymbol((prev) => (prev === row.symbol ? null : prev))}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setPinnedSymbol((prev) => (prev === row.symbol ? null : row.symbol));
+                      }
+                    }}
                     tabIndex={0}
                   >
                     <div style={{ fontSize: "30px", fontWeight: 700, lineHeight: 1, color: "#fff", fontFamily: "Space Grotesk", textAlign: "center" }}>{row.symbol}</div>
                     <div style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: "#e2e8f0", textAlign: "center", marginTop: "2px" }}>
                       {(row.attention_score * 100).toFixed(0)}% attn
                     </div>
+                    {isPinned ? (
+                      <span className="absolute -top-1 -right-1 rounded-full px-1 py-0.5" style={{ fontSize: "7px", fontFamily: "JetBrains Mono, monospace", color: C.primary, border: "1px solid rgba(156,255,147,0.45)", backgroundColor: "rgba(8,20,14,0.85)" }}>
+                        PIN
+                      </span>
+                    ) : null}
                     <span className={`gv-node-ring${surgeTopSymbols.includes(row.symbol) ? " gv-node-ring-surge" : ""}`} style={{ borderColor: `${tone}55` }} />
                   </div>
                 );
@@ -442,9 +506,19 @@ export default function Dashboard() {
                 <div className="absolute left-2 right-2 bottom-2 md:left-auto md:right-3 md:bottom-3 md:w-[42%] rounded p-2.5" style={{ backgroundColor: "rgba(15,22,40,0.86)", border: `1px solid ${C.border}`, backdropFilter: "blur(8px)" }}>
                   <div className="flex items-center justify-between gap-2">
                     <div style={{ fontSize: "12px", fontFamily: "Space Grotesk", fontWeight: 700, color: "#fff" }}>{focusedNode.symbol} Intelligence Card</div>
-                    <span style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: focusedNode.readiness === "allow" ? C.primary : focusedNode.readiness === "watch" ? "#fbbf24" : C.tertiary }}>
-                      {focusedNode.readiness.toUpperCase()}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setPinnedSymbol((prev) => (prev === focusedNode.symbol ? null : focusedNode.symbol))}
+                        className="rounded px-1.5 py-0.5"
+                        style={{ fontSize: "8px", fontFamily: "JetBrains Mono, monospace", color: pinnedSymbol === focusedNode.symbol ? C.primary : C.muted, border: `1px solid ${pinnedSymbol === focusedNode.symbol ? "rgba(156,255,147,0.45)" : C.border}`, backgroundColor: "#0c1526" }}
+                      >
+                        {pinnedSymbol === focusedNode.symbol ? "UNPIN" : "PIN"}
+                      </button>
+                      <span style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: focusedNode.readiness === "allow" ? C.primary : focusedNode.readiness === "watch" ? "#fbbf24" : C.tertiary }}>
+                        {focusedNode.readiness.toUpperCase()}
+                      </span>
+                    </div>
                   </div>
                   <div className="mt-2 grid grid-cols-2 gap-1.5">
                     <div className="rounded px-2 py-1" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0f131e" }}>
@@ -485,15 +559,28 @@ export default function Dashboard() {
               <div className="mt-2 space-y-2">
                 {rankedBoard.slice(0, 4).map((row) => {
                   const dotColor = row.readiness === "allow" ? C.primary : row.readiness === "watch" ? "#fbbf24" : C.tertiary;
+                  const sparklineValues = buildSparklineSeries(row);
+                  const sparklinePath = buildSparklinePath(sparklineValues, 74, 22, 1.5);
                   return (
-                    <div key={row.symbol} className="flex items-start gap-2">
-                      <span className="w-2 h-2 rounded-full mt-1" style={{ backgroundColor: dotColor }} />
-                      <div>
-                        <div style={{ fontSize: "11px", color: "#fff", fontFamily: "Space Grotesk" }}>{row.symbol}: {row.reasoning_verdict.replace(/_/g, " ")}</div>
-                        <div style={{ fontSize: "9px", color: C.muted, fontFamily: "JetBrains Mono, monospace" }}>
-                          setup {row.setup_family} · {row.risk_state}
+                    <div
+                      key={row.symbol}
+                      className="flex items-start justify-between gap-2 rounded px-1.5 py-1"
+                      style={{ border: focusedNode?.symbol === row.symbol ? `1px solid ${dotColor}55` : "1px solid transparent" }}
+                      onMouseEnter={() => setHoveredSymbol(row.symbol)}
+                      onMouseLeave={() => setHoveredSymbol((prev) => (prev === row.symbol ? null : prev))}
+                    >
+                      <div className="flex items-start gap-2">
+                        <span className="w-2 h-2 rounded-full mt-1" style={{ backgroundColor: dotColor }} />
+                        <div>
+                          <div style={{ fontSize: "11px", color: "#fff", fontFamily: "Space Grotesk" }}>{row.symbol}: {row.reasoning_verdict.replace(/_/g, " ")}</div>
+                          <div style={{ fontSize: "9px", color: C.muted, fontFamily: "JetBrains Mono, monospace" }}>
+                            setup {row.setup_family} · {row.risk_state}
+                          </div>
                         </div>
                       </div>
+                      <svg width="74" height="22" viewBox="0 0 74 22" className="shrink-0">
+                        <path d={sparklinePath} fill="none" stroke={`${dotColor}AA`} strokeWidth="1.4" strokeLinecap="round" />
+                      </svg>
                     </div>
                   );
                 })}
