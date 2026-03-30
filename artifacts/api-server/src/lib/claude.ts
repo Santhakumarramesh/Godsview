@@ -23,6 +23,13 @@ export interface ClaudeVetoResult {
   key_factors: string[];
   latency_ms: number;
   hard_veto?: boolean;
+  validation_status?:
+    | "hard_veto"
+    | "schema_valid"
+    | "schema_invalid_fallback"
+    | "heuristic_fallback"
+    | "api_error_fallback"
+    | "circuit_open";
 }
 
 export interface SetupContext {
@@ -124,6 +131,83 @@ type AnthropicClient = {
 
 let client: AnthropicClient | null = null;
 let clientLoading: Promise<AnthropicClient | null> | null = null;
+let claudeConsecutiveFailures = 0;
+let claudeCircuitOpenUntil = 0;
+
+const CLAUDE_MAX_RETRIES = Math.max(0, Number.parseInt(process.env.CLAUDE_VETO_MAX_RETRIES ?? "1", 10) || 0);
+const CLAUDE_CIRCUIT_FAIL_THRESHOLD = Math.max(2, Number.parseInt(process.env.CLAUDE_VETO_CIRCUIT_THRESHOLD ?? "4", 10) || 4);
+const CLAUDE_CIRCUIT_COOLDOWN_MS = Math.max(10_000, Number.parseInt(process.env.CLAUDE_VETO_CIRCUIT_COOLDOWN_MS ?? "120000", 10) || 120_000);
+
+type ClaudeResponse = {
+  verdict: ClaudeVerdict;
+  confidence: number;
+  claude_score: number;
+  reasoning: string;
+  key_factors: string[];
+};
+
+function nowMs(): number {
+  return Date.now();
+}
+
+function isCircuitOpen(): boolean {
+  return nowMs() < claudeCircuitOpenUntil;
+}
+
+function markClaudeFailure(): void {
+  claudeConsecutiveFailures += 1;
+  if (claudeConsecutiveFailures >= CLAUDE_CIRCUIT_FAIL_THRESHOLD) {
+    claudeCircuitOpenUntil = nowMs() + CLAUDE_CIRCUIT_COOLDOWN_MS;
+  }
+}
+
+function markClaudeSuccess(): void {
+  claudeConsecutiveFailures = 0;
+  claudeCircuitOpenUntil = 0;
+}
+
+function stripCodeFences(raw: string): string {
+  return raw
+    .replace(/^```(?:json)?\n?/i, "")
+    .replace(/\n?```$/i, "")
+    .trim();
+}
+
+function extractJsonObject(raw: string): string {
+  const cleaned = stripCodeFences(raw);
+  const firstBrace = cleaned.indexOf("{");
+  const lastBrace = cleaned.lastIndexOf("}");
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    return cleaned.slice(firstBrace, lastBrace + 1).trim();
+  }
+  return cleaned;
+}
+
+function parseClaudeJson(raw: string): ClaudeResponse | null {
+  try {
+    const jsonStr = extractJsonObject(raw);
+    const parsed = JSON.parse(jsonStr) as Record<string, unknown>;
+    const verdictRaw = String(parsed.verdict ?? "").toUpperCase();
+    if (verdictRaw !== "APPROVED" && verdictRaw !== "VETOED" && verdictRaw !== "CAUTION") return null;
+    const confidence = Number(parsed.confidence);
+    const claudeScore = Number(parsed.claude_score);
+    const reasoning = String(parsed.reasoning ?? "");
+    const keyFactorsRaw = Array.isArray(parsed.key_factors) ? parsed.key_factors : [];
+    const keyFactors = keyFactorsRaw.map((item) => String(item)).filter((item) => item.trim().length > 0);
+    if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) return null;
+    if (!Number.isFinite(claudeScore) || claudeScore < 0 || claudeScore > 1) return null;
+    if (reasoning.trim().length < 8) return null;
+    return {
+      verdict: verdictRaw,
+      confidence,
+      claude_score: claudeScore,
+      reasoning,
+      key_factors: keyFactors,
+    };
+  } catch {
+    return null;
+  }
+}
 
 async function getClient(): Promise<AnthropicClient | null> {
   const key = process.env.ANTHROPIC_API_KEY;
@@ -149,7 +233,7 @@ async function getClient(): Promise<AnthropicClient | null> {
 }
 
 export function isClaudeAvailable(): boolean {
-  return Boolean(process.env.ANTHROPIC_API_KEY);
+  return Boolean(process.env.ANTHROPIC_API_KEY) && !isCircuitOpen();
 }
 
 // ─── Pre-Call Heuristic Hard-Veto ──────────────────────────────────────────────
@@ -169,7 +253,7 @@ function preCallHardVeto(ctx: SetupContext): ClaudeVetoResult | null {
       verdict: "VETOED", confidence: 0.85, claude_score: 0.25,
       reasoning: `Hard veto: SK bias (${ctx.sk_bias}) directly opposes ${ctx.direction} direction with quality at ${(ctx.final_quality * 100).toFixed(0)}%.`,
       key_factors: ["SK bias conflict", `Quality ${(ctx.final_quality * 100).toFixed(0)}% insufficient to override`],
-      latency_ms: 0, hard_veto: true,
+      latency_ms: 0, hard_veto: true, validation_status: "hard_veto",
     };
   }
 
@@ -179,7 +263,7 @@ function preCallHardVeto(ctx: SetupContext): ClaudeVetoResult | null {
       verdict: "VETOED", confidence: 0.95, claude_score: 0.10,
       reasoning: "Hard veto: Chop regime detected — no directional edge exists.",
       key_factors: ["Chop regime", "No directional edge"],
-      latency_ms: 0, hard_veto: true,
+      latency_ms: 0, hard_veto: true, validation_status: "hard_veto",
     };
   }
 
@@ -189,7 +273,7 @@ function preCallHardVeto(ctx: SetupContext): ClaudeVetoResult | null {
       verdict: "VETOED", confidence: 0.80, claude_score: 0.20,
       reasoning: `Hard veto: Extreme volatility (ATR ${(ctx.atr_pct * 100).toFixed(2)}%) with quality ${(ctx.final_quality * 100).toFixed(0)}%.`,
       key_factors: ["Extreme ATR", "Insufficient quality for volatility level"],
-      latency_ms: 0, hard_veto: true,
+      latency_ms: 0, hard_veto: true, validation_status: "hard_veto",
     };
   }
 
@@ -199,7 +283,7 @@ function preCallHardVeto(ctx: SetupContext): ClaudeVetoResult | null {
       verdict: "VETOED", confidence: 0.75, claude_score: 0.30,
       reasoning: `Hard veto: R:R of ${rr.toFixed(2)} is below minimum threshold with quality at ${(ctx.final_quality * 100).toFixed(0)}%.`,
       key_factors: [`R:R ${rr.toFixed(2)} too low`, "Negative expectancy"],
-      latency_ms: 0, hard_veto: true,
+      latency_ms: 0, hard_veto: true, validation_status: "hard_veto",
     };
   }
 
@@ -213,7 +297,7 @@ function preCallHardVeto(ctx: SetupContext): ClaudeVetoResult | null {
       verdict: "VETOED", confidence: 0.78, claude_score: 0.28,
       reasoning: `Hard veto: ${count} consecutive opposing candles against ${ctx.direction} direction.`,
       key_factors: [`${count} opposing candles`, "Momentum against direction"],
-      latency_ms: 0, hard_veto: true,
+      latency_ms: 0, hard_veto: true, validation_status: "hard_veto",
     };
   }
 
@@ -228,6 +312,18 @@ export async function claudeVeto(ctx: SetupContext): Promise<ClaudeVetoResult> {
   if (hardVetoResult) {
     console.log(`[claude] Hard veto: ${hardVetoResult.reasoning.slice(0, 80)}`);
     return hardVetoResult;
+  }
+
+  if (isCircuitOpen()) {
+    return {
+      verdict: "CAUTION",
+      confidence: 0.35,
+      claude_score: Math.min(1, Math.max(0, ctx.final_quality * 0.65)),
+      reasoning: "Claude circuit breaker is open after repeated validation/API failures. Falling back to caution mode.",
+      key_factors: ["Claude circuit open", "Heuristic degradation mode"],
+      latency_ms: Date.now() - t0,
+      validation_status: "circuit_open",
+    };
   }
 
   // Step 2: Get API client
@@ -246,7 +342,7 @@ export async function claudeVeto(ctx: SetupContext): Promise<ClaudeVetoResult> {
       verdict: heuristicScore >= ctx.quality_threshold ? "APPROVED" : "CAUTION",
       confidence: heuristicScore, claude_score: heuristicScore,
       reasoning: "Claude reasoning layer inactive — ANTHROPIC_API_KEY not configured. Using heuristic fallback.",
-      key_factors: [], latency_ms: 0,
+      key_factors: [], latency_ms: 0, validation_status: "heuristic_fallback",
     };
   }
 
@@ -313,42 +409,52 @@ Run through your veto checklist. Issue your verdict.`.trim();
   // Step 4: Call Claude API
   try {
     const model = process.env.CLAUDE_VETO_MODEL ?? "claude-sonnet-4-5-20241022";
-    const msg = await claude.messages.create({
-      model,
-      max_tokens: 400,
-      messages: [{ role: "user", content: userPrompt }],
-      system: SYSTEM_PROMPT,
-    });
+    let parseFailReason = "";
+    for (let attempt = 0; attempt <= CLAUDE_MAX_RETRIES; attempt++) {
+      const attemptPrompt = attempt === 0
+        ? userPrompt
+        : `${userPrompt}\n\nIMPORTANT: Your previous response was invalid JSON for the required schema. Return ONLY one strict JSON object with correct keys and value ranges.`;
+      const msg = await claude.messages.create({
+        model,
+        max_tokens: 400,
+        messages: [{ role: "user", content: attemptPrompt }],
+        system: SYSTEM_PROMPT,
+      });
 
-    const raw = (msg.content[0] as { type: string; text: string }).text.trim();
-    const jsonStr = raw
-      .replace(/^```(?:json)?\n?/i, "")
-      .replace(/\n?```$/i, "")
-      .trim();
-    const parsed = JSON.parse(jsonStr) as {
-      verdict: ClaudeVerdict;
-      confidence: number;
-      claude_score: number;
-      reasoning: string;
-      key_factors: string[];
-    };
+      const raw = (msg.content[0] as { type: string; text: string }).text.trim();
+      const parsed = parseClaudeJson(raw);
+      if (!parsed) {
+        parseFailReason = "invalid_schema_or_json";
+        continue;
+      }
 
-    const verdict = parsed.verdict ?? "CAUTION";
-    const claudeScore = Math.min(1, Math.max(0, Number(parsed.claude_score ?? 0.5)));
+      const claudeScore = Math.min(1, Math.max(0, parsed.claude_score));
+      const finalVerdict = parsed.verdict === "APPROVED" && claudeScore < 0.55 ? "CAUTION" : parsed.verdict;
+      markClaudeSuccess();
+      return {
+        verdict: finalVerdict,
+        confidence: Math.min(1, Math.max(0, parsed.confidence)),
+        claude_score: claudeScore,
+        reasoning: String(parsed.reasoning ?? ""),
+        key_factors: (parsed.key_factors ?? []).slice(0, 4),
+        latency_ms: Date.now() - t0,
+        validation_status: "schema_valid",
+      };
+    }
 
-    // Post-response sanity check
-    const finalVerdict = verdict === "APPROVED" && claudeScore < 0.55 ? "CAUTION" : verdict;
-
+    markClaudeFailure();
     return {
-      verdict: finalVerdict,
-      confidence: Math.min(1, Math.max(0, Number(parsed.confidence ?? 0.5))),
-      claude_score: claudeScore,
-      reasoning: String(parsed.reasoning ?? ""),
-      key_factors: (parsed.key_factors ?? []).slice(0, 4),
+      verdict: "CAUTION",
+      confidence: 0.38,
+      claude_score: Math.min(1, Math.max(0, ctx.final_quality * 0.72)),
+      reasoning: `Claude response failed strict JSON/schema validation (${parseFailReason || "unknown"}). Falling back to caution.`,
+      key_factors: ["schema_validation_failed", "fallback_caution"],
       latency_ms: Date.now() - t0,
+      validation_status: "schema_invalid_fallback",
     };
   } catch (err) {
     console.error("[claude] veto error:", err);
+    markClaudeFailure();
     return {
       verdict: "CAUTION",
       confidence: 0.4,
@@ -356,6 +462,7 @@ Run through your veto checklist. Issue your verdict.`.trim();
       reasoning: `Claude reasoning error: ${String(err).slice(0, 120)}. Defaulting to CAUTION.`,
       key_factors: ["API error — reduced confidence"],
       latency_ms: Date.now() - t0,
+      validation_status: "api_error_fallback",
     };
   }
 }
