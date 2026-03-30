@@ -20,6 +20,9 @@ import CandleXRayPage from "@/pages/candle-xray";
 import SetupExplorerPage from "@/pages/setup-explorer";
 import ReportsPage from "@/pages/reports";
 import RiskPage from "@/pages/risk";
+import SettingsPage from "@/pages/settings";
+import { GlobalDataProvider } from "@/components/GlobalDataProvider";
+import { NotificationSystem } from "@/components/NotificationSystem";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -116,6 +119,7 @@ function Router() {
         <RoutedPage path="/setup-explorer" component={SetupExplorerPage} scope="page:setup-explorer" />
         <RoutedPage path="/reports" component={ReportsPage} scope="page:reports" />
         <RoutedPage path="/risk" component={RiskPage} scope="page:risk" />
+        <RoutedPage path="/settings" component={SettingsPage} scope="page:settings" />
         <Route>
           <AppErrorBoundary scope="page:not-found">
             <NotFound />
@@ -130,11 +134,14 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <AppErrorBoundary scope="app-root">
-          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            <Router />
-          </WouterRouter>
-        </AppErrorBoundary>
+        <GlobalDataProvider>
+          <AppErrorBoundary scope="app-root">
+            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+              <Router />
+            </WouterRouter>
+          </AppErrorBoundary>
+          <NotificationSystem />
+        </GlobalDataProvider>
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>

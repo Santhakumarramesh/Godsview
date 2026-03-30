@@ -320,6 +320,7 @@ const navItems = [
   { href: "/performance", label: "Analytics", icon: "analytics", sub: "Performance" },
   { href: "/system", label: "System Core", icon: "memory", sub: "Diagnostics" },
   { href: "/stitch-lab", label: "Stitch Vault", icon: "palette", sub: "Design Pack" },
+  { href: "/settings", label: "Settings", icon: "settings", sub: "Configuration" },
 ];
 
 export function Shell({ children }: { children: React.ReactNode }) {
