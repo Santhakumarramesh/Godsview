@@ -53,6 +53,41 @@ type ProofPayload = {
 type OosPayload = {
   deltas: { winRateDelta: number; expectancyDeltaR: number; avgFinalQualityDelta: number };
 };
+type ConsciousnessBoardRow = {
+  symbol: string;
+  attention_score: number;
+  readiness: "allow" | "watch" | "block";
+  setup_family: string;
+  direction: "long" | "short" | "none";
+  structure_score: number;
+  orderflow_score: number;
+  context_score: number;
+  memory_score: number;
+  reasoning_score: number;
+  risk_score: number;
+  reasoning_verdict: string;
+  risk_state: "allowed" | "blocked";
+  block_reason: string;
+};
+type ConsciousnessSnapshot = {
+  has_data: boolean;
+  generated_at: string;
+  board: ConsciousnessBoardRow[];
+  fetched_at: string;
+  source: {
+    exists: boolean;
+    path: string;
+    error: string | null;
+  };
+};
+
+const HERO_NODE_POSITIONS = [
+  { left: "16%", top: "56%" },
+  { left: "31%", top: "32%" },
+  { left: "50%", top: "58%" },
+  { left: "69%", top: "34%" },
+  { left: "84%", top: "52%" },
+];
 
 export default function Dashboard() {
 
@@ -93,6 +128,17 @@ export default function Dashboard() {
     staleTime: 45_000,
     retry: 2,
   });
+  const { data: consciousness, refetch: refetchConsciousness } = useQuery<ConsciousnessSnapshot>({
+    queryKey: ["system-consciousness-latest-dashboard"],
+    queryFn: async () => {
+      const r = await fetch("/api/system/consciousness/latest");
+      if (!r.ok) throw new Error(`consciousness snapshot fetch failed: ${r.status}`);
+      return r.json();
+    },
+    refetchInterval: 30_000,
+    staleTime: 20_000,
+    retry: 2,
+  });
 
   // Fallback manual interval — 30 s to avoid Alpaca 429 rate limits
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -105,9 +151,10 @@ export default function Dashboard() {
       refetchModelDiagnostics();
       refetchProofBySetup();
       refetchOosProof();
+      refetchConsciousness();
     }, 30_000);
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [refetchStatus, refetchPerf, refetchSigs, refetchDiag, refetchModelDiagnostics, refetchProofBySetup, refetchOosProof]);
+  }, [refetchStatus, refetchPerf, refetchSigs, refetchDiag, refetchModelDiagnostics, refetchProofBySetup, refetchOosProof, refetchConsciousness]);
 
   const isInitialLoading =
     (sysLoading && !systemStatus) ||
@@ -160,6 +207,30 @@ export default function Dashboard() {
   const activeChartSymbol =
     rawInstrument.includes("BTC") ? "BTCUSD" :
     rawInstrument.includes("ETH") ? "ETHUSD" : "BTCUSD";
+  const board = consciousness?.board ?? [];
+  const rankedBoard = [...board].sort((a, b) => b.attention_score - a.attention_score);
+  const featuredBrainNodes = rankedBoard.slice(0, HERO_NODE_POSITIONS.length);
+  const avgAttention = rankedBoard.length > 0 ? rankedBoard.reduce((sum, row) => sum + row.attention_score, 0) / rankedBoard.length : 0;
+  const avgRiskScore = rankedBoard.length > 0 ? rankedBoard.reduce((sum, row) => sum + row.risk_score, 0) / rankedBoard.length : 0;
+  const avgStructureScore = rankedBoard.length > 0 ? rankedBoard.reduce((sum, row) => sum + row.structure_score, 0) / rankedBoard.length : 0;
+  const avgOrderflowScore = rankedBoard.length > 0 ? rankedBoard.reduce((sum, row) => sum + row.orderflow_score, 0) / rankedBoard.length : 0;
+  const bullishBiasCount = rankedBoard.filter((row) => row.direction === "long").length;
+  const bearishBiasCount = rankedBoard.filter((row) => row.direction === "short").length;
+  const sentimentQuality = sigs.length > 0 ? sigs.reduce((sum, row) => sum + row.final_quality, 0) / sigs.length : avgAttention * 100;
+  const sentimentSign = winRate >= 0.5 ? "+" : "";
+  const sentimentLabel = bullishBiasCount > bearishBiasCount ? "Bullish" : bearishBiasCount > bullishBiasCount ? "Bearish" : "Balanced";
+  const setupAlerts = sigs.slice(0, 4);
+  const heroSignal = sigs[0];
+  const heroSignalDirection = heroSignal
+    ? (heroSignal.setup_type.toLowerCase().includes("short") || heroSignal.setup_type.toLowerCase().includes("bear") ? "sell" : "buy")
+    : rankedBoard[0]?.direction === "short"
+      ? "sell"
+      : rankedBoard[0]?.direction === "long"
+        ? "buy"
+        : "none";
+  const executionSlippageLabel = avgRiskScore < 0.35 ? "Low" : avgRiskScore < 0.65 ? "Moderate" : "High";
+  const executionFillLabel = avgOrderflowScore > 0.7 ? "Excellent" : avgOrderflowScore > 0.5 ? "Good" : "Watch";
+  const executionRiskLabel = avgRiskScore < 0.35 ? "Disciplined" : avgRiskScore < 0.65 ? "Moderate" : "Elevated";
 
   return (
     <div className="space-y-6">
@@ -203,6 +274,190 @@ export default function Dashboard() {
           </span>
         </div>
       )}
+
+      {/* ── Neural Command Surface ── */}
+      <div className="rounded-xl p-3 lg:p-4 space-y-3 overflow-hidden" style={{ backgroundColor: "#0c0f16", border: `1px solid rgba(102,157,255,0.18)`, boxShadow: "inset 0 0 0 1px rgba(102,157,255,0.08)" }}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined" style={{ fontSize: "15px", color: C.secondary }}>neurology</span>
+            <span style={{ fontSize: "9px", color: C.outline, fontFamily: "Space Grotesk", letterSpacing: "0.2em", textTransform: "uppercase" }}>
+              Neural Command Surface
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span style={{ fontSize: "10px", fontFamily: "Space Grotesk", color: C.muted }}>
+              Market Regime: <span style={{ color: sentimentLabel === "Bullish" ? C.primary : sentimentLabel === "Bearish" ? C.tertiary : C.secondary, fontWeight: 700 }}>{sentimentLabel}</span>
+            </span>
+            <span style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: C.outlineVar }}>
+              Active Setups: {setupAlerts.length}
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-3">
+          <div className="xl:col-span-3 space-y-3">
+            <div className="rounded p-3" style={{ backgroundColor: "#111726", border: `1px solid rgba(156,255,147,0.16)` }}>
+              <MicroLabel>Global Market Sentiment</MicroLabel>
+              <div className="mt-2" style={{ fontSize: "36px", lineHeight: 1, fontFamily: "Space Grotesk", fontWeight: 700, color: sentimentLabel === "Bullish" ? C.primary : sentimentLabel === "Bearish" ? C.tertiary : C.secondary }}>
+                {sentimentSign}{formatNumber(sentimentQuality / 100, 2)}%
+              </div>
+              <div className="mt-2 flex items-center gap-2">
+                <span className="material-symbols-outlined" style={{ fontSize: "14px", color: sentimentLabel === "Bullish" ? C.primary : sentimentLabel === "Bearish" ? C.tertiary : C.secondary }}>
+                  {sentimentLabel === "Bullish" ? "arrow_upward" : sentimentLabel === "Bearish" ? "arrow_downward" : "trending_flat"}
+                </span>
+                <span style={{ fontSize: "12px", fontFamily: "Space Grotesk", fontWeight: 700, color: "#fff" }}>{sentimentLabel}</span>
+              </div>
+              <div className="mt-3 space-y-1.5">
+                <div className="rounded px-2 py-1.5 flex items-center justify-between" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0f131e" }}>
+                  <span style={{ fontSize: "10px", color: C.muted }}>Structure</span>
+                  <span style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: C.primary }}>{(avgStructureScore * 100).toFixed(1)}%</span>
+                </div>
+                <div className="rounded px-2 py-1.5 flex items-center justify-between" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0f131e" }}>
+                  <span style={{ fontSize: "10px", color: C.muted }}>Orderflow</span>
+                  <span style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: C.secondary }}>{(avgOrderflowScore * 100).toFixed(1)}%</span>
+                </div>
+                <div className="rounded px-2 py-1.5 flex items-center justify-between" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0f131e" }}>
+                  <span style={{ fontSize: "10px", color: C.muted }}>Attention</span>
+                  <span style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: "#fff" }}>{(avgAttention * 100).toFixed(1)}%</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded p-3" style={{ backgroundColor: "#111726", border: `1px solid ${C.border}` }}>
+              <MicroLabel>Setup Alerts</MicroLabel>
+              <div className="mt-2 space-y-1.5">
+                {setupAlerts.length > 0 ? setupAlerts.map((sig, idx) => (
+                  <div key={sig.id} className="rounded px-2 py-1.5 flex items-center justify-between" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0f131e" }}>
+                    <span style={{ fontSize: "10px", color: "#fff", fontFamily: "Space Grotesk" }}>{idx + 1}. {sig.instrument} {sig.setup_type.replace(/_/g, " ")}</span>
+                    <span style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: sig.final_quality > 70 ? C.primary : sig.final_quality > 50 ? "#fbbf24" : C.tertiary }}>
+                      {formatNumber(sig.final_quality, 1)}%
+                    </span>
+                  </div>
+                )) : (
+                  <div style={{ fontSize: "10px", color: C.muted }}>No active setup alerts.</div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="xl:col-span-6">
+            <div className="relative rounded min-h-[360px] overflow-hidden" style={{ background: "radial-gradient(circle at 52% 52%, rgba(71,144,255,0.28), rgba(10,16,32,0.95) 60%), linear-gradient(140deg, rgba(16,22,38,0.98), rgba(10,14,26,0.98))", border: `1px solid rgba(102,157,255,0.2)` }}>
+              <div className="absolute inset-0 opacity-70" style={{ backgroundImage: "radial-gradient(circle at 30% 20%, rgba(156,255,147,0.2), transparent 25%), radial-gradient(circle at 70% 80%, rgba(255,113,98,0.15), transparent 30%), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(0deg, rgba(255,255,255,0.04) 1px, transparent 1px)", backgroundSize: "auto, auto, 38px 38px, 38px 38px" }} />
+              <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full w-40 h-40 flex items-center justify-center" style={{ background: "radial-gradient(circle, rgba(255,199,84,0.95), rgba(255,153,0,0.18) 54%, rgba(255,153,0,0.02) 72%)", boxShadow: "0 0 60px rgba(255,184,77,0.4)" }}>
+                <div className="text-center">
+                  <div style={{ fontSize: "11px", letterSpacing: "0.12em", fontFamily: "Space Grotesk", textTransform: "uppercase", color: "#100d08" }}>Godsview Brain</div>
+                  <div style={{ fontSize: "16px", fontFamily: "Space Grotesk", fontWeight: 700, color: "#100d08" }}>{sentimentLabel}</div>
+                </div>
+              </div>
+              {featuredBrainNodes.map((row, idx) => {
+                const pos = HERO_NODE_POSITIONS[idx] ?? HERO_NODE_POSITIONS[0];
+                const tone = row.direction === "long" ? C.primary : row.direction === "short" ? C.tertiary : C.secondary;
+                return (
+                  <div
+                    key={row.symbol}
+                    className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full px-4 py-2"
+                    style={{
+                      left: pos.left,
+                      top: pos.top,
+                      border: `1px solid ${tone}88`,
+                      backgroundColor: `${tone}22`,
+                      boxShadow: `0 0 24px ${tone}66`,
+                    }}
+                  >
+                    <div style={{ fontSize: "30px", fontWeight: 700, lineHeight: 1, color: "#fff", fontFamily: "Space Grotesk", textAlign: "center" }}>{row.symbol}</div>
+                    <div style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: "#e2e8f0", textAlign: "center", marginTop: "2px" }}>
+                      {(row.attention_score * 100).toFixed(0)}% attn
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="xl:col-span-3 space-y-3">
+            <div className="rounded p-3" style={{ backgroundColor: "#111726", border: `1px solid ${C.border}` }}>
+              <MicroLabel>Claude Analysis</MicroLabel>
+              <div className="mt-2 space-y-2">
+                {rankedBoard.slice(0, 4).map((row) => {
+                  const dotColor = row.readiness === "allow" ? C.primary : row.readiness === "watch" ? "#fbbf24" : C.tertiary;
+                  return (
+                    <div key={row.symbol} className="flex items-start gap-2">
+                      <span className="w-2 h-2 rounded-full mt-1" style={{ backgroundColor: dotColor }} />
+                      <div>
+                        <div style={{ fontSize: "11px", color: "#fff", fontFamily: "Space Grotesk" }}>{row.symbol}: {row.reasoning_verdict.replace(/_/g, " ")}</div>
+                        <div style={{ fontSize: "9px", color: C.muted, fontFamily: "JetBrains Mono, monospace" }}>
+                          setup {row.setup_family} · {row.risk_state}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                {rankedBoard.length === 0 && (
+                  <div style={{ fontSize: "10px", color: C.muted }}>
+                    No consciousness data yet. Run brain cycle.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded p-3" style={{ backgroundColor: "#111726", border: `1px solid ${C.border}` }}>
+              <MicroLabel>Execution Metrics</MicroLabel>
+              <div className="mt-2 space-y-2">
+                <div className="rounded px-2 py-1.5 flex items-center justify-between" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0f131e" }}>
+                  <span style={{ fontSize: "10px", color: C.muted }}>Slippage</span>
+                  <span style={{ fontSize: "10px", color: executionSlippageLabel === "Low" ? C.primary : executionSlippageLabel === "Moderate" ? "#fbbf24" : C.tertiary }}>{executionSlippageLabel}</span>
+                </div>
+                <div className="rounded px-2 py-1.5 flex items-center justify-between" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0f131e" }}>
+                  <span style={{ fontSize: "10px", color: C.muted }}>Fill Quality</span>
+                  <span style={{ fontSize: "10px", color: executionFillLabel === "Excellent" ? C.primary : executionFillLabel === "Good" ? C.secondary : "#fbbf24" }}>{executionFillLabel}</span>
+                </div>
+                <div className="rounded px-2 py-1.5 flex items-center justify-between" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0f131e" }}>
+                  <span style={{ fontSize: "10px", color: C.muted }}>Risk Level</span>
+                  <span style={{ fontSize: "10px", color: executionRiskLabel === "Disciplined" ? C.primary : executionRiskLabel === "Moderate" ? "#fbbf24" : C.tertiary }}>{executionRiskLabel}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+          {setupAlerts.length > 0 ? setupAlerts.map((sig) => (
+            <div key={`strip-${sig.id}`} className="rounded px-3 py-2" style={{ backgroundColor: "#111726", border: `1px solid ${C.border}` }}>
+              <div style={{ fontSize: "10px", color: "#fff", fontWeight: 700, fontFamily: "Space Grotesk" }}>{sig.instrument} {sig.setup_type.replace(/_/g, " ")}</div>
+              <div style={{ fontSize: "9px", marginTop: "3px", color: sig.final_quality > 65 ? C.primary : sig.final_quality > 50 ? "#fbbf24" : C.tertiary }}>
+                {formatNumber(sig.final_quality, 1)}% quality
+              </div>
+            </div>
+          )) : (
+            <div className="md:col-span-4 rounded px-3 py-2" style={{ backgroundColor: "#111726", border: `1px solid ${C.border}`, color: C.muted, fontSize: "10px" }}>
+              Waiting for fresh setups from live scan.
+            </div>
+          )}
+        </div>
+
+        <div className="rounded px-4 py-3 flex flex-wrap items-center justify-between gap-3" style={{ backgroundColor: "#0f1628", border: `1px solid rgba(156,255,147,0.2)` }}>
+          <div className="flex flex-wrap items-center gap-4">
+            <span style={{ fontSize: "28px", fontFamily: "Space Grotesk", fontWeight: 700, color: heroSignalDirection === "buy" ? C.primary : heroSignalDirection === "sell" ? C.tertiary : "#fff" }}>
+              {heroSignal?.instrument ?? rankedBoard[0]?.symbol ?? "NO-SIGNAL"}
+            </span>
+            <span style={{ fontSize: "18px", fontFamily: "Space Grotesk", fontWeight: 700, color: heroSignalDirection === "buy" ? C.primary : heroSignalDirection === "sell" ? C.tertiary : C.muted }}>
+              {heroSignalDirection === "none" ? "STANDBY" : `${heroSignalDirection.toUpperCase()} SIGNAL`}
+            </span>
+            {heroSignal && (
+              <span style={{ fontSize: "11px", color: C.muted, fontFamily: "JetBrains Mono, monospace" }}>
+                Entry {heroSignal.entry_price ? Number(heroSignal.entry_price).toFixed(2) : "—"} · Quality {formatNumber(heroSignal.final_quality, 1)}%
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            className="rounded px-4 py-2 transition-all hover:brightness-110"
+            style={{ backgroundColor: "rgba(156,255,147,0.16)", color: C.primary, border: "1px solid rgba(156,255,147,0.42)", fontFamily: "Space Grotesk", fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", fontWeight: 700 }}
+          >
+            Execute Trade
+          </button>
+        </div>
+      </div>
 
       {/* ── Top Metrics ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -504,7 +759,7 @@ export default function Dashboard() {
           </div>
         </div>
         <div style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: C.outlineVar }}>
-          GODSVIEW v0.2.0-BETA
+          GODSVIEW v0.4.1-BRAIN
         </div>
       </div>
     </div>
