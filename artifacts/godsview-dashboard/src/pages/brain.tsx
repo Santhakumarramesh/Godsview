@@ -11,6 +11,8 @@ import { useState, useRef, useMemo, useCallback, useEffect, Suspense } from "rea
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Float, Billboard, Text, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
+import { useBrainConsciousness, useBrainEntities } from "@/lib/api";
+import { useLivePrices } from "@/lib/market-store";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -45,30 +47,30 @@ const MOCK_STOCKS: StockNodeData[] = [
   { symbol: "NVDA", displaySymbol: "NVDA", confidence: 82, sentiment: "bullish", regime: "risk-on", attentionLevel: "HIGH", opportunityScore: 85, setupFamily: "breakout", state: "STRONG_LONG", price: 924.5, changePct: 3.12, riskGate: "ALLOW" },
   { symbol: "AAPL", displaySymbol: "AAPL", confidence: 65, sentiment: "neutral", regime: "choppy", attentionLevel: "MEDIUM", opportunityScore: 55, setupFamily: "pullback", state: "WATCH_LONG", price: 198.2, changePct: -0.32, riskGate: "WATCH" },
   { symbol: "TSLA", displaySymbol: "TSLA", confidence: 45, sentiment: "bearish", regime: "high-vol", attentionLevel: "LOW", opportunityScore: 35, setupFamily: "reversal", state: "BLOCKED", price: 172.8, changePct: -2.14, riskGate: "BLOCK" },
-  { symbol: "SPY", displaySymbol: "SPY", confidence: 70, sentiment: "bullish", regime: "risk-on", attentionLevel: "MEDIUM", opportunityScore: 62, setupFamily: "trend", state: "WATCH_LONG", price: 562.4, changePct: 0.45, riskGate: "ALLOW" },  { symbol: "SPY", displaySymbol: "SPY", confidence: 70, sentiment: "bullish", regime: "risk-on", attentionLevel: "MEDIUM", opportunityScore: 62, setupFamily: "trend", state: "WATCH_LONG", price: 562.4, changePct: 0.45, riskGate: "ALLOW" },
-    50→  { symbol: "QQQ", displaySymbol: "QQQ", confidence: 72, sentiment: "bullish", regime: "risk-on", attentionLevel: "MEDIUM", opportunityScore: 68, setupFamily: "trend", state: "WATCH_LONG", price: 485.3, changePct: 0.78, riskGate: "ALLOW" },
-    51→  { symbol: "AMZN", displaySymbol: "AMZN", confidence: 58, sentiment: "neutral", regime: "choppy", attentionLevel: "LOW", opportunityScore: 42, setupFamily: "range", state: "IDLE", price: 186.7, changePct: -0.65, riskGate: "WATCH" },
-    52→  { symbol: "META", displaySymbol: "META", confidence: 76, sentiment: "bullish", regime: "risk-on", attentionLevel: "HIGH", opportunityScore: 80, setupFamily: "breakout", state: "WATCH_LONG", price: 512.3, changePct: 1.56, riskGate: "ALLOW" },
-    53→  { symbol: "SOLUSD", displaySymbol: "SOL", confidence: 69, sentiment: "bullish", regime: "risk-on", attentionLevel: "MEDIUM", opportunityScore: 71, setupFamily: "continuation", state: "WATCH_LONG", price: 187.5, changePct: 4.21, riskGate: "ALLOW" },
-    54→];
-    55→
-    56→const MOCK_SUPREME: SupremeState = {
-    57→  regime: "RISK-ON",
-    58→  riskAppetite: "MODERATE",
-    59→  totalCapitalAllocated: 78,
-    60→  activeBrains: 10,
-    61→  lastCycleMs: 1240,
-    62→  decayDetected: false,
-    63→};
-    64→
-    65→// ─── Color Helpers ──────────────────────────────────────────────────────────
-    66→
-    67→function getNodeColor(stock: StockNodeData): string {
-    68→  if (stock.riskGate === "BLOCK") return "#ff4444";
-    69→  if (stock.sentiment === "bearish") return "#ff7162";
-    70→  if (stock.sentiment === "bullish") return "#00ffcc";
-    71→  return "#8888aa";
-    72→}
+  { symbol: "SPY", displaySymbol: "SPY", confidence: 70, sentiment: "bullish", regime: "risk-on", attentionLevel: "MEDIUM", opportunityScore: 62, setupFamily: "trend", state: "WATCH_LONG", price: 562.4, changePct: 0.45, riskGate: "ALLOW" },
+  { symbol: "QQQ", displaySymbol: "QQQ", confidence: 72, sentiment: "bullish", regime: "risk-on", attentionLevel: "MEDIUM", opportunityScore: 68, setupFamily: "trend", state: "WATCH_LONG", price: 485.3, changePct: 0.78, riskGate: "ALLOW" },
+  { symbol: "AMZN", displaySymbol: "AMZN", confidence: 58, sentiment: "neutral", regime: "choppy", attentionLevel: "LOW", opportunityScore: 42, setupFamily: "range", state: "IDLE", price: 186.7, changePct: -0.65, riskGate: "WATCH" },
+  { symbol: "META", displaySymbol: "META", confidence: 76, sentiment: "bullish", regime: "risk-on", attentionLevel: "HIGH", opportunityScore: 80, setupFamily: "breakout", state: "WATCH_LONG", price: 512.3, changePct: 1.56, riskGate: "ALLOW" },
+  { symbol: "SOLUSD", displaySymbol: "SOL", confidence: 69, sentiment: "bullish", regime: "risk-on", attentionLevel: "MEDIUM", opportunityScore: 71, setupFamily: "continuation", state: "WATCH_LONG", price: 187.5, changePct: 4.21, riskGate: "ALLOW" },
+];
+
+const MOCK_SUPREME: SupremeState = {
+  regime: "RISK-ON",
+  riskAppetite: "MODERATE",
+  totalCapitalAllocated: 78,
+  activeBrains: 10,
+  lastCycleMs: 1240,
+  decayDetected: false,
+};
+
+// ─── Color Helpers ──────────────────────────────────────────────────────────
+
+function getNodeColor(stock: StockNodeData): string {
+  if (stock.riskGate === "BLOCK") return "#ff4444";
+  if (stock.sentiment === "bearish") return "#ff7162";
+  if (stock.sentiment === "bullish") return "#00ffcc";
+  return "#8888aa";
+}
 
 function getNodeEmissive(stock: StockNodeData): string {
   if (stock.riskGate === "BLOCK") return "#660000";
@@ -175,8 +177,10 @@ function CentralBrain() {
       {/* Floating particle cloud */}
       <points ref={particlesRef}>
         <bufferGeometry>
+          {/* @ts-ignore R3F bufferAttribute typing */}
           <bufferAttribute
             attach="attributes-position"
+            args={[particlePositions, 3]}
             count={particlePositions.length / 3}
             array={particlePositions}
             itemSize={3}
@@ -227,15 +231,16 @@ function NeuralLink({
     }
   });
 
+  const Line = "line" as any;
   return (
-    <line ref={lineRef as any} geometry={geometry}>
+    <Line ref={lineRef} geometry={geometry}>
       <lineBasicMaterial
         color={color}
         transparent
         opacity={0.2}
         linewidth={1}
       />
-    </line>
+    </Line>
   );
 }
 /** Individual stock node sphere with label */
@@ -362,8 +367,10 @@ function ParticleField() {
   return (
     <points ref={ref}>
       <bufferGeometry>
+        {/* @ts-ignore R3F bufferAttribute typing */}
         <bufferAttribute
           attach="attributes-position"
+          args={[positions, 3]}
           count={positions.length / 3}
           array={positions}
           itemSize={3}
@@ -731,8 +738,45 @@ function StockDrawer({
 
 export default function BrainPage() {
   const [selectedStock, setSelectedStock] = useState<StockNodeData | null>(null);
-  const [stocks] = useState(MOCK_STOCKS);
-  const [supreme] = useState(MOCK_SUPREME);
+
+  // Real API hooks — graceful fallback to mock data
+  const { data: brainEntities } = useBrainEntities();
+  const { data: consciousness } = useBrainConsciousness();
+  const livePrices = useLivePrices();
+
+  const stocks = useMemo(() => {
+    if (!brainEntities?.length) return MOCK_STOCKS;
+    return brainEntities.map((entity: any): StockNodeData => {
+      const lp = livePrices.find((p) => p.symbol === entity.symbol);
+      const sj = entity.state_json ? JSON.parse(entity.state_json) : {};
+      return {
+        symbol: entity.symbol,
+        displaySymbol: entity.name || entity.symbol.replace("USD", ""),
+        confidence: sj.confidence ?? 50,
+        sentiment: sj.sentiment ?? (lp && lp.changePct > 0 ? "bullish" : lp && lp.changePct < 0 ? "bearish" : "neutral"),
+        regime: entity.regime ?? "unknown",
+        attentionLevel: sj.attentionLevel ?? "MEDIUM",
+        opportunityScore: sj.opportunityScore ?? 50,
+        setupFamily: sj.setupFamily ?? "unknown",
+        state: sj.state ?? "IDLE",
+        price: lp?.price ?? entity.last_price ?? 0,
+        changePct: lp?.changePct ?? 0,
+        riskGate: sj.riskGate ?? "ALLOW",
+      };
+    });
+  }, [brainEntities, livePrices]);
+
+  const supreme = useMemo<SupremeState>(() => {
+    if (!consciousness) return MOCK_SUPREME;
+    return {
+      regime: consciousness.regime ?? MOCK_SUPREME.regime,
+      riskAppetite: consciousness.riskAppetite ?? MOCK_SUPREME.riskAppetite,
+      totalCapitalAllocated: consciousness.totalCapitalAllocated ?? MOCK_SUPREME.totalCapitalAllocated,
+      activeBrains: consciousness.activeBrains ?? stocks.length,
+      lastCycleMs: consciousness.lastCycleMs ?? MOCK_SUPREME.lastCycleMs,
+      decayDetected: consciousness.decayDetected ?? false,
+    };
+  }, [consciousness, stocks.length]);
 
   const handleSelectStock = useCallback((stock: StockNodeData) => {
     setSelectedStock((prev) => (prev?.symbol === stock.symbol ? null : stock));

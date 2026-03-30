@@ -192,6 +192,7 @@ function LayerCard({ layer, isActive, onClick }: { layer: PipelineLayer; isActiv
       const iv = setInterval(() => setPulse((p) => !p), 1200);
       return () => clearInterval(iv);
     }
+    return undefined;
   }, [layer.status]);
 
   const borderColor = isActive ? "#669dff" : "rgba(72,72,73,0.15)";
