@@ -207,6 +207,11 @@
     opacity: 0.78;
   }
 
+  .gv-neural-link-surge {
+    filter: drop-shadow(0 0 8px rgba(255, 204, 102, 0.5));
+    animation: gvLinkFlow 4.2s linear infinite, gvSurgePulse 2.8s ease-in-out infinite;
+  }
+
   .gv-neural-node {
     position: absolute;
     isolation: isolate;
@@ -223,6 +228,10 @@
     outline: none;
   }
 
+  .gv-neural-node-surge {
+    animation: gvNodeFloat 6.2s ease-in-out infinite, gvSurgePulse 2.8s ease-in-out infinite;
+  }
+
   .gv-node-ring {
     position: absolute;
     inset: -7px;
@@ -231,6 +240,20 @@
     animation: gvPulseRing 2.9s ease-out infinite;
     pointer-events: none;
     z-index: -1;
+  }
+
+  .gv-node-ring-surge {
+    animation: gvPulseRing 2.9s ease-out infinite, gvSurgeRing 2.8s ease-in-out infinite;
+  }
+
+  .gv-signal-particle {
+    filter: drop-shadow(0 0 4px rgba(156, 255, 147, 0.45));
+    opacity: 0.85;
+  }
+
+  .gv-signal-particle-surge {
+    filter: drop-shadow(0 0 6px rgba(255, 199, 84, 0.62));
+    animation: gvParticleSurge 2.8s ease-in-out infinite;
   }
 
   @keyframes gvBrainBreath {
@@ -292,6 +315,45 @@
     100% {
       transform: translate3d(0, -10px, 0);
       opacity: 1;
+    }
+  }
+
+  @keyframes gvSurgePulse {
+    0% {
+      opacity: 0.8;
+      filter: brightness(0.96);
+    }
+    45% {
+      opacity: 1;
+      filter: brightness(1.18);
+    }
+    100% {
+      opacity: 0.85;
+      filter: brightness(1);
+    }
+  }
+
+  @keyframes gvSurgeRing {
+    0% {
+      transform: scale(1);
+    }
+    40% {
+      transform: scale(1.16);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+
+  @keyframes gvParticleSurge {
+    0% {
+      opacity: 0.7;
+    }
+    50% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0.7;
     }
   }
 

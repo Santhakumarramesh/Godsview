@@ -89,6 +89,16 @@ const HERO_NODE_POSITIONS = [
   { left: "84%", top: "52%" },
 ];
 
+function buildNeuralCurvePath(targetX: number, targetY: number, i: number): string {
+  const startX = 50;
+  const startY = 50;
+  const direction = targetX >= 50 ? 1 : -1;
+  const baseCurvature = 7 + i * 1.4;
+  const controlX = (startX + targetX) / 2 + direction * baseCurvature;
+  const controlY = (startY + targetY) / 2 - Math.abs(targetX - startX) * 0.18;
+  return `M ${startX} ${startY} Q ${controlX} ${controlY} ${targetX} ${targetY}`;
+}
+
 export default function Dashboard() {
   const [focusedSymbol, setFocusedSymbol] = useState<string | null>(null);
 
@@ -232,12 +242,17 @@ export default function Dashboard() {
   const executionSlippageLabel = avgRiskScore < 0.35 ? "Low" : avgRiskScore < 0.65 ? "Moderate" : "High";
   const executionFillLabel = avgOrderflowScore > 0.7 ? "Excellent" : avgOrderflowScore > 0.5 ? "Good" : "Watch";
   const executionRiskLabel = avgRiskScore < 0.35 ? "Disciplined" : avgRiskScore < 0.65 ? "Moderate" : "Elevated";
+  const surgeTopSymbols = featuredBrainNodes
+    .slice()
+    .sort((a, b) => b.attention_score - a.attention_score)
+    .slice(0, 3)
+    .map((row) => row.symbol);
   const focusedNode = useMemo(
     () =>
       rankedBoard.find((row) => row.symbol === focusedSymbol) ??
       featuredBrainNodes[0] ??
       null,
-    [rankedBoard, focusedSymbol, featuredBrainNodes],
+    [rankedBoard, focusedSymbol, featuredBrainNodes]
   );
 
   return (
@@ -356,20 +371,34 @@ export default function Dashboard() {
                   const pos = HERO_NODE_POSITIONS[idx] ?? HERO_NODE_POSITIONS[0];
                   const x = Number.parseFloat(pos.left);
                   const y = Number.parseFloat(pos.top);
+                  const pathD = buildNeuralCurvePath(x, y, idx);
                   const lineColor = row.direction === "long" ? "rgba(156,255,147,0.75)" : row.direction === "short" ? "rgba(255,113,98,0.75)" : "rgba(102,157,255,0.75)";
                   const strokeWidth = 0.22 + row.attention_score * 0.6;
+                  const isSurge = surgeTopSymbols.includes(row.symbol);
                   return (
-                    <line
-                      key={`link-${row.symbol}`}
-                      className="gv-neural-link"
-                      x1="50"
-                      y1="50"
-                      x2={x}
-                      y2={y}
-                      stroke={lineColor}
-                      strokeWidth={strokeWidth}
-                      strokeLinecap="round"
-                    />
+                    <g key={`link-${row.symbol}`}>
+                      <path
+                        className={`gv-neural-link${isSurge ? " gv-neural-link-surge" : ""}`}
+                        d={pathD}
+                        stroke={lineColor}
+                        strokeWidth={strokeWidth}
+                        strokeLinecap="round"
+                        fill="none"
+                      />
+                      <circle
+                        r={0.58 + row.attention_score * 0.28}
+                        className={isSurge ? "gv-signal-particle gv-signal-particle-surge" : "gv-signal-particle"}
+                        fill={lineColor}
+                      >
+                        <animateMotion
+                          dur={`${Math.max(1.9, 3.8 - row.attention_score * 1.6)}s`}
+                          repeatCount="indefinite"
+                          rotate="auto"
+                          path={pathD}
+                          begin={`${(idx * 0.24).toFixed(2)}s`}
+                        />
+                      </circle>
+                    </g>
                   );
                 })}
               </svg>
@@ -386,7 +415,7 @@ export default function Dashboard() {
                 return (
                   <div
                     key={row.symbol}
-                    className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full px-4 py-2 gv-neural-node"
+                    className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full px-4 py-2 gv-neural-node${surgeTopSymbols.includes(row.symbol) ? " gv-neural-node-surge" : ""}`}
                     style={{
                       left: pos.left,
                       top: pos.top,
@@ -405,7 +434,7 @@ export default function Dashboard() {
                     <div style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: "#e2e8f0", textAlign: "center", marginTop: "2px" }}>
                       {(row.attention_score * 100).toFixed(0)}% attn
                     </div>
-                    <span className="gv-node-ring" style={{ borderColor: `${tone}55` }} />
+                    <span className={`gv-node-ring${surgeTopSymbols.includes(row.symbol) ? " gv-node-ring-surge" : ""}`} style={{ borderColor: `${tone}55` }} />
                   </div>
                 );
               })}
