@@ -307,6 +307,7 @@ function useLiveTicker() {
 
 const navItems = [
   { href: "/", label: "Mission Control", icon: "dashboard", sub: "Overview" },
+  { href: "/brain", label: "Brain", icon: "neurology", sub: "Intelligence" },
   { href: "/alpaca", label: "Live Intelligence", icon: "psychology", sub: "Analysis" },
   { href: "/infinity", label: "Infinity Screen", icon: "grid_view", sub: "Multi-Chart" },
   { href: "/signals", label: "Signal Feed", icon: "sensors", sub: "Pipeline" },

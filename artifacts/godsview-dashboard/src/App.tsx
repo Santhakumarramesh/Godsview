@@ -13,6 +13,7 @@ import Performance from "@/pages/performance";
 import System from "@/pages/system";
 import AlpacaPage from "@/pages/alpaca";
 import InfinityPage from "@/pages/infinity";
+import BrainPage from "@/pages/brain";
 import StitchLabPage from "@/pages/stitch-lab";
 
 const queryClient = new QueryClient({
@@ -103,6 +104,7 @@ function Router() {
         <RoutedPage path="/system" component={System} scope="page:system" />
         <RoutedPage path="/alpaca" component={AlpacaPage} scope="page:alpaca" />
         <RoutedPage path="/infinity" component={InfinityPage} scope="page:infinity" />
+        <RoutedPage path="/brain" component={BrainPage} scope="page:brain" />
         <RoutedPage path="/stitch-lab" component={StitchLabPage} scope="page:stitch-lab" />
         <Route>
           <AppErrorBoundary scope="page:not-found">
