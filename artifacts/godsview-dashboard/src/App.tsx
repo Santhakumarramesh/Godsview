@@ -17,6 +17,8 @@ import BrainPage from "@/pages/brain";
 import StitchLabPage from "@/pages/stitch-lab";
 import PipelinePage from "@/pages/pipeline";
 import CandleXRayPage from "@/pages/candle-xray";
+import SetupExplorerPage from "@/pages/setup-explorer";
+import ReportsPage from "@/pages/reports";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -110,6 +112,8 @@ function Router() {
         <RoutedPage path="/stitch-lab" component={StitchLabPage} scope="page:stitch-lab" />
         <RoutedPage path="/pipeline" component={PipelinePage} scope="page:pipeline" />
         <RoutedPage path="/candle-xray" component={CandleXRayPage} scope="page:candle-xray" />
+        <RoutedPage path="/setup-explorer" component={SetupExplorerPage} scope="page:setup-explorer" />
+        <RoutedPage path="/reports" component={ReportsPage} scope="page:reports" />
         <Route>
           <AppErrorBoundary scope="page:not-found">
             <NotFound />
