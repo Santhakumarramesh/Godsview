@@ -1,0 +1,50 @@
+# ── GodsView Trading Dashboard — Docker Compose ─────────────────────
+# Usage:
+#   docker compose up -d          # start all services
+#   docker compose logs -f app    # tail app logs
+#   docker compose down            # stop everything
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: godsview
+      POSTGRES_USER: godsview
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-godsview_dev}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U godsview"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://godsview:${DB_PASSWORD:-godsview_dev}@db:5432/godsview
+      ALPACA_API_KEY: ${ALPACA_API_KEY}
+      ALPACA_API_SECRET: ${ALPACA_API_SECRET}
+      ALPACA_BASE_URL: ${ALPACA_BASE_URL:-https://paper-api.alpaca.markets}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # Risk defaults
+      MAX_POSITION_SIZE: ${MAX_POSITION_SIZE:-1000}
+      MAX_DAILY_LOSS: ${MAX_DAILY_LOSS:-500}
+      MAX_OPEN_POSITIONS: ${MAX_OPEN_POSITIONS:-5}
+      QUALITY_THRESHOLD: ${QUALITY_THRESHOLD:-0.75}
+    env_file:
+      - .env
+
+volumes:
+  pgdata:

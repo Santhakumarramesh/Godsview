@@ -1,0 +1,15 @@
+node_modules
+**/node_modules
+**/dist
+.git
+.env
+.env.local
+*.tar.gz
+*.b64
+_tmp_*
+_bp.*
+mnt/
+.bash*
+.profile
+godsview-openbb/
+attached_assets/
