@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 from app.config import settings
@@ -109,6 +110,45 @@ def _fetch_with_alpaca(symbol: str, interval: str) -> pd.DataFrame:
     return _normalize_ohlcv(bars)
 
 
+def _generate_synthetic_ohlcv(symbol: str, interval: str) -> pd.DataFrame:
+    bars = max(settings.lookback, 220)
+    interval_u = interval.upper()
+    if interval_u in {"1M", "5M", "15M", "30M"}:
+        freq = "15min"
+    elif interval_u in {"1H", "H", "HOUR"}:
+        freq = "1h"
+    else:
+        freq = "1D"
+
+    end_ts = pd.Timestamp(datetime.now(timezone.utc))
+    index = pd.date_range(end=end_ts, periods=bars, freq=freq, tz="UTC")
+
+    # Deterministic synthetic path per symbol for stable demo runs.
+    seed = sum(ord(ch) for ch in symbol) + len(interval_u) * 97
+    rng = np.random.default_rng(seed)
+    drift = 0.0004 if symbol.endswith("USD") else 0.00025
+    noise = rng.normal(loc=drift, scale=0.008, size=bars)
+    base_price = 100.0 + (seed % 70)
+    close = base_price * np.exp(np.cumsum(noise))
+    open_ = np.roll(close, 1)
+    open_[0] = close[0] * (1 - 0.002)
+    high = np.maximum(open_, close) * (1 + rng.uniform(0.0008, 0.006, size=bars))
+    low = np.minimum(open_, close) * (1 - rng.uniform(0.0008, 0.006, size=bars))
+    volume = np.abs(rng.normal(loc=5_000, scale=1_600, size=bars)) + 1_000
+
+    df = pd.DataFrame(
+        {
+            "Open": open_,
+            "High": high,
+            "Low": low,
+            "Close": close,
+            "Volume": volume,
+        },
+        index=index,
+    )
+    return _normalize_ohlcv(df)
+
+
 def fetch_price_history(symbol: str | None = None, interval: str | None = None) -> pd.DataFrame:
     final_symbol = (symbol or settings.symbol).upper()
     final_interval = (interval or settings.timeframe).upper()
@@ -116,9 +156,20 @@ def fetch_price_history(symbol: str | None = None, interval: str | None = None) 
     try:
         df = _fetch_with_openbb(final_symbol, settings.openbb_provider, final_interval)
         return df.tail(settings.lookback)
-    except Exception:
+    except Exception as openbb_err:
         # OpenBB is primary; Alpaca fallback improves reliability in environments where
         # OpenBB provider credentials or route support differ.
-        df = _fetch_with_alpaca(final_symbol, final_interval)
-        return df.tail(settings.lookback)
-
+        try:
+            df = _fetch_with_alpaca(final_symbol, final_interval)
+            return df.tail(settings.lookback)
+        except Exception as alpaca_err:
+            if settings.allow_synthetic_data_fallback:
+                synthetic = _generate_synthetic_ohlcv(final_symbol, final_interval)
+                synthetic.attrs["data_source"] = "synthetic_fallback"
+                synthetic.attrs["openbb_error"] = str(openbb_err)
+                synthetic.attrs["alpaca_error"] = str(alpaca_err)
+                return synthetic.tail(settings.lookback)
+            raise RuntimeError(
+                "Price history fetch failed via OpenBB and Alpaca fallback. "
+                f"OpenBB error: {openbb_err}. Alpaca error: {alpaca_err}."
+            ) from alpaca_err

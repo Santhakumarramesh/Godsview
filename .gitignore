@@ -55,3 +55,9 @@ __pycache__/
 .env.*
 !.env.example
 Godsview/
+
+# Godsview Python runtime artifacts
+godsview-openbb/data/processed/
+godsview-openbb/charts/
+godsview-openbb/reports/
+godsview-openbb/memory/
