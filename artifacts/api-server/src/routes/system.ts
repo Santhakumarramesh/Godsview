@@ -68,6 +68,12 @@ function asRecord(value: unknown): JsonRecord | null {
   return null;
 }
 
+function parseIsoToMs(value: unknown): number | null {
+  if (typeof value !== "string" || value.trim() === "") return null;
+  const ts = Date.parse(value);
+  return Number.isFinite(ts) ? ts : null;
+}
+
 function toTupleReasonList(value: unknown): Array<{ reason: string; count: number }> {
   if (!Array.isArray(value)) return [];
   return value
@@ -332,10 +338,12 @@ router.get("/system/status", async (req, res) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const [signalsRow, tradesRow, { positions, account }] = await Promise.all([
+    const [signalsRow, tradesRow, { positions, account }, orchestratorArtifact, reviewArtifact] = await Promise.all([
       db.select({ count: sql<number>`count(*)` }).from(signalsTable).where(gte(signalsTable.created_at, today)),
       db.select({ count: sql<number>`count(*)` }).from(tradesTable).where(gte(tradesTable.created_at, today)),
       getCachedAlpacaData(),
+      readJsonArtifact("latest_orchestrator_run.json"),
+      readJsonArtifact("latest_review_snapshot.json"),
     ]);
 
     const unrealizedPnl = positions.reduce((sum, p) => sum + parseFloat(p.unrealized_pl ?? "0"), 0);
@@ -344,6 +352,14 @@ router.get("/system/status", async (req, res) => {
     const accountNumber = (account as Record<string, string> | null)?.account_number ?? null;
     const accountMode = accountNumber ? (accountNumber.startsWith("PA") ? "paper" : "live") : null;
     const accountHasError = typeof account === "object" && account !== null && "error" in account;
+    const orchestratorData = asRecord(orchestratorArtifact.data);
+    const reviewData = asRecord(reviewArtifact.data);
+    const recallDbCount = Number(signalsRow[0].count);
+    const nowMs = Date.now();
+    const recallArtifactTs = parseIsoToMs(orchestratorData?.generated_at) ?? parseIsoToMs(reviewData?.recorded_at);
+    const recallArtifactFresh = recallArtifactTs !== null && nowMs - recallArtifactTs <= 24 * 60 * 60 * 1000;
+    const recallFromArtifacts = Boolean(orchestratorArtifact.exists && recallArtifactFresh);
+    const recallActive = recallDbCount > 0 || recallFromArtifacts;
 
     // Derive active instrument from open positions or default to BTC
     const activeInstrument = positions.length > 0
@@ -365,9 +381,11 @@ router.get("/system/status", async (req, res) => {
       { name: "Order Flow", status: "active" as const, message: "Tracking absorption, delta shifts, sweeps, CVD divergence", last_update: new Date().toISOString() },
       {
         name: "Recall Engine",
-        status: Number(signalsRow[0].count) > 0 ? ("active" as const) : ("warning" as const),
-        message: Number(signalsRow[0].count) > 0
-          ? "1m/5m/15m/1h multi-timeframe context ready"
+        status: recallActive ? ("active" as const) : ("warning" as const),
+        message: recallDbCount > 0
+          ? `Recall context ready from ${recallDbCount} fresh signal(s) today`
+          : recallFromArtifacts
+          ? "Recall context refreshed from latest pipeline/backtest artifacts"
           : "No fresh signals today — run scan/backtest to refresh recall context",
         last_update: new Date().toISOString(),
       },
