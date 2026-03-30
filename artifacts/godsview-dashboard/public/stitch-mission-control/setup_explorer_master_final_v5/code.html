@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>GODSVIEW | Setup Explorer</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "inverse-primary": "#0060ac",
+                        "surface": "#131314",
+                        "tertiary-fixed": "#7efba4",
+                        "secondary-container": "#334d58",
+                        "on-secondary-fixed-variant": "#304a55",
+                        "on-tertiary": "#00391a",
+                        "secondary": "#afcbd8",
+                        "surface-container-high": "#2a2a2b",
+                        "primary-fixed": "#d4e3ff",
+                        "on-tertiary-container": "#003115",
+                        "on-secondary-fixed": "#021f29",
+                        "error": "#ffb4ab",
+                        "surface-variant": "#353436",
+                        "surface-dim": "#131314",
+                        "error-container": "#93000a",
+                        "surface-bright": "#3a393a",
+                        "on-secondary-container": "#a1bdca",
+                        "on-background": "#e5e2e3",
+                        "primary": "#a4c9ff",
+                        "outline": "#8b919d",
+                        "on-tertiary-fixed": "#00210c",
+                        "tertiary-fixed-dim": "#61de8a",
+                        "surface-container-highest": "#353436",
+                        "secondary-fixed-dim": "#afcbd8",
+                        "on-surface": "#e5e2e3",
+                        "on-error": "#690005",
+                        "inverse-surface": "#e5e2e3",
+                        "on-primary-container": "#002a51",
+                        "surface-tint": "#a4c9ff",
+                        "on-primary": "#00315d",
+                        "primary-container": "#4d93e5",
+                        "on-surface-variant": "#c1c7d3",
+                        "on-primary-fixed-variant": "#004883",
+                        "primary-fixed-dim": "#a4c9ff",
+                        "outline-variant": "#414751",
+                        "surface-container-low": "#1c1b1c",
+                        "on-tertiary-fixed-variant": "#005228",
+                        "background": "#131314",
+                        "tertiary-container": "#18a659",
+                        "tertiary": "#61de8a",
+                        "surface-container-lowest": "#0e0e0f",
+                        "surface-container": "#201f20",
+                        "secondary-fixed": "#cbe7f5",
+                        "inverse-on-surface": "#313031",
+                        "on-secondary": "#19343e",
+                        "on-primary-fixed": "#001c39",
+                        "on-error-container": "#ffdad6"
+                    },
+                    fontFamily: {
+                        "headline": ["Manrope"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .tnum { font-variant-numeric: tabular-nums; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: #131314; }
+        ::-webkit-scrollbar-thumb { background: #2A2A2B; border-radius: 2px; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface font-body selection:bg-primary/30">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 flex justify-between items-center px-6 h-16 w-full bg-[#131314] dark:bg-[#131314]">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center overflow-hidden border border-outline-variant/20">
+<img alt="Profile" class="w-full h-full object-cover" data-alt="Professional portrait of an institutional trader in a high-tech dark trading room environment with blue accent lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBpvhQ0icH-xQJKd9jq7fCaoPYedXh_zIOh3oZoZ1ujPO0KZxnQQ6PsL1dvSSBqS2QJXczjJUrBApym6hKMqrqQv7PjfsREW3QzwkynoSAsrGrfWxVtQHRIwHrMrkbWz0ZSqE4e4vK2aCQ3iUZOr6cKWqiUBS8QlfDhKfFxDvUlVvjnooN-suAddU4YJn9iUZKmTkAAL01dQvUDm3GxdI4lSvDHOT5lgZSvSI0WGKQsLw8IY2dKjwMaTjR-blgQeFqOgvCqSqpUvK0"/>
+</div>
+<span class="font-['Manrope'] text-xl font-black tracking-widest text-[#A4C9FF] bg-gradient-to-br from-[#A4C9FF] to-[#4D93E2] bg-clip-text text-transparent">GODSVIEW</span>
+</div>
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-[#A4C9FF]" data-icon="sensors">sensors</span>
+</div>
+</header>
+<main class="pt-20 pb-32 px-4 space-y-6">
+<!-- Screen Header -->
+<section class="space-y-1">
+<p class="font-label text-[10px] tracking-[0.15em] text-primary uppercase font-bold">Execution Engine</p>
+<h1 class="font-headline text-2xl font-extrabold tracking-tight text-on-surface">Setup Explorer</h1>
+</section>
+<!-- Eligibility Matrix: Horizontal Bento -->
+<div class="grid grid-cols-1 gap-4">
+<!-- Model Card 1 -->
+<div class="bg-surface-container-low p-5 rounded-lg border-l-2 border-primary relative overflow-hidden">
+<div class="absolute top-0 right-0 p-3">
+<span class="px-2 py-0.5 bg-primary/10 text-primary font-label text-[9px] font-bold tracking-widest uppercase rounded-sm">Eligible</span>
+</div>
+<div class="space-y-4">
+<div class="flex justify-between items-start">
+<div>
+<h3 class="font-headline text-lg font-bold text-on-surface">Absorption Reversal</h3>
+<p class="font-label text-xs text-on-surface-variant">Model: V4-ALGO-X</p>
+</div>
+</div>
+<div class="grid grid-cols-3 gap-2">
+<div class="bg-surface-container-high p-3 rounded-sm space-y-1">
+<span class="block font-label text-[9px] text-outline uppercase tracking-wider">Win Rate</span>
+<span class="block font-body text-sm font-bold text-tertiary tnum">68.4%</span>
+</div>
+<div class="bg-surface-container-high p-3 rounded-sm space-y-1">
+<span class="block font-label text-[9px] text-outline uppercase tracking-wider">Edge</span>
+<span class="block font-body text-sm font-bold text-on-surface tnum">+1.2R</span>
+</div>
+<div class="bg-surface-container-high p-3 rounded-sm space-y-1">
+<span class="block font-label text-[9px] text-outline uppercase tracking-wider">Volume</span>
+<span class="block font-body text-sm font-bold text-secondary tnum">High</span>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between items-center text-[10px] font-label uppercase tracking-widest text-outline">
+<span>Market Alignment</span>
+<span class="text-primary font-bold">Optimal</span>
+</div>
+<div class="h-1 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full w-[85%] bg-gradient-to-r from-primary to-primary-container"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Model Card 2 -->
+<div class="bg-surface-container-low p-5 rounded-lg border-l-2 border-outline-variant relative opacity-80">
+<div class="absolute top-0 right-0 p-3">
+<span class="px-2 py-0.5 bg-surface-container-highest text-outline font-label text-[9px] font-bold tracking-widest uppercase rounded-sm">Standby</span>
+</div>
+<div class="space-y-4">
+<div>
+<h3 class="font-headline text-lg font-bold text-on-surface">Sweep Reclaim</h3>
+<p class="font-label text-xs text-on-surface-variant">Model: LIQUIDITY-PUMP</p>
+</div>
+<div class="grid grid-cols-3 gap-2">
+<div class="bg-surface-container-high p-3 rounded-sm space-y-1">
+<span class="block font-label text-[9px] text-outline uppercase tracking-wider">Win Rate</span>
+<span class="block font-body text-sm font-bold text-outline tnum">54.1%</span>
+</div>
+<div class="bg-surface-container-high p-3 rounded-sm space-y-1">
+<span class="block font-label text-[9px] text-outline uppercase tracking-wider">Edge</span>
+<span class="block font-body text-sm font-bold text-outline tnum">+0.4R</span>
+</div>
+<div class="bg-surface-container-high p-3 rounded-sm space-y-1">
+<span class="block font-label text-[9px] text-outline uppercase tracking-wider">Volume</span>
+<span class="block font-body text-sm font-bold text-outline tnum">Thin</span>
+</div>
+</div>
+<div class="flex items-center gap-2 text-[10px] font-label text-error/80 uppercase tracking-widest">
+<span class="material-symbols-outlined text-xs" data-icon="warning">warning</span>
+<span>Insufficient Delta Pressure</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Session Fit Matrix -->
+<section class="space-y-4">
+<h2 class="font-headline text-sm font-bold tracking-widest text-outline uppercase">Session Fit Matrix</h2>
+<div class="bg-surface-container-low rounded-lg overflow-hidden">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-high">
+<th class="p-3 font-label text-[9px] text-outline uppercase tracking-widest">Session</th>
+<th class="p-3 font-label text-[9px] text-outline uppercase tracking-widest">Volatility</th>
+<th class="p-3 font-label text-[9px] text-outline uppercase tracking-widest text-right">Fit Score</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/10">
+<tr>
+<td class="p-3 font-body text-xs font-semibold text-on-surface">London (LDN)</td>
+<td class="p-3">
+<span class="px-2 py-0.5 rounded-full bg-tertiary/10 text-tertiary text-[9px] font-bold">Extreme</span>
+</td>
+<td class="p-3 text-right font-body text-xs font-bold text-primary">94/100</td>
+</tr>
+<tr>
+<td class="p-3 font-body text-xs font-semibold text-on-surface">New York (NY)</td>
+<td class="p-3">
+<span class="px-2 py-0.5 rounded-full bg-secondary/10 text-secondary text-[9px] font-bold">Standard</span>
+</td>
+<td class="p-3 text-right font-body text-xs font-bold text-primary">88/100</td>
+</tr>
+<tr class="opacity-40 bg-surface-container-lowest">
+<td class="p-3 font-body text-xs font-semibold text-outline">Asian (ASN)</td>
+<td class="p-3">
+<span class="px-2 py-0.5 rounded-full bg-outline/10 text-outline text-[9px] font-bold">Compressed</span>
+</td>
+<td class="p-3 text-right font-body text-xs font-bold text-outline">12/100</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<!-- Model Readiness Checklist -->
+<section class="space-y-4">
+<h2 class="font-headline text-sm font-bold tracking-widest text-outline uppercase">Model Readiness Checklist</h2>
+<div class="grid grid-cols-1 gap-3">
+<div class="flex items-center justify-between p-4 bg-surface-container-high rounded-sm">
+<div class="flex items-center gap-3">
+<div class="w-5 h-5 flex items-center justify-center border border-primary text-primary">
+<span class="material-symbols-outlined text-sm" data-icon="check">check</span>
+</div>
+<span class="font-label text-xs font-medium text-on-surface">API Latency Calibration &lt; 5ms</span>
+</div>
+<span class="font-label text-[10px] text-tertiary font-bold tnum">PASS</span>
+</div>
+<div class="flex items-center justify-between p-4 bg-surface-container-high rounded-sm">
+<div class="flex items-center gap-3">
+<div class="w-5 h-5 flex items-center justify-center border border-primary text-primary">
+<span class="material-symbols-outlined text-sm" data-icon="check">check</span>
+</div>
+<span class="font-label text-xs font-medium text-on-surface">Order Flow Imbalance Map Loaded</span>
+</div>
+<span class="font-label text-[10px] text-tertiary font-bold tnum">PASS</span>
+</div>
+<div class="flex items-center justify-between p-4 bg-surface-container-high rounded-sm">
+<div class="flex items-center gap-3">
+<div class="w-5 h-5 flex items-center justify-center border border-error text-error">
+<span class="material-symbols-outlined text-sm" data-icon="close">close</span>
+</div>
+<span class="font-label text-xs font-medium text-on-surface">Counter-Party Sentiment Overlay</span>
+</div>
+<span class="font-label text-[10px] text-error font-bold tnum">WAIT</span>
+</div>
+</div>
+</section>
+<!-- Dynamic Condition Matrix -->
+<div class="grid grid-cols-2 gap-4">
+<div class="bg-surface-container-lowest p-4 rounded-lg space-y-3 border border-outline-variant/10">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-sm" data-icon="show_chart">show_chart</span>
+<span class="font-label text-[10px] text-outline uppercase tracking-widest">Volatility Index</span>
+</div>
+<div class="text-xl font-headline font-bold text-on-surface tnum">24.8 <span class="text-[10px] font-normal text-tertiary tracking-normal">+4.2%</span></div>
+</div>
+<div class="bg-surface-container-lowest p-4 rounded-lg space-y-3 border border-outline-variant/10">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-sm" data-icon="bar_chart_4_bars">bar_chart_4_bars</span>
+<span class="font-label text-[10px] text-outline uppercase tracking-widest">Liquidity Depth</span>
+</div>
+<div class="text-xl font-headline font-bold text-on-surface tnum">$4.2B <span class="text-[10px] font-normal text-error tracking-normal">-0.8%</span></div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center px-4 pb-6 pt-2 bg-[#131314]/80 backdrop-blur-xl dark:bg-[#131314]/80 z-50 border-t border-[#414751]/15 shadow-[0px_-12px_32px_rgba(255,255,255,0.06)]">
+<a class="flex flex-col items-center justify-center text-[#909094] py-1 w-full hover:text-[#A4C9FF] transition-all active:scale-95 duration-200" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="terminal">terminal</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-wider uppercase">Terminal</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#909094] py-1 w-full hover:text-[#A4C9FF] transition-all active:scale-95 duration-200" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="insert_chart">insert_chart</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-wider uppercase">Analytics</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#A4C9FF] bg-gradient-to-br from-[#A4C9FF]/10 to-[#4D93E2]/5 rounded-sm py-1 w-full active:scale-95 duration-200" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="psychology" style="font-variation-settings: 'FILL' 1;">psychology</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-wider uppercase">Intelligence</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#909094] py-1 w-full hover:text-[#A4C9FF] transition-all active:scale-95 duration-200" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="shield_with_heart">shield_with_heart</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-wider uppercase">Risk</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#909094] py-1 w-full hover:text-[#A4C9FF] transition-all active:scale-95 duration-200" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="account_circle">account_circle</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-wider uppercase">Profile</span>
+</a>
+</nav>
+</body></html>

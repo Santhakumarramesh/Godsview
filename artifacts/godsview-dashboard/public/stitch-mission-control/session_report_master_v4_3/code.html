@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Session Report (Master) v4 | Godsview</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Manrope:wght@500;700;800&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "tertiary-container": "#18a659",
+                        "on-primary-fixed-variant": "#004883",
+                        "on-primary-fixed": "#001c39",
+                        "surface": "#131314",
+                        "background": "#131314",
+                        "surface-container-high": "#2a2a2b",
+                        "on-surface-variant": "#c1c7d3",
+                        "surface-container": "#201f20",
+                        "error": "#ffb4ab",
+                        "surface-bright": "#3a393a",
+                        "on-primary-container": "#002a51",
+                        "primary-fixed": "#d4e3ff",
+                        "inverse-surface": "#e5e2e3",
+                        "error-container": "#93000a",
+                        "inverse-primary": "#0060ac",
+                        "on-primary": "#00315d",
+                        "on-tertiary-container": "#003115",
+                        "secondary-fixed-dim": "#afcbd8",
+                        "on-secondary-container": "#a1bdca",
+                        "primary-fixed-dim": "#a4c9ff",
+                        "outline-variant": "#414751",
+                        "secondary-fixed": "#cbe7f5",
+                        "outline": "#8b919d",
+                        "on-surface": "#e5e2e3",
+                        "surface-container-highest": "#353436",
+                        "primary": "#a4c9ff",
+                        "primary-container": "#4d93e5",
+                        "secondary-container": "#334d58",
+                        "on-tertiary-fixed-variant": "#005228",
+                        "on-secondary": "#19343e",
+                        "surface-container-lowest": "#0e0e0f",
+                        "inverse-on-surface": "#313031",
+                        "tertiary-fixed-dim": "#61de8a",
+                        "surface-tint": "#a4c9ff",
+                        "surface-dim": "#131314",
+                        "on-tertiary-fixed": "#00210c",
+                        "secondary": "#afcbd8",
+                        "on-secondary-fixed": "#021f29",
+                        "surface-container-low": "#1c1b1c",
+                        "on-tertiary": "#00391a",
+                        "on-background": "#e5e2e3",
+                        "on-secondary-fixed-variant": "#304a55",
+                        "on-error-container": "#ffdad6",
+                        "surface-variant": "#353436",
+                        "on-error": "#690005",
+                        "tertiary-fixed": "#7efba4",
+                        "tertiary": "#61de8a"
+                    },
+                    fontFamily: {
+                        "headline": ["Manrope"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .tabular-nums { font-feature-settings: "tnum" 1; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: #131314; }
+        ::-webkit-scrollbar-thumb { background: #414751; border-radius: 10px; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface font-body selection:bg-primary-container/30">
+<!-- Top Navigation Anchor -->
+<header class="fixed top-0 w-full z-50 bg-[#131314] flex justify-between items-center px-6 h-14 w-full">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[#A4C9FF]">sensors</span>
+<span class="text-sm font-black tracking-widest text-[#A4C9FF] font-['Manrope'] uppercase text-[10px] font-bold">BRAIN_TERMINAL_V.1</span>
+</div>
+<div class="flex items-center gap-6">
+<nav class="hidden md:flex gap-8">
+<a class="text-[#A4C9FF] font-['Manrope'] tracking-[0.05em] uppercase text-[10px] font-bold" href="#">Session</a>
+<a class="text-[#414751] hover:bg-[#2A2A2B] transition-colors font-['Manrope'] tracking-[0.05em] uppercase text-[10px] font-bold" href="#">Analysis</a>
+<a class="text-[#414751] hover:bg-[#2A2A2B] transition-colors font-['Manrope'] tracking-[0.05em] uppercase text-[10px] font-bold" href="#">Vault</a>
+</nav>
+<span class="material-symbols-outlined text-[#A4C9FF]">settings_input_component</span>
+</div>
+</header>
+<main class="pt-20 pb-24 px-4 md:px-8 max-w-7xl mx-auto space-y-8">
+<!-- Session Summary Header: Asymmetric Bento Style -->
+<section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+<!-- Left: Hero P&L and Date -->
+<div class="lg:col-span-8 bg-surface-container-low p-8 rounded-sm relative overflow-hidden group">
+<div class="absolute top-0 right-0 w-64 h-64 bg-tertiary/5 rounded-full blur-[100px] -mr-32 -mt-32"></div>
+<div class="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
+<div>
+<p class="font-headline text-[10px] uppercase tracking-[0.2em] text-outline mb-2">Operational Session Report</p>
+<h1 class="font-headline text-5xl font-extrabold tracking-tighter tabular-nums text-tertiary">
+                            +$3,060.00
+                        </h1>
+<p class="text-on-surface-variant mt-2 font-label text-sm">Oct 24, 2023 <span class="mx-2 text-outline-variant">/</span> 09:30 - 16:00 EST</p>
+</div>
+<div class="bg-surface-container-high px-4 py-3 rounded-sm border-l-2 border-tertiary">
+<p class="font-headline text-[10px] uppercase tracking-widest text-outline mb-1">Regime Classification</p>
+<p class="font-headline font-bold text-primary">Volatile Bullish</p>
+</div>
+</div>
+</div>
+<!-- Right: Neural Synthesis (Asymmetric weighting) -->
+<div class="lg:col-span-4 bg-gradient-to-br from-primary/10 to-transparent p-6 rounded-sm border border-primary/10">
+<div class="flex items-center gap-2 mb-4">
+<span class="material-symbols-outlined text-primary text-sm">psychology</span>
+<h3 class="font-headline text-[10px] uppercase tracking-widest font-bold">Neural Synthesis</h3>
+</div>
+<p class="text-sm leading-relaxed text-on-surface-variant italic">
+                    "Session identified high alpha in micro-reversals. Risk parameters successfully mitigated news-driven slippage at 10:30. Execution efficiency remains above 90th percentile for NQ clusters."
+                </p>
+</div>
+</section>
+<!-- Top Metrics Grid -->
+<section class="grid grid-cols-2 md:grid-cols-4 gap-4">
+<div class="bg-surface-container-low p-5 rounded-sm hover:bg-surface-container-high transition-colors group">
+<p class="font-label text-[10px] uppercase tracking-widest text-outline mb-3 group-hover:text-primary transition-colors">Total Trades</p>
+<p class="font-headline text-2xl font-bold tabular-nums">14</p>
+</div>
+<div class="bg-surface-container-low p-5 rounded-sm hover:bg-surface-container-high transition-colors group">
+<p class="font-label text-[10px] uppercase tracking-widest text-outline mb-3 group-hover:text-primary transition-colors">Win Rate</p>
+<p class="font-headline text-2xl font-bold tabular-nums text-tertiary">64.2%</p>
+</div>
+<div class="bg-surface-container-low p-5 rounded-sm hover:bg-surface-container-high transition-colors group">
+<p class="font-label text-[10px] uppercase tracking-widest text-outline mb-3 group-hover:text-primary transition-colors">Profit Factor</p>
+<p class="font-headline text-2xl font-bold tabular-nums">2.84</p>
+</div>
+<div class="bg-surface-container-low p-5 rounded-sm hover:bg-surface-container-high transition-colors group">
+<p class="font-label text-[10px] uppercase tracking-widest text-outline mb-3 group-hover:text-primary transition-colors">Sharpe Ratio</p>
+<p class="font-headline text-2xl font-bold tabular-nums">3.12</p>
+</div>
+</section>
+<!-- Main Body: Pipeline and Analysis -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+<!-- Decision Pipeline Log (Vertical Timeline) -->
+<div class="lg:col-span-7 space-y-6">
+<div class="flex items-center justify-between">
+<h2 class="font-headline text-sm font-bold tracking-widest uppercase">Decision Pipeline Log</h2>
+<span class="text-[10px] font-label text-outline uppercase tracking-tighter">Live Audit Stream</span>
+</div>
+<div class="relative space-y-4">
+<!-- Vertical Line -->
+<div class="absolute left-4 top-0 bottom-0 w-[1px] bg-outline-variant/30"></div>
+<!-- Pipeline Item: Approved -->
+<div class="relative pl-12 flex items-start group">
+<div class="absolute left-[11px] top-1.5 w-2.5 h-2.5 rounded-full bg-tertiary border-2 border-surface z-10"></div>
+<div class="bg-surface-container-low w-full p-4 rounded-sm flex justify-between items-center group-hover:bg-surface-container-high transition-colors">
+<div>
+<p class="font-headline text-[10px] uppercase tracking-widest text-tertiary font-bold">Approved</p>
+<p class="font-label font-medium text-sm">NQ! Long - Scalp Cluster B</p>
+<p class="text-[10px] text-outline tabular-nums mt-1">10:42:12 EST</p>
+</div>
+<div class="text-right">
+<p class="font-headline font-bold text-sm tabular-nums text-tertiary">+$1,220</p>
+<p class="text-[10px] text-outline uppercase tracking-tighter">Executed</p>
+</div>
+</div>
+</div>
+<!-- Pipeline Item: Vetoed -->
+<div class="relative pl-12 flex items-start group">
+<div class="absolute left-[11px] top-1.5 w-2.5 h-2.5 rounded-full bg-primary border-2 border-surface z-10"></div>
+<div class="bg-surface-container-low w-full p-4 rounded-sm flex justify-between items-center group-hover:bg-surface-container-high transition-colors">
+<div>
+<p class="font-headline text-[10px] uppercase tracking-widest text-primary font-bold">Vetoed</p>
+<p class="font-label font-medium text-sm">ES! Short - Mean Reversion</p>
+<p class="text-[10px] text-outline tabular-nums mt-1">11:15:04 EST</p>
+</div>
+<div class="text-right">
+<p class="font-headline font-bold text-sm tabular-nums text-outline">—</p>
+<p class="text-[10px] text-outline uppercase tracking-tighter">Override</p>
+</div>
+</div>
+</div>
+<!-- Pipeline Item: Rejected -->
+<div class="relative pl-12 flex items-start group">
+<div class="absolute left-[11px] top-1.5 w-2.5 h-2.5 rounded-full bg-error border-2 border-surface z-10"></div>
+<div class="bg-surface-container-low w-full p-4 rounded-sm flex justify-between items-center group-hover:bg-surface-container-high transition-colors">
+<div>
+<p class="font-headline text-[10px] uppercase tracking-widest text-error font-bold">Rejected</p>
+<p class="font-label font-medium text-sm">BTC! Long - Breakout Pattern</p>
+<p class="text-[10px] text-outline tabular-nums mt-1">13:50:42 EST</p>
+</div>
+<div class="text-right">
+<p class="font-headline font-bold text-sm tabular-nums text-error">Rejection</p>
+<p class="text-[10px] text-error uppercase tracking-tighter">News Lock</p>
+</div>
+</div>
+</div>
+<!-- Pipeline Item: Approved -->
+<div class="relative pl-12 flex items-start group">
+<div class="absolute left-[11px] top-1.5 w-2.5 h-2.5 rounded-full bg-tertiary border-2 border-surface z-10"></div>
+<div class="bg-surface-container-low w-full p-4 rounded-sm flex justify-between items-center group-hover:bg-surface-container-high transition-colors">
+<div>
+<p class="font-headline text-[10px] uppercase tracking-widest text-tertiary font-bold">Approved</p>
+<p class="font-label font-medium text-sm">NQ! Long - Follow-through</p>
+<p class="text-[10px] text-outline tabular-nums mt-1">15:20:00 EST</p>
+</div>
+<div class="text-right">
+<p class="font-headline font-bold text-sm tabular-nums text-tertiary">+$2,990</p>
+<p class="text-[10px] text-outline uppercase tracking-tighter">Finalized</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Outliers and Rejection Analysis -->
+<div class="lg:col-span-5 space-y-8">
+<!-- Outlier Performance Card -->
+<div class="bg-surface-container-low p-6 rounded-sm">
+<h3 class="font-headline text-[10px] uppercase tracking-widest font-bold mb-6 text-outline">Outlier Performance</h3>
+<div class="space-y-4">
+<div class="flex justify-between items-center pb-4 border-b border-outline-variant/10">
+<div>
+<p class="text-[10px] uppercase tracking-tighter text-tertiary font-bold mb-1">Alpha Peak</p>
+<p class="font-label font-semibold">NQ! +$4,210</p>
+</div>
+<div class="h-10 w-24 bg-tertiary/5 flex items-end px-1 gap-1">
+<div class="w-2 h-4 bg-tertiary/20"></div>
+<div class="w-2 h-6 bg-tertiary/40"></div>
+<div class="w-2 h-8 bg-tertiary/60"></div>
+<div class="w-2 h-10 bg-tertiary"></div>
+</div>
+</div>
+<div class="flex justify-between items-center">
+<div>
+<p class="text-[10px] uppercase tracking-tighter text-error font-bold mb-1">Max Drawdown</p>
+<p class="font-label font-semibold">ES! -$1,150</p>
+</div>
+<div class="h-10 w-24 bg-error/5 flex items-start px-1 gap-1">
+<div class="w-2 h-10 bg-error"></div>
+<div class="w-2 h-7 bg-error/60"></div>
+<div class="w-2 h-4 bg-error/30"></div>
+<div class="w-2 h-2 bg-error/10"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Rejection Reason Analysis -->
+<div class="bg-surface-container-low p-6 rounded-sm">
+<h3 class="font-headline text-[10px] uppercase tracking-widest font-bold mb-6 text-outline">Rejection Reasons</h3>
+<div class="space-y-5">
+<div class="space-y-2">
+<div class="flex justify-between text-[11px] font-label uppercase tracking-widest">
+<span>News Lockout</span>
+<span class="text-on-surface">48%</span>
+</div>
+<div class="h-1 w-full bg-surface-container-highest overflow-hidden">
+<div class="h-full bg-primary" style="width: 48%"></div>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between text-[11px] font-label uppercase tracking-widest">
+<span>High Volatility</span>
+<span class="text-on-surface">32%</span>
+</div>
+<div class="h-1 w-full bg-surface-container-highest overflow-hidden">
+<div class="h-full bg-primary/70" style="width: 32%"></div>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between text-[11px] font-label uppercase tracking-widest">
+<span>Spread Violation</span>
+<span class="text-on-surface">20%</span>
+</div>
+<div class="h-1 w-full bg-surface-container-highest overflow-hidden">
+<div class="h-full bg-primary/40" style="width: 20%"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Bottom Navigation Shell -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center px-4 pb-6 pt-2 bg-[#131314]/80 dark:bg-[#131314]/80 backdrop-blur-xl border-t border-[#414751]/15 shadow-[0px_-12px_32px_rgba(255,255,255,0.06)] z-50 rounded-t-sm">
+<a class="flex flex-col items-center justify-center text-[#A4C9FF] bg-gradient-to-tr from-[#A4C9FF]/10 to-[#4D93E2]/5 rounded-sm py-1 w-full transition-all" href="#">
+<span class="material-symbols-outlined text-lg">psychology</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-tight">Brain</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#414751] py-1 w-full hover:text-[#A4C9FF] transition-all" href="#">
+<span class="material-symbols-outlined text-lg">equalizer</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-tight">Market</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#414751] py-1 w-full hover:text-[#A4C9FF] transition-all" href="#">
+<span class="material-symbols-outlined text-lg">hub</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-tight">Agents</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#414751] py-1 w-full hover:text-[#A4C9FF] transition-all" href="#">
+<span class="material-symbols-outlined text-lg">swap_horiz</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-tight">Trades</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#414751] py-1 w-full hover:text-[#A4C9FF] transition-all" href="#">
+<span class="material-symbols-outlined text-lg">security</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-tight">Risk</span>
+</a>
+</nav>
+<!-- Contextual Decorative UI -->
+<div class="fixed top-1/2 right-4 -translate-y-1/2 hidden xl:flex flex-col gap-4 opacity-20 pointer-events-none">
+<div class="w-1 h-32 bg-outline-variant/30 rounded-full flex flex-col justify-start">
+<div class="w-full h-1/2 bg-primary"></div>
+</div>
+<p class="font-headline text-[8px] uppercase tracking-[0.5em] origin-right rotate-90 translate-x-4">System Latency: 4ms</p>
+</div>
+</body></html>

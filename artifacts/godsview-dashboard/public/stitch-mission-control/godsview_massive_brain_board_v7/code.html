@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>GodsView | Massive Brain Board v7</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;400;600;800&amp;family=Inter:wght@300;400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "inverse-surface": "#e5e2e3",
+                        "on-tertiary-container": "#003115",
+                        "tertiary": "#61de8a",
+                        "primary-fixed": "#d4e3ff",
+                        "surface-variant": "#353436",
+                        "on-secondary-container": "#a1bdca",
+                        "on-error-container": "#ffdad6",
+                        "primary-fixed-dim": "#a4c9ff",
+                        "on-error": "#690005",
+                        "surface-container-low": "#1c1b1c",
+                        "secondary-fixed-dim": "#afcbd8",
+                        "secondary-fixed": "#cbe7f5",
+                        "on-secondary": "#19343e",
+                        "on-surface-variant": "#c1c7d3",
+                        "background": "#131314",
+                        "secondary": "#afcbd8",
+                        "on-surface": "#e5e2e3",
+                        "on-tertiary": "#00391a",
+                        "tertiary-fixed-dim": "#61de8a",
+                        "surface-tint": "#a4c9ff",
+                        "on-primary-container": "#002a51",
+                        "primary-container": "#4d93e5",
+                        "outline-variant": "#414751",
+                        "on-primary-fixed": "#001c39",
+                        "on-primary": "#00315d",
+                        "primary": "#a4c9ff",
+                        "on-secondary-fixed-variant": "#304a55",
+                        "tertiary-fixed": "#7efba4",
+                        "inverse-on-surface": "#313031",
+                        "surface-container-highest": "#353436",
+                        "on-primary-fixed-variant": "#004883",
+                        "surface-container-high": "#2a2a2b",
+                        "on-tertiary-fixed-variant": "#005228",
+                        "error-container": "#93000a",
+                        "error": "#ffb4ab",
+                        "surface": "#131314",
+                        "surface-container": "#201f20",
+                        "on-tertiary-fixed": "#00210c",
+                        "outline": "#8b919d",
+                        "inverse-primary": "#0060ac",
+                        "tertiary-container": "#18a659",
+                        "surface-container-lowest": "#0e0e0f",
+                        "on-background": "#e5e2e3",
+                        "secondary-container": "#334d58",
+                        "surface-bright": "#3a393a",
+                        "on-secondary-fixed": "#021f29",
+                        "surface-dim": "#131314"
+                    },
+                    fontFamily: {
+                        "headline": ["Manrope"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" },
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            display: inline-block;
+            line-height: 1;
+            text-transform: none;
+            letter-spacing: normal;
+            word-wrap: normal;
+            white-space: nowrap;
+            direction: ltr;
+        }
+        body { background-color: #131314; color: #e5e2e3; }
+        .neural-pulse {
+            box-shadow: 0 0 20px rgba(164, 201, 255, 0.2);
+        }
+        .brain-gradient {
+            background: radial-gradient(circle at center, rgba(164, 201, 255, 0.15) 0%, transparent 70%);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="font-body selection:bg-primary/30 antialiased overflow-x-hidden">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-[#131314]/80 backdrop-blur-xl border-b border-[#414751]/15 shadow-[0_12px_32px_rgba(255,255,255,0.06)]">
+<div class="flex justify-between items-center px-6 h-16 w-full max-w-none">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[#A4C9FF]">hub</span>
+<span class="font-['Manrope'] font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-tr from-[#A4C9FF] to-[#4D93E2] text-xl">GodsView</span>
+</div>
+<div class="flex items-center gap-4">
+<span class="font-['Manrope'] tracking-widest uppercase text-xs font-bold text-[#A4C9FF]">BRAIN BOARD v7</span>
+<button class="material-symbols-outlined text-[#8E918F] hover:bg-[#353436] transition-colors duration-300 p-2 rounded-lg">settings_input_component</button>
+</div>
+</div>
+</header>
+<main class="pt-20 pb-28 px-4 space-y-6">
+<!-- Central Hero: The Market Brain -->
+<section class="relative w-full aspect-square flex items-center justify-center overflow-hidden">
+<div class="absolute inset-0 brain-gradient rounded-full scale-110"></div>
+<!-- The Brain Core -->
+<div class="relative z-10 w-48 h-48 rounded-full border border-primary/20 flex items-center justify-center neural-pulse">
+<div class="absolute inset-0 bg-gradient-to-br from-primary/10 to-primary-container/10 rounded-full animate-pulse"></div>
+<img alt="" class="w-32 h-32 opacity-80" data-alt="high-fidelity glowing 3D human brain made of translucent digital neon blue neural lines and pulsing data clusters on deep black background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAm3EttiLyhLm6cLA1ZRpSXZdznpFuReWuWn4BZlR-OAAQ9Nz2y7wtp4IUGJaKoiFDsXOZp86rp4nGHb5iSKQgtxhGxjRwzePbhnCau4zOgLG0MKgZI6OGZ93stpfF8-6jfUAbBn-9dAs5ROf5tXxLkb3Wyn69p4R7jI0Kb40Y16dcnzY59fR5GF4pVicRpM3yHqFm9Qzu8bObk81QVT2Jl7PDZJAorEczRbAnbyoveBeZbGS0XxznjlJ9Wx8oZLytOJQ9PwomCDfc"/>
+<!-- Orbiting Nodes -->
+<!-- NVDA - Strong Buy -->
+<div class="absolute -top-12 -right-4 flex flex-col items-center">
+<div class="w-14 h-14 rounded-full bg-tertiary-container/20 border border-tertiary flex items-center justify-center shadow-[0_0_15px_rgba(97,222,138,0.4)]">
+<span class="font-headline font-bold text-tertiary text-xs">NVDA</span>
+</div>
+<div class="h-10 w-px bg-gradient-to-b from-tertiary to-transparent opacity-50 mt-1"></div>
+</div>
+<!-- BTC - Neutral -->
+<div class="absolute top-1/2 -left-16 -translate-y-1/2 flex items-center">
+<div class="w-12 h-12 rounded-full bg-secondary-container/20 border border-secondary flex items-center justify-center">
+<span class="font-headline font-bold text-secondary text-[10px]">BTC</span>
+</div>
+<div class="w-8 h-px bg-gradient-to-r from-secondary to-transparent opacity-30 ml-1"></div>
+</div>
+<!-- AAPL - Low Sentiment -->
+<div class="absolute -bottom-8 right-12 flex flex-col items-center">
+<div class="w-10 h-10 rounded-full bg-surface-container-high border border-outline-variant flex items-center justify-center opacity-60">
+<span class="font-headline font-bold text-on-surface-variant text-[8px]">AAPL</span>
+</div>
+<div class="h-6 w-px bg-outline-variant opacity-20 mb-1"></div>
+</div>
+<!-- TSLA - Emerging -->
+<div class="absolute bottom-4 -left-8 flex flex-col items-center">
+<div class="w-11 h-11 rounded-full bg-primary-container/10 border border-primary/40 flex items-center justify-center">
+<span class="font-headline font-bold text-primary text-[9px]">TSLA</span>
+</div>
+</div>
+</div>
+<!-- Global Status Indicator Overlay -->
+<div class="absolute top-4 left-4 bg-surface-container-low/60 backdrop-blur-md px-3 py-1.5 rounded-lg border border-outline-variant/15">
+<div class="flex items-center gap-2">
+<div class="w-1.5 h-1.5 rounded-full bg-tertiary animate-ping"></div>
+<span class="font-label text-[10px] tracking-[0.05em] uppercase text-on-surface-variant">Live Synthesis Active</span>
+</div>
+</div>
+</section>
+<!-- Risk Gate -->
+<section class="grid grid-cols-2 gap-3">
+<div class="bg-surface-container-low p-4 rounded-lg flex flex-col justify-between h-24">
+<span class="font-label text-[10px] text-on-surface-variant uppercase tracking-wider">Risk Gate</span>
+<div class="flex items-end justify-between">
+<span class="font-headline font-extrabold text-2xl text-tertiary">ALLOWED</span>
+<span class="material-symbols-outlined text-tertiary text-xl" data-weight="fill">shield_with_heart</span>
+</div>
+</div>
+<div class="bg-surface-container-low p-4 rounded-lg flex flex-col justify-between h-24">
+<span class="font-label text-[10px] text-on-surface-variant uppercase tracking-wider">Drawdown Gap</span>
+<div class="flex items-end justify-between">
+<span class="font-headline font-extrabold text-2xl text-on-surface">-0.42%</span>
+<span class="font-label text-[10px] text-on-surface-variant">LVL 1</span>
+</div>
+</div>
+</section>
+<!-- Claude Neural Reasoning -->
+<section class="bg-surface-container-low p-5 rounded-xl border border-outline-variant/5">
+<div class="flex items-center gap-2 mb-4">
+<span class="material-symbols-outlined text-primary text-lg">psychology</span>
+<h2 class="font-headline text-sm font-bold tracking-tight uppercase">Claude Neural Reasoning</h2>
+</div>
+<p class="font-body text-sm text-on-surface-variant leading-relaxed">
+                Aggregated sentiment across <span class="text-primary">NVDA</span> ecosystem shows massive institutional positioning ahead of the compute cycle. Technical divergence on <span class="text-secondary">BTC</span> suggests a temporary liquidity trap. GodsView recommends <span class="text-tertiary font-bold underline decoration-tertiary/30 underline-offset-4">Overweight Exposure</span> on high-confidence neural nodes while maintaining tight stops on legacy tech.
+            </p>
+<div class="mt-4 pt-4 border-t border-outline-variant/10 flex items-center justify-between">
+<span class="font-label text-[10px] text-on-surface-variant uppercase">Confidence Score</span>
+<span class="font-headline font-bold text-primary text-sm">94.8%</span>
+</div>
+</section>
+<!-- Attention Allocation -->
+<section class="bg-surface-container-low p-5 rounded-xl">
+<h2 class="font-headline text-sm font-bold tracking-tight uppercase mb-5 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-container text-lg">monitoring</span>
+                Attention Allocation
+            </h2>
+<div class="space-y-6">
+<!-- Row 1 -->
+<div class="space-y-2">
+<div class="flex justify-between items-center text-[11px] font-label uppercase text-on-surface-variant">
+<span>NVDA / NVIDIA</span>
+<span class="text-tertiary font-bold">98% Intensity</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full w-[98%] bg-gradient-to-r from-tertiary to-tertiary-container"></div>
+</div>
+</div>
+<!-- Row 2 -->
+<div class="space-y-2">
+<div class="flex justify-between items-center text-[11px] font-label uppercase text-on-surface-variant">
+<span>BTC / Bitcoin</span>
+<span class="text-secondary font-bold">64% Intensity</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full w-[64%] bg-gradient-to-r from-secondary to-on-secondary-container"></div>
+</div>
+</div>
+<!-- Row 3 -->
+<div class="space-y-2">
+<div class="flex justify-between items-center text-[11px] font-label uppercase text-on-surface-variant">
+<span>TSLA / Tesla</span>
+<span class="text-primary font-bold">42% Intensity</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full w-[42%] bg-gradient-to-r from-primary to-primary-container"></div>
+</div>
+</div>
+</div>
+</section>
+<!-- Market DNA -->
+<section class="bg-surface-container-low p-5 rounded-xl border border-outline-variant/10">
+<h2 class="font-headline text-sm font-bold tracking-tight uppercase mb-5 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-lg">genetics</span>
+                Market DNA
+            </h2>
+<div class="grid grid-cols-2 gap-4">
+<div class="space-y-1">
+<span class="font-label text-[10px] text-on-surface-variant block uppercase">Breakout Cleanliness</span>
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-tertiary text-sm" data-weight="fill">star</span>
+<span class="material-symbols-outlined text-tertiary text-sm" data-weight="fill">star</span>
+<span class="material-symbols-outlined text-tertiary text-sm" data-weight="fill">star</span>
+<span class="material-symbols-outlined text-tertiary text-sm" data-weight="fill">star</span>
+<span class="material-symbols-outlined text-outline-variant text-sm">star</span>
+</div>
+</div>
+<div class="space-y-1">
+<span class="font-label text-[10px] text-on-surface-variant block uppercase">Trend Persistence</span>
+<div class="flex items-baseline gap-1">
+<span class="font-headline font-bold text-on-surface">EXTREME</span>
+<span class="material-symbols-outlined text-error text-xs">trending_up</span>
+</div>
+</div>
+<div class="space-y-1 pt-2">
+<span class="font-label text-[10px] text-on-surface-variant block uppercase">Volatility Index</span>
+<span class="font-headline font-bold text-on-surface">14.2</span>
+</div>
+<div class="space-y-1 pt-2">
+<span class="font-label text-[10px] text-on-surface-variant block uppercase">Signal Decay</span>
+<span class="font-headline font-bold text-on-surface">LOW</span>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center h-20 px-4 pb-4 bg-[#1C1B1C]/60 backdrop-blur-2xl z-50">
+<!-- Brain (Active) -->
+<a class="flex flex-col items-center justify-center text-[#A4C9FF] bg-gradient-to-tr from-[#A4C9FF]/10 to-[#4D93E2]/10 rounded-lg py-1 px-3" href="#">
+<span class="material-symbols-outlined" data-weight="fill">psychology</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-[0.05em]">Brain</span>
+</a>
+<!-- Market -->
+<a class="flex flex-col items-center justify-center text-[#8E918F] py-1 px-3 hover:text-white transition-all duration-200" href="#">
+<span class="material-symbols-outlined">monitoring</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-[0.05em]">Market</span>
+</a>
+<!-- Reason -->
+<a class="flex flex-col items-center justify-center text-[#8E918F] py-1 px-3 hover:text-white transition-all duration-200" href="#">
+<span class="material-symbols-outlined">query_stats</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-[0.05em]">Reason</span>
+</a>
+<!-- Risk -->
+<a class="flex flex-col items-center justify-center text-[#8E918F] py-1 px-3 hover:text-white transition-all duration-200" href="#">
+<span class="material-symbols-outlined">shield_with_heart</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-[0.05em]">Risk</span>
+</a>
+<!-- DNA -->
+<a class="flex flex-col items-center justify-center text-[#8E918F] py-1 px-3 hover:text-white transition-all duration-200" href="#">
+<span class="material-symbols-outlined">genetics</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-[0.05em]">DNA</span>
+</a>
+</nav>
+<!-- Background Decoration -->
+<div class="fixed top-1/4 -right-20 w-64 h-64 bg-primary/5 rounded-full blur-[100px] pointer-events-none"></div>
+<div class="fixed bottom-1/4 -left-20 w-64 h-64 bg-tertiary/5 rounded-full blur-[100px] pointer-events-none"></div>
+</body></html>

@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>GODSVIEW | Institutional Intelligence</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .tabular-nums {
+            font-variant-numeric: tabular-nums;
+        }
+        body {
+            background-color: #131314;
+            color: #e5e2e3;
+        }
+        /* Glassmorphism utility */
+        .glass-panel {
+            background: rgba(53, 52, 54, 0.6);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+        }
+    </style>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-error-container": "#ffdad6",
+              "primary": "#adc6ff",
+              "surface-variant": "#353436",
+              "primary-container": "#4c8eff",
+              "tertiary-fixed": "#26fedc",
+              "on-error": "#690005",
+              "outline": "#8c909f",
+              "tertiary": "#00dfc1",
+              "tertiary-container": "#00a38d",
+              "inverse-surface": "#e5e2e3",
+              "primary-fixed-dim": "#adc6ff",
+              "surface-container-highest": "#353436",
+              "on-tertiary-fixed-variant": "#005144",
+              "error": "#ffb4ab",
+              "on-secondary-fixed-variant": "#474649",
+              "on-tertiary": "#00382f",
+              "inverse-primary": "#005ac2",
+              "on-secondary-fixed": "#1b1b1d",
+              "primary-fixed": "#d8e2ff",
+              "secondary": "#c8c6c8",
+              "on-primary-fixed-variant": "#004494",
+              "on-tertiary-container": "#003028",
+              "tertiary-fixed-dim": "#00dfc1",
+              "surface-container-lowest": "#0e0e0f",
+              "on-primary": "#002e69",
+              "error-container": "#93000a",
+              "secondary-fixed": "#e4e2e4",
+              "on-secondary": "#303032",
+              "surface-container-low": "#1c1b1c",
+              "surface-dim": "#131314",
+              "on-tertiary-fixed": "#00201a",
+              "on-surface": "#e5e2e3",
+              "on-primary-container": "#00285d",
+              "surface-bright": "#3a393a",
+              "on-primary-fixed": "#001a41",
+              "surface-container-high": "#2a2a2b",
+              "inverse-on-surface": "#313031",
+              "secondary-container": "#474649",
+              "on-background": "#e5e2e3",
+              "surface": "#131314",
+              "secondary-fixed-dim": "#c8c6c8",
+              "surface-container": "#201f20",
+              "on-surface-variant": "#c2c6d6",
+              "background": "#131314",
+              "on-secondary-container": "#b6b4b7",
+              "outline-variant": "#414754",
+              "surface-tint": "#adc6ff"
+            },
+            fontFamily: {
+              "headline": ["Inter"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="font-body selection:bg-primary selection:text-on-primary overflow-x-hidden">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 flex justify-between items-center px-6 h-16 bg-[#131314] dark:bg-[#131314] shadow-[0_32px_64px_rgba(173,198,255,0.06)]">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[#adc6ff]" data-icon="monitoring">monitoring</span>
+<span class="text-xl font-light tracking-widest text-[#adc6ff] uppercase">GODSVIEW</span>
+</div>
+<div class="flex items-center gap-6">
+<div class="hidden md:flex gap-8">
+<span class="text-[#00dfc1] font-bold font-['Inter'] tabular-nums tracking-tight text-sm cursor-pointer">MARKET LIVE</span>
+<span class="text-[#353436] hover:text-[#adc6ff] transition-colors duration-200 font-['Inter'] tabular-nums tracking-tight text-sm cursor-pointer uppercase">STREAMS</span>
+<span class="text-[#353436] hover:text-[#adc6ff] transition-colors duration-200 font-['Inter'] tabular-nums tracking-tight text-sm cursor-pointer uppercase">VAULTS</span>
+</div>
+<button class="bg-surface-container-high px-4 py-1.5 text-xs font-bold tracking-widest text-primary uppercase border border-outline-variant/20">
+                TERMINAL
+            </button>
+</div>
+</header>
+<!-- NavigationDrawer -->
+<aside class="fixed left-0 top-0 h-full z-40 flex flex-col pt-20 w-64 bg-[#131314] dark:bg-[#131314] border-r border-outline-variant/5">
+<div class="px-6 mb-10">
+<div class="flex items-center gap-3 mb-2">
+<div class="w-10 h-10 bg-surface-container-highest flex items-center justify-center overflow-hidden">
+<img alt="Institutional Trader Profile" class="w-full h-full object-cover" data-alt="Close-up portrait of a professional trader in a dark suit with glowing blue screen reflections on their face, cinematic lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBEIC3zpQxvZLkrW2OGpfQVflx6vMzMzT3S3t0CU5wtdnOnyqsbAR_h6cowlWmkfu6V5gu9Nmy6GcPaBkqROuPmVCwOluJFUPpazKYlkKtix_cmea_z0jyMtuPPqoc28P4XGN_Wz4dywqYwIHoG6cC55bHEzSdq_vEDeBYx-y17Q8ta-7GyDDRAh6nTlrA6UXnGPSNwZ4ugPuig8SzRuYIsPMbUNh3TsXJMWm7LEIMMLYqDw0EZiXJxAtQNvTc1p5JpWiQu8iaajKs"/>
+</div>
+<div>
+<div class="text-[#adc6ff] font-bold text-sm uppercase tracking-wider">Sovereign Observer</div>
+<div class="text-[#353436] text-[10px] uppercase tracking-widest">Latency: 14ms</div>
+</div>
+</div>
+<div class="text-[10px] text-[#353436] uppercase tracking-widest">Session: 04:22:10</div>
+</div>
+<nav class="flex-1">
+<div class="flex flex-col">
+<a class="flex items-center gap-4 px-6 py-4 text-[#353436] hover:text-[#adc6ff] hover:bg-[#1c1b1c] transition-all duration-300 font-['Inter'] font-medium text-[0.875rem] uppercase tracking-wider" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span>Overview</span>
+</a>
+<a class="flex items-center gap-4 px-6 py-4 text-[#adc6ff] bg-[#1c1b1c] border-l-4 border-[#adc6ff] font-['Inter'] font-medium text-[0.875rem] uppercase tracking-wider" href="#">
+<span class="material-symbols-outlined" data-icon="Troubleshoot">troubleshoot</span>
+<span>Signals</span>
+</a>
+<a class="flex items-center gap-4 px-6 py-4 text-[#353436] hover:text-[#adc6ff] hover:bg-[#1c1b1c] transition-all duration-300 font-['Inter'] font-medium text-[0.875rem] uppercase tracking-wider" href="#">
+<span class="material-symbols-outlined" data-icon="travel_explore">travel_explore</span>
+<span>Explorer</span>
+</a>
+<a class="flex items-center gap-4 px-6 py-4 text-[#353436] hover:text-[#adc6ff] hover:bg-[#1c1b1c] transition-all duration-300 font-['Inter'] font-medium text-[0.875rem] uppercase tracking-wider" href="#">
+<span class="material-symbols-outlined" data-icon="security">security</span>
+<span>Risk</span>
+</a>
+<a class="flex items-center gap-4 px-6 py-4 text-[#353436] hover:text-[#adc6ff] hover:bg-[#1c1b1c] transition-all duration-300 font-['Inter'] font-medium text-[0.875rem] uppercase tracking-wider" href="#">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+<span>Analytics</span>
+</a>
+</div>
+</nav>
+</aside>
+<!-- Main Content Canvas -->
+<main class="pl-64 pt-16 min-h-screen bg-background">
+<div class="max-w-7xl mx-auto p-8 flex flex-col gap-8">
+<!-- Hero Decision Area -->
+<section class="relative grid grid-cols-12 gap-6 items-start">
+<!-- Main Signal Card -->
+<div class="col-span-12 lg:col-span-8 bg-surface-container-low p-8 relative overflow-hidden">
+<!-- Top Confidence Badge -->
+<div class="absolute top-0 right-0 p-8 flex flex-col items-end">
+<div class="text-[0.6875rem] font-label text-on-surface-variant tracking-[0.2em] uppercase mb-1">Signal Confidence</div>
+<div class="text-6xl font-light text-tertiary tabular-nums tracking-tighter">94%</div>
+<div class="flex items-center gap-2 mt-2">
+<span class="w-2 h-2 rounded-full bg-tertiary animate-pulse"></span>
+<span class="text-[0.6875rem] font-bold text-tertiary uppercase tracking-widest">Approved</span>
+</div>
+</div>
+<!-- Signal Header -->
+<div class="mb-12">
+<div class="inline-flex items-center gap-2 px-3 py-1 bg-surface-container-highest text-primary text-[10px] font-bold tracking-widest uppercase mb-4">
+                            High Conviction Pattern
+                        </div>
+<h1 class="text-5xl font-light tracking-tight mb-2">BTC/USDT <span class="text-tertiary">LONG</span></h1>
+<p class="text-on-surface-variant font-label text-sm tracking-wide">EXECUTION WINDOW: 64,281.00 — 64,310.00</p>
+</div>
+<!-- Data Grid -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-12 mb-16">
+<div>
+<div class="text-[0.6875rem] text-on-surface-variant uppercase tracking-widest mb-2">Entry Price</div>
+<div class="text-2xl font-medium tabular-nums">64,281.50</div>
+</div>
+<div>
+<div class="text-[0.6875rem] text-on-surface-variant uppercase tracking-widest mb-2">Stop Loss</div>
+<div class="text-2xl font-medium tabular-nums text-error">63,890.00</div>
+</div>
+<div>
+<div class="text-[0.6875rem] text-on-surface-variant uppercase tracking-widest mb-2">Take Profit</div>
+<div class="text-2xl font-medium tabular-nums text-tertiary">65,600.00</div>
+</div>
+<div>
+<div class="text-[0.6875rem] text-on-surface-variant uppercase tracking-widest mb-2">Risk/Reward</div>
+<div class="text-2xl font-medium tabular-nums">1 : 3.2</div>
+</div>
+</div>
+<!-- Master Pipeline Stepper -->
+<div class="border-t border-outline-variant/10 pt-8">
+<div class="flex flex-wrap items-center gap-4 text-[0.6875rem] font-bold tracking-[0.1em]">
+<div class="flex items-center gap-2 text-tertiary">
+<span class="material-symbols-outlined text-sm" data-icon="check_circle">check_circle</span>
+<span>SETUP DETECTED</span>
+</div>
+<div class="w-4 h-[1px] bg-outline-variant/30"></div>
+<div class="flex items-center gap-2 text-tertiary">
+<span class="material-symbols-outlined text-sm" data-icon="check_circle">check_circle</span>
+<span>ORDER FLOW</span>
+</div>
+<div class="w-4 h-[1px] bg-outline-variant/30"></div>
+<div class="flex items-center gap-2 text-primary">
+<span class="px-1.5 py-0.5 bg-primary/10 rounded-sm">ML SCORE: 88%</span>
+</div>
+<div class="w-4 h-[1px] bg-outline-variant/30"></div>
+<div class="flex items-center gap-2 text-tertiary">
+<span class="material-symbols-outlined text-sm" data-icon="verified">verified</span>
+<span>CLAUDE AI: APPROVED</span>
+</div>
+<div class="w-4 h-[1px] bg-outline-variant/30"></div>
+<div class="flex items-center gap-2 text-tertiary">
+<span class="material-symbols-outlined text-sm" data-icon="security">security</span>
+<span>RISK ENGINE: APPROVED</span>
+</div>
+</div>
+</div>
+</div>
+<!-- AI Reasoning Sidebar -->
+<div class="col-span-12 lg:col-span-4 flex flex-col gap-6">
+<div class="bg-surface-container-high p-6 border-l-4 border-primary">
+<div class="flex items-center gap-2 mb-4">
+<span class="material-symbols-outlined text-primary" data-icon="psychology">psychology</span>
+<span class="text-sm font-bold tracking-widest uppercase">AI Reasoning Panel</span>
+</div>
+<div class="space-y-4">
+<div class="bg-surface-dim/40 p-4">
+<div class="text-[10px] text-primary uppercase font-bold mb-1">Structural Context</div>
+<p class="text-xs text-on-surface-variant leading-relaxed">Liquidity sweep of the 64k round number confirmed. High volume absorption noted on the tape.</p>
+</div>
+<div class="bg-surface-dim/40 p-4">
+<div class="text-[10px] text-primary uppercase font-bold mb-1">Momentum Profile</div>
+<p class="text-xs text-on-surface-variant leading-relaxed">Cumulative Volume Delta (CVD) divergence confirmed on 15m timeframes. Bullish absorption.</p>
+</div>
+<div class="bg-surface-dim/40 p-4">
+<div class="text-[10px] text-primary uppercase font-bold mb-1">Current Regime</div>
+<p class="text-xs text-on-surface-variant leading-relaxed font-bold">TRENDING (BULLISH)</p>
+</div>
+</div>
+</div>
+<button class="w-full bg-primary text-on-primary font-bold py-4 tracking-[0.2em] uppercase hover:opacity-90 transition-opacity">
+                        EXECUTE POSITION
+                    </button>
+</div>
+</section>
+<!-- Bottom Data Layer -->
+<section class="grid grid-cols-12 gap-6">
+<!-- Chart Preview / Market Tape -->
+<div class="col-span-12 md:col-span-8 bg-surface-container-low p-6 h-64 relative">
+<div class="flex justify-between items-center mb-6">
+<div class="text-[0.6875rem] font-bold tracking-widest uppercase text-on-surface-variant">Real-time Telemetry</div>
+<div class="flex gap-4">
+<span class="text-[10px] text-tertiary tabular-nums uppercase">Slippage: 0.01%</span>
+<span class="text-[10px] text-on-surface-variant tabular-nums uppercase">Depth: $42.1M</span>
+</div>
+</div>
+<div class="w-full h-32 flex items-end gap-1 px-2">
+<!-- Abstract Volume Bars -->
+<div class="flex-1 bg-surface-container-highest/40 h-[20%]"></div>
+<div class="flex-1 bg-surface-container-highest/40 h-[25%]"></div>
+<div class="flex-1 bg-surface-container-highest/40 h-[40%]"></div>
+<div class="flex-1 bg-surface-container-highest/40 h-[35%]"></div>
+<div class="flex-1 bg-tertiary/20 h-[60%] border-t border-tertiary/40"></div>
+<div class="flex-1 bg-tertiary/20 h-[75%] border-t border-tertiary/40"></div>
+<div class="flex-1 bg-tertiary/30 h-[95%] border-t border-tertiary/60"></div>
+<div class="flex-1 bg-tertiary/20 h-[70%] border-t border-tertiary/40"></div>
+<div class="flex-1 bg-surface-container-highest/40 h-[50%]"></div>
+<div class="flex-1 bg-surface-container-highest/40 h-[45%]"></div>
+<div class="flex-1 bg-surface-container-highest/40 h-[30%]"></div>
+<div class="flex-1 bg-surface-container-highest/40 h-[20%]"></div>
+<div class="flex-1 bg-surface-container-highest/40 h-[15%]"></div>
+<div class="flex-1 bg-surface-container-highest/40 h-[10%]"></div>
+<div class="flex-1 bg-surface-container-highest/40 h-[25%]"></div>
+<div class="flex-1 bg-surface-container-highest/40 h-[40%]"></div>
+<div class="flex-1 bg-surface-container-highest/40 h-[35%]"></div>
+<div class="flex-1 bg-surface-container-highest/40 h-[50%]"></div>
+<div class="flex-1 bg-surface-container-highest/40 h-[45%]"></div>
+</div>
+<div class="mt-4 flex justify-between text-[10px] text-outline uppercase font-medium tracking-tighter">
+<span>14:30</span>
+<span>14:35</span>
+<span>14:40</span>
+<span>14:45</span>
+<span>14:50</span>
+<span>14:55</span>
+<span>CURRENT</span>
+</div>
+</div>
+<!-- Signal Queue -->
+<div class="col-span-12 md:col-span-4 bg-surface-container-low p-6 flex flex-col">
+<div class="text-[0.6875rem] font-bold tracking-widest uppercase text-on-surface-variant mb-6 flex justify-between">
+<span>Other Active Signals</span>
+<span class="text-primary cursor-pointer hover:underline">View All</span>
+</div>
+<div class="flex-1 overflow-y-auto space-y-4 pr-2">
+<!-- Queue Item -->
+<div class="bg-surface-container-highest p-3 flex justify-between items-center transition-colors hover:bg-surface-bright cursor-pointer">
+<div class="flex flex-col">
+<span class="text-xs font-bold">ETH/USDT</span>
+<span class="text-[10px] text-error font-bold uppercase">Short</span>
+</div>
+<div class="text-right">
+<div class="text-xs tabular-nums font-medium">2,412.50</div>
+<div class="text-[10px] text-on-surface-variant tabular-nums">Conf: 72%</div>
+</div>
+</div>
+<!-- Queue Item -->
+<div class="bg-surface-container-highest p-3 flex justify-between items-center transition-colors hover:bg-surface-bright cursor-pointer">
+<div class="flex flex-col">
+<span class="text-xs font-bold">SOL/USDT</span>
+<span class="text-[10px] text-tertiary font-bold uppercase">Long</span>
+</div>
+<div class="text-right">
+<div class="text-xs tabular-nums font-medium">142.12</div>
+<div class="text-[10px] text-on-surface-variant tabular-nums">Conf: 81%</div>
+</div>
+</div>
+<!-- Queue Item -->
+<div class="bg-surface-container-highest p-3 flex justify-between items-center transition-colors hover:bg-surface-bright cursor-pointer">
+<div class="flex flex-col">
+<span class="text-xs font-bold">NEAR/USDT</span>
+<span class="text-[10px] text-tertiary font-bold uppercase">Long</span>
+</div>
+<div class="text-right">
+<div class="text-xs tabular-nums font-medium">4.881</div>
+<div class="text-[10px] text-on-surface-variant tabular-nums">Conf: 65%</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+</div>
+</main>
+<!-- Visual Accents & Glass Overlays -->
+<div class="fixed top-20 right-8 w-64 pointer-events-none opacity-20">
+<div class="w-full h-96 bg-primary blur-[120px] rounded-full"></div>
+</div>
+</body></html>
