@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
+import numbers
 from typing import Any
+
+import pandas as pd
 
 from app.agents.base import AgentState
 from app.agents.data_agent import DataAgent
@@ -26,6 +29,47 @@ PIPELINE = [
     ExecutionAgent(),
     MonitorAgent(),
 ]
+
+
+def _json_safe(value: Any) -> Any:
+    if isinstance(value, bool) or value is None:
+        return value
+    if isinstance(value, str):
+        return value
+    if isinstance(value, numbers.Integral):
+        return int(value)
+    if isinstance(value, numbers.Real):
+        return float(value)
+    if isinstance(value, pd.DataFrame):
+        cols = list(value.columns)
+        tail = value.tail(3)
+        sample_rows = []
+        for idx, row in tail.iterrows():
+            sample = {"index": str(idx)}
+            for col in cols:
+                cell = row[col]
+                if isinstance(cell, bool) or cell is None:
+                    sample[col] = cell
+                elif isinstance(cell, str):
+                    sample[col] = cell
+                elif isinstance(cell, numbers.Integral):
+                    sample[col] = int(cell)
+                elif isinstance(cell, numbers.Real):
+                    sample[col] = float(cell)
+                else:
+                    sample[col] = str(cell)
+            sample_rows.append(sample)
+        return {
+            "_type": "dataframe",
+            "rows": int(len(value)),
+            "columns": [str(c) for c in cols],
+            "tail_sample": sample_rows,
+        }
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe(v) for v in value]
+    return str(value)
 
 
 def run_orchestrator(
@@ -122,7 +166,7 @@ def run_orchestrator(
         "block_reason": state.block_reason,
         "errors": state.errors,
         "pipeline": pipeline,
-        "data": state.data,
+        "data": _json_safe(state.data),
     }
     if with_replay:
         try:

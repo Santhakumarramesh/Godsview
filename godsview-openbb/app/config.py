@@ -54,6 +54,9 @@ class Settings:
     timeframe: str = os.getenv("TIMEFRAME", "1D").strip().upper()
     lookback: int = _as_int("LOOKBACK", 500)
     openbb_provider: str = os.getenv("OPENBB_PROVIDER", "yfinance").strip()
+    fred_api_key: str = os.getenv("FRED_API_KEY", "").strip()
+    tiingo_api_key: str = os.getenv("TIINGO_API_KEY", "").strip()
+    quiver_api_key: str = os.getenv("QUIVER_API_KEY", "").strip()
 
     model_type: str = os.getenv("MODEL_TYPE", "random_forest").strip().lower()
     model_threshold_buy: float = _as_float("MODEL_THRESHOLD_BUY", 0.60)

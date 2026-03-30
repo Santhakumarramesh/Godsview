@@ -5,9 +5,7 @@ from statistics import mean, pstdev
 from app.agents.base import Agent, AgentState
 from app.analysis.multi_timeframe import analyze_multi_timeframes
 from app.brain.schema import AssetEntity, SemanticMemory
-from app.data.macro import get_macro_event_context
-from app.data.sentiment import get_sentiment_snapshot
-from app.data_fetch import fetch_price_history
+from app.data.stack import get_execution_context, get_macro_context, get_market_ohlcv, get_sentiment_context
 from app.strategy.time_trigger import evaluate_time_window
 
 
@@ -19,7 +17,7 @@ class DataAgent(Agent):
             return state
 
         try:
-            df = fetch_price_history(state.symbol)
+            df, market_source = get_market_ohlcv(state.symbol, "1D")
             if len(df) < 80:
                 state.set_blocked("insufficient_market_data")
                 return state
@@ -47,10 +45,13 @@ class DataAgent(Agent):
                 "trend_20": float(trend),
                 "volatility_100": float(vol),
                 "regime": regime,
+                "source": market_source.get("primary_source"),
             }
+            state.data["market_source"] = market_source
             state.data["session"] = evaluate_time_window()
-            state.data["sentiment"] = get_sentiment_snapshot(state.symbol)
-            state.data["macro"] = get_macro_event_context(state.symbol)
+            state.data["sentiment"] = get_sentiment_context(state.symbol)
+            state.data["macro"] = get_macro_context(state.symbol)
+            state.data["execution_context"] = get_execution_context()
             # Build lightweight multi-timeframe context for downstream agents.
             state.data["mtf"] = analyze_multi_timeframes(
                 state.symbol,
@@ -81,6 +82,7 @@ class DataAgent(Agent):
                         "session": state.data["session"],
                         "sentiment": state.data["sentiment"],
                         "macro": state.data["macro"],
+                        "execution_context": state.data["execution_context"],
                     },
                 )
             )
