@@ -6,6 +6,21 @@ from datetime import datetime, timezone
 
 from app.agents.orchestrator import run_orchestrator
 from app.config import settings
+from app.nodes import (
+    ContextNode,
+    EvolutionNode,
+    ExecutionNode,
+    MemoryNode,
+    OrderFlowNode,
+    PerceptionNode,
+    ReasoningNode,
+    RiskNode,
+    StockNode,
+    StructureNode,
+    SupremeNode,
+)
+from app.state.store import get_brain_store
+from app.utils import write_json
 
 
 def utc_now_iso() -> str:
@@ -13,6 +28,22 @@ def utc_now_iso() -> str:
 
 
 def run_loop(symbol: str, interval_seconds: int, with_replay: bool) -> None:
+    store = get_brain_store()
+    stock_pipeline = StockNode(
+        child_nodes=[
+            PerceptionNode(),
+            StructureNode(),
+            OrderFlowNode(),
+            ContextNode(),
+            MemoryNode(),
+            ReasoningNode(),
+            RiskNode(),
+            ExecutionNode(),
+            EvolutionNode(),
+        ]
+    )
+    supreme = SupremeNode()
+
     print(f"[{utc_now_iso()}] brain_loop start symbol={symbol} interval={interval_seconds}s replay={with_replay}")
     while True:
         try:
@@ -23,10 +54,26 @@ def run_loop(symbol: str, interval_seconds: int, with_replay: bool) -> None:
                 human_approval=False,
                 with_replay=with_replay,
             )
+            brain = store.get_or_create_stock(symbol)
+            brain = stock_pipeline.run(brain, result, store)
+            supreme_state = supreme.run(store)
+
+            write_json(
+                "data/processed/latest_stock_brain_state.json",
+                {
+                    "generated_at": utc_now_iso(),
+                    "symbol": symbol,
+                    "state": store.stock_json(symbol),
+                },
+            )
+            write_json(
+                "data/processed/latest_consciousness_board.json",
+                supreme.board_payload(store),
+            )
             blocked = bool(result.get("blocked", False))
             reason = str(result.get("block_reason", ""))
             print(
-                f"[{utc_now_iso()}] cycle complete symbol={symbol} blocked={blocked} reason={reason}"
+                f"[{utc_now_iso()}] cycle complete symbol={symbol} blocked={blocked} reason={reason} attention={brain.attention_score:.3f} health={supreme_state.system_health}"
             )
         except Exception as err:  # noqa: BLE001
             print(f"[{utc_now_iso()}] cycle error symbol={symbol} error={err}")
@@ -44,4 +91,3 @@ def _parse_args() -> argparse.Namespace:
 if __name__ == "__main__":
     args = _parse_args()
     run_loop(symbol=args.symbol.upper(), interval_seconds=args.interval, with_replay=bool(args.with_replay))
-

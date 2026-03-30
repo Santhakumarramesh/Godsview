@@ -7,6 +7,7 @@ type JsonRecord = Record<string, unknown>;
 const CACHE_TTL_MS = 10_000;
 const PROCESSED_DIR = path.resolve(process.cwd(), "godsview-openbb", "data", "processed");
 const ORCHESTRATOR_ARTIFACT = path.join(PROCESSED_DIR, "latest_orchestrator_run.json");
+const BOARD_ARTIFACT = path.join(PROCESSED_DIR, "latest_consciousness_board.json");
 
 let snapshotCache: { ts: number; data: JsonRecord | null } = { ts: 0, data: null };
 let consciousnessCache: { ts: number; data: JsonRecord | null } = { ts: 0, data: null };
@@ -49,6 +50,31 @@ export async function getConsciousnessSnapshot(force = false): Promise<JsonRecor
   const now = Date.now();
   if (!force && consciousnessCache.data && now - consciousnessCache.ts <= CACHE_TTL_MS) {
     return consciousnessCache.data;
+  }
+  const boardArtifact = await readJsonArtifact(BOARD_ARTIFACT);
+  if (boardArtifact && Array.isArray(boardArtifact.cards)) {
+    const rows = (boardArtifact.cards as JsonRecord[]).map((card) => ({
+      symbol: String(card.symbol ?? "UNKNOWN"),
+      setup: String(card.setup ?? "none"),
+      action: String(card.bias ?? "neutral"),
+      readiness: String(card.risk_state ?? "Blocked").toLowerCase().includes("allow") ? "allow" : "watch",
+      attention_score: clamp01(parseNum(card.c4_score, 0) / 100),
+      structure_score: clamp01(parseNum(card.readiness_pct, 0) / 100),
+      orderflow_score: clamp01(parseNum(card.memory_match_pct, 0) / 100),
+      context_score: 0.5,
+      memory_score: clamp01(parseNum(card.memory_match_pct, 0) / 100),
+      reasoning_score: clamp01(parseNum(card.c4_score, 0) / 100),
+      risk_score: String(card.risk_state ?? "").toLowerCase().includes("allow") ? 0.8 : 0.35,
+      block_reason: String(card.risk_state ?? ""),
+    }));
+    const boosted: JsonRecord = {
+      symbol: String(rows[0]?.symbol ?? "UNKNOWN"),
+      generated_at: String(boardArtifact.generated_at ?? new Date().toISOString()),
+      board: rows,
+      source: "node_pipeline",
+    };
+    consciousnessCache = { ts: now, data: boosted };
+    return boosted;
   }
   const snapshot = await getLatestBrainSnapshot(force);
   if (!snapshot) return null;
@@ -136,4 +162,3 @@ export async function runBrainCycle(args: {
   await getConsciousnessSnapshot(true);
   return { ...result, command: [pythonBin, ...command], snapshot };
 }
-
