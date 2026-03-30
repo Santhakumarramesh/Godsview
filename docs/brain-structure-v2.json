@@ -1,0 +1,152 @@
+{
+  "name": "SupremeBrain",
+  "children": [
+    {
+      "name": "MarketUniverseBrain",
+      "children": [
+        { "name": "SymbolBrain:SPY" },
+        { "name": "SymbolBrain:QQQ" },
+        { "name": "SymbolBrain:NVDA" },
+        { "name": "SymbolBrain:TSLA" },
+        { "name": "SymbolBrain:AAPL" }
+      ]
+    },
+    {
+      "name": "GlobalContextBrain",
+      "children": [
+        { "name": "MacroBrain" },
+        { "name": "NewsBrain" },
+        { "name": "MarketRegimeBrain" },
+        { "name": "SectorRotationBrain" },
+        { "name": "SessionBrain" }
+      ]
+    },
+    {
+      "name": "MemoryBrain",
+      "children": [
+        { "name": "SetupMemory" },
+        { "name": "SymbolPersonalityMemory" },
+        { "name": "TradeOutcomeMemory" },
+        { "name": "SimilarityRetrievalBrain" }
+      ]
+    },
+    {
+      "name": "ReasoningBrain",
+      "children": [
+        { "name": "ClaudeAuditorNode" },
+        { "name": "ContradictionDetectorNode" },
+        { "name": "ScenarioRankingNode" },
+        { "name": "ThesisSynthesisNode" }
+      ]
+    },
+    {
+      "name": "RiskBrain",
+      "children": [
+        { "name": "ExposureNode" },
+        { "name": "PositionSizingNode" },
+        { "name": "DrawdownGuardNode" },
+        { "name": "SlippageGuardNode" },
+        { "name": "KillSwitchNode" }
+      ]
+    },
+    {
+      "name": "ExecutionBrain",
+      "children": [
+        { "name": "OrderIntentNode" },
+        { "name": "BrokerRoutingNode" },
+        { "name": "FillTrackingNode" },
+        { "name": "ExitManagerNode" },
+        { "name": "ReconciliationNode" }
+      ]
+    },
+    {
+      "name": "EvolutionBrain",
+      "children": [
+        { "name": "PerformanceReviewNode" },
+        { "name": "CalibrationNode" },
+        { "name": "RuleTuningNode" },
+        { "name": "WeightOptimizerNode" },
+        { "name": "SetupPruningNode" }
+      ]
+    }
+  ],
+  "symbolBrainTemplate": {
+    "name": "SymbolBrain",
+    "children": [
+      {
+        "name": "PerceptionLayer",
+        "children": [
+          { "name": "TickNode" },
+          { "name": "QuoteNode" },
+          { "name": "CandleNode" },
+          { "name": "VolumeNode" }
+        ]
+      },
+      {
+        "name": "TimeframeLayer",
+        "children": [
+          { "name": "1mNode" },
+          { "name": "5mNode" },
+          { "name": "15mNode" },
+          { "name": "1hNode" },
+          { "name": "DailyNode" }
+        ]
+      },
+      {
+        "name": "InterpretationLayer",
+        "children": [
+          { "name": "StructureNode" },
+          { "name": "OrderflowNode" },
+          { "name": "LiquidityNode" },
+          { "name": "VolatilityNode" },
+          { "name": "ContextLinkNode" }
+        ]
+      },
+      {
+        "name": "MemoryLayer",
+        "children": [
+          { "name": "SetupMatchNode" },
+          { "name": "SymbolPersonalityNode" },
+          { "name": "OutcomeHistoryNode" },
+          { "name": "SimilarityNode" }
+        ]
+      },
+      {
+        "name": "ReasoningLayer",
+        "children": [
+          { "name": "LocalThesisNode" },
+          { "name": "ContradictionNode" },
+          { "name": "TriggerInvalidationNode" }
+        ]
+      },
+      {
+        "name": "RiskLayer",
+        "children": [
+          { "name": "TradePermissionNode" },
+          { "name": "SizingNode" },
+          { "name": "StopTargetNode" },
+          { "name": "SlippageGuardNode" }
+        ]
+      },
+      {
+        "name": "DecisionLayer",
+        "children": [
+          { "name": "AttentionScoreNode" },
+          { "name": "ReadinessScoreNode" },
+          { "name": "FinalSignalNode" },
+          { "name": "ExecutionIntentNode" }
+        ]
+      }
+    ]
+  },
+  "nodeContract": [
+    "metadata",
+    "inputs",
+    "internalFeatures",
+    "state",
+    "scoringOutput",
+    "decisionOutput",
+    "auditExplanation"
+  ]
+}
+
