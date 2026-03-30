@@ -181,4 +181,127 @@
     vertical-align: middle;
     font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
   }
+
+  .gv-neural-grid {
+    position: relative;
+  }
+
+  .gv-neural-grid::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(circle at 18% 30%, rgba(102, 157, 255, 0.14), transparent 34%),
+      radial-gradient(circle at 78% 70%, rgba(156, 255, 147, 0.11), transparent 30%);
+    animation: gvParticleDrift 9s ease-in-out infinite alternate;
+  }
+
+  .gv-brain-core {
+    animation: gvBrainBreath 4.4s ease-in-out infinite;
+  }
+
+  .gv-neural-link {
+    stroke-dasharray: 1.1 1.8;
+    animation: gvLinkFlow 5.5s linear infinite;
+    opacity: 0.78;
+  }
+
+  .gv-neural-node {
+    position: absolute;
+    isolation: isolate;
+    transition: transform 220ms ease, filter 220ms ease;
+    animation: gvNodeFloat 6.2s ease-in-out infinite;
+    cursor: pointer;
+    z-index: 2;
+  }
+
+  .gv-neural-node:hover,
+  .gv-neural-node:focus-visible {
+    filter: brightness(1.15);
+    z-index: 3;
+    outline: none;
+  }
+
+  .gv-node-ring {
+    position: absolute;
+    inset: -7px;
+    border-radius: 9999px;
+    border: 1px solid rgba(102, 157, 255, 0.35);
+    animation: gvPulseRing 2.9s ease-out infinite;
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  @keyframes gvBrainBreath {
+    0% {
+      transform: translate(-50%, -50%) scale(0.985);
+      filter: saturate(0.95);
+    }
+    50% {
+      transform: translate(-50%, -50%) scale(1.03);
+      filter: saturate(1.1);
+    }
+    100% {
+      transform: translate(-50%, -50%) scale(0.985);
+      filter: saturate(0.95);
+    }
+  }
+
+  @keyframes gvNodeFloat {
+    0% {
+      margin-top: 0;
+    }
+    50% {
+      margin-top: -4px;
+    }
+    100% {
+      margin-top: 0;
+    }
+  }
+
+  @keyframes gvPulseRing {
+    0% {
+      transform: scale(0.92);
+      opacity: 0.55;
+    }
+    70% {
+      transform: scale(1.12);
+      opacity: 0.05;
+    }
+    100% {
+      transform: scale(1.2);
+      opacity: 0;
+    }
+  }
+
+  @keyframes gvLinkFlow {
+    0% {
+      stroke-dashoffset: 0;
+    }
+    100% {
+      stroke-dashoffset: -28;
+    }
+  }
+
+  @keyframes gvParticleDrift {
+    0% {
+      transform: translate3d(0, 0, 0);
+      opacity: 0.8;
+    }
+    100% {
+      transform: translate3d(0, -10px, 0);
+      opacity: 1;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .gv-neural-grid::before,
+    .gv-brain-core,
+    .gv-neural-link,
+    .gv-neural-node,
+    .gv-node-ring {
+      animation: none !important;
+    }
+  }
 }

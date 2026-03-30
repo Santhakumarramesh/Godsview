@@ -2,7 +2,7 @@ import { useGetSystemStatus, useGetPerformance, useGetSignals } from "@workspace
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/utils";
 import { format } from "date-fns";
 import { Link } from "wouter";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import TradingViewChart from "@/components/TradingViewChart";
 
@@ -90,6 +90,7 @@ const HERO_NODE_POSITIONS = [
 ];
 
 export default function Dashboard() {
+  const [focusedSymbol, setFocusedSymbol] = useState<string | null>(null);
 
   // ── Data hooks — 5 s auto-refresh ────────────────────────────────────────
   const { data: systemStatus, isLoading: sysLoading, isError: sysError, refetch: refetchStatus } =
@@ -231,6 +232,13 @@ export default function Dashboard() {
   const executionSlippageLabel = avgRiskScore < 0.35 ? "Low" : avgRiskScore < 0.65 ? "Moderate" : "High";
   const executionFillLabel = avgOrderflowScore > 0.7 ? "Excellent" : avgOrderflowScore > 0.5 ? "Good" : "Watch";
   const executionRiskLabel = avgRiskScore < 0.35 ? "Disciplined" : avgRiskScore < 0.65 ? "Moderate" : "Elevated";
+  const focusedNode = useMemo(
+    () =>
+      rankedBoard.find((row) => row.symbol === focusedSymbol) ??
+      featuredBrainNodes[0] ??
+      null,
+    [rankedBoard, focusedSymbol, featuredBrainNodes],
+  );
 
   return (
     <div className="space-y-6">
@@ -341,9 +349,31 @@ export default function Dashboard() {
           </div>
 
           <div className="xl:col-span-6">
-            <div className="relative rounded min-h-[360px] overflow-hidden" style={{ background: "radial-gradient(circle at 52% 52%, rgba(71,144,255,0.28), rgba(10,16,32,0.95) 60%), linear-gradient(140deg, rgba(16,22,38,0.98), rgba(10,14,26,0.98))", border: `1px solid rgba(102,157,255,0.2)` }}>
+            <div className="relative rounded min-h-[300px] md:min-h-[360px] overflow-hidden gv-neural-grid" style={{ background: "radial-gradient(circle at 52% 52%, rgba(71,144,255,0.28), rgba(10,16,32,0.95) 60%), linear-gradient(140deg, rgba(16,22,38,0.98), rgba(10,14,26,0.98))", border: `1px solid rgba(102,157,255,0.2)` }}>
               <div className="absolute inset-0 opacity-70" style={{ backgroundImage: "radial-gradient(circle at 30% 20%, rgba(156,255,147,0.2), transparent 25%), radial-gradient(circle at 70% 80%, rgba(255,113,98,0.15), transparent 30%), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(0deg, rgba(255,255,255,0.04) 1px, transparent 1px)", backgroundSize: "auto, auto, 38px 38px, 38px 38px" }} />
-              <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full w-40 h-40 flex items-center justify-center" style={{ background: "radial-gradient(circle, rgba(255,199,84,0.95), rgba(255,153,0,0.18) 54%, rgba(255,153,0,0.02) 72%)", boxShadow: "0 0 60px rgba(255,184,77,0.4)" }}>
+              <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
+                {featuredBrainNodes.map((row, idx) => {
+                  const pos = HERO_NODE_POSITIONS[idx] ?? HERO_NODE_POSITIONS[0];
+                  const x = Number.parseFloat(pos.left);
+                  const y = Number.parseFloat(pos.top);
+                  const lineColor = row.direction === "long" ? "rgba(156,255,147,0.75)" : row.direction === "short" ? "rgba(255,113,98,0.75)" : "rgba(102,157,255,0.75)";
+                  const strokeWidth = 0.22 + row.attention_score * 0.6;
+                  return (
+                    <line
+                      key={`link-${row.symbol}`}
+                      className="gv-neural-link"
+                      x1="50"
+                      y1="50"
+                      x2={x}
+                      y2={y}
+                      stroke={lineColor}
+                      strokeWidth={strokeWidth}
+                      strokeLinecap="round"
+                    />
+                  );
+                })}
+              </svg>
+              <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full w-32 h-32 md:w-40 md:h-40 flex items-center justify-center gv-brain-core" style={{ background: "radial-gradient(circle, rgba(255,199,84,0.95), rgba(255,153,0,0.18) 54%, rgba(255,153,0,0.02) 72%)", boxShadow: "0 0 60px rgba(255,184,77,0.4)" }}>
                 <div className="text-center">
                   <div style={{ fontSize: "11px", letterSpacing: "0.12em", fontFamily: "Space Grotesk", textTransform: "uppercase", color: "#100d08" }}>Godsview Brain</div>
                   <div style={{ fontSize: "16px", fontFamily: "Space Grotesk", fontWeight: 700, color: "#100d08" }}>{sentimentLabel}</div>
@@ -352,25 +382,71 @@ export default function Dashboard() {
               {featuredBrainNodes.map((row, idx) => {
                 const pos = HERO_NODE_POSITIONS[idx] ?? HERO_NODE_POSITIONS[0];
                 const tone = row.direction === "long" ? C.primary : row.direction === "short" ? C.tertiary : C.secondary;
+                const nodeScale = 0.86 + row.attention_score * 0.5;
                 return (
                   <div
                     key={row.symbol}
-                    className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full px-4 py-2"
+                    className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full px-4 py-2 gv-neural-node"
                     style={{
                       left: pos.left,
                       top: pos.top,
+                      transform: `translate(-50%, -50%) scale(${nodeScale.toFixed(2)})`,
                       border: `1px solid ${tone}88`,
                       backgroundColor: `${tone}22`,
                       boxShadow: `0 0 24px ${tone}66`,
                     }}
+                    onMouseEnter={() => setFocusedSymbol(row.symbol)}
+                    onMouseLeave={() => setFocusedSymbol((prev) => (prev === row.symbol ? null : prev))}
+                    onFocus={() => setFocusedSymbol(row.symbol)}
+                    onBlur={() => setFocusedSymbol((prev) => (prev === row.symbol ? null : prev))}
+                    tabIndex={0}
                   >
                     <div style={{ fontSize: "30px", fontWeight: 700, lineHeight: 1, color: "#fff", fontFamily: "Space Grotesk", textAlign: "center" }}>{row.symbol}</div>
                     <div style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: "#e2e8f0", textAlign: "center", marginTop: "2px" }}>
                       {(row.attention_score * 100).toFixed(0)}% attn
                     </div>
+                    <span className="gv-node-ring" style={{ borderColor: `${tone}55` }} />
                   </div>
                 );
               })}
+              {focusedNode ? (
+                <div className="absolute left-2 right-2 bottom-2 md:left-auto md:right-3 md:bottom-3 md:w-[42%] rounded p-2.5" style={{ backgroundColor: "rgba(15,22,40,0.86)", border: `1px solid ${C.border}`, backdropFilter: "blur(8px)" }}>
+                  <div className="flex items-center justify-between gap-2">
+                    <div style={{ fontSize: "12px", fontFamily: "Space Grotesk", fontWeight: 700, color: "#fff" }}>{focusedNode.symbol} Intelligence Card</div>
+                    <span style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: focusedNode.readiness === "allow" ? C.primary : focusedNode.readiness === "watch" ? "#fbbf24" : C.tertiary }}>
+                      {focusedNode.readiness.toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-1.5">
+                    <div className="rounded px-2 py-1" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0f131e" }}>
+                      <MicroLabel>Sentiment</MicroLabel>
+                      <div style={{ fontSize: "10px", color: focusedNode.direction === "long" ? C.primary : focusedNode.direction === "short" ? C.tertiary : C.secondary }}>{focusedNode.direction}</div>
+                    </div>
+                    <div className="rounded px-2 py-1" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0f131e" }}>
+                      <MicroLabel>Confidence</MicroLabel>
+                      <div style={{ fontSize: "10px", color: "#fff" }}>{(focusedNode.attention_score * 100).toFixed(1)}%</div>
+                    </div>
+                    <div className="rounded px-2 py-1" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0f131e" }}>
+                      <MicroLabel>Setup Family</MicroLabel>
+                      <div style={{ fontSize: "10px", color: C.muted }}>{focusedNode.setup_family}</div>
+                    </div>
+                    <div className="rounded px-2 py-1" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0f131e" }}>
+                      <MicroLabel>Market DNA</MicroLabel>
+                      <div style={{ fontSize: "10px", color: C.muted }}>
+                        S {focusedNode.structure_score.toFixed(2)} · O {focusedNode.orderflow_score.toFixed(2)}
+                      </div>
+                    </div>
+                    <div className="rounded px-2 py-1" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0f131e" }}>
+                      <MicroLabel>Execution Signature</MicroLabel>
+                      <div style={{ fontSize: "10px", color: focusedNode.risk_state === "allowed" ? C.primary : C.tertiary }}>{focusedNode.risk_state}</div>
+                    </div>
+                    <div className="rounded px-2 py-1" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0f131e" }}>
+                      <MicroLabel>Readiness</MicroLabel>
+                      <div style={{ fontSize: "10px", color: focusedNode.readiness === "allow" ? C.primary : focusedNode.readiness === "watch" ? "#fbbf24" : C.tertiary }}>{focusedNode.readiness}</div>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
 
@@ -420,9 +496,9 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+        <div className="flex gap-2 overflow-x-auto pb-1 md:grid md:grid-cols-4 md:overflow-visible">
           {setupAlerts.length > 0 ? setupAlerts.map((sig) => (
-            <div key={`strip-${sig.id}`} className="rounded px-3 py-2" style={{ backgroundColor: "#111726", border: `1px solid ${C.border}` }}>
+            <div key={`strip-${sig.id}`} className="rounded px-3 py-2 min-w-[220px] md:min-w-0" style={{ backgroundColor: "#111726", border: `1px solid ${C.border}` }}>
               <div style={{ fontSize: "10px", color: "#fff", fontWeight: 700, fontFamily: "Space Grotesk" }}>{sig.instrument} {sig.setup_type.replace(/_/g, " ")}</div>
               <div style={{ fontSize: "9px", marginTop: "3px", color: sig.final_quality > 65 ? C.primary : sig.final_quality > 50 ? "#fbbf24" : C.tertiary }}>
                 {formatNumber(sig.final_quality, 1)}% quality
