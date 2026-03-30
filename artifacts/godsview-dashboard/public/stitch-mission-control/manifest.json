@@ -1,11 +1,13 @@
 {
-  "count": 88,
+  "count": 92,
   "categories": [
     "Brain",
     "Candle X-Ray",
+    "Design Systems",
     "Live Intelligence",
     "Mission Control",
     "Other",
+    "PRD",
     "Performance",
     "Pipeline",
     "Reports",
@@ -14,6 +16,14 @@
     "Signal Intelligence"
   ],
   "templates": [
+    {
+      "id": "aetherius_institutional",
+      "title": "Aetherius Institutional",
+      "category": "Design Systems",
+      "hasScreen": false,
+      "hasHtml": false,
+      "hasDesign": true
+    },
     {
       "id": "agents_neural_swarm_status",
       "title": "Agents Neural Swarm Status",
@@ -76,6 +86,14 @@
       "category": "Candle X-Ray",
       "hasScreen": true,
       "hasHtml": true
+    },
+    {
+      "id": "godsview_ai_trading_brain_system_prd",
+      "title": "GodsView AI Trading Brain System PRD",
+      "category": "PRD",
+      "hasScreen": false,
+      "hasHtml": true,
+      "hasDesign": false
     },
     {
       "id": "godsview_brain_master_dashboard",
@@ -314,6 +332,22 @@
       "category": "Mission Control",
       "hasScreen": true,
       "hasHtml": true
+    },
+    {
+      "id": "obsidian_quant",
+      "title": "Obsidian Quant",
+      "category": "Design Systems",
+      "hasScreen": false,
+      "hasHtml": false,
+      "hasDesign": true
+    },
+    {
+      "id": "obsidian_terminal",
+      "title": "Obsidian Terminal",
+      "category": "Design Systems",
+      "hasScreen": false,
+      "hasHtml": false,
+      "hasDesign": true
     },
     {
       "id": "overview_dashboard",
