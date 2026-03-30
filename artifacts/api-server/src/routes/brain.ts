@@ -6,6 +6,7 @@ import {
   db,
 } from "@workspace/db";
 import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
+import { getConsciousnessSnapshot, getLatestBrainSnapshot, runBrainCycle } from "../lib/brain_bridge";
 
 const router: IRouter = Router();
 
@@ -285,6 +286,113 @@ router.post("/brain/memories", async (req, res) => {
     res.status(400).json({
       error: "invalid_request",
       message: err instanceof Error ? err.message : "Failed to create brain memory",
+    });
+  }
+});
+
+router.get("/brain/snapshot", async (req, res) => {
+  try {
+    const force = String(req.query.force ?? "").toLowerCase() === "true";
+    const snapshot = await getLatestBrainSnapshot(force);
+    if (!snapshot) {
+      res.status(404).json({
+        error: "not_found",
+        message: "No orchestrator snapshot found at godsview-openbb/data/processed/latest_orchestrator_run.json",
+      });
+      return;
+    }
+    res.json({
+      has_data: true,
+      generated_at: String(snapshot.generated_at ?? ""),
+      symbol: String(snapshot.symbol ?? ""),
+      blocked: Boolean(snapshot.blocked ?? false),
+      block_reason: String(snapshot.block_reason ?? ""),
+      snapshot,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch brain snapshot");
+    res.status(500).json({ error: "internal_error", message: "Failed to fetch brain snapshot" });
+  }
+});
+
+router.get("/brain/consciousness", async (req, res) => {
+  try {
+    const force = String(req.query.force ?? "").toLowerCase() === "true";
+    const consciousness = await getConsciousnessSnapshot(force);
+    if (!consciousness) {
+      res.status(404).json({
+        error: "not_found",
+        message: "No consciousness snapshot available. Run /brain/update first.",
+      });
+      return;
+    }
+    res.json({ has_data: true, ...consciousness });
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch consciousness snapshot");
+    res.status(500).json({ error: "internal_error", message: "Failed to fetch consciousness snapshot" });
+  }
+});
+
+router.post("/brain/update", async (req, res) => {
+  try {
+    const symbol = asRequiredSymbol(req.body?.symbol ?? req.query.symbol ?? "AAPL");
+    const withReplay = Boolean(req.body?.with_replay ?? false);
+    const live = Boolean(req.body?.live ?? false);
+    const dryRun = Boolean(req.body?.dry_run ?? true);
+    const approve = Boolean(req.body?.approve ?? false);
+
+    const result = await runBrainCycle({
+      symbol,
+      withReplay,
+      live,
+      dryRun,
+      approve,
+    });
+    res.status(result.ok ? 200 : 500).json({
+      ok: result.ok,
+      symbol,
+      command: result.command.join(" "),
+      stdout: result.stdout,
+      stderr: result.stderr,
+      snapshot_generated_at: String(result.snapshot?.generated_at ?? ""),
+      blocked: Boolean(result.snapshot?.blocked ?? false),
+      block_reason: String(result.snapshot?.block_reason ?? ""),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to run brain update");
+    res.status(500).json({
+      error: "internal_error",
+      message: err instanceof Error ? err.message : "Failed to run brain update",
+    });
+  }
+});
+
+router.post("/brain/evolve", async (req, res) => {
+  try {
+    const symbol = asRequiredSymbol(req.body?.symbol ?? req.query.symbol ?? "AAPL");
+    const result = await runBrainCycle({
+      symbol,
+      withReplay: true,
+      live: false,
+      dryRun: true,
+      approve: false,
+    });
+    const consciousness = await getConsciousnessSnapshot(true);
+    res.status(result.ok ? 200 : 500).json({
+      ok: result.ok,
+      symbol,
+      mode: "evolve",
+      command: result.command.join(" "),
+      snapshot_generated_at: String(result.snapshot?.generated_at ?? ""),
+      blocked: Boolean(result.snapshot?.blocked ?? false),
+      block_reason: String(result.snapshot?.block_reason ?? ""),
+      consciousness,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to run brain evolve cycle");
+    res.status(500).json({
+      error: "internal_error",
+      message: err instanceof Error ? err.message : "Failed to run brain evolve cycle",
     });
   }
 });

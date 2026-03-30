@@ -368,6 +368,17 @@ type ConsciousnessSnapshot = {
     error: string | null;
   };
 };
+type BrainCycleResponse = {
+  ok: boolean;
+  symbol: string;
+  command: string;
+  stdout?: string;
+  stderr?: string;
+  snapshot_generated_at?: string;
+  blocked?: boolean;
+  block_reason?: string;
+  mode?: string;
+};
 
 const LAYER_LABELS: Record<string, string> = {
   data_feed: "Data Feed (Alpaca)",
@@ -541,6 +552,7 @@ export default function System() {
     refetchInterval: 20_000,
     staleTime: 12_000,
   });
+  const [brainCycleFeedback, setBrainCycleFeedback] = useState<BrainCycleResponse | null>(null);
   const [draft, setDraft] = useState<RiskConfig | null>(null);
   useEffect(() => {
     if (riskSnapshot && !draft) {
@@ -618,6 +630,42 @@ export default function System() {
       queryClient.invalidateQueries({ queryKey: ["system-governance-overview"] });
       queryClient.invalidateQueries({ queryKey: ["system-pipeline-trace"] });
       queryClient.invalidateQueries({ queryKey: ["system-consciousness-latest"] });
+    },
+  });
+  const brainUpdateMutation = useMutation({
+    mutationFn: async () => {
+      const r = await fetch("/api/brain/update", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ symbol: data?.active_instrument || "AAPL", dry_run: true, with_replay: false }),
+      });
+      const body = await r.json();
+      if (!r.ok) throw new Error(body?.message || `brain update failed: ${r.status}`);
+      return body as BrainCycleResponse;
+    },
+    onSuccess: (payload) => {
+      setBrainCycleFeedback(payload);
+      queryClient.invalidateQueries({ queryKey: ["system-consciousness-latest"] });
+      queryClient.invalidateQueries({ queryKey: ["system-pipeline-trace"] });
+      queryClient.invalidateQueries({ queryKey: ["system-governance-overview"] });
+    },
+  });
+  const brainEvolveMutation = useMutation({
+    mutationFn: async () => {
+      const r = await fetch("/api/brain/evolve", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ symbol: data?.active_instrument || "AAPL" }),
+      });
+      const body = await r.json();
+      if (!r.ok) throw new Error(body?.message || `brain evolve failed: ${r.status}`);
+      return body as BrainCycleResponse;
+    },
+    onSuccess: (payload) => {
+      setBrainCycleFeedback(payload);
+      queryClient.invalidateQueries({ queryKey: ["system-consciousness-latest"] });
+      queryClient.invalidateQueries({ queryKey: ["system-pipeline-trace"] });
+      queryClient.invalidateQueries({ queryKey: ["system-governance-overview"] });
     },
   });
 
@@ -1039,10 +1087,40 @@ export default function System() {
             <MicroLabel>Consciousness Board</MicroLabel>
             <StatusPill status={consciousness?.has_data ? "live" : "offline"} />
           </div>
-          <span style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: C.outlineVar }}>
-            {consciousness?.generated_at ? format(new Date(consciousness.generated_at), "HH:mm:ss") : "n/a"}
-          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => brainUpdateMutation.mutate()}
+              disabled={brainUpdateMutation.isPending || brainEvolveMutation.isPending}
+              className="rounded px-2 py-1 text-[9px]"
+              style={{ border: `1px solid ${C.border}`, color: C.secondary }}
+            >
+              {brainUpdateMutation.isPending ? "UPDATING..." : "UPDATE"}
+            </button>
+            <button
+              onClick={() => brainEvolveMutation.mutate()}
+              disabled={brainUpdateMutation.isPending || brainEvolveMutation.isPending}
+              className="rounded px-2 py-1 text-[9px]"
+              style={{ border: `1px solid ${C.border}`, color: C.primary }}
+            >
+              {brainEvolveMutation.isPending ? "EVOLVING..." : "EVOLVE"}
+            </button>
+            <span style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: C.outlineVar }}>
+              {consciousness?.generated_at ? format(new Date(consciousness.generated_at), "HH:mm:ss") : "n/a"}
+            </span>
+          </div>
         </div>
+        {brainCycleFeedback && (
+          <div className="mb-3 rounded px-2 py-1.5" style={{ border: `1px solid ${C.border}`, backgroundColor: "#101011" }}>
+            <div style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: brainCycleFeedback.ok ? C.primary : C.tertiary }}>
+              cycle {brainCycleFeedback.ok ? "ok" : "failed"} · {brainCycleFeedback.symbol} · {brainCycleFeedback.blocked ? `blocked (${brainCycleFeedback.block_reason || "n/a"})` : "not blocked"}
+            </div>
+          </div>
+        )}
+        {(brainUpdateMutation.error || brainEvolveMutation.error) && (
+          <div className="mb-3 text-[9px]" style={{ color: C.tertiary }}>
+            {(brainUpdateMutation.error as Error | null)?.message || (brainEvolveMutation.error as Error | null)?.message}
+          </div>
+        )}
         {consciousness?.has_data ? (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
             {(consciousness.board ?? []).map((row) => {
@@ -1535,7 +1613,7 @@ export default function System() {
           Auth Profile: Redacted
         </div>
         <div style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: C.outlineVar }}>
-          KERNEL V2.4.0 · GODSVIEW
+          GODSVIEW v0.4.0-BRAIN
         </div>
       </div>
     </div>

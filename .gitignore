@@ -61,3 +61,7 @@ godsview-openbb/data/processed/
 godsview-openbb/charts/
 godsview-openbb/reports/
 godsview-openbb/memory/
+
+# Brain sync transfer temp artifacts
+_brain_sync.b64
+_brain_sync.tar.gz
