@@ -1,170 +1,106 @@
-# Godsview
+# GodsView — AI Trading Intelligence Dashboard
 
-Godsview is an AI-assisted order-flow trading terminal for discretionary traders.  
-It filters trade opportunities with structure-first gating, order-flow confirmation, historical pattern recall, probabilistic scoring, and hard risk controls.
+A real-time trading intelligence system powered by a 6-layer hybrid AI pipeline, built with React, TypeScript, and Node.js.
 
-## Product Scope (V1)
+## Overview
 
-Primary user: discretionary intraday trader (crypto/futures style workflow).  
-Primary promise: better trade selection, stricter trade blocking, and explainable execution decisions.
+GodsView combines structural analysis, order flow intelligence, pattern recall, machine learning, and Claude AI into a unified decision pipeline with a real-time risk gate. Every signal must pass through all six layers and exceed a composite quality threshold of **≥ 0.75** before execution.
 
-## Core Workflow
+### Composite Quality Score
 
-1. Connect market data and broker keys.
-2. Choose watchlist/symbols.
-3. Configure risk rails (loss limits, exposure, session allowlist, news lockout).
-4. Run scan (`/api/alpaca/analyze`).
-5. Review approved/rejected setups with reasons.
-6. Execute (paper/live mode policy controlled).
-7. Review audit + performance and iterate.
-
-## Decision Stack
-
-- `SK Structure`: location and bias context.
-- `Order Flow`: CVD/divergence/absorption style confirmation.
-- `Recall`: historical pattern similarity and regime context.
-- `ML`: probability estimation from historical outcomes.
-- `Claude`: reasoning veto/adjustment layer.
-- `Risk Engine`: hard blockers before execution.
-
-Final quality score:
-
-`0.30 * structure + 0.25 * orderFlow + 0.20 * recall + 0.15 * ml + 0.10 * claude`
-
-## Hard Risk Rails (Implemented)
-
-- Kill switch blocks all trading writes.
-- Max daily realized loss.
-- Max open exposure.
-- Max concurrent positions.
-- Max trades per session.
-- Cooldown after loss streak.
-- Degraded-data block policy.
-- Session allowlist (`Asian/London/NY`).
-- Runtime news lockout gate.
-
-Decision states are standardized across logs/routes/UI:
-
-- `TRADE`
-- `PASS`
-- `REJECTED`
-- `BLOCKED_BY_RISK`
-- `DEGRADED_DATA`
-
-## System Modes
-
-`GODSVIEW_SYSTEM_MODE`:
-
-- `demo`
-- `paper`
-- `live_disabled`
-- `live_enabled`
-
-Writes are only allowed when mode policy permits and kill switch is off.
-
-## Repo Layout
-
-- `artifacts/api-server`: Express API + strategy/risk/execution routes.
-- `artifacts/godsview-dashboard`: React/Vite dashboard.
-- `lib/strategy-core`: shared setup catalog, scoring, mode/risk rule helpers.
-- `lib/db`: Drizzle schema + DB layer.
-- `scripts`: seeds and support scripts.
-
-## Local Setup
-
-```bash
-corepack pnpm install
-corepack pnpm run setup
-corepack pnpm run dev
+```
+Q = 0.30×Structure + 0.25×OrderFlow + 0.20×Recall + 0.15×ML + 0.10×Claude
 ```
 
-Build and run:
+### Architecture
 
-```bash
-corepack pnpm run build
-corepack pnpm run start
+```
+┌─────────────────────────────────────────────────────┐
+│                  React Dashboard                     │
+│  15 pages · WebSocket · SSE · Obsidian Terminal UI   │
+├─────────────────────────────────────────────────────┤
+│               Express API Server                     │
+│  REST + WS · Alpaca · Risk Engine · ML Model         │
+├─────────────────────────────────────────────────────┤
+│            6-Layer AI Pipeline                       │
+│  Structure → OrderFlow → Recall → ML → Claude → Risk│
+└─────────────────────────────────────────────────────┘
 ```
 
-## Environment
+## Dashboard Pages
 
-Copy `.env.example` to `.env` and set keys.
+| Page | Route | Purpose |
+|------|-------|---------|
+| Mission Control | `/` | P&L, win rate, ML accuracy, pipeline health, live chart |
+| Brain | `/brain` | 3D consciousness visualization, entity intelligence |
+| Live Intelligence | `/alpaca` | Real-time Alpaca analysis with chart overlays |
+| Infinity Screen | `/infinity` | Multi-chart grid for simultaneous monitoring |
+| Pipeline Engine | `/pipeline` | 6-layer AI pipeline visualization and signal feed |
+| Candle X-Ray | `/candle-xray` | Microstructure analysis, order book, live tape |
+| Signal Feed | `/signals` | Real-time pipeline signals with quality scores |
+| Setup Explorer | `/setup-explorer` | Strategy matrix with sortable performance data |
+| Trade Journal | `/trades` | Execution log with entry/exit analysis |
+| Session Reports | `/reports` | Post-session intelligence and performance review |
+| Risk Command | `/risk` | Kill switch, 9 safety rails, drawdown tracking |
+| Analytics | `/performance` | Win rate, profit factor, equity curve, by-setup |
+| System Core | `/system` | Diagnostics, data stack health, audit events |
+| Settings | `/settings` | Connection status, risk params, session filters |
 
-Key runtime controls:
+## Quick Start
 
-- `GODSVIEW_SYSTEM_MODE`
-- `GODSVIEW_KILL_SWITCH`
-- `GODSVIEW_MAX_DAILY_LOSS_USD`
-- `GODSVIEW_MAX_OPEN_EXPOSURE_PCT`
-- `GODSVIEW_MAX_TRADES_PER_SESSION`
-- `GODSVIEW_COOLDOWN_AFTER_LOSSES`
-- `GODSVIEW_COOLDOWN_MINUTES`
-- `GODSVIEW_BLOCK_ON_DEGRADED_DATA`
-- `GODSVIEW_ALLOW_SESSION_ASIAN`
-- `GODSVIEW_ALLOW_SESSION_LONDON`
-- `GODSVIEW_ALLOW_SESSION_NY`
-- `GODSVIEW_NEWS_LOCKOUT_ACTIVE`
+```bash
+# 1. Clone and install
+git clone https://github.com/Santhakumarramesh/Godsview.git
+cd Godsview
+pnpm install
 
-## Production Readiness Focus
+# 2. Configure environment
+cp .env.example .env
+# Edit .env with your Alpaca API keys
 
-Current implementation prioritizes:
+# 3. Run development
+pnpm run dev
+```
 
-- deterministic trade gating,
-- observable audit trails,
-- measurable performance outputs,
-- strict mode/risk controls,
-- fail-fast runtime config validation,
-- graceful shutdown and startup bootstrapping,
-- request safety (security headers, body limits, API rate limits),
-- dedicated liveness/readiness probes.
+## Production Deployment
 
-Operational endpoints:
+### Docker (recommended)
 
-- `/api/healthz` (liveness)
-- `/api/readyz` (readiness with DB + mode/dependency checks)
+```bash
+cp .env.example .env   # configure API keys
+docker compose up -d   # starts postgres + app
+# Dashboard: http://localhost:3000
+# API: http://localhost:3000/api
+# Health: http://localhost:3000/api/healthz
+```
 
-Next recommended milestones:
+### Bare Metal
 
-1. Expand proof dashboard with stronger out-of-sample reporting.
-2. Add replay UI for orderbook and decision attribution.
-3. Add operator runbooks for incident response and rollback.
-4. Add onboarding defaults and tighter product packaging.
+```bash
+./scripts/start-prod.sh
+# Or with custom port:
+PORT=8080 ./scripts/start-prod.sh
+```
 
-## Disclaimer
+## ML Model
 
-This software is for research and trading-assistance workflows. It does not guarantee profitability. Always use paper mode before any live execution.
+The ML layer trains an L2-regularized logistic regression at server startup from the `accuracy_results` table (136k+ labeled win/loss records).
 
-## Architecture Doc
+**Feature vector** (18 dimensions): structure score, order flow score, recall score, final quality, interaction terms (structure×flow, recall×structure), disagreement signal, direction encoding, one-hot setup type (5), one-hot regime (5).
 
-Detailed production architecture and phase plan:
+**Metrics exposed via API**: accuracy, AUC-ROC, win rate, training sample count, cross-validated AUC, drift detection (stable/watch/drift).
 
-- [docs/market-ready-architecture.md](./docs/market-ready-architecture.md)
-- [docs/production-runbook.md](./docs/production-runbook.md)
-- [docs/brain-schema.md](./docs/brain-schema.md)
-- [docs/brain-structure-v2.md](./docs/brain-structure-v2.md)
-- [docs/massive-brain-v1-spec.md](./docs/massive-brain-v1-spec.md)
+**Retrain on demand**: `POST /api/system/retrain`
 
-## OpenBB Research Integration
+## Environment Variables
 
-A Python-side OpenBB research and paper-execution scaffold is included at:
+See `.env.example` for the full list. Key variables:
 
-- [godsview-openbb/README.md](./godsview-openbb/README.md)
+- `ALPACA_API_KEY` / `ALPACA_API_SECRET` — Alpaca paper trading credentials
+- `DATABASE_URL` — PostgreSQL connection string
+- `ANTHROPIC_API_KEY` — Claude reasoning layer (optional, falls back to deterministic scoring)
+- `QUALITY_THRESHOLD` — Minimum composite quality for signal execution (default: 0.75)
 
-It provides a separate workflow for:
+## License
 
-- OpenBB-first historical data ingestion
-- feature engineering + ML training
-- inference + filter + risk checks
-- optional Alpaca paper order submission
-- multi-agent orchestration with persistent brain memory
-- replay-based chart intelligence (structure/BOS/CHOCH/order blocks/FVG) with screenshot artifacts
-
-Bridge endpoint in API:
-
-- `GET /api/research/openbb/latest` (reads generated artifacts from `godsview-openbb/data/processed`)
-
-Brain memory endpoints:
-
-- `POST /api/brain/entities`
-- `POST /api/brain/relations`
-- `POST /api/brain/memories`
-- `GET /api/brain/:symbol/context`
+MIT

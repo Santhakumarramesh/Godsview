@@ -1278,6 +1278,70 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* ── AI Pipeline Intelligence — Model Accuracy & Win Rate ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        {(() => {
+          const mlMeta = (modelDiag?.status as any)?.meta;
+          const mlStatus = modelDiag?.status?.status ?? "warning";
+          const mlAccuracy = mlMeta?.accuracy ?? null;
+          const mlAuc = mlMeta?.auc ?? null;
+          const mlWinRate = mlMeta?.winRate ?? null;
+          const mlSamples = mlMeta?.samples ?? null;
+          const cvAuc = modelDiag?.validation?.auc ?? null;
+          const driftStatus = modelDiag?.drift?.status ?? null;
+
+          return (
+            <>
+              <div className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+                <MicroLabel>ML Model Accuracy</MicroLabel>
+                <div className="mt-2 font-headline font-bold text-xl" style={{ color: mlAccuracy != null ? (mlAccuracy >= 0.65 ? C.primary : mlAccuracy >= 0.55 ? "#fbbf24" : C.tertiary) : C.muted }}>
+                  {mlAccuracy != null ? `${(mlAccuracy * 100).toFixed(1)}%` : "—"}
+                </div>
+                <div style={{ fontSize: "9px", color: C.outline, fontFamily: "Space Grotesk", marginTop: "4px" }}>
+                  {mlSamples != null ? `${mlSamples.toLocaleString()} samples` : "Training..."}
+                </div>
+              </div>
+              <div className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+                <MicroLabel>AUC-ROC</MicroLabel>
+                <div className="mt-2 font-headline font-bold text-xl" style={{ color: mlAuc != null ? (mlAuc >= 0.70 ? C.primary : mlAuc >= 0.60 ? "#fbbf24" : C.tertiary) : C.muted }}>
+                  {mlAuc != null ? mlAuc.toFixed(3) : "—"}
+                </div>
+                <div style={{ fontSize: "9px", color: C.outline, fontFamily: "Space Grotesk", marginTop: "4px" }}>
+                  {cvAuc != null ? `CV: ${cvAuc.toFixed(3)}` : "Model discriminative power"}
+                </div>
+              </div>
+              <div className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+                <MicroLabel>Historical Win Rate</MicroLabel>
+                <div className="mt-2 font-headline font-bold text-xl" style={{ color: mlWinRate != null ? (mlWinRate >= 0.55 ? C.primary : C.tertiary) : C.muted }}>
+                  {mlWinRate != null ? `${(mlWinRate * 100).toFixed(1)}%` : "—"}
+                </div>
+                <div style={{ fontSize: "9px", color: C.outline, fontFamily: "Space Grotesk", marginTop: "4px" }}>
+                  From {mlSamples != null ? `${mlSamples.toLocaleString()} labeled trades` : "accuracy_results"}
+                </div>
+              </div>
+              <div className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+                <MicroLabel>Model Status</MicroLabel>
+                <div className="mt-2 font-headline font-bold text-xl" style={{ color: mlStatus === "active" ? C.primary : mlStatus === "warning" ? "#fbbf24" : C.tertiary }}>
+                  {mlStatus === "active" ? "TRAINED" : mlStatus === "warning" ? "HEURISTIC" : "ERROR"}
+                </div>
+                <div style={{ fontSize: "9px", color: C.outline, fontFamily: "Space Grotesk", marginTop: "4px" }}>
+                  {mlStatus === "active" ? "L2 Logistic Regression" : "Fallback scoring active"}
+                </div>
+              </div>
+              <div className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+                <MicroLabel>Drift</MicroLabel>
+                <div className="mt-2 font-headline font-bold text-xl" style={{ color: driftStatus === "stable" ? C.primary : driftStatus === "watch" ? "#fbbf24" : driftStatus === "drift" ? C.tertiary : C.muted }}>
+                  {driftStatus != null ? driftStatus.toUpperCase() : "—"}
+                </div>
+                <div style={{ fontSize: "9px", color: C.outline, fontFamily: "Space Grotesk", marginTop: "4px" }}>
+                  {driftStatus === "stable" ? "No regime shift detected" : driftStatus === "drift" ? "Retrain recommended" : "Monitoring..."}
+                </div>
+              </div>
+            </>
+          );
+        })()}
+      </div>
+
       <div className="rounded p-4 space-y-3" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
