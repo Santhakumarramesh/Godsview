@@ -80,6 +80,32 @@ type ConsciousnessSnapshot = {
     error: string | null;
   };
 };
+type LivePosition = {
+  symbol: string;
+  side: string;
+  qty: string;
+  unrealized_pl: string;
+  unrealized_plpc: string;
+  market_value: string;
+  current_price: string;
+};
+type LivePositionsResponse = {
+  positions?: LivePosition[];
+  error?: string;
+  message?: string;
+};
+type OpenOrder = {
+  id: string;
+  symbol: string;
+  side: string;
+  status: string;
+  qty: string;
+};
+type OpenOrdersResponse = {
+  orders?: OpenOrder[];
+  error?: string;
+  message?: string;
+};
 
 function buildNeuralCurvePath(targetX: number, targetY: number, i: number): string {
   const startX = 50;
@@ -89,6 +115,10 @@ function buildNeuralCurvePath(targetX: number, targetY: number, i: number): stri
   const controlX = (startX + targetX) / 2 + direction * baseCurvature;
   const controlY = (startY + targetY) / 2 - Math.abs(targetX - startX) * 0.18;
   return `M ${startX} ${startY} Q ${controlX} ${controlY} ${targetX} ${targetY}`;
+}
+
+function normalizeInstrumentKey(value: string): string {
+  return value.replace(/[^a-z0-9]/gi, "").toUpperCase();
 }
 
 function getSymbolSeed(symbol: string): number {
@@ -175,6 +205,28 @@ export default function Dashboard() {
     },
     refetchInterval: 30_000,
     staleTime: 20_000,
+    retry: 2,
+  });
+  const { data: livePositionsData } = useQuery<LivePositionsResponse>({
+    queryKey: ["alpaca-live-positions-dashboard"],
+    queryFn: async () => {
+      const r = await fetch("/api/alpaca/positions/live");
+      if (!r.ok) throw new Error(`positions fetch failed: ${r.status}`);
+      return r.json();
+    },
+    refetchInterval: 15_000,
+    staleTime: 8_000,
+    retry: 2,
+  });
+  const { data: openOrders } = useQuery<OpenOrdersResponse>({
+    queryKey: ["alpaca-open-orders-dashboard"],
+    queryFn: async () => {
+      const r = await fetch("/api/alpaca/orders?status=open&limit=50");
+      if (!r.ok) throw new Error(`open orders fetch failed: ${r.status}`);
+      return r.json();
+    },
+    refetchInterval: 15_000,
+    staleTime: 8_000,
     retry: 2,
   });
 
@@ -279,6 +331,28 @@ export default function Dashboard() {
   const executionSlippageLabel = avgRiskScore < 0.35 ? "Low" : avgRiskScore < 0.65 ? "Moderate" : "High";
   const executionFillLabel = avgOrderflowScore > 0.7 ? "Excellent" : avgOrderflowScore > 0.5 ? "Good" : "Watch";
   const executionRiskLabel = avgRiskScore < 0.35 ? "Disciplined" : avgRiskScore < 0.65 ? "Moderate" : "Elevated";
+  const livePositionsList = livePositionsData?.positions ?? [];
+  const openOrdersList = openOrders?.orders ?? [];
+  const positionBySymbol = useMemo(() => {
+    const map = new Map<string, LivePosition>();
+    for (const pos of livePositionsList) {
+      map.set(normalizeInstrumentKey(pos.symbol), pos);
+    }
+    return map;
+  }, [livePositionsList]);
+  const openOrderBySymbol = useMemo(() => {
+    const map = new Map<string, { count: number; status: string; side: string }>();
+    for (const order of openOrdersList) {
+      const key = normalizeInstrumentKey(order.symbol);
+      const prev = map.get(key);
+      if (prev) {
+        prev.count += 1;
+      } else {
+        map.set(key, { count: 1, status: order.status, side: order.side });
+      }
+    }
+    return map;
+  }, [openOrdersList]);
   const orbitNodes = useMemo(
     () => {
       const count = Math.max(featuredBrainNodes.length, 1);
@@ -348,6 +422,14 @@ export default function Dashboard() {
       null,
     [rankedBoard, drawerSymbol, focusedNode]
   );
+  const drawerExecution = useMemo(() => {
+    if (!drawerNode) return { position: null as LivePosition | null, order: null as { count: number; status: string; side: string } | null };
+    const key = normalizeInstrumentKey(drawerNode.symbol);
+    return {
+      position: positionBySymbol.get(key) ?? null,
+      order: openOrderBySymbol.get(key) ?? null,
+    };
+  }, [drawerNode, positionBySymbol, openOrderBySymbol]);
 
   useEffect(() => {
     if (pinnedSymbol && !rankedBoard.some((row) => row.symbol === pinnedSymbol)) {
@@ -514,6 +596,12 @@ export default function Dashboard() {
                 const tone = row.direction === "long" ? C.primary : row.direction === "short" ? C.tertiary : C.secondary;
                 const nodeScale = 0.86 + row.attention_score * 0.5;
                 const isPinned = pinnedSymbol === row.symbol;
+                const symbolKey = normalizeInstrumentKey(row.symbol);
+                const livePos = positionBySymbol.get(symbolKey);
+                const orderState = openOrderBySymbol.get(symbolKey);
+                const unrealized = livePos ? Number.parseFloat(livePos.unrealized_pl ?? "0") : null;
+                const executionBadge = livePos ? `${livePos.side.toUpperCase()} ${livePos.qty}` : orderState ? `ORDERS ${orderState.count}` : null;
+                const executionColor = livePos ? (unrealized ?? 0) >= 0 ? C.primary : C.tertiary : orderState ? "#fbbf24" : C.muted;
                 return (
                   <div
                     key={row.symbol}
@@ -547,6 +635,16 @@ export default function Dashboard() {
                     <div style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: "#e2e8f0", textAlign: "center", marginTop: "2px" }}>
                       {(row.attention_score * 100).toFixed(0)}% attn
                     </div>
+                    {executionBadge ? (
+                      <span className="absolute -left-2 -top-2 rounded-full px-1.5 py-0.5" style={{ fontSize: "7px", fontFamily: "JetBrains Mono, monospace", color: executionColor, border: `1px solid ${executionColor}66`, backgroundColor: "rgba(10,14,22,0.9)" }}>
+                        {executionBadge}
+                      </span>
+                    ) : null}
+                    {livePos ? (
+                      <span className="absolute left-1/2 -translate-x-1/2 -bottom-2 rounded-full px-1.5 py-0.5" style={{ fontSize: "7px", fontFamily: "JetBrains Mono, monospace", color: (unrealized ?? 0) >= 0 ? C.primary : C.tertiary, border: `1px solid ${((unrealized ?? 0) >= 0 ? C.primary : C.tertiary)}66`, backgroundColor: "rgba(10,14,22,0.92)" }}>
+                        {(unrealized ?? 0) >= 0 ? "+" : ""}{(unrealized ?? 0).toFixed(2)}
+                      </span>
+                    ) : null}
                     {isPinned ? (
                       <span className="absolute -top-1 -right-1 rounded-full px-1 py-0.5" style={{ fontSize: "7px", fontFamily: "JetBrains Mono, monospace", color: C.primary, border: "1px solid rgba(156,255,147,0.45)", backgroundColor: "rgba(8,20,14,0.85)" }}>
                         PIN
@@ -623,6 +721,9 @@ export default function Dashboard() {
                   const dotColor = row.readiness === "allow" ? C.primary : row.readiness === "watch" ? "#fbbf24" : C.tertiary;
                   const sparklineValues = buildSparklineSeries(row);
                   const sparklinePath = buildSparklinePath(sparklineValues, 74, 22, 1.5);
+                  const key = normalizeInstrumentKey(row.symbol);
+                  const rowPos = positionBySymbol.get(key);
+                  const rowOrder = openOrderBySymbol.get(key);
                   return (
                     <div
                       key={row.symbol}
@@ -638,6 +739,7 @@ export default function Dashboard() {
                           <div style={{ fontSize: "11px", color: "#fff", fontFamily: "Space Grotesk" }}>{row.symbol}: {row.reasoning_verdict.replace(/_/g, " ")}</div>
                           <div style={{ fontSize: "9px", color: C.muted, fontFamily: "JetBrains Mono, monospace" }}>
                             setup {row.setup_family} · {row.risk_state}
+                            {rowPos ? ` · ${rowPos.side} ${rowPos.qty}` : rowOrder ? ` · orders ${rowOrder.count}` : ""}
                           </div>
                         </div>
                       </div>
@@ -724,6 +826,15 @@ export default function Dashboard() {
                 <span style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: drawerNode.readiness === "allow" ? C.primary : drawerNode.readiness === "watch" ? "#fbbf24" : C.tertiary }}>
                   {drawerNode.readiness.toUpperCase()} · {drawerNode.risk_state.toUpperCase()}
                 </span>
+                {drawerExecution.position ? (
+                  <span style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: Number.parseFloat(drawerExecution.position.unrealized_pl ?? "0") >= 0 ? C.primary : C.tertiary }}>
+                    POS {drawerExecution.position.side.toUpperCase()} {drawerExecution.position.qty}
+                  </span>
+                ) : drawerExecution.order ? (
+                  <span style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: "#fbbf24" }}>
+                    ORDERS {drawerExecution.order.count}
+                  </span>
+                ) : null}
                 <button
                   type="button"
                   className="rounded px-2 py-1"
@@ -761,6 +872,20 @@ export default function Dashboard() {
                 <MicroLabel>Execution Signature</MicroLabel>
                 <div style={{ fontSize: "10px", color: drawerNode.risk_score < 0.4 ? C.primary : drawerNode.risk_score < 0.65 ? "#fbbf24" : C.tertiary }}>
                   Risk {drawerNode.risk_score.toFixed(2)}
+                </div>
+              </div>
+              <div className="rounded px-2 py-1.5" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0e1424" }}>
+                <MicroLabel>Live PnL</MicroLabel>
+                <div style={{ fontSize: "10px", color: drawerExecution.position ? Number.parseFloat(drawerExecution.position.unrealized_pl ?? "0") >= 0 ? C.primary : C.tertiary : C.muted }}>
+                  {drawerExecution.position
+                    ? `${Number.parseFloat(drawerExecution.position.unrealized_pl ?? "0") >= 0 ? "+" : ""}${Number.parseFloat(drawerExecution.position.unrealized_pl ?? "0").toFixed(2)}`
+                    : "flat"}
+                </div>
+              </div>
+              <div className="rounded px-2 py-1.5" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0e1424" }}>
+                <MicroLabel>Execution State</MicroLabel>
+                <div style={{ fontSize: "10px", color: drawerExecution.position ? C.primary : drawerExecution.order ? "#fbbf24" : C.muted }}>
+                  {drawerExecution.position ? "In Position" : drawerExecution.order ? drawerExecution.order.status.replace(/_/g, " ") : "Idle"}
                 </div>
               </div>
               <div className="rounded px-2 py-1.5" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0e1424" }}>
