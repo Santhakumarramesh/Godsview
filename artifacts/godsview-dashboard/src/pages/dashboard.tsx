@@ -5,6 +5,11 @@ import { Link } from "wouter";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import TradingViewChart from "@/components/TradingViewChart";
+import BookmapPanel from "@/components/BookmapPanel";
+import CandleIntelligencePanel from "@/components/CandleIntelligencePanel";
+import CVDPanel from "@/components/CVDPanel";
+import ChartIntelStrip from "@/components/ChartIntelStrip";
+import { isCryptoSymbol } from "@/lib/market/symbols";
 
 const C = {
   bg: "#0e0e0f",
@@ -106,6 +111,41 @@ type OpenOrdersResponse = {
   error?: string;
   message?: string;
 };
+type CandleIntelBar = {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  vwap: number | null;
+  imbalance: number;
+  absorption: number;
+  liquidity_strength: number;
+  reversal_score: number;
+  wick_top: number;
+  wick_bot: number;
+  body_ratio: number;
+  direction: "bull" | "bear";
+  is_doji: boolean;
+  is_high_vol: boolean;
+  is_absorption: boolean;
+  is_reversal_signal: boolean;
+};
+type CandleIntelResponse = {
+  symbol: string;
+  timeframe: string;
+  bars: CandleIntelBar[];
+  summary: {
+    total_bars: number;
+    avg_volume: number;
+    avg_range: number;
+    reversal_signals: number;
+    absorption_zones: number;
+    high_vol_events: number;
+    top_reversals: Array<{ time: number; price: number; score: number; direction: string }>;
+  };
+};
 
 function buildNeuralCurvePath(targetX: number, targetY: number, i: number): string {
   const startX = 50;
@@ -119,6 +159,10 @@ function buildNeuralCurvePath(targetX: number, targetY: number, i: number): stri
 
 function normalizeInstrumentKey(value: string): string {
   return value.replace(/[^a-z0-9]/gi, "").toUpperCase();
+}
+
+function toCandleMs(unixOrMs: number): number {
+  return unixOrMs > 1_000_000_000_000 ? unixOrMs : unixOrMs * 1000;
 }
 
 function getSymbolSeed(symbol: string): number {
@@ -157,6 +201,8 @@ export default function Dashboard() {
   const [hoveredSymbol, setHoveredSymbol] = useState<string | null>(null);
   const [pinnedSymbol, setPinnedSymbol] = useState<string | null>(null);
   const [drawerSymbol, setDrawerSymbol] = useState<string | null>(null);
+  const [xrayTab, setXrayTab] = useState<"summary" | "orderbook" | "heatmap" | "flow" | "ai">("summary");
+  const [selectedCandleTs, setSelectedCandleTs] = useState<number | null>(null);
   const [orbitPhase, setOrbitPhase] = useState(0);
 
   // ── Data hooks — 5 s auto-refresh ────────────────────────────────────────
@@ -430,6 +476,67 @@ export default function Dashboard() {
       order: openOrderBySymbol.get(key) ?? null,
     };
   }, [drawerNode, positionBySymbol, openOrderBySymbol]);
+  const xraySymbol = drawerNode?.symbol ?? null;
+  const xrayTimeframe = "1Min";
+  const xrayIsCrypto = xraySymbol ? isCryptoSymbol(xraySymbol) : false;
+  const { data: candleXrayData } = useQuery<CandleIntelResponse>({
+    queryKey: ["brain-focus-candle-intel", xraySymbol, xrayTimeframe],
+    queryFn: async () => {
+      const r = await fetch(`/api/market/candle-intelligence?symbol=${encodeURIComponent(xraySymbol ?? "BTCUSD")}&timeframe=${xrayTimeframe}&bars=120`);
+      if (!r.ok) throw new Error(`candle intelligence fetch failed: ${r.status}`);
+      return r.json();
+    },
+    enabled: Boolean(xraySymbol),
+    refetchInterval: 45_000,
+    staleTime: 20_000,
+    retry: 2,
+  });
+  const selectedCandle = useMemo(() => {
+    const bars = candleXrayData?.bars ?? [];
+    if (!bars.length) return null;
+    return bars.find((bar) => bar.time === selectedCandleTs) ?? bars[bars.length - 1];
+  }, [candleXrayData, selectedCandleTs]);
+  const selectedCandleTags = useMemo(() => {
+    if (!selectedCandle) return [];
+    const tags: string[] = [];
+    if (selectedCandle.is_reversal_signal) tags.push("Reversal Signal");
+    if (selectedCandle.is_absorption) tags.push("Absorption");
+    if (selectedCandle.imbalance > 0.45) tags.push("Momentum Burst");
+    if (selectedCandle.imbalance < -0.45) tags.push("Sell Aggression");
+    if (selectedCandle.is_high_vol) tags.push("High Volatility");
+    if (selectedCandle.wick_top > 0.45 || selectedCandle.wick_bot > 0.45) tags.push("Liquidity Sweep");
+    if (selectedCandle.is_doji) tags.push("Doji / Indecision");
+    return tags;
+  }, [selectedCandle]);
+  const selectedCandleAi = useMemo(() => {
+    if (!selectedCandle || !drawerNode) return "Select a candle to generate Candle X-Ray explanation.";
+    const narrative: string[] = [];
+    const direction = selectedCandle.direction === "bull" ? "bullish" : "bearish";
+    narrative.push(`This ${drawerNode.symbol} candle closed ${direction} with imbalance ${selectedCandle.imbalance >= 0 ? "+" : ""}${selectedCandle.imbalance.toFixed(2)} and liquidity strength ${selectedCandle.liquidity_strength.toFixed(2)}.`);
+    if (selectedCandle.is_absorption) {
+      narrative.push("Wick/body profile indicates absorption against the immediate move, suggesting hidden resting liquidity near the candle extremes.");
+    }
+    if (selectedCandle.is_reversal_signal) {
+      narrative.push("Reversal score is elevated, so this candle likely marked a local turning event or trap response.");
+    }
+    if (selectedCandle.wick_top > 0.45 || selectedCandle.wick_bot > 0.45) {
+      narrative.push("Large wick signature implies sweep behavior and potential stop-run participation at this level.");
+    }
+    narrative.push(`Brain context currently tags ${drawerNode.setup_family} with readiness ${drawerNode.readiness.toUpperCase()} and risk state ${drawerNode.risk_state.toUpperCase()}.`);
+    return narrative.join(" ");
+  }, [selectedCandle, drawerNode]);
+  const xrayBars = useMemo(() => {
+    const bars = candleXrayData?.bars ?? [];
+    if (!bars.length) return [];
+    return bars.slice(-32);
+  }, [candleXrayData]);
+  const xrayTabs: Array<{ key: "summary" | "orderbook" | "heatmap" | "flow" | "ai"; label: string; icon: string }> = [
+    { key: "summary", label: "Summary", icon: "lightbulb" },
+    { key: "orderbook", label: "Order Book", icon: "stacked_bar_chart" },
+    { key: "heatmap", label: "Heatmap", icon: "heat_pump" },
+    { key: "flow", label: "Flow", icon: "monitoring" },
+    { key: "ai", label: "AI", icon: "neurology" },
+  ];
 
   useEffect(() => {
     if (pinnedSymbol && !rankedBoard.some((row) => row.symbol === pinnedSymbol)) {
@@ -441,6 +548,19 @@ export default function Dashboard() {
       setDrawerSymbol(null);
     }
   }, [drawerSymbol, rankedBoard]);
+  useEffect(() => {
+    setXrayTab("summary");
+  }, [drawerSymbol]);
+  useEffect(() => {
+    const bars = candleXrayData?.bars ?? [];
+    if (!bars.length) {
+      setSelectedCandleTs(null);
+      return;
+    }
+    if (!selectedCandleTs || !bars.some((bar) => bar.time === selectedCandleTs)) {
+      setSelectedCandleTs(bars[bars.length - 1].time);
+    }
+  }, [candleXrayData, selectedCandleTs]);
 
   return (
     <div className="space-y-6">
@@ -914,6 +1034,194 @@ export default function Dashboard() {
                 />
               </svg>
             </div>
+            <div className="mt-2.5 rounded p-2.5" style={{ border: `1px solid rgba(102,157,255,0.3)`, backgroundColor: "#0a1323" }}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined" style={{ fontSize: "14px", color: C.secondary }}>visibility</span>
+                  <MicroLabel>Brain Focus Mode · Candle X-Ray</MicroLabel>
+                </div>
+                <span style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: C.muted }}>
+                  {xraySymbol ?? drawerNode.symbol} · {xrayTimeframe}
+                </span>
+              </div>
+
+              <div className="mt-2">
+                <ChartIntelStrip symbol={xraySymbol ?? drawerNode.symbol} timeframe="1" compact />
+              </div>
+
+              <div className="mt-2 rounded px-2 py-2" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0b1220" }}>
+                <div className="flex items-center justify-between">
+                  <MicroLabel>Candle Timeline (Click To Inspect)</MicroLabel>
+                  {selectedCandle ? (
+                    <span style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: C.secondary }}>
+                      {format(new Date(toCandleMs(selectedCandle.time)), "HH:mm:ss")}
+                    </span>
+                  ) : null}
+                </div>
+                <div className="mt-2 overflow-x-auto">
+                  <div className="flex items-end gap-1 min-w-max pb-1">
+                    {xrayBars.map((bar) => {
+                      const isSelected = selectedCandle?.time === bar.time;
+                      const up = bar.close >= bar.open;
+                      const bodyPct = Math.max(10, Math.min(100, Math.abs(bar.body_ratio) * 100));
+                      const barColor = up ? C.primary : C.tertiary;
+                      return (
+                        <button
+                          key={`xray-bar-${bar.time}`}
+                          type="button"
+                          onClick={() => {
+                            setSelectedCandleTs(bar.time);
+                            setXrayTab("summary");
+                          }}
+                          className="rounded-sm transition-all"
+                          style={{
+                            width: "12px",
+                            height: `${Math.max(18, bodyPct)}px`,
+                            border: `1px solid ${isSelected ? `${barColor}` : `${barColor}55`}`,
+                            backgroundColor: isSelected ? `${barColor}88` : `${barColor}36`,
+                            boxShadow: isSelected ? `0 0 12px ${barColor}` : "none",
+                          }}
+                          title={`${format(new Date(toCandleMs(bar.time)), "HH:mm:ss")} · O ${bar.open.toFixed(2)} H ${bar.high.toFixed(2)} L ${bar.low.toFixed(2)} C ${bar.close.toFixed(2)}`}
+                        />
+                      );
+                    })}
+                    {xrayBars.length === 0 ? (
+                      <span style={{ fontSize: "10px", color: C.muted }}>No candle intelligence bars available.</span>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-2 grid grid-cols-2 lg:grid-cols-4 gap-2">
+                <div className="rounded px-2 py-1.5" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0d1628" }}>
+                  <MicroLabel>Open / Close</MicroLabel>
+                  <div style={{ fontSize: "10px", color: "#fff", fontFamily: "JetBrains Mono, monospace" }}>
+                    {selectedCandle ? `${selectedCandle.open.toFixed(2)} → ${selectedCandle.close.toFixed(2)}` : "—"}
+                  </div>
+                </div>
+                <div className="rounded px-2 py-1.5" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0d1628" }}>
+                  <MicroLabel>High / Low</MicroLabel>
+                  <div style={{ fontSize: "10px", color: "#fff", fontFamily: "JetBrains Mono, monospace" }}>
+                    {selectedCandle ? `${selectedCandle.high.toFixed(2)} / ${selectedCandle.low.toFixed(2)}` : "—"}
+                  </div>
+                </div>
+                <div className="rounded px-2 py-1.5" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0d1628" }}>
+                  <MicroLabel>Volume / Delta</MicroLabel>
+                  <div style={{ fontSize: "10px", color: selectedCandle && selectedCandle.imbalance >= 0 ? C.primary : C.tertiary, fontFamily: "JetBrains Mono, monospace" }}>
+                    {selectedCandle ? `${Math.round(selectedCandle.volume)} / ${selectedCandle.imbalance >= 0 ? "+" : ""}${selectedCandle.imbalance.toFixed(2)}` : "—"}
+                  </div>
+                </div>
+                <div className="rounded px-2 py-1.5" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0d1628" }}>
+                  <MicroLabel>Liquidity / Reversal</MicroLabel>
+                  <div style={{ fontSize: "10px", color: "#fff", fontFamily: "JetBrains Mono, monospace" }}>
+                    {selectedCandle ? `${selectedCandle.liquidity_strength.toFixed(2)} / ${selectedCandle.reversal_score.toFixed(2)}` : "—"}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-2 flex flex-wrap gap-1">
+                {selectedCandleTags.map((tag) => (
+                  <span
+                    key={`tag-${tag}`}
+                    className="px-2 py-0.5 rounded-full"
+                    style={{ fontSize: "8px", fontFamily: "Space Grotesk", color: C.secondary, border: "1px solid rgba(102,157,255,0.35)", backgroundColor: "rgba(102,157,255,0.12)" }}
+                  >
+                    {tag}
+                  </span>
+                ))}
+                {selectedCandleTags.length === 0 ? (
+                  <span style={{ fontSize: "9px", color: C.muted }}>No event tags on selected candle.</span>
+                ) : null}
+              </div>
+
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {xrayTabs.map((tab) => {
+                  const active = xrayTab === tab.key;
+                  return (
+                    <button
+                      key={`xray-tab-${tab.key}`}
+                      type="button"
+                      className="rounded px-2 py-1 transition-all flex items-center gap-1"
+                      style={{
+                        border: `1px solid ${active ? "rgba(156,255,147,0.45)" : C.border}`,
+                        backgroundColor: active ? "rgba(156,255,147,0.12)" : "#0b1220",
+                        color: active ? C.primary : C.muted,
+                        fontSize: "9px",
+                        fontFamily: "Space Grotesk",
+                        letterSpacing: "0.08em",
+                      }}
+                      onClick={() => setXrayTab(tab.key)}
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: "12px" }}>{tab.icon}</span>
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="mt-2">
+                {xrayTab === "summary" ? (
+                  <div className="rounded px-2 py-2" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0b1220" }}>
+                    <MicroLabel>Candle Summary</MicroLabel>
+                    <div className="mt-1 grid grid-cols-1 md:grid-cols-2 gap-2">
+                      <div className="rounded px-2 py-1.5" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0d1628" }}>
+                        <div style={{ fontSize: "9px", color: C.outline, fontFamily: "Space Grotesk" }}>Candle Time</div>
+                        <div style={{ fontSize: "10px", color: "#fff", fontFamily: "JetBrains Mono, monospace" }}>
+                          {selectedCandle ? format(new Date(toCandleMs(selectedCandle.time)), "MMM dd · HH:mm:ss") : "—"}
+                        </div>
+                      </div>
+                      <div className="rounded px-2 py-1.5" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0d1628" }}>
+                        <div style={{ fontSize: "9px", color: C.outline, fontFamily: "Space Grotesk" }}>Aggression / Absorption</div>
+                        <div style={{ fontSize: "10px", color: "#fff", fontFamily: "JetBrains Mono, monospace" }}>
+                          {selectedCandle ? `${selectedCandle.imbalance >= 0 ? "Buy" : "Sell"} / ${selectedCandle.absorption.toFixed(2)}` : "—"}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
+                {xrayTab === "orderbook" ? (
+                  xrayIsCrypto ? (
+                    <BookmapPanel symbol={xraySymbol ?? "BTCUSD"} depth={22} />
+                  ) : (
+                    <div className="rounded px-3 py-3" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0b1220" }}>
+                      <div className="flex items-center gap-2">
+                        <span className="material-symbols-outlined" style={{ fontSize: "14px", color: C.secondary }}>info</span>
+                        <span style={{ fontSize: "10px", color: C.muted }}>
+                          Live order-book ladder is currently enabled for crypto symbols. Use heatmap/flow tabs for this equity candle.
+                        </span>
+                      </div>
+                    </div>
+                  )
+                ) : null}
+
+                {xrayTab === "heatmap" ? (
+                  <CandleIntelligencePanel symbol={xraySymbol ?? drawerNode.symbol} timeframe={xrayTimeframe} bars={90} />
+                ) : null}
+
+                {xrayTab === "flow" ? (
+                  <CVDPanel symbol={xraySymbol ?? drawerNode.symbol} timeframe={xrayTimeframe} bars={120} autoRefresh={30} />
+                ) : null}
+
+                {xrayTab === "ai" ? (
+                  <div className="rounded px-3 py-3 space-y-2" style={{ border: `1px solid rgba(156,255,147,0.28)`, backgroundColor: "#0b1220" }}>
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined" style={{ fontSize: "14px", color: C.primary }}>psychology</span>
+                      <MicroLabel>AI Candle Explanation</MicroLabel>
+                    </div>
+                    <p style={{ fontSize: "11px", lineHeight: "1.5", color: "#d7e1ef" }}>
+                      {selectedCandleAi}
+                    </p>
+                    <div className="rounded px-2 py-1.5" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0d1628" }}>
+                      <div style={{ fontSize: "9px", color: C.outline, fontFamily: "Space Grotesk" }}>Risk Policy Context</div>
+                      <div style={{ fontSize: "10px", color: drawerNode.risk_state === "allowed" ? C.primary : C.tertiary }}>
+                        {drawerNode.risk_state === "allowed" ? "Trade allowed if trigger confirms." : "Risk gate is blocking this moment."}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
           </div>
         ) : null}
       </div>
@@ -1218,7 +1526,7 @@ export default function Dashboard() {
           </div>
         </div>
         <div style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: C.outlineVar }}>
-          GODSVIEW v0.4.1-BRAIN
+          GODSVIEW v0.4.2-CANDLE-XRAY
         </div>
       </div>
     </div>
