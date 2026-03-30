@@ -8,6 +8,7 @@ import { getTypedPositions, getAccount, hasValidTradingKey, isBrokerKey } from "
 import { getModelDiagnostics, getModelStatus, retrainModel } from "../lib/ml_model";
 import { resolveSystemMode, canWriteOrders, isLiveMode } from "@workspace/strategy-core";
 import { getCurrentTradingSession, getRiskEngineSnapshot, isKillSwitchActive, isSessionAllowed, resetRiskEngineRuntime, setKillSwitchActive, updateRiskConfig } from "../lib/risk_engine";
+import { runBrainCycle } from "../lib/brain_bridge";
 
 const router: IRouter = Router();
 const LEGACY_LIVE_TRADING_ENABLED = String(process.env.GODSVIEW_ENABLE_LIVE_TRADING ?? "").toLowerCase() === "true";
@@ -375,12 +376,13 @@ router.get("/system/status", async (req, res) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const [signalsRow, tradesRow, { positions, account }, orchestratorArtifact, reviewArtifact] = await Promise.all([
+    const [signalsRow, tradesRow, { positions, account }, orchestratorArtifact, reviewArtifact, consciousnessArtifact] = await Promise.all([
       db.select({ count: sql<number>`count(*)` }).from(signalsTable).where(gte(signalsTable.created_at, today)),
       db.select({ count: sql<number>`count(*)` }).from(tradesTable).where(gte(tradesTable.created_at, today)),
       getCachedAlpacaData(),
       readJsonArtifact("latest_orchestrator_run.json"),
       readJsonArtifact("latest_review_snapshot.json"),
+      readJsonArtifact("latest_consciousness_board.json"),
     ]);
 
     const unrealizedPnl = positions.reduce((sum, p) => sum + parseFloat(p.unrealized_pl ?? "0"), 0);
@@ -393,9 +395,13 @@ router.get("/system/status", async (req, res) => {
     const reviewData = asRecord(reviewArtifact.data);
     const recallDbCount = Number(signalsRow[0].count);
     const nowMs = Date.now();
-    const recallArtifactTs = parseIsoToMs(orchestratorData?.generated_at) ?? parseIsoToMs(reviewData?.recorded_at);
+    const consciousnessData = asRecord(consciousnessArtifact.data);
+    const recallArtifactTs =
+      parseIsoToMs(orchestratorData?.generated_at) ??
+      parseIsoToMs(reviewData?.recorded_at) ??
+      parseIsoToMs(consciousnessData?.generated_at);
     const recallArtifactFresh = recallArtifactTs !== null && nowMs - recallArtifactTs <= 24 * 60 * 60 * 1000;
-    const recallFromArtifacts = Boolean(orchestratorArtifact.exists && recallArtifactFresh);
+    const recallFromArtifacts = Boolean((orchestratorArtifact.exists || reviewArtifact.exists || consciousnessArtifact.exists) && recallArtifactFresh);
     const recallActive = recallDbCount > 0 || recallFromArtifacts;
 
     // Derive active instrument from open positions or default to BTC
@@ -488,6 +494,59 @@ router.get("/system/status", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to get system status");
     res.status(500).json({ error: "internal_error", message: "Failed to fetch system status" });
+  }
+});
+
+// ─── POST /api/system/recall/refresh — run replay cycle to refresh context ──
+router.post("/system/recall/refresh", async (req, res) => {
+  try {
+    const requestedSymbol = String(req.body?.symbol ?? "").trim().toUpperCase();
+    const symbol = requestedSymbol.length > 0 ? requestedSymbol : "AAPL";
+    const withReplay = req.body?.with_replay !== false;
+    const cycle = await runBrainCycle({
+      symbol,
+      withReplay,
+      live: false,
+      dryRun: true,
+      approve: false,
+    });
+
+    const [orchestratorArtifact, reviewArtifact, consciousnessArtifact] = await Promise.all([
+      readJsonArtifact("latest_orchestrator_run.json"),
+      readJsonArtifact("latest_review_snapshot.json"),
+      readJsonArtifact("latest_consciousness_board.json"),
+    ]);
+    const orchestratorData = asRecord(orchestratorArtifact.data);
+    const reviewData = asRecord(reviewArtifact.data);
+    const consciousnessData = asRecord(consciousnessArtifact.data);
+    const latestTs =
+      parseIsoToMs(orchestratorData?.generated_at) ??
+      parseIsoToMs(reviewData?.recorded_at) ??
+      parseIsoToMs(consciousnessData?.generated_at);
+    const recallFresh = latestTs !== null && Date.now() - latestTs <= 24 * 60 * 60 * 1000;
+
+    const blocked = Boolean(asRecord(cycle.snapshot)?.blocked ?? false);
+    const blockReason = String(asRecord(cycle.snapshot)?.block_reason ?? "");
+    const statusCode = cycle.ok ? 200 : 502;
+    res.status(statusCode).json({
+      ok: cycle.ok,
+      symbol,
+      with_replay: withReplay,
+      blocked,
+      block_reason: blockReason,
+      recall_context_ready: recallFresh,
+      generated_at: new Date().toISOString(),
+      artifacts: {
+        orchestrator: { exists: orchestratorArtifact.exists, path: orchestratorArtifact.path, error: orchestratorArtifact.error },
+        review: { exists: reviewArtifact.exists, path: reviewArtifact.path, error: reviewArtifact.error },
+        consciousness: { exists: consciousnessArtifact.exists, path: consciousnessArtifact.path, error: consciousnessArtifact.error },
+      },
+      command: cycle.command,
+      stderr: cycle.stderr,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to refresh recall context");
+    res.status(500).json({ error: "recall_refresh_failed", message: "Failed to refresh recall context" });
   }
 });
 

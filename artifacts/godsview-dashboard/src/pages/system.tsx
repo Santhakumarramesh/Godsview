@@ -379,6 +379,16 @@ type BrainCycleResponse = {
   block_reason?: string;
   mode?: string;
 };
+type RecallRefreshResponse = {
+  ok: boolean;
+  symbol: string;
+  with_replay: boolean;
+  blocked?: boolean;
+  block_reason?: string;
+  recall_context_ready: boolean;
+  generated_at: string;
+  stderr?: string;
+};
 
 const LAYER_LABELS: Record<string, string> = {
   data_feed: "Data Feed (Alpaca)",
@@ -553,6 +563,7 @@ export default function System() {
     staleTime: 12_000,
   });
   const [brainCycleFeedback, setBrainCycleFeedback] = useState<BrainCycleResponse | null>(null);
+  const [recallRefreshFeedback, setRecallRefreshFeedback] = useState<RecallRefreshResponse | null>(null);
   const [draft, setDraft] = useState<RiskConfig | null>(null);
   useEffect(() => {
     if (riskSnapshot && !draft) {
@@ -665,6 +676,29 @@ export default function System() {
       setBrainCycleFeedback(payload);
       queryClient.invalidateQueries({ queryKey: ["system-consciousness-latest"] });
       queryClient.invalidateQueries({ queryKey: ["system-pipeline-trace"] });
+      queryClient.invalidateQueries({ queryKey: ["system-governance-overview"] });
+    },
+  });
+  const recallRefreshMutation = useMutation({
+    mutationFn: async () => {
+      const r = await fetch("/api/system/recall/refresh", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          symbol: data?.active_instrument || "AAPL",
+          with_replay: true,
+        }),
+      });
+      const body = await r.json();
+      if (!r.ok) throw new Error(body?.message || `recall refresh failed: ${r.status}`);
+      return body as RecallRefreshResponse;
+    },
+    onSuccess: (payload) => {
+      setRecallRefreshFeedback(payload);
+      queryClient.invalidateQueries({ queryKey: ["system-status"] });
+      queryClient.invalidateQueries({ queryKey: ["diagnostics"] });
+      queryClient.invalidateQueries({ queryKey: ["system-pipeline-trace"] });
+      queryClient.invalidateQueries({ queryKey: ["system-consciousness-latest"] });
       queryClient.invalidateQueries({ queryKey: ["system-governance-overview"] });
     },
   });
@@ -1269,10 +1303,34 @@ export default function System() {
 
       {/* Pipeline Layers (from system status) */}
       <div>
-        <div className="flex items-center gap-3 mb-4">
-          <span className="material-symbols-outlined text-base" style={{ color: C.secondary }}>account_tree</span>
-          <MicroLabel>Pipeline Layer Status</MicroLabel>
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <div className="flex items-center gap-3">
+            <span className="material-symbols-outlined text-base" style={{ color: C.secondary }}>account_tree</span>
+            <MicroLabel>Pipeline Layer Status</MicroLabel>
+          </div>
+          <button
+            onClick={() => recallRefreshMutation.mutate()}
+            disabled={recallRefreshMutation.isPending}
+            className="rounded px-2 py-1 text-[9px] uppercase tracking-wider disabled:opacity-50"
+            style={{ border: `1px solid ${C.border}`, color: C.secondary, backgroundColor: "rgba(102,157,255,0.12)" }}
+          >
+            {recallRefreshMutation.isPending ? "Refreshing..." : "Refresh Recall"}
+          </button>
         </div>
+        {(recallRefreshFeedback || recallRefreshMutation.error) && (
+          <div className="mb-3 rounded px-2 py-1.5" style={{ border: `1px solid ${C.border}`, backgroundColor: "#101011" }}>
+            {recallRefreshMutation.error ? (
+              <div style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: C.tertiary }}>
+                {(recallRefreshMutation.error as Error).message}
+              </div>
+            ) : recallRefreshFeedback ? (
+              <div style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: recallRefreshFeedback.ok ? C.primary : C.tertiary }}>
+                recall refresh {recallRefreshFeedback.ok ? "ok" : "failed"} · {recallRefreshFeedback.symbol} · {recallRefreshFeedback.recall_context_ready ? "context ready" : "context stale"}
+                {recallRefreshFeedback.blocked ? ` · blocked (${recallRefreshFeedback.block_reason || "n/a"})` : ""}
+              </div>
+            ) : null}
+          </div>
+        )}
         <div className="space-y-2">
           {data.layers.map((layer, index) => {
             const isActive = layer.status === "active";
