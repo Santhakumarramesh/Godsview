@@ -310,6 +310,8 @@ const navItems = [
   { href: "/brain", label: "Brain", icon: "neurology", sub: "Intelligence" },
   { href: "/alpaca", label: "Live Intelligence", icon: "psychology", sub: "Analysis" },
   { href: "/infinity", label: "Infinity Screen", icon: "grid_view", sub: "Multi-Chart" },
+  { href: "/pipeline", label: "Pipeline Engine", icon: "hub", sub: "6-Layer AI" },
+  { href: "/candle-xray", label: "Candle X-Ray", icon: "radiology", sub: "Microstructure" },
   { href: "/signals", label: "Signal Feed", icon: "sensors", sub: "Pipeline" },
   { href: "/trades", label: "Trade Journal", icon: "receipt_long", sub: "Execution" },
   { href: "/performance", label: "Analytics", icon: "analytics", sub: "Performance" },
