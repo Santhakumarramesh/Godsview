@@ -126,6 +126,8 @@ function buildSparklinePath(values: number[], width: number, height: number, pad
 export default function Dashboard() {
   const [hoveredSymbol, setHoveredSymbol] = useState<string | null>(null);
   const [pinnedSymbol, setPinnedSymbol] = useState<string | null>(null);
+  const [drawerSymbol, setDrawerSymbol] = useState<string | null>(null);
+  const [orbitPhase, setOrbitPhase] = useState(0);
 
   // ── Data hooks — 5 s auto-refresh ────────────────────────────────────────
   const { data: systemStatus, isLoading: sysLoading, isError: sysError, refetch: refetchStatus } =
@@ -191,6 +193,16 @@ export default function Dashboard() {
     }, 30_000);
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [refetchStatus, refetchPerf, refetchSigs, refetchDiag, refetchModelDiagnostics, refetchProofBySetup, refetchOosProof, refetchConsciousness]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    if (reduceMotion) return;
+    const id = setInterval(() => {
+      setOrbitPhase((prev) => (prev + 0.022) % (Math.PI * 2));
+    }, 120);
+    return () => clearInterval(id);
+  }, []);
 
   const isInitialLoading =
     (sysLoading && !systemStatus) ||
@@ -270,25 +282,51 @@ export default function Dashboard() {
   const orbitNodes = useMemo(
     () => {
       const count = Math.max(featuredBrainNodes.length, 1);
-      const angleStep = 360 / count;
-      return featuredBrainNodes.map((row, idx) => {
+      const angleStep = (Math.PI * 2) / count;
+      const nodes = featuredBrainNodes.map((row, idx) => {
         const attention = Math.max(0, Math.min(1, row.attention_score));
-        const angle = ((-90 + angleStep * idx) * Math.PI) / 180;
-        const radiusX = 24 + attention * 18;
-        const radiusY = 17 + attention * 12;
-        const jitter = (idx % 2 === 0 ? 1 : -1) * (1 - attention) * 2.5;
-        const left = 50 + Math.cos(angle) * radiusX + jitter;
+        const seed = (getSymbolSeed(row.symbol) % 17) * 0.01;
+        const angle = -Math.PI / 2 + idx * angleStep + orbitPhase + seed;
+        const radiusX = 22 + attention * 20;
+        const radiusY = 16 + attention * 12;
+        const left = 50 + Math.cos(angle) * radiusX;
         const top = 50 + Math.sin(angle) * radiusY;
+        return { row, left, top };
+      });
+
+      const minDistance = 11.5;
+      for (let iter = 0; iter < 2; iter += 1) {
+        for (let i = 0; i < nodes.length; i += 1) {
+          for (let j = i + 1; j < nodes.length; j += 1) {
+            const dx = nodes[j].left - nodes[i].left;
+            const dy = nodes[j].top - nodes[i].top;
+            const dist = Math.hypot(dx, dy);
+            if (dist < minDistance) {
+              const push = (minDistance - dist) / 2;
+              const nx = dx / Math.max(dist, 0.0001);
+              const ny = dy / Math.max(dist, 0.0001);
+              nodes[i].left -= nx * push;
+              nodes[i].top -= ny * push;
+              nodes[j].left += nx * push;
+              nodes[j].top += ny * push;
+            }
+          }
+        }
+      }
+
+      return nodes.map((node) => {
+        const clampedLeft = Math.min(90, Math.max(10, node.left));
+        const clampedTop = Math.min(86, Math.max(14, node.top));
         return {
-          row,
-          left,
-          top,
-          leftPct: `${left.toFixed(2)}%`,
-          topPct: `${top.toFixed(2)}%`,
+          row: node.row,
+          left: clampedLeft,
+          top: clampedTop,
+          leftPct: `${clampedLeft.toFixed(2)}%`,
+          topPct: `${clampedTop.toFixed(2)}%`,
         };
       });
     },
-    [featuredBrainNodes]
+    [featuredBrainNodes, orbitPhase]
   );
   const surgeTopSymbols = orbitNodes
     .slice()
@@ -303,12 +341,24 @@ export default function Dashboard() {
       null,
     [rankedBoard, activeFocusedSymbol, orbitNodes]
   );
+  const drawerNode = useMemo(
+    () =>
+      rankedBoard.find((row) => row.symbol === drawerSymbol) ??
+      focusedNode ??
+      null,
+    [rankedBoard, drawerSymbol, focusedNode]
+  );
 
   useEffect(() => {
     if (pinnedSymbol && !rankedBoard.some((row) => row.symbol === pinnedSymbol)) {
       setPinnedSymbol(null);
     }
   }, [pinnedSymbol, rankedBoard]);
+  useEffect(() => {
+    if (drawerSymbol && !rankedBoard.some((row) => row.symbol === drawerSymbol)) {
+      setDrawerSymbol(null);
+    }
+  }, [drawerSymbol, rankedBoard]);
 
   return (
     <div className="space-y-6">
@@ -478,13 +528,17 @@ export default function Dashboard() {
                     }}
                     onMouseEnter={() => setHoveredSymbol(row.symbol)}
                     onMouseLeave={() => setHoveredSymbol((prev) => (prev === row.symbol ? null : prev))}
-                    onClick={() => setPinnedSymbol((prev) => (prev === row.symbol ? null : row.symbol))}
+                    onClick={() => {
+                      setPinnedSymbol((prev) => (prev === row.symbol ? null : row.symbol));
+                      setDrawerSymbol(row.symbol);
+                    }}
                     onFocus={() => setHoveredSymbol(row.symbol)}
                     onBlur={() => setHoveredSymbol((prev) => (prev === row.symbol ? null : prev))}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ") {
                         event.preventDefault();
                         setPinnedSymbol((prev) => (prev === row.symbol ? null : row.symbol));
+                        setDrawerSymbol(row.symbol);
                       }
                     }}
                     tabIndex={0}
@@ -507,6 +561,14 @@ export default function Dashboard() {
                   <div className="flex items-center justify-between gap-2">
                     <div style={{ fontSize: "12px", fontFamily: "Space Grotesk", fontWeight: 700, color: "#fff" }}>{focusedNode.symbol} Intelligence Card</div>
                     <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setDrawerSymbol((prev) => (prev === focusedNode.symbol ? null : focusedNode.symbol))}
+                        className="rounded px-1.5 py-0.5"
+                        style={{ fontSize: "8px", fontFamily: "JetBrains Mono, monospace", color: drawerSymbol === focusedNode.symbol ? C.secondary : C.muted, border: `1px solid ${drawerSymbol === focusedNode.symbol ? "rgba(102,157,255,0.45)" : C.border}`, backgroundColor: "#0c1526" }}
+                      >
+                        {drawerSymbol === focusedNode.symbol ? "CLOSE" : "DEEP"}
+                      </button>
                       <button
                         type="button"
                         onClick={() => setPinnedSymbol((prev) => (prev === focusedNode.symbol ? null : focusedNode.symbol))}
@@ -565,9 +627,10 @@ export default function Dashboard() {
                     <div
                       key={row.symbol}
                       className="flex items-start justify-between gap-2 rounded px-1.5 py-1"
-                      style={{ border: focusedNode?.symbol === row.symbol ? `1px solid ${dotColor}55` : "1px solid transparent" }}
+                      style={{ border: focusedNode?.symbol === row.symbol ? `1px solid ${dotColor}55` : "1px solid transparent", cursor: "pointer", backgroundColor: drawerSymbol === row.symbol ? "rgba(11,22,38,0.55)" : "transparent" }}
                       onMouseEnter={() => setHoveredSymbol(row.symbol)}
                       onMouseLeave={() => setHoveredSymbol((prev) => (prev === row.symbol ? null : prev))}
+                      onClick={() => setDrawerSymbol((prev) => (prev === row.symbol ? null : row.symbol))}
                     >
                       <div className="flex items-start gap-2">
                         <span className="w-2 h-2 rounded-full mt-1" style={{ backgroundColor: dotColor }} />
@@ -649,6 +712,85 @@ export default function Dashboard() {
             Execute Trade
           </button>
         </div>
+
+        {drawerNode ? (
+          <div className="rounded p-3 gv-deep-dive" style={{ backgroundColor: "#10182b", border: `1px solid ${C.border}` }}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <div style={{ fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase", color: C.outline, fontFamily: "Space Grotesk" }}>Symbol Deep Dive</div>
+                <div style={{ fontSize: "15px", color: "#fff", fontFamily: "Space Grotesk", fontWeight: 700 }}>{drawerNode.symbol}</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: drawerNode.readiness === "allow" ? C.primary : drawerNode.readiness === "watch" ? "#fbbf24" : C.tertiary }}>
+                  {drawerNode.readiness.toUpperCase()} · {drawerNode.risk_state.toUpperCase()}
+                </span>
+                <button
+                  type="button"
+                  className="rounded px-2 py-1"
+                  style={{ fontSize: "9px", color: C.muted, border: `1px solid ${C.border}` }}
+                  onClick={() => setDrawerSymbol(null)}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mt-2.5">
+              <div className="rounded px-2 py-1.5" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0e1424" }}>
+                <MicroLabel>Sentiment</MicroLabel>
+                <div style={{ fontSize: "10px", color: drawerNode.direction === "long" ? C.primary : drawerNode.direction === "short" ? C.tertiary : C.secondary }}>{drawerNode.direction}</div>
+              </div>
+              <div className="rounded px-2 py-1.5" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0e1424" }}>
+                <MicroLabel>Confidence</MicroLabel>
+                <div style={{ fontSize: "10px", color: "#fff" }}>{(drawerNode.attention_score * 100).toFixed(1)}%</div>
+              </div>
+              <div className="rounded px-2 py-1.5" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0e1424" }}>
+                <MicroLabel>Setup Family</MicroLabel>
+                <div style={{ fontSize: "10px", color: C.muted }}>{drawerNode.setup_family}</div>
+              </div>
+              <div className="rounded px-2 py-1.5" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0e1424" }}>
+                <MicroLabel>Regime Fit</MicroLabel>
+                <div style={{ fontSize: "10px", color: drawerNode.context_score > 0.66 ? C.primary : drawerNode.context_score > 0.45 ? "#fbbf24" : C.tertiary }}>
+                  {(drawerNode.context_score * 100).toFixed(1)}%
+                </div>
+              </div>
+              <div className="rounded px-2 py-1.5" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0e1424" }}>
+                <MicroLabel>Market DNA</MicroLabel>
+                <div style={{ fontSize: "10px", color: C.muted }}>S {drawerNode.structure_score.toFixed(2)} · O {drawerNode.orderflow_score.toFixed(2)}</div>
+              </div>
+              <div className="rounded px-2 py-1.5" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0e1424" }}>
+                <MicroLabel>Execution Signature</MicroLabel>
+                <div style={{ fontSize: "10px", color: drawerNode.risk_score < 0.4 ? C.primary : drawerNode.risk_score < 0.65 ? "#fbbf24" : C.tertiary }}>
+                  Risk {drawerNode.risk_score.toFixed(2)}
+                </div>
+              </div>
+              <div className="rounded px-2 py-1.5" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0e1424" }}>
+                <MicroLabel>Memory / Reasoning</MicroLabel>
+                <div style={{ fontSize: "10px", color: C.muted }}>{drawerNode.memory_score.toFixed(2)} / {drawerNode.reasoning_score.toFixed(2)}</div>
+              </div>
+              <div className="rounded px-2 py-1.5" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0e1424" }}>
+                <MicroLabel>Block Reason</MicroLabel>
+                <div style={{ fontSize: "10px", color: drawerNode.block_reason ? "#fbbf24" : C.muted }}>
+                  {drawerNode.block_reason || "none"}
+                </div>
+              </div>
+            </div>
+            <div className="mt-2.5 rounded px-2 py-2" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0b1220" }}>
+              <div className="flex items-center justify-between mb-1">
+                <MicroLabel>Signal Trace</MicroLabel>
+                <span style={{ fontSize: "9px", color: C.muted, fontFamily: "JetBrains Mono, monospace" }}>{drawerNode.reasoning_verdict.replace(/_/g, " ")}</span>
+              </div>
+              <svg width="100%" height="54" viewBox="0 0 220 54" preserveAspectRatio="none">
+                <path
+                  d={buildSparklinePath(buildSparklineSeries(drawerNode, 26), 220, 54, 3)}
+                  fill="none"
+                  stroke={drawerNode.direction === "long" ? `${C.primary}CC` : drawerNode.direction === "short" ? `${C.tertiary}CC` : `${C.secondary}CC`}
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {/* ── Top Metrics ── */}
