@@ -19,6 +19,7 @@ import PipelinePage from "@/pages/pipeline";
 import CandleXRayPage from "@/pages/candle-xray";
 import SetupExplorerPage from "@/pages/setup-explorer";
 import ReportsPage from "@/pages/reports";
+import RiskPage from "@/pages/risk";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -114,6 +115,7 @@ function Router() {
         <RoutedPage path="/candle-xray" component={CandleXRayPage} scope="page:candle-xray" />
         <RoutedPage path="/setup-explorer" component={SetupExplorerPage} scope="page:setup-explorer" />
         <RoutedPage path="/reports" component={ReportsPage} scope="page:reports" />
+        <RoutedPage path="/risk" component={RiskPage} scope="page:risk" />
         <Route>
           <AppErrorBoundary scope="page:not-found">
             <NotFound />

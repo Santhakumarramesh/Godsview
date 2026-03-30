@@ -316,6 +316,7 @@ const navItems = [
   { href: "/setup-explorer", label: "Setup Explorer", icon: "explore", sub: "Strategy Matrix" },
   { href: "/trades", label: "Trade Journal", icon: "receipt_long", sub: "Execution" },
   { href: "/reports", label: "Session Reports", icon: "summarize", sub: "Intelligence" },
+  { href: "/risk", label: "Risk Command", icon: "shield", sub: "Safety Rails" },
   { href: "/performance", label: "Analytics", icon: "analytics", sub: "Performance" },
   { href: "/system", label: "System Core", icon: "memory", sub: "Diagnostics" },
   { href: "/stitch-lab", label: "Stitch Vault", icon: "palette", sub: "Design Pack" },
