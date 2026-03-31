@@ -16,6 +16,8 @@ import checklistRouter from "./checklist";
 import warRoomRouter from "./war_room";
 import proofRouter from "./proof";
 import macroRouter from "./macro";
+import portfolioRouter from "./portfolio";
+import opsRouter from "./ops";
 
 const router: IRouter = Router();
 
@@ -36,5 +38,7 @@ router.use("/api/checklist", checklistRouter);
 router.use("/api/war-room", warRoomRouter);
 router.use("/api/proof", proofRouter);
 router.use("/api/macro", macroRouter);
+router.use("/api/portfolio", portfolioRouter);
+router.use(opsRouter);
 
 export default router;

@@ -14,6 +14,10 @@ import { and, desc, eq } from "drizzle-orm";
 import { db, signalsTable } from "@workspace/db";
 import { CreateSignalBody, GetSignalsQueryParams } from "@workspace/api-zod";
 import { claudeVeto, isClaudeAvailable, type SetupContext } from "../lib/claude";
+import { autoEvaluateChecklist } from "../lib/checklist_engine";
+import { runWarRoom, type RiskInput } from "../lib/war_room";
+import { checkNewsLockout } from "../lib/macro_engine";
+import { markEngineRun, updateDataFreshness } from "../lib/ops_monitor";
 import {
   applyNoTradeFilters,
   buildRecallFeatures,
@@ -286,8 +290,111 @@ signalsRouter.post("/signals", async (req: Request, res: Response) => {
       0.15 * ml        +
       0.10 * claudeScore;
 
-    const status =
-      vetoResult.verdict === "VETOED" ? "rejected" : "pending";
+    // ── Layer 7: Hard Gates (Checklist + War Room + Macro) ──────────────────
+    const gateStart = Date.now();
+    const direction = (body.direction as "long" | "short") ?? "long";
+    const symbol = String(body.instrument ?? "UNKNOWN").toUpperCase();
+    let gateBlocked = false;
+    let gateReason = "";
+    let checklistResult = null as any;
+    let warRoomVerdict = null as any;
+    let newsLocked = false;
+
+    try {
+      // Gate 1: Macro lockout — fastest check first
+      newsLocked = checkNewsLockout(symbol);
+      if (newsLocked) {
+        gateBlocked = true;
+        gateReason = "NEWS_LOCKOUT: High-impact macro event active";
+      }
+
+      // Gate 2: Checklist — build lightweight SMC state from signal body
+      if (!gateBlocked) {
+        const pseudoSMC = {
+          symbol,
+          structure: {
+            trend: setupCtx.sk_bias === "bull" ? "bullish" as const : setupCtx.sk_bias === "bear" ? "bearish" as const : "range" as const,
+            lastBOS: setupCtx.sk_sequence_stage === "impulse" ? { direction: direction === "long" ? "up" as const : "down" as const, price: setupCtx.entry_price, index: 0 } : null,
+            lastCHoCH: null,
+            swings: [],
+          },
+          activeOBs: setupCtx.sk_in_zone ? [{ type: direction === "long" ? "bullish" as const : "bearish" as const, high: setupCtx.entry_price * 1.001, low: setupCtx.entry_price * 0.999, index: 0, mitigated: false }] : [],
+          unfilledFVGs: [],
+          liquidityPools: [],
+          displacements: setupCtx.momentum_1m > 0.002 ? [{ direction: direction === "long" ? "up" as const : "down" as const, magnitude: setupCtx.momentum_1m * 100, index: 0 }] : [],
+          confluenceScore: final_quality,
+          computedAt: new Date().toISOString(),
+        };
+
+        checklistResult = autoEvaluateChecklist({
+          symbol,
+          direction,
+          smcState: pseudoSMC,
+          entryPrice: setupCtx.entry_price,
+          stopLoss: setupCtx.stop_loss,
+          takeProfit: setupCtx.take_profit,
+          newsLockout: newsLocked,
+        });
+
+        if (!checklistResult.allPassed) {
+          const failedItems = checklistResult.items.filter((i: any) => !i.passed).map((i: any) => i.key);
+          gateBlocked = true;
+          gateReason = `CHECKLIST_FAILED: ${failedItems.join(", ")} (${checklistResult.passedCount}/${checklistResult.totalCount})`;
+        }
+      }
+
+      // Gate 3: War Room consensus
+      if (!gateBlocked) {
+        const riskInput: RiskInput = {
+          entryPrice: setupCtx.entry_price,
+          stopLoss: setupCtx.stop_loss,
+          takeProfit: setupCtx.take_profit,
+          atrPct: setupCtx.atr_pct,
+        };
+
+        warRoomVerdict = runWarRoom({
+          symbol,
+          direction,
+          smcState: pseudoSMC ?? {
+            symbol,
+            structure: { trend: "range" as const, lastBOS: null, lastCHoCH: null, swings: [] },
+            activeOBs: [], unfilledFVGs: [], liquidityPools: [], displacements: [],
+            confluenceScore: 0, computedAt: new Date().toISOString(),
+          },
+          orderflowState: {
+            symbol,
+            cvd: 0,
+            cvdSlope: setupCtx.cvd_slope,
+            buyVolumeRatio: setupCtx.buy_volume_ratio,
+            deltaImbalance: 0,
+            largeBlockActivity: false,
+            computedAt: new Date().toISOString(),
+          },
+          riskInput,
+        });
+
+        if (warRoomVerdict.consensus === "NO_GO") {
+          gateBlocked = true;
+          gateReason = `WAR_ROOM_REJECTED: consensus=${warRoomVerdict.consensus} score=${warRoomVerdict.compositeScore.toFixed(3)}`;
+        }
+      }
+
+      markEngineRun("hard-gates", Date.now() - gateStart);
+    } catch (gateErr) {
+      // Gates fail open — log but don't block
+      logger.error(`[signals] Hard gate error: ${gateErr instanceof Error ? gateErr.message : "unknown"}`);
+      markEngineRun("hard-gates", Date.now() - gateStart, true);
+    }
+
+    logger.info(`[signals] Hard gates: blocked=${gateBlocked} reason="${gateReason}" latency=${Date.now() - gateStart}ms`);
+
+    // ── Map verdict → signal status ─────────────────────────────────────────
+    let status: string;
+    if (gateBlocked) {
+      status = "rejected";
+    } else {
+      status = vetoResult.verdict === "VETOED" ? "rejected" : "pending";
+    }
 
     const [created] = await db
       .insert(signalsTable)
@@ -295,12 +402,15 @@ signalsRouter.post("/signals", async (req: Request, res: Response) => {
         ...body,
         ml_probability:   ml,
         claude_score:     String(claudeScore),
-        claude_verdict:   vetoResult.verdict,
-        claude_reasoning: vetoResult.reasoning,
+        claude_verdict:   gateBlocked ? "GATE_BLOCKED" : vetoResult.verdict,
+        claude_reasoning: gateBlocked ? gateReason : vetoResult.reasoning,
         final_quality:    String(final_quality),
         status,
+        news_lockout:     newsLocked,
       })
       .returning();
+
+    updateDataFreshness("signals");
 
     res.status(201).json({
       signal: created,
@@ -312,6 +422,20 @@ signalsRouter.post("/signals", async (req: Request, res: Response) => {
         key_factors:  vetoResult.key_factors,
         latency_ms:   vetoResult.latency_ms,
         available:    isClaudeAvailable(),
+      },
+      gates: {
+        blocked: gateBlocked,
+        reason: gateReason,
+        checklist: checklistResult ? {
+          passed: checklistResult.allPassed,
+          score: `${checklistResult.passedCount}/${checklistResult.totalCount}`,
+          failedItems: checklistResult.items.filter((i: any) => !i.passed).map((i: any) => i.key),
+        } : null,
+        warRoom: warRoomVerdict ? {
+          consensus: warRoomVerdict.consensus,
+          compositeScore: warRoomVerdict.compositeScore,
+        } : null,
+        newsLockout: newsLocked,
       },
     });
   } catch (err) {
