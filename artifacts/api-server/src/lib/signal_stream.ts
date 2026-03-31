@@ -121,6 +121,17 @@ export function getSSEClientCount(): number {
   return clients.size;
 }
 
+/** Close all SSE clients (used during graceful shutdown) */
+export function closeAllClients(): void {
+  for (const client of clients) {
+    try {
+      client.write(`event: shutdown\ndata: ${JSON.stringify({ reason: "server_shutdown" })}\n\n`);
+      client.end();
+    } catch { /* ignore */ }
+  }
+  clients.clear();
+}
+
 // ── Convenience Emitters ───────────────────────────────────────────────────
 
 /** Emit an SI decision event */

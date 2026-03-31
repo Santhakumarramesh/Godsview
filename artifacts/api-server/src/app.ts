@@ -11,6 +11,11 @@ import router from "./routes";
 import { logger } from "./lib/logger";
 import { runtimeConfig } from "./lib/runtime_config";
 import { createRateLimiter, securityHeadersMiddleware } from "./lib/request_guards";
+import {
+  httpRequestsTotal,
+  httpRequestDuration,
+  httpRequestsInFlight,
+} from "./lib/metrics";
 
 const app: Express = express();
 const allowedCorsOrigins = runtimeConfig.corsOrigins;
@@ -53,6 +58,23 @@ app.use((req, res, next) => {
   next();
 });
 app.use(securityHeadersMiddleware);
+
+// ── HTTP metrics instrumentation ──────────────────────────────────────
+app.use((req, res, next) => {
+  const start = process.hrtime.bigint();
+  httpRequestsInFlight.inc();
+  res.on("finish", () => {
+    httpRequestsInFlight.dec();
+    const durationSec = Number(process.hrtime.bigint() - start) / 1e9;
+    const normalizedPath = (req.route?.path ?? req.path)
+      .replace(/\/[0-9a-f]{8,}/gi, "/:id")
+      .replace(/\/\d+/g, "/:id")
+      .replace(/\?.*/g, "");
+    httpRequestsTotal.inc({ method: req.method, path: normalizedPath, status: String(res.statusCode) });
+    httpRequestDuration.observe(durationSec);
+  });
+  next();
+});
 app.use(
   cors({
     origin(origin, callback) {

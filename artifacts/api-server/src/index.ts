@@ -10,6 +10,7 @@ import {
   markMlBootstrapRunning,
 } from "./lib/startup_state";
 import { pool } from "@workspace/db";
+import { closeAllClients as closeSSEClients } from "./lib/signal_stream";
 
 const server = app.listen(runtimeConfig.port, (err) => {
   if (err) {
@@ -68,6 +69,12 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   await new Promise<void>((resolve) => {
     server.close(() => resolve());
   });
+
+  // Close all SSE client connections
+  try {
+    closeSSEClients();
+    logger.info("SSE clients disconnected");
+  } catch { /* best effort */ }
 
   try {
     await pool.end();
