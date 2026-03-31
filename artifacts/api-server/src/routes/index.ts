@@ -12,6 +12,10 @@ import brainRouter from "./brain";
 import superIntelligenceRouter from "./super_intelligence";
 import backtestRouter from "./backtest";
 import alertsRouter from "./alerts";
+import checklistRouter from "./checklist";
+import warRoomRouter from "./war_room";
+import proofRouter from "./proof";
+import macroRouter from "./macro";
 
 const router: IRouter = Router();
 
@@ -28,5 +32,9 @@ router.use(brainRouter);
 router.use(superIntelligenceRouter);
 router.use(backtestRouter);
 router.use(alertsRouter);
+router.use("/api/checklist", checklistRouter);
+router.use("/api/war-room", warRoomRouter);
+router.use("/api/proof", proofRouter);
+router.use("/api/macro", macroRouter);
 
 export default router;

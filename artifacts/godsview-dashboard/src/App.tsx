@@ -22,6 +22,9 @@ import ReportsPage from "@/pages/reports";
 import RiskPage from "@/pages/risk";
 import SettingsPage from "@/pages/settings";
 import SuperIntelligencePage from "@/pages/super-intelligence";
+import WarRoom from "@/pages/war-room";
+import Proof from "@/pages/proof";
+import Checklist from "@/pages/checklist";
 import { GlobalDataProvider } from "@/components/GlobalDataProvider";
 import { NotificationSystem } from "@/components/NotificationSystem";
 
@@ -60,27 +63,26 @@ class AppErrorBoundary extends React.Component<
   };
 
   render() {
-    if (!this.state.hasError) return this.props.children;
-    return (
-      <div className="min-h-screen flex items-center justify-center p-6 bg-[#0e0e0f]">
-        <div className="max-w-xl w-full rounded border border-red-500/30 bg-[#181719] p-6 space-y-4">
-          <div className="text-xs uppercase tracking-[0.2em] text-red-300">Godsview UI Fault</div>
-          <h1 className="text-2xl font-bold">UI component crashed</h1>
-          <p className="text-sm text-zinc-300">
-            Scope: <span className="font-mono">{this.props.scope}</span>
-          </p>
-          <pre className="text-xs bg-black/30 border border-zinc-700 rounded p-3 overflow-x-auto text-zinc-300">
-            {this.state.message}
-          </pre>
-          <button
-            onClick={this.handleReload}
-            className="px-4 py-2 rounded bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 hover:bg-emerald-500/30"
-          >
-            Reload App
-          </button>
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen flex flex-col items-center justify-center bg-[#0a0a1a] p-6">
+          <div className="text-center">
+            <h1 className="text-3xl font-bold text-red-400 mb-4">UI Error</h1>
+            <p className="text-gray-400 mb-6">{this.state.message}</p>
+            <pre className="bg-gray-900 text-gray-300 p-4 rounded text-sm max-w-2xl mx-auto text-left mb-6 overflow-auto max-h-64">
+              {this.state.message}
+            </pre>
+            <button
+              onClick={this.handleReload}
+              className="px-4 py-2 rounded bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 hover:bg-emerald-500/30"
+            >
+              Reload App
+            </button>
+          </div>
         </div>
-      </div>
-    );
+      );
+    }
+    return this.props.children;
   }
 }
 
@@ -122,6 +124,9 @@ function Router() {
         <RoutedPage path="/risk" component={RiskPage} scope="page:risk" />
         <RoutedPage path="/super-intelligence" component={SuperIntelligencePage} scope="page:super-intelligence" />
         <RoutedPage path="/settings" component={SettingsPage} scope="page:settings" />
+        <RoutedPage path="/war-room" component={WarRoom} scope="page:war-room" />
+        <RoutedPage path="/proof" component={Proof} scope="page:proof" />
+        <RoutedPage path="/checklist" component={Checklist} scope="page:checklist" />
         <Route>
           <AppErrorBoundary scope="page:not-found">
             <NotFound />
