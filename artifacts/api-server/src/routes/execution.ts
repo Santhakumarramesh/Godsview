@@ -10,6 +10,7 @@
  */
 
 import { Router, Request, Response } from "express";
+import { requireOperator } from "../lib/auth_guard";
 import { logger } from "../lib/logger";
 import { evaluateForProduction, getProductionGateStats } from "../lib/production_gate";
 import { executeOrder, getExecutionMode } from "../lib/order_executor";
@@ -25,7 +26,7 @@ export const executionRouter = Router();
 
 // ── POST /execute — Full production pipeline ──────────
 
-executionRouter.post("/execute", async (req: Request, res: Response) => {
+executionRouter.post("/execute", requireOperator, async (req: Request, res: Response) => {
   try {
     const {
       symbol, direction, setup_type, regime,
@@ -169,7 +170,7 @@ executionRouter.post("/execute", async (req: Request, res: Response) => {
 
 // ── POST /kill-switch — Toggle kill switch ────────────
 
-executionRouter.post("/kill-switch", async (req: Request, res: Response) => {
+executionRouter.post("/kill-switch", requireOperator, async (req: Request, res: Response) => {
   try {
     const { active, operator_token, reason } = req.body;
     const shouldActivate = Boolean(active);
@@ -205,7 +206,7 @@ executionRouter.post("/kill-switch", async (req: Request, res: Response) => {
 
 // ── POST /emergency-close — Emergency liquidation ─────
 
-executionRouter.post("/emergency-close", async (req: Request, res: Response) => {
+executionRouter.post("/emergency-close", requireOperator, async (req: Request, res: Response) => {
   try {
     const reason = req.body.reason ?? "manual_api";
     if (isLiquidationInProgress()) {
@@ -287,7 +288,7 @@ executionRouter.get("/breaker", (_req: Request, res: Response) => {
 
 // ── POST /breaker/reset — Manual breaker reset ────────
 
-executionRouter.post("/breaker/reset", (_req: Request, res: Response) => {
+executionRouter.post("/breaker/reset", requireOperator, (_req: Request, res: Response) => {
   try {
     const snapshot = resetBreaker();
     logger.warn("Drawdown breaker manually reset via API");

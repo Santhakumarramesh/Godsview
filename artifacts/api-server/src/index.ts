@@ -12,6 +12,8 @@ import {
 import { pool } from "@workspace/db";
 import { closeAllClients as closeSSEClients } from "./lib/signal_stream";
 import { attachWSRelay } from "./lib/ws_relay";
+import { runPreflight } from "./lib/preflight";
+import { getDegradationSnapshot } from "./lib/degradation";
 import { startReconciler, stopReconciler } from "./lib/fill_reconciler";
 
 const server = app.listen(runtimeConfig.port, (err) => {
@@ -28,6 +30,13 @@ const server = app.listen(runtimeConfig.port, (err) => {
     },
     "Server listening",
   );
+
+  // Run preflight checks
+  runPreflight().then((result) => {
+    if (!result.passed) {
+      logger.fatal({ checks: result.checks.filter(c => !c.passed && c.critical) }, "CRITICAL preflight checks failed — server may not function correctly");
+    }
+  }).catch((err) => logger.error({ err }, "Preflight check error"));
 
   // Attach WebSocket relay for real-time price feeds + dashboard events
   attachWSRelay(server);

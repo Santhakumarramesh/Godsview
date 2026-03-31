@@ -6,6 +6,7 @@ import { isLiveMode } from "@workspace/strategy-core";
 import { runtimeConfig } from "../lib/runtime_config";
 import { getStartupSnapshot } from "../lib/startup_state";
 import { collectAllMetrics } from "../lib/metrics_execution";
+import { getDegradationSnapshot } from "../lib/degradation";
 
 const router: IRouter = Router();
 
@@ -70,6 +71,15 @@ router.get("/metrics", (_req, res) => {
     res.send(metrics);
   } catch {
     res.status(500).json({ error: "Failed to collect metrics" });
+  }
+});
+
+/* ── Degradation Status ────────────────────────────────────────── */
+router.get("/degradation", (_req, res) => {
+  try {
+    res.json(getDegradationSnapshot());
+  } catch {
+    res.status(500).json({ error: "Failed to get degradation status" });
   }
 });
 
