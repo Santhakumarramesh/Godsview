@@ -21,6 +21,7 @@ import SetupExplorerPage from "@/pages/setup-explorer";
 import ReportsPage from "@/pages/reports";
 import RiskPage from "@/pages/risk";
 import SettingsPage from "@/pages/settings";
+import SuperIntelligencePage from "@/pages/super-intelligence";
 import { GlobalDataProvider } from "@/components/GlobalDataProvider";
 import { NotificationSystem } from "@/components/NotificationSystem";
 
@@ -119,6 +120,7 @@ function Router() {
         <RoutedPage path="/setup-explorer" component={SetupExplorerPage} scope="page:setup-explorer" />
         <RoutedPage path="/reports" component={ReportsPage} scope="page:reports" />
         <RoutedPage path="/risk" component={RiskPage} scope="page:risk" />
+        <RoutedPage path="/super-intelligence" component={SuperIntelligencePage} scope="page:super-intelligence" />
         <RoutedPage path="/settings" component={SettingsPage} scope="page:settings" />
         <Route>
           <AppErrorBoundary scope="page:not-found">
