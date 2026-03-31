@@ -11,6 +11,7 @@ import {
 } from "./lib/startup_state";
 import { pool } from "@workspace/db";
 import { closeAllClients as closeSSEClients } from "./lib/signal_stream";
+import { attachWSRelay } from "./lib/ws_relay";
 
 const server = app.listen(runtimeConfig.port, (err) => {
   if (err) {
@@ -26,6 +27,9 @@ const server = app.listen(runtimeConfig.port, (err) => {
     },
     "Server listening",
   );
+
+  // Attach WebSocket relay for real-time price feeds + dashboard events
+  attachWSRelay(server);
 
   markMlBootstrapRunning();
   trainModel()
