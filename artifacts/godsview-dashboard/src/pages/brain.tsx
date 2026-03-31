@@ -16,7 +16,7 @@ import { useState, useRef, useMemo, useCallback, useEffect, Suspense } from "rea
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Float, Billboard, Text, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
-import { useBrainConsciousness, useBrainEntities, useBrainIntelligence } from "@/lib/api";
+import { useBrainConsciousness, useBrainEntities, useBrainIntelligence, useBrainState, useSMCState, useRegimeState } from "@/lib/api";
 import { useLivePrices } from "@/lib/market-store";
 import BrainFocusMode from "@/components/BrainFocusMode";
 
@@ -846,12 +846,18 @@ function StockDrawer({
   onOpenFocus,
   decisions,
   intelligence,
+  brainState,
+  smcState,
+  regimeState,
 }: {
   stock: StockNodeData | null;
   onClose: () => void;
   onOpenFocus: () => void;
   decisions: SIDecisionEvent[];
   intelligence?: { dna: any; setup_memory: any; context: any } | null;
+  brainState?: any;
+  smcState?: any;
+  regimeState?: any;
 }) {
   if (!stock) return null;
 
@@ -1066,6 +1072,182 @@ function StockDrawer({
         </div>
       </div>
 
+      {/* SMC Zones */}
+      <div style={{ ...panelStyle, marginBottom: "12px" }}>
+        <div style={{ ...labelStyle, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span>SMC Zones</span>
+          {smcState && (
+            <span style={{ fontSize: "7px", color: "#484849", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+              confluence {Math.round((smcState.confluenceScore ?? 0) * 100)}%
+            </span>
+          )}
+        </div>
+        {smcState?.structure && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", marginBottom: "8px" }}>
+            <div style={{ padding: "6px 8px", borderRadius: "5px", backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(72,72,73,0.12)" }}>
+              <div style={{ fontSize: "7px", color: "#484849", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: "2px" }}>Trend</div>
+              <div style={{ fontSize: "11px", fontFamily: "JetBrains Mono", fontWeight: 700, color: smcState.structure.trend === "bullish" ? "#00ffcc" : smcState.structure.trend === "bearish" ? "#ff7162" : "#ffcc00" }}>
+                {smcState.structure.trend?.toUpperCase()}
+              </div>
+            </div>
+            <div style={{ padding: "6px 8px", borderRadius: "5px", backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(72,72,73,0.12)" }}>
+              <div style={{ fontSize: "7px", color: "#484849", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: "2px" }}>Pattern</div>
+              <div style={{ fontSize: "11px", fontFamily: "JetBrains Mono", fontWeight: 700, color: "#adaaab" }}>
+                {smcState.structure.pattern?.replace("_", "/")}
+              </div>
+            </div>
+          </div>
+        )}
+        {/* BOS / CHoCH indicators */}
+        {(smcState?.structure?.bos || smcState?.structure?.choch) && (
+          <div style={{ display: "flex", gap: "6px", marginBottom: "8px" }}>
+            {smcState.structure.bos && (
+              <span style={{
+                fontSize: "8px", padding: "2px 6px", borderRadius: "3px", fontFamily: "JetBrains Mono", fontWeight: 700,
+                backgroundColor: smcState.structure.bosDirection === "bullish" ? "rgba(0,255,204,0.12)" : "rgba(255,113,98,0.12)",
+                color: smcState.structure.bosDirection === "bullish" ? "#00ffcc" : "#ff7162",
+                border: `1px solid ${smcState.structure.bosDirection === "bullish" ? "rgba(0,255,204,0.25)" : "rgba(255,113,98,0.25)"}`,
+              }}>
+                BOS {smcState.structure.bosDirection?.toUpperCase()}
+              </span>
+            )}
+            {smcState.structure.choch && (
+              <span style={{
+                fontSize: "8px", padding: "2px 6px", borderRadius: "3px", fontFamily: "JetBrains Mono", fontWeight: 700,
+                backgroundColor: "rgba(255,204,0,0.12)", color: "#ffcc00",
+                border: "1px solid rgba(255,204,0,0.25)",
+              }}>
+                CHoCH \u2014 REVERSAL
+              </span>
+            )}
+          </div>
+        )}
+        {/* Active OBs */}
+        {smcState?.activeOBs?.length > 0 && (
+          <div style={{ marginBottom: "6px" }}>
+            <div style={{ fontSize: "8px", color: "#484849", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "3px" }}>
+              Active Order Blocks ({smcState.activeOBs.length})
+            </div>
+            {smcState.activeOBs.slice(0, 3).map((ob: any, i: number) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: "9px", padding: "2px 0" }}>
+                <span style={{ color: ob.side === "bullish" ? "#00ffcc" : "#ff7162" }}>
+                  {ob.side === "bullish" ? "\u25B2" : "\u25BC"} {ob.side}
+                </span>
+                <span style={{ fontFamily: "JetBrains Mono", color: "#767576" }}>
+                  ${ob.low?.toFixed(2)} \u2013 ${ob.high?.toFixed(2)} ({Math.round((ob.strength ?? 0) * 100)}%)
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+        {/* Unfilled FVGs */}
+        {smcState?.unfilledFVGs?.length > 0 && (
+          <div>
+            <div style={{ fontSize: "8px", color: "#484849", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "3px" }}>
+              Unfilled FVGs ({smcState.unfilledFVGs.length})
+            </div>
+            {smcState.unfilledFVGs.slice(0, 3).map((fvg: any, i: number) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: "9px", padding: "2px 0" }}>
+                <span style={{ color: fvg.side === "bullish" ? "#00ffcc" : "#ff7162" }}>
+                  {fvg.side === "bullish" ? "GAP\u2191" : "GAP\u2193"}
+                </span>
+                <span style={{ fontFamily: "JetBrains Mono", color: "#767576" }}>
+                  ${fvg.low?.toFixed(2)} \u2013 ${fvg.high?.toFixed(2)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+        {/* Liquidity targets */}
+        {(smcState?.nearestLiquidityAbove || smcState?.nearestLiquidityBelow) && (
+          <div style={{ marginTop: "6px", fontSize: "9px" }}>
+            <div style={{ fontSize: "8px", color: "#484849", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "3px" }}>Liquidity Targets</div>
+            {smcState.nearestLiquidityAbove && (
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "2px 0" }}>
+                <span style={{ color: "#ff7162" }}>\u25B2 Above</span>
+                <span style={{ fontFamily: "JetBrains Mono", color: "#767576" }}>
+                  ${smcState.nearestLiquidityAbove.price?.toFixed(2)} ({smcState.nearestLiquidityAbove.touches} touches)
+                </span>
+              </div>
+            )}
+            {smcState.nearestLiquidityBelow && (
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "2px 0" }}>
+                <span style={{ color: "#00ffcc" }}>\u25BC Below</span>
+                <span style={{ fontFamily: "JetBrains Mono", color: "#767576" }}>
+                  ${smcState.nearestLiquidityBelow.price?.toFixed(2)} ({smcState.nearestLiquidityBelow.touches} touches)
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Regime + Spectral Analysis */}
+      {regimeState && (
+        <div style={{ ...panelStyle, marginBottom: "12px" }}>
+          <div style={labelStyle}>Regime &amp; Spectral</div>
+          <div style={{ fontSize: "11px", fontFamily: "JetBrains Mono", fontWeight: 700, color: "#adaaab", marginBottom: "8px" }}>
+            {regimeState.label}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
+            <div style={{ padding: "6px 8px", borderRadius: "5px", backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(72,72,73,0.12)" }}>
+              <div style={{ fontSize: "7px", color: "#484849", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: "2px" }}>Trend Strength</div>
+              <div style={{ fontSize: "12px", fontFamily: "JetBrains Mono", fontWeight: 700, color: (regimeState.basic?.trendStrength ?? 0) > 0.6 ? "#00ffcc" : "#ffcc00" }}>
+                {Math.round((regimeState.basic?.trendStrength ?? 0) * 100)}%
+              </div>
+            </div>
+            <div style={{ padding: "6px 8px", borderRadius: "5px", backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(72,72,73,0.12)" }}>
+              <div style={{ fontSize: "7px", color: "#484849", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: "2px" }}>Confidence</div>
+              <div style={{ fontSize: "12px", fontFamily: "JetBrains Mono", fontWeight: 700, color: (regimeState.confidence ?? 0) > 0.5 ? "#00ffcc" : "#767576" }}>
+                {Math.round((regimeState.confidence ?? 0) * 100)}%
+              </div>
+            </div>
+          </div>
+          {regimeState.spectral?.dominantCycleLength && (
+            <div style={{ marginTop: "6px", fontSize: "9px", color: "#767576" }}>
+              Dominant Cycle: <span style={{ color: "#adaaab", fontFamily: "JetBrains Mono" }}>{regimeState.spectral.dominantCycleLength} bars</span>
+              {" \u00B7 "}
+              Stability: <span style={{ color: "#adaaab", fontFamily: "JetBrains Mono" }}>{Math.round((regimeState.spectral.cycleStability ?? 0) * 100)}%</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Brain Readiness Score */}
+      {brainState && (
+        <div style={{ ...panelStyle, marginBottom: "12px" }}>
+          <div style={labelStyle}>Brain Readiness</div>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
+            <div style={{ fontSize: "28px", fontFamily: "JetBrains Mono", fontWeight: 700, color: (brainState.readinessScore ?? 0) > 0.6 ? "#00ffcc" : (brainState.readinessScore ?? 0) > 0.35 ? "#ffcc00" : "#ff7162" }}>
+              {Math.round((brainState.readinessScore ?? 0) * 100)}
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ height: "4px", borderRadius: "2px", backgroundColor: "rgba(255,255,255,0.05)", marginBottom: "4px" }}>
+                <div style={{ height: "100%", borderRadius: "2px", width: `${(brainState.readinessScore ?? 0) * 100}%`, backgroundColor: (brainState.readinessScore ?? 0) > 0.6 ? "#00ffcc" : (brainState.readinessScore ?? 0) > 0.35 ? "#ffcc00" : "#ff7162", transition: "width 0.5s ease" }} />
+              </div>
+              <div style={{ fontSize: "8px", color: "#767576", fontFamily: "JetBrains Mono" }}>
+                S:{Math.round((brainState.structureScore ?? 0) * 100)} R:{Math.round((brainState.regimeScore ?? 0) * 100)} F:{Math.round((brainState.orderflowScore ?? 0) * 100)} V:{Math.round((brainState.volScore ?? 0) * 100)}
+              </div>
+            </div>
+          </div>
+          {brainState.summary && (
+            <div style={{ fontSize: "9px", color: "#767576", lineHeight: 1.5 }}>
+              {brainState.summary}
+            </div>
+          )}
+          {brainState.microstructureEvents?.length > 0 && (
+            <div style={{ marginTop: "6px", display: "flex", flexDirection: "column", gap: "3px" }}>
+              <div style={{ fontSize: "7px", color: "#484849", letterSpacing: "0.12em", textTransform: "uppercase" }}>Live Events</div>
+              {brainState.microstructureEvents.slice(0, 3).map((ev: any, i: number) => (
+                <div key={i} style={{ fontSize: "8px", color: ev.eventType?.includes("absorption") ? "#ffcc00" : ev.eventType?.includes("sweep") ? "#ff7162" : "#adaaab", fontFamily: "JetBrains Mono" }}>
+                  \u25CF {ev.description}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Recent SI Decisions for this stock */}
       {stockDecisions.length > 0 && (
         <div style={{ ...panelStyle, marginBottom: "12px" }}>
@@ -1109,6 +1291,9 @@ export default function BrainPage() {
   const livePrices = useLivePrices();
   const { decisions: siDecisions, connected: sseConnected } = useSIStream();
   const { data: intelligence } = useBrainIntelligence(selectedStock?.symbol ?? "");
+  const { data: brainState } = useBrainState(selectedStock?.symbol ?? "");
+  const { data: smcState } = useSMCState(selectedStock?.symbol ?? "");
+  const { data: regimeState } = useRegimeState(selectedStock?.symbol ?? "");
 
   const stocks = useMemo(() => {
     if (!brainEntities?.length) return MOCK_STOCKS;
@@ -1263,6 +1448,9 @@ export default function BrainPage() {
         onOpenFocus={() => setFocusModeOpen(true)}
         decisions={siDecisions}
         intelligence={intelligence}
+        brainState={brainState}
+        smcState={smcState}
+        regimeState={regimeState}
       />
 
       {/* Backdrop */}

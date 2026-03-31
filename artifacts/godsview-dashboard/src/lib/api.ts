@@ -410,3 +410,135 @@ export function useBrainIntelligence(symbol: string) {
     enabled: !!symbol,
   });
 }
+
+// ─── SMC Engine State ────────────────────────────────────────────────────────
+export function useSMCState(symbol: string) {
+  return useQuery({
+    queryKey: ["brain", symbol, "smc"],
+    queryFn: () => apiFetch<{
+      symbol: string;
+      structure: {
+        trend: string;
+        bos: boolean;
+        choch: boolean;
+        bosDirection: string;
+        structureScore: number;
+        pattern: string;
+        invalidation: number | null;
+        swingHighs: Array<{ price: number; ts: string }>;
+        swingLows: Array<{ price: number; ts: string }>;
+      };
+      orderBlocks: Array<{
+        side: string; low: number; high: number; mid: number;
+        strength: number; tested: boolean; broken: boolean; ts: string;
+      }>;
+      fairValueGaps: Array<{
+        side: string; low: number; high: number; sizePct: number;
+        filled: boolean; fillPct: number; ts: string;
+      }>;
+      liquidityPools: Array<{
+        price: number; kind: string; touches: number; swept: boolean;
+      }>;
+      activeOBs: Array<{ side: string; low: number; high: number; strength: number }>;
+      unfilledFVGs: Array<{ side: string; low: number; high: number }>;
+      nearestLiquidityAbove: { price: number; kind: string; touches: number } | null;
+      nearestLiquidityBelow: { price: number; kind: string; touches: number } | null;
+      confluenceScore: number;
+    }>(`/brain/${symbol}/smc`),
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+    enabled: !!symbol,
+  });
+}
+
+// ─── Regime + Spectral State ─────────────────────────────────────────────────
+export function useRegimeState(symbol: string) {
+  return useQuery({
+    queryKey: ["brain", symbol, "regime"],
+    queryFn: () => apiFetch<{
+      symbol: string;
+      basic: {
+        regime: string;
+        trendStrength: number;
+        compressionScore: number;
+        expansionScore: number;
+        volState: string;
+        dirPersistence: number;
+        confidence: number;
+      };
+      spectral: {
+        dominantCycleLength: number | null;
+        spectralPower: number;
+        cycleStability: number;
+        regimeLabel: string;
+      };
+      label: string;
+      confidence: number;
+    }>(`/brain/${symbol}/regime`),
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+    enabled: !!symbol,
+  });
+}
+
+// ─── Order Flow State ────────────────────────────────────────────────────────
+export function useOrderflowState(symbol: string) {
+  return useQuery({
+    queryKey: ["brain", symbol, "orderflow"],
+    queryFn: () => apiFetch<{
+      symbol: string;
+      orderflow: {
+        delta: number; cvd: number; cvdSlope: number;
+        quoteImbalance: number; spreadBps: number;
+        aggressionScore: number; orderflowBias: string;
+        orderflowScore: number; buyVolumeRatio: number;
+        largeDeltaBar: boolean; divergence: boolean;
+      };
+      liquidity: {
+        strongestBidLevel: number | null; strongestAskLevel: number | null;
+        liquidityAbove: number; liquidityBelow: number;
+        thinZoneDetected: boolean; liquidityScore: number;
+      };
+      candle_packets: Array<{
+        ts: string; open: number; high: number; low: number; close: number;
+        volume: number; delta: number; cvdChange: number; imbalance: number;
+        events: Array<{ eventType: string; intensity: number; description: string }>;
+      }>;
+    }>(`/brain/${symbol}/orderflow`),
+    staleTime: 15_000,
+    refetchInterval: 15_000,
+    enabled: !!symbol,
+  });
+}
+
+// ─── Full Brain State (all engines merged) ───────────────────────────────────
+export function useBrainState(symbol: string) {
+  return useQuery({
+    queryKey: ["brain", symbol, "brain-state"],
+    queryFn: () => apiFetch<{
+      symbol: string;
+      readinessScore: number;
+      attentionScore: number;
+      structureScore: number;
+      regimeScore: number;
+      orderflowScore: number;
+      liquidityScore: number;
+      volScore: number;
+      stressPenalty: number;
+      summary: string;
+      smc: any;
+      regime: any;
+      orderflow: any;
+      liquidity: any;
+      volatility: any;
+      microstructureEvents: Array<{
+        ts: string; eventType: string; intensity: number; description: string;
+      }>;
+      dna: any;
+      computedAt: string;
+    }>(`/brain/${symbol}/brain-state`),
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+    enabled: !!symbol,
+  });
+}

@@ -645,4 +645,173 @@ router.get("/brain/:symbol/intelligence", async (req, res) => {
   }
 });
 
+// ─── Helper: fetch bars as SMCBar shape ────────────────────────────────────
+async function fetchSMCBars(
+  symbol: string,
+  timeframe: "1Min" | "5Min" | "15Min" | "1Hour" | "1Day",
+  limit: number,
+): Promise<Array<{ Timestamp: string; Open: number; High: number; Low: number; Close: number; Volume: number }>> {
+  const { getBars } = await import("../lib/alpaca");
+  const rawBars = await getBars(symbol, timeframe, limit);
+  return rawBars.map((b: any) => ({
+    Timestamp: String(b.t ?? b.Timestamp ?? ""),
+    Open: Number(b.o ?? b.Open ?? 0),
+    High: Number(b.h ?? b.High ?? 0),
+    Low: Number(b.l ?? b.Low ?? 0),
+    Close: Number(b.c ?? b.Close ?? 0),
+    Volume: Number(b.v ?? b.Volume ?? 0),
+  }));
+}
+
+// ─── SMC State endpoint ────────────────────────────────────────────────────
+router.get("/brain/:symbol/smc", async (req, res) => {
+  try {
+    const symbol = req.params.symbol.toUpperCase();
+    const { computeSMCState } = await import("../lib/smc_engine");
+
+    let bars1m: any[] = [];
+    let bars5m: any[] = [];
+    try {
+      bars1m = await fetchSMCBars(symbol, "1Min", 200);
+    } catch { /* fallback empty */ }
+    try {
+      bars5m = await fetchSMCBars(symbol, "5Min", 100);
+    } catch { /* fallback empty */ }
+
+    const smc = computeSMCState(symbol, bars1m, bars5m);
+    res.json(smc);
+  } catch (err) {
+    req.log.error({ err }, "Failed to compute SMC state");
+    res.status(500).json({ error: "internal_error", message: "Failed to compute SMC state" });
+  }
+});
+
+// ─── Regime + Spectral endpoint ────────────────────────────────────────────
+router.get("/brain/:symbol/regime", async (req, res) => {
+  try {
+    const symbol = req.params.symbol.toUpperCase();
+    const { computeFullRegime } = await import("../lib/regime_engine");
+
+    let bars: any[] = [];
+    try {
+      bars = await fetchSMCBars(symbol, "5Min", 150);
+    } catch {
+      try {
+        bars = await fetchSMCBars(symbol, "1Min", 200);
+      } catch { /* empty */ }
+    }
+
+    const regime = computeFullRegime(bars);
+    res.json({ symbol, ...regime });
+  } catch (err) {
+    req.log.error({ err }, "Failed to compute regime state");
+    res.status(500).json({ error: "internal_error", message: "Failed to compute regime state" });
+  }
+});
+
+// ─── Order Flow endpoint ───────────────────────────────────────────────────
+router.get("/brain/:symbol/orderflow", async (req, res) => {
+  try {
+    const symbol = req.params.symbol.toUpperCase();
+    const { computeOrderflowState, computeLiquidityMapState, buildCandlePackets } =
+      await import("../lib/orderflow_engine");
+
+    let bars: any[] = [];
+    try {
+      bars = await fetchSMCBars(symbol, "1Min", 100);
+    } catch { /* empty */ }
+
+    // Try to get live orderbook
+    let orderbook = null;
+    try {
+      const { normalizeMarketSymbol } = await import("../lib/market/symbols");
+      const { orderBookManager } = await import("../lib/market/orderbook");
+      const alpacaSymbol = normalizeMarketSymbol(symbol);
+      orderbook = orderBookManager.getSnapshot(alpacaSymbol);
+    } catch { /* no orderbook */ }
+
+    const orderflowState = computeOrderflowState(bars, orderbook);
+    const liquidityMap = computeLiquidityMapState(orderbook);
+    const candlePackets = buildCandlePackets(bars, orderbook, 20);
+
+    res.json({
+      symbol,
+      orderflow: orderflowState,
+      liquidity: liquidityMap,
+      candle_packets: candlePackets,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to compute orderflow state");
+    res.status(500).json({ error: "internal_error", message: "Failed to compute orderflow state" });
+  }
+});
+
+// ─── Volatility / Stress endpoint ──────────────────────────────────────────
+router.get("/brain/:symbol/stress", async (req, res) => {
+  try {
+    const symbol = req.params.symbol.toUpperCase();
+    const { computeVolatilityState } = await import("../lib/stress_engine");
+
+    let bars: any[] = [];
+    try {
+      bars = await fetchSMCBars(symbol, "1Min", 200);
+    } catch {
+      try {
+        bars = await fetchSMCBars(symbol, "5Min", 100);
+      } catch { /* empty */ }
+    }
+
+    const vol = computeVolatilityState(symbol, bars);
+    res.json({ symbol, volatility: vol });
+  } catch (err) {
+    req.log.error({ err }, "Failed to compute stress state");
+    res.status(500).json({ error: "internal_error", message: "Failed to compute stress state" });
+  }
+});
+
+// ─── Full Brain State endpoint (all engines combined) ──────────────────────
+router.get("/brain/:symbol/brain-state", async (req, res) => {
+  try {
+    const symbol = req.params.symbol.toUpperCase();
+    const { computeSymbolBrainState } = await import("../lib/symbol_brain");
+
+    let bars1m: any[] = [];
+    let bars5m: any[] = [];
+    try {
+      bars1m = await fetchSMCBars(symbol, "1Min", 200);
+    } catch { /* empty */ }
+    try {
+      bars5m = await fetchSMCBars(symbol, "5Min", 100);
+    } catch { /* empty */ }
+
+    // Try to get live orderbook
+    let orderbook = null;
+    try {
+      const { normalizeMarketSymbol } = await import("../lib/market/symbols");
+      const { orderBookManager } = await import("../lib/market/orderbook");
+      const alpacaSymbol = normalizeMarketSymbol(symbol);
+      orderbook = orderBookManager.getSnapshot(alpacaSymbol);
+    } catch { /* no orderbook */ }
+
+    // Try to get Market DNA
+    let dna = null;
+    try {
+      const { getMarketDNA } = await import("../lib/market_dna");
+      const dnaBars = bars1m.map((b: any) => ({
+        open: b.Open, high: b.High, low: b.Low, close: b.Close, volume: b.Volume,
+      }));
+      dna = await getMarketDNA(symbol, dnaBars);
+    } catch { /* no DNA */ }
+
+    const brainState = computeSymbolBrainState(
+      symbol, bars1m, bars5m, orderbook, null, dna,
+    );
+
+    res.json(brainState);
+  } catch (err) {
+    req.log.error({ err }, "Failed to compute brain state");
+    res.status(500).json({ error: "internal_error", message: "Failed to compute brain state" });
+  }
+});
+
 export default router;
