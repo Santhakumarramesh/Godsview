@@ -1828,15 +1828,40 @@ router.post("/alpaca/analyze", async (req, res) => {
     // ── Super Intelligence Enhancement Layer ──────────────────────────────
     // Run approved setups through SI for enhanced sizing, trailing stops,
     // and profit targets. SI can also veto borderline signals.
+    // Fixes: feeds MTF scores, orderbook imbalance, and measures latency.
     let siEnhancedSetups: typeof enrichedSetups;
+    let siPipelineLatencyMs = 0;
     try {
+      const siStartMs = Date.now();
       const { processSuperSignal } = await import("../lib/super_intelligence");
       const { emitSIDecision } = await import("../lib/signal_stream");
+      const { computeMTFScores } = await import("../lib/mtf_scores");
+      const { extractOrderbookFeatures, orderbookAdjustment } = await import("../lib/orderbook_signal");
+
+      // Compute multi-timeframe directional bias scores from live bars
+      const mtfScores = computeMTFScores(bars1m, bars5m, bars15m);
+
+      // Extract orderbook features (if orderbook manager has a snapshot)
+      let obFeatures: ReturnType<typeof extractOrderbookFeatures> | null = null;
+      try {
+        const { orderBookManager } = await import("../lib/market/orderbook");
+        const snap = orderBookManager.getSnapshot(alpacaSymbol);
+        obFeatures = extractOrderbookFeatures(snap);
+      } catch { /* orderbook not available */ }
+
       siEnhancedSetups = enrichedSetups.map((s) => {
         if (!s.meets_threshold) return s;
+
+        // Adjust order_flow_score with live orderbook data
+        let adjustedOrderFlow = s.order_flow_score;
+        if (obFeatures) {
+          const obMult = orderbookAdjustment(obFeatures, s.direction);
+          adjustedOrderFlow = Math.max(0, Math.min(1, s.order_flow_score * obMult));
+        }
+
         const siResult = processSuperSignal({
           structure_score: s.structure_score,
-          order_flow_score: s.order_flow_score,
+          order_flow_score: adjustedOrderFlow,
           recall_score: s.recall_score,
           setup_type: s.setup_type,
           regime: s.recall_features?.regime ?? "ranging",
@@ -1846,6 +1871,7 @@ router.post("/alpaca/analyze", async (req, res) => {
           take_profit: s.take_profit,
           atr: s.atr ?? 1.0,
           equity: 10_000,
+          timeframe_scores: mtfScores,
         });
         // Emit SSE event for real-time dashboard
         emitSIDecision(s.instrument, siResult, s.setup_type, s.direction, s.recall_features?.regime ?? "ranging");
@@ -1853,12 +1879,16 @@ router.post("/alpaca/analyze", async (req, res) => {
         // SI veto: if SI rejects, downgrade to rejected
         if (!siResult.approved) {
           return { ...s, meets_threshold: false, execution_mode: "skip" as const, decision_state: "REJECTED" as any,
-            si_rejection: siResult.rejection_reason, si_result: siResult };
+            si_rejection: siResult.rejection_reason, si_result: siResult,
+            ob_features: obFeatures, mtf_scores: mtfScores };
         }
         // Attach SI metadata for order execution
         return { ...s, si_result: siResult, si_kelly_qty: siResult.suggested_qty,
-          si_trailing_stop: siResult.trailing_stop, si_profit_targets: siResult.profit_targets };
+          si_trailing_stop: siResult.trailing_stop, si_profit_targets: siResult.profit_targets,
+          ob_features: obFeatures, mtf_scores: mtfScores,
+          order_flow_adjusted: adjustedOrderFlow };
       });
+      siPipelineLatencyMs = Date.now() - siStartMs;
     } catch {
       siEnhancedSetups = enrichedSetups; // Fallback: SI unavailable
     }
