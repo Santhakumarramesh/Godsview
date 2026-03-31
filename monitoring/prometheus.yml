@@ -1,0 +1,26 @@
+# GodsView Prometheus Configuration
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - "prometheus-alerts.yml"
+
+scrape_configs:
+  - job_name: "godsview-api"
+    metrics_path: "/metrics"
+    scrape_interval: 10s
+    static_configs:
+      - targets: ["api:3000"]
+        labels:
+          environment: "production"
+          service: "godsview-api"
+
+  - job_name: "godsview-api-local"
+    metrics_path: "/metrics"
+    scrape_interval: 10s
+    static_configs:
+      - targets: ["localhost:3000"]
+        labels:
+          environment: "development"
+          service: "godsview-api"

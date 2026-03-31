@@ -1,0 +1,144 @@
+{
+  "dashboard": {
+    "title": "GodsView Trading System",
+    "uid": "godsview-main",
+    "tags": ["godsview", "trading"],
+    "timezone": "browser",
+    "refresh": "10s",
+    "time": { "from": "now-6h", "to": "now" },
+    "panels": [
+      {
+        "title": "Kill Switch",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 3, "x": 0, "y": 0 },
+        "targets": [{ "expr": "godsview_kill_switch", "legendFormat": "Kill Switch" }],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              { "type": "value", "options": { "0": { "text": "OFF", "color": "green" }, "1": { "text": "ACTIVE", "color": "red" } } }
+            ]
+          }
+        }
+      },
+      {
+        "title": "Breaker Level",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 3, "x": 3, "y": 0 },
+        "targets": [{ "expr": "godsview_breaker_level", "legendFormat": "Level" }],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              { "type": "value", "options": { "0": { "text": "NORMAL", "color": "green" }, "1": { "text": "WARNING", "color": "yellow" }, "2": { "text": "THROTTLE", "color": "orange" }, "3": { "text": "HALT", "color": "red" } } }
+            ]
+          }
+        }
+      },
+      {
+        "title": "Realized PnL Today",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 3, "x": 6, "y": 0 },
+        "targets": [{ "expr": "godsview_breaker_realized_pnl_usd", "legendFormat": "PnL" }],
+        "fieldConfig": { "defaults": { "unit": "currencyUSD", "thresholds": { "steps": [{ "value": null, "color": "red" }, { "value": 0, "color": "green" }] } } }
+      },
+      {
+        "title": "Open Positions",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 3, "x": 9, "y": 0 },
+        "targets": [{ "expr": "godsview_managed_positions", "legendFormat": "Positions" }],
+        "fieldConfig": { "defaults": { "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 3, "color": "yellow" }, { "value": 5, "color": "red" }] } } }
+      },
+      {
+        "title": "Size Multiplier",
+        "type": "gauge",
+        "gridPos": { "h": 4, "w": 3, "x": 12, "y": 0 },
+        "targets": [{ "expr": "godsview_breaker_position_size_multiplier", "legendFormat": "Multiplier" }],
+        "fieldConfig": { "defaults": { "min": 0, "max": 1, "thresholds": { "steps": [{ "value": null, "color": "red" }, { "value": 0.5, "color": "yellow" }, { "value": 0.9, "color": "green" }] } } }
+      },
+      {
+        "title": "Consecutive Losses",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 3, "x": 15, "y": 0 },
+        "targets": [{ "expr": "godsview_breaker_consecutive_losses", "legendFormat": "Losses" }],
+        "fieldConfig": { "defaults": { "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 2, "color": "yellow" }, { "value": 3, "color": "red" }] } } }
+      },
+      {
+        "title": "Active Alerts",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 3, "x": 18, "y": 0 },
+        "targets": [{ "expr": "godsview_active_alerts", "legendFormat": "Alerts" }],
+        "fieldConfig": { "defaults": { "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 1, "color": "yellow" }, { "value": 5, "color": "red" }] } } }
+      },
+      {
+        "title": "Fills Today",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 3, "x": 21, "y": 0 },
+        "targets": [{ "expr": "godsview_fills_today_total", "legendFormat": "Fills" }]
+      },
+      {
+        "title": "PnL Over Time",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+        "targets": [
+          { "expr": "godsview_breaker_realized_pnl_usd", "legendFormat": "Realized" },
+          { "expr": "godsview_breaker_unrealized_pnl_usd", "legendFormat": "Unrealized" },
+          { "expr": "godsview_breaker_realized_pnl_usd + godsview_breaker_unrealized_pnl_usd", "legendFormat": "Total" }
+        ],
+        "fieldConfig": { "defaults": { "unit": "currencyUSD" } }
+      },
+      {
+        "title": "Breaker Level Timeline",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+        "targets": [
+          { "expr": "godsview_breaker_level", "legendFormat": "Breaker Level" },
+          { "expr": "godsview_kill_switch", "legendFormat": "Kill Switch" }
+        ],
+        "fieldConfig": { "defaults": { "min": 0, "max": 3 } }
+      },
+      {
+        "title": "HTTP Request Rate",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 8, "x": 0, "y": 12 },
+        "targets": [{ "expr": "rate(godsview_http_requests_total[5m])", "legendFormat": "req/s" }]
+      },
+      {
+        "title": "HTTP Latency (P50 / P95 / P99)",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 8, "x": 8, "y": 12 },
+        "targets": [
+          { "expr": "histogram_quantile(0.50, rate(godsview_http_request_duration_seconds_bucket[5m]))", "legendFormat": "P50" },
+          { "expr": "histogram_quantile(0.95, rate(godsview_http_request_duration_seconds_bucket[5m]))", "legendFormat": "P95" },
+          { "expr": "histogram_quantile(0.99, rate(godsview_http_request_duration_seconds_bucket[5m]))", "legendFormat": "P99" }
+        ],
+        "fieldConfig": { "defaults": { "unit": "s" } }
+      },
+      {
+        "title": "Trades & Wins/Losses",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 8, "x": 16, "y": 12 },
+        "targets": [
+          { "expr": "godsview_trades_today_total", "legendFormat": "Total Trades" },
+          { "expr": "godsview_wins_today_total", "legendFormat": "Wins" },
+          { "expr": "godsview_losses_today_total", "legendFormat": "Losses" }
+        ]
+      },
+      {
+        "title": "Hourly PnL Velocity",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+        "targets": [{ "expr": "godsview_hourly_pnl_velocity_usd", "legendFormat": "$/hr" }],
+        "fieldConfig": { "defaults": { "unit": "currencyUSD" } }
+      },
+      {
+        "title": "Signal Pipeline Throughput",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+        "targets": [
+          { "expr": "rate(godsview_signals_processed_total[5m])", "legendFormat": "Signals/s" },
+          { "expr": "rate(godsview_si_decisions_total[5m])", "legendFormat": "SI Decisions/s" },
+          { "expr": "rate(godsview_production_gate_total[5m])", "legendFormat": "Gate Evals/s" }
+        ]
+      }
+    ]
+  }
+}

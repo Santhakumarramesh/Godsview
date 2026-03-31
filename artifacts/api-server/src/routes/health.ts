@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { isLiveMode } from "@workspace/strategy-core";
 import { runtimeConfig } from "../lib/runtime_config";
 import { getStartupSnapshot } from "../lib/startup_state";
-import { collectMetrics } from "../lib/metrics";
+import { collectAllMetrics } from "../lib/metrics_execution";
 
 const router: IRouter = Router();
 
@@ -65,7 +65,7 @@ router.get("/readyz", async (_req, res) => {
 /* ── Prometheus Metrics ─────────────────────────────────────────── */
 router.get("/metrics", (_req, res) => {
   try {
-    const metrics = collectMetrics();
+    const metrics = collectAllMetrics();
     res.setHeader("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
     res.send(metrics);
   } catch {
