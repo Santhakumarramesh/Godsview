@@ -70,6 +70,9 @@ COPY artifacts/godsview-dashboard/package.json artifacts/godsview-dashboard/
 # Install production deps only
 RUN pnpm install --frozen-lockfile --prod
 
+# Install tsx globally for running migration scripts (.ts)
+RUN corepack pnpm add -g tsx
+
 # Copy built API bundle
 COPY --from=build /app/artifacts/api-server/dist ./artifacts/api-server/dist
 

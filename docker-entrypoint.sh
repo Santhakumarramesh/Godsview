@@ -42,7 +42,7 @@ if [ -n "$DATABASE_URL" ]; then
 
   # ── Step 2: Run Drizzle migrations ─────────────────────────────
   echo "[entrypoint] Running database migrations..."
-  if node --enable-source-maps ./lib/db/src/migrate.ts 2>&1; then
+  if npx tsx ./lib/db/src/migrate.ts 2>&1; then
     echo "[entrypoint] Migrations completed successfully"
   else
     echo "[entrypoint] WARNING: Migration runner failed — server will attempt to start anyway"
