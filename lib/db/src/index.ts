@@ -1,15 +1,19 @@
 import * as schema from "./schema";
 
 /**
- * Smart DB driver selection:
- * - If DATABASE_URL is set → use real PostgreSQL (Replit, Neon, etc.)
- * - If DATABASE_URL is empty/missing → use PGlite (in-process, zero setup)
+ * Smart DB driver selection with production-grade connection management:
+ * - DATABASE_URL set → real PostgreSQL with connection pool + retry
+ * - DATABASE_URL empty → PGlite (in-process, zero setup)
  *
- * PGlite auto-creates tables on first run.
+ * Production pool settings:
+ *   - min 2 / max 10 connections (tunable via DB_POOL_MAX)
+ *   - 30s idle timeout, 10s connection timeout
+ *   - Automatic reconnect on pool error
  */
 
 let db: any;
 let pool: any = { end: async () => {} };
+let _driver: "pg" | "pglite" = "pglite";
 
 const dbUrl = process.env.DATABASE_URL?.trim();
 
@@ -17,9 +21,28 @@ if (dbUrl) {
   const { drizzle } = await import("drizzle-orm/node-postgres");
   const pg = await import("pg");
   const { Pool } = pg.default ?? pg;
-  pool = new Pool({ connectionString: dbUrl });
+
+  const poolMax = Math.min(
+    Math.max(parseInt(process.env.DB_POOL_MAX || "10", 10) || 10, 1),
+    50,
+  );
+
+  pool = new Pool({
+    connectionString: dbUrl,
+    max: poolMax,
+    min: 2,
+    idleTimeoutMillis: 30_000,
+    connectionTimeoutMillis: 10_000,
+  });
+
+  /* Log pool errors but don't crash — pg Pool auto-reconnects */
+  pool.on("error", (err: Error) => {
+    console.error(`[db] Pool background error: ${err.message}`);
+  });
+
   db = drizzle(pool, { schema });
-  console.log("[db] Connected to PostgreSQL");
+  _driver = "pg";
+  console.log(`[db] Connected to PostgreSQL (pool max=${poolMax})`);
 } else {
   const { drizzle } = await import("drizzle-orm/pglite");
   const { PGlite } = await import("@electric-sql/pglite");
@@ -69,6 +92,8 @@ if (dbUrl) {
       session TEXT,
       regime TEXT,
       notes TEXT,
+      order_id TEXT,
+      operator_id TEXT,
       entry_time TIMESTAMPTZ,
       exit_time TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -119,52 +144,95 @@ if (dbUrl) {
       payload_json TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
-    CREATE TABLE IF NOT EXISTS brain_entities (
+    CREATE TABLE IF NOT EXISTS trading_sessions (
       id SERIAL PRIMARY KEY,
-      symbol TEXT NOT NULL,
-      entity_type TEXT NOT NULL DEFAULT 'stock',
-      name TEXT,
-      sector TEXT,
-      regime TEXT,
-      volatility NUMERIC(8,4),
-      last_price NUMERIC(14,6),
-      state_json TEXT,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS idx_brain_entities_symbol ON brain_entities(symbol);
-    CREATE TABLE IF NOT EXISTS brain_relations (
-      id SERIAL PRIMARY KEY,
-      source_entity_id INTEGER NOT NULL,
-      target_entity_id INTEGER NOT NULL,
-      relation_type TEXT NOT NULL,
-      strength NUMERIC(6,4) NOT NULL DEFAULT 0.5000,
-      context_json TEXT,
+      session_id TEXT NOT NULL UNIQUE,
+      system_mode TEXT NOT NULL,
+      operator_id TEXT,
+      started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      ended_at TIMESTAMPTZ,
+      trades_executed INTEGER DEFAULT 0,
+      signals_generated INTEGER DEFAULT 0,
+      realized_pnl NUMERIC(12,4),
+      peak_drawdown_pct NUMERIC(8,4),
+      breaker_triggered BOOLEAN DEFAULT false,
+      kill_switch_used BOOLEAN DEFAULT false,
+      exit_reason TEXT,
+      notes TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
-    CREATE INDEX IF NOT EXISTS idx_brain_relations_source ON brain_relations(source_entity_id);
-    CREATE INDEX IF NOT EXISTS idx_brain_relations_target ON brain_relations(target_entity_id);
-    CREATE TABLE IF NOT EXISTS brain_memories (
+    CREATE TABLE IF NOT EXISTS breaker_events (
       id SERIAL PRIMARY KEY,
-      entity_id INTEGER NOT NULL,
-      memory_type TEXT NOT NULL,
-      title TEXT NOT NULL,
-      content TEXT NOT NULL,
-      signal_id INTEGER,
-      trade_id INTEGER,
-      confidence NUMERIC(6,4) NOT NULL DEFAULT 0.5000,
-      outcome_score NUMERIC(8,4),
-      tags TEXT,
-      context_json TEXT,
+      session_id TEXT,
+      level TEXT NOT NULL,
+      previous_level TEXT,
+      trigger TEXT NOT NULL,
+      daily_pnl NUMERIC(12,4),
+      consecutive_losses INTEGER,
+      position_size_multiplier NUMERIC(5,4),
+      details TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
-    CREATE INDEX IF NOT EXISTS idx_brain_memories_entity ON brain_memories(entity_id);
-    CREATE INDEX IF NOT EXISTS idx_brain_memories_created_at ON brain_memories(created_at);
   `);
 
   db = drizzle(client, { schema });
+  _driver = "pglite";
   console.log("[db] Using PGlite (in-process) — tables auto-created");
 }
+
+/* ── Health Check ──────────────────────────────────────────────────── */
+
+export interface DbHealthResult {
+  ok: boolean;
+  driver: "pg" | "pglite";
+  latencyMs: number;
+  poolTotal?: number;
+  poolIdle?: number;
+  poolWaiting?: number;
+  error?: string;
+}
+
+/**
+ * Lightweight health probe — runs SELECT 1 and reports pool stats.
+ * Used by preflight checks and /health endpoint.
+ */
+export async function checkDbHealth(): Promise<DbHealthResult> {
+  const start = performance.now();
+  try {
+    await db.execute(/* sql */ "SELECT 1");
+    const latencyMs = Math.round(performance.now() - start);
+    const result: DbHealthResult = { ok: true, driver: _driver, latencyMs };
+    if (_driver === "pg" && pool.totalCount !== undefined) {
+      result.poolTotal = pool.totalCount;
+      result.poolIdle = pool.idleCount;
+      result.poolWaiting = pool.waitingCount;
+    }
+    return result;
+  } catch (err: any) {
+    return {
+      ok: false,
+      driver: _driver,
+      latencyMs: Math.round(performance.now() - start),
+      error: err.message,
+    };
+  }
+}
+
+/* ── Graceful Shutdown ─────────────────────────────────────────────── */
+
+/**
+ * Drain the connection pool. Call this during server shutdown.
+ */
+export async function closePool(): Promise<void> {
+  try {
+    await pool.end();
+    console.log("[db] Connection pool closed");
+  } catch (err: any) {
+    console.error(`[db] Error closing pool: ${err.message}`);
+  }
+}
+
+/* ── Exports ───────────────────────────────────────────────────────── */
 
 export { db, pool };
 export * from "./schema";

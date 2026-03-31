@@ -1,120 +1,76 @@
-import type { AddressInfo } from "node:net";
 import app from "./app";
 import { logger } from "./lib/logger";
 import { trainModel } from "./lib/ml_model";
-import { trainEnsemble } from "./lib/super_intelligence";
-import { runtimeConfig, getRuntimeConfigForLog } from "./lib/runtime_config";
-import {
-  markMlBootstrapFailed,
-  markMlBootstrapReady,
-  markMlBootstrapRunning,
-} from "./lib/startup_state";
-import { pool } from "@workspace/db";
-import { closeAllClients as closeSSEClients } from "./lib/signal_stream";
-import { attachWSRelay } from "./lib/ws_relay";
+import { validateEnv } from "./lib/env";
+import { setupGracefulShutdown, onShutdown } from "./lib/shutdown";
+import { closePool, checkDbHealth } from "@workspace/db";
 import { runPreflight } from "./lib/preflight";
-import { getDegradationSnapshot } from "./lib/degradation";
-import { startReconciler, stopReconciler } from "./lib/fill_reconciler";
 
-const server = app.listen(runtimeConfig.port, (err) => {
+// ── Validate environment before anything else ───────────────────
+validateEnv();
+
+const rawPort = process.env["PORT"];
+
+if (!rawPort) {
+  throw new Error(
+    "PORT environment variable is required but was not provided.",
+  );
+}
+
+const port = Number(rawPort);
+
+if (Number.isNaN(port) || port <= 0) {
+  throw new Error(`Invalid PORT value: "${rawPort}"`);
+}
+
+const server = app.listen(port, (err) => {
   if (err) {
     logger.error({ err }, "Error listening on port");
     process.exit(1);
   }
 
-  const address = server.address() as AddressInfo | null;
-  logger.info(
-    {
-      port: address?.port ?? runtimeConfig.port,
-      config: getRuntimeConfigForLog(),
-    },
-    "Server listening",
-  );
+  logger.info({ port }, "Server listening");
 
-  // Run preflight checks
-  runPreflight().then((result) => {
-    if (!result.passed) {
-      logger.fatal({ checks: result.checks.filter(c => !c.passed && c.critical) }, "CRITICAL preflight checks failed — server may not function correctly");
-    }
-  }).catch((err) => logger.error({ err }, "Preflight check error"));
-
-  // Attach WebSocket relay for real-time price feeds + dashboard events
-  attachWSRelay(server);
-
-  markMlBootstrapRunning();
-  trainModel()
-    .then(() => {
-      markMlBootstrapReady();
-      logger.info("ML bootstrap completed — training super intelligence ensemble...");
-      return trainEnsemble();
+  // Run preflight checks (non-blocking — logs results)
+  runPreflight()
+    .then((result) => {
+      if (!!result.passed) {
+        logger.warn({ checks: result.checks.filter(c => !c.passed) }, "Preflight checks had failures");
+      }
     })
-    .then(() => {
-      logger.info("Super Intelligence ensemble ready");
+    .catch((err) => logger.error({ err }, "Preflight checks failed"));
 
-      // Start fill reconciler after ML bootstrap
-      startReconciler();
+  // Verify DB connectivity
+  checkDbHealth()
+    .then((h) => {
+      if (h.ok) {
+        logger.info({ driver: h.driver, latencyMs: h.latencyMs }, "Database health OK");
+      } else {
+        logger.error({ error: h.error }, "Database health check failed");
+      }
     })
-    .catch((bootstrapErr) => {
-      markMlBootstrapFailed(bootstrapErr);
-      logger.error({ err: bootstrapErr }, "ML/ensemble training failed during bootstrap");
-    });
+    .catch((err) => logger.error({ err }, "DB health check threw"));
+
+  // Train ML model from accuracy_results data (non-blocking)
+  trainModel().catch((err) => logger.error({ err }, "ML model training failed"));
 });
 
-server.requestTimeout = runtimeConfig.requestTimeoutMs;
-server.keepAliveTimeout = runtimeConfig.keepAliveTimeoutMs;
-server.headersTimeout = runtimeConfig.headersTimeoutMs;
-server.maxRequestsPerSocket = runtimeConfig.maxRequestsPerSocket;
+// ── Graceful shutdown with connection draining ──────────────────
+setupGracefulShutdown(server);
 
-let isShuttingDown = false;
-
-async function shutdown(signal: NodeJS.Signals): Promise<void> {
-  if (isShuttingDown) {
-    return;
-  }
-  isShuttingDown = true;
-  logger.warn({ signal }, "Graceful shutdown initiated");
-
-  const forceExitTimer = setTimeout(() => {
-    logger.error(
-      { timeoutMs: runtimeConfig.shutdownTimeoutMs, signal },
-      "Graceful shutdown timeout exceeded; forcing exit",
-    );
-    process.exit(1);
-  }, runtimeConfig.shutdownTimeoutMs);
-  forceExitTimer.unref();
-
-  await new Promise<void>((resolve) => {
-    server.close(() => resolve());
-  });
-
-  // Close all SSE client connections
+// Register cleanup: close SSE connections
+onShutdown(async () => {
+  logger.info("Cleaning up SSE connections...");
   try {
-    closeSSEClients();
-    stopReconciler();
-    logger.info("SSE clients disconnected");
-  } catch { /* best effort */ }
-
-  try {
-    await pool.end();
-    logger.info("Database pool closed");
-  } catch (err) {
-    logger.error({ err }, "Failed to close database pool during shutdown");
-  } finally {
-    clearTimeout(forceExitTimer);
+    const { closeAllClients } = await import("./lib/signal_stream");
+    closeAllClients();
+  } catch {
+    // signal_stream may not be loaded
   }
-
-  logger.info({ signal }, "Shutdown complete");
-  process.exit(0);
-}
-
-process.on("SIGTERM", () => {
-  void shutdown("SIGTERM");
 });
 
-process.on("SIGINT", () => {
-  void shutdown("SIGINT");
-});
-
-process.on("unhandledRejection", (reason) => {
-  logger.error({ err: reason }, "Unhandled promise rejection");
+// Register cleanup: drain database pool
+onShutdown(async () => {
+  logger.info("Draining database connection pool...");
+  await closePool();
 });
