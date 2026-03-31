@@ -367,9 +367,9 @@ signalsRouter.post("/signals", async (req: Request, res: Response) => {
           riskInput,
         );
 
-        if (warRoomVerdict.consensus === "NO_GO") {
+        if (warRoomVerdict.finalDecision === "blocked") {
           gateBlocked = true;
-          gateReason = `WAR_ROOM_REJECTED: consensus=${warRoomVerdict.consensus} score=${warRoomVerdict.compositeScore.toFixed(3)}`;
+          gateReason = `WAR_ROOM_REJECTED: decision=${warRoomVerdict.finalDecision} score=${warRoomVerdict.finalScore.toFixed(3)}`;
         }
       }
 
@@ -426,8 +426,8 @@ signalsRouter.post("/signals", async (req: Request, res: Response) => {
           failedItems: checklistResult.items.filter((i: any) => !i.passed).map((i: any) => i.key),
         } : null,
         warRoom: warRoomVerdict ? {
-          consensus: warRoomVerdict.consensus,
-          compositeScore: warRoomVerdict.compositeScore,
+          decision: warRoomVerdict?.finalDecision,
+          score: warRoomVerdict?.finalScore,
         } : null,
         newsLockout: newsLocked,
       },

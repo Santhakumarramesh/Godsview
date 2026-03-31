@@ -18,6 +18,8 @@ import proofRouter from "./proof";
 import macroRouter from "./macro";
 import portfolioRouter from "./portfolio";
 import opsRouter from "./ops";
+import featuresRouter from "./features";
+import engineHealthRouter from "./engine_health";
 
 const router: IRouter = Router();
 
@@ -40,5 +42,7 @@ router.use("/api/proof", proofRouter);
 router.use("/api/macro", macroRouter);
 router.use("/api/portfolio", portfolioRouter);
 router.use(opsRouter);
+router.use("/api/features", featuresRouter);
+router.use(engineHealthRouter);
 
 export default router;
