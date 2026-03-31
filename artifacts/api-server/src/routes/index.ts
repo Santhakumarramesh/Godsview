@@ -20,6 +20,7 @@ import portfolioRouter from "./portfolio";
 import opsRouter from "./ops";
 import featuresRouter from "./features";
 import engineHealthRouter from "./engine_health";
+import executionRouter from "./execution";
 
 const router: IRouter = Router();
 
@@ -44,5 +45,6 @@ router.use("/api/portfolio", portfolioRouter);
 router.use(opsRouter);
 router.use("/api/features", featuresRouter);
 router.use(engineHealthRouter);
+router.use("/api/execution", executionRouter);
 
 export default router;

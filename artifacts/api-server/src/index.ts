@@ -12,6 +12,7 @@ import {
 import { pool } from "@workspace/db";
 import { closeAllClients as closeSSEClients } from "./lib/signal_stream";
 import { attachWSRelay } from "./lib/ws_relay";
+import { startReconciler, stopReconciler } from "./lib/fill_reconciler";
 
 const server = app.listen(runtimeConfig.port, (err) => {
   if (err) {
@@ -40,6 +41,9 @@ const server = app.listen(runtimeConfig.port, (err) => {
     })
     .then(() => {
       logger.info("Super Intelligence ensemble ready");
+
+      // Start fill reconciler after ML bootstrap
+      startReconciler();
     })
     .catch((bootstrapErr) => {
       markMlBootstrapFailed(bootstrapErr);
@@ -77,6 +81,7 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   // Close all SSE client connections
   try {
     closeSSEClients();
+    stopReconciler();
     logger.info("SSE clients disconnected");
   } catch { /* best effort */ }
 

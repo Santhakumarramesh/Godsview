@@ -59,11 +59,11 @@ describe("E2E Smoke Tests", () => {
     try {
       const res = await fetch(`${baseUrl}/engine-health`);
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body: any = await res.json();
       expect(body).toHaveProperty("status");
       expect(body).toHaveProperty("engines");
       expect(body).toHaveProperty("timestamp");
-      expect(["healthy", "degraded", "operational"]).toContain(body.status);
+      expect(["healthy", "degraded", "operational"]).toContain(((body as any).status));
     } finally {
       await stopServer();
     }
@@ -88,7 +88,7 @@ describe("E2E Smoke Tests", () => {
       });
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body: any = await res.json();
       expect(body.features).toHaveProperty("symbol", "BTCUSD");
       expect(body.features).toHaveProperty("rsi_14");
       expect(body.features).toHaveProperty("atr_14");
@@ -113,7 +113,7 @@ describe("E2E Smoke Tests", () => {
       });
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body: any = await res.json();
       expect(body).toHaveProperty("positions");
       expect(body).toHaveProperty("total_allocated_pct");
       expect(body.positions).toHaveLength(1);
