@@ -10,6 +10,7 @@ import strictSetupRouter from "./strict_setup";
 import researchRouter from "./research";
 import brainRouter from "./brain";
 import superIntelligenceRouter from "./super_intelligence";
+import backtestRouter from "./backtest";
 
 const router: IRouter = Router();
 
@@ -24,5 +25,6 @@ router.use(strictSetupRouter);
 router.use(researchRouter);
 router.use(brainRouter);
 router.use(superIntelligenceRouter);
+router.use(backtestRouter);
 
 export default router;

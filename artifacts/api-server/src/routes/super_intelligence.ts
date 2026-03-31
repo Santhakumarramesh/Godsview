@@ -6,6 +6,7 @@ import {
   type SuperIntelligenceInput,
 } from "../lib/super_intelligence";
 import { evaluateForProduction, getProductionGateStats } from "../lib/production_gate";
+import { addSSEClient, getSSEClientCount } from "../lib/signal_stream";
 
 const router: IRouter = Router();
 
@@ -124,6 +125,18 @@ router.post("/super-intelligence/production-gate", async (req, res): Promise<voi
     req.log.error({ err }, "Production gate evaluation failed");
     res.status(500).json({ error: "internal_error", message: "Production gate failed" });
   }
+});
+
+// ── GET /super-intelligence/stream ──────────────────────────────────────────
+// SSE endpoint for real-time SI decision streaming
+router.get("/super-intelligence/stream", (req, res) => {
+  addSSEClient(res);
+  req.on("close", () => { /* cleanup handled in addSSEClient */ });
+});
+
+// ── GET /super-intelligence/stream/clients ──────────────────────────────────
+router.get("/super-intelligence/stream/clients", (_req, res) => {
+  res.json({ connected_clients: getSSEClientCount() });
 });
 
 // ── GET /super-intelligence/production-stats ────────────────────────────────

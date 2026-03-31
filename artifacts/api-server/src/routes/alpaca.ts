@@ -1825,8 +1825,46 @@ router.post("/alpaca/analyze", async (req, res) => {
       return acc;
     }, {});
     decisionSummary.BLOCKED_BY_RISK = (decisionSummary.BLOCKED_BY_RISK ?? 0) + blockedSetups.length;
-    const highConvictionSetups = enrichedSetups.filter((s) => s.meets_threshold && s.execution_mode === "full_size");
-    const conditionalSetups = enrichedSetups.filter((s) => s.meets_threshold && s.execution_mode === "reduced_size");
+    // ── Super Intelligence Enhancement Layer ──────────────────────────────
+    // Run approved setups through SI for enhanced sizing, trailing stops,
+    // and profit targets. SI can also veto borderline signals.
+    let siEnhancedSetups: typeof enrichedSetups;
+    try {
+      const { processSuperSignal } = await import("../lib/super_intelligence");
+      const { emitSIDecision } = await import("../lib/signal_stream");
+      siEnhancedSetups = enrichedSetups.map((s) => {
+        if (!s.meets_threshold) return s;
+        const siResult = processSuperSignal({
+          structure_score: s.structure_score,
+          order_flow_score: s.order_flow_score,
+          recall_score: s.recall_score,
+          setup_type: s.setup_type,
+          regime: s.recall_features?.regime ?? "ranging",
+          direction: s.direction,
+          entry_price: s.entry_price,
+          stop_loss: s.stop_loss,
+          take_profit: s.take_profit,
+          atr: s.atr ?? 1.0,
+          equity: 10_000,
+        });
+        // Emit SSE event for real-time dashboard
+        emitSIDecision(s.instrument, siResult, s.setup_type, s.direction, s.recall_features?.regime ?? "ranging");
+
+        // SI veto: if SI rejects, downgrade to rejected
+        if (!siResult.approved) {
+          return { ...s, meets_threshold: false, execution_mode: "skip" as const, decision_state: "REJECTED" as any,
+            si_rejection: siResult.rejection_reason, si_result: siResult };
+        }
+        // Attach SI metadata for order execution
+        return { ...s, si_result: siResult, si_kelly_qty: siResult.suggested_qty,
+          si_trailing_stop: siResult.trailing_stop, si_profit_targets: siResult.profit_targets };
+      });
+    } catch {
+      siEnhancedSetups = enrichedSetups; // Fallback: SI unavailable
+    }
+
+    const highConvictionSetups = siEnhancedSetups.filter((s) => s.meets_threshold && s.execution_mode === "full_size");
+    const conditionalSetups = siEnhancedSetups.filter((s) => s.meets_threshold && s.execution_mode === "reduced_size");
     const executableSetups = [...highConvictionSetups, ...conditionalSetups];
     const metaSkipped = enrichedSetups.filter((s) => s.meta_label?.decision === "SKIP").length;
     decisionSummary.C4_CONDITIONAL = conditionalSetups.length;
