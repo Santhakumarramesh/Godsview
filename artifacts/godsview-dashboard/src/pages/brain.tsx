@@ -16,7 +16,7 @@ import { useState, useRef, useMemo, useCallback, useEffect, Suspense } from "rea
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Float, Billboard, Text, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
-import { useBrainConsciousness, useBrainEntities } from "@/lib/api";
+import { useBrainConsciousness, useBrainEntities, useBrainIntelligence } from "@/lib/api";
 import { useLivePrices } from "@/lib/market-store";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -843,10 +843,12 @@ function StockDrawer({
   stock,
   onClose,
   decisions,
+  intelligence,
 }: {
   stock: StockNodeData | null;
   onClose: () => void;
   decisions: SIDecisionEvent[];
+  intelligence?: { dna: any; setup_memory: any; context: any } | null;
 }) {
   if (!stock) return null;
 
@@ -902,14 +904,23 @@ function StockDrawer({
 
       {/* Market DNA */}
       <div style={{ ...panelStyle, marginBottom: "12px" }}>
-        <div style={labelStyle}>Market DNA</div>
+        <div style={{ ...labelStyle, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span>Market DNA</span>
+          {intelligence?.dna && (
+            <span style={{ fontSize: "7px", color: "#484849", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+              {intelligence.dna.bar_count} bars \u00B7 {intelligence.dna.volatility_regime} vol
+            </span>
+          )}
+        </div>
         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
           {[
-            { trait: "Trendiness", value: stock.trendiness ?? 60 },
-            { trait: "Breakout Quality", value: stock.breakoutQuality ?? 55 },
-            { trait: "Fakeout Risk", value: stock.fakeoutRisk ?? 40, invert: true },
-            { trait: "Spread Stability", value: stock.spreadStability ?? 75 },
-            { trait: "News Sensitivity", value: stock.newsSensitivity ?? 50 },
+            { trait: "Trendiness", value: intelligence?.dna?.trendiness ?? stock.trendiness ?? 60 },
+            { trait: "Breakout Quality", value: intelligence?.dna?.breakout_quality ?? stock.breakoutQuality ?? 55 },
+            { trait: "Fakeout Risk", value: intelligence?.dna?.fakeout_risk ?? stock.fakeoutRisk ?? 40, invert: true },
+            { trait: "Spread Stability", value: intelligence?.dna?.spread_stability ?? stock.spreadStability ?? 75 },
+            { trait: "News Sensitivity", value: intelligence?.dna?.news_sensitivity ?? stock.newsSensitivity ?? 50 },
+            { trait: "Momentum Persist.", value: intelligence?.dna?.momentum_persistence ?? 50 },
+            { trait: "Mean Reversion", value: intelligence?.dna?.mean_reversion ?? 50 },
           ].map((d) => (
             <div key={d.trait}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
@@ -930,22 +941,60 @@ function StockDrawer({
 
       {/* Setup Memory */}
       <div style={{ ...panelStyle, marginBottom: "12px" }}>
-        <div style={labelStyle}>Setup Memory</div>
+        <div style={{ ...labelStyle, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span>Setup Memory</span>
+          {intelligence?.setup_memory && intelligence.setup_memory.total_decisions > 0 && (
+            <span style={{ fontSize: "7px", color: "#484849", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+              {intelligence.setup_memory.total_decisions} decisions \u00B7 90d
+            </span>
+          )}
+        </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
           <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: "16px", fontFamily: "JetBrains Mono", fontWeight: 700, color: "#00ffcc" }}>{stock.similarSetups ?? 0}</div>
-            <div style={{ fontSize: "7px", color: "#767576", letterSpacing: "0.1em" }}>SIMILAR</div>
+            <div style={{ fontSize: "16px", fontFamily: "JetBrains Mono", fontWeight: 700, color: "#00ffcc" }}>
+              {intelligence?.setup_memory?.total_approved ?? stock.similarSetups ?? 0}
+            </div>
+            <div style={{ fontSize: "7px", color: "#767576", letterSpacing: "0.1em" }}>APPROVED</div>
           </div>
           <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: "16px", fontFamily: "JetBrains Mono", fontWeight: 700, color: (stock.winRate ?? 50) > 55 ? "#00ffcc" : "#ffcc00" }}>{stock.winRate ?? 50}%</div>
+            {(() => {
+              const wr = intelligence?.setup_memory?.overall_win_rate ?? (stock.winRate ? stock.winRate / 100 : 0.5);
+              const pct = Math.round(wr * 100);
+              return <div style={{ fontSize: "16px", fontFamily: "JetBrains Mono", fontWeight: 700, color: pct > 55 ? "#00ffcc" : "#ffcc00" }}>{pct}%</div>;
+            })()}
             <div style={{ fontSize: "7px", color: "#767576", letterSpacing: "0.1em" }}>WIN RATE</div>
           </div>
           <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: "16px", fontFamily: "JetBrains Mono", fontWeight: 700, color: (stock.profitFactor ?? 1) > 1.5 ? "#00ffcc" : "#ffcc00" }}>{(stock.profitFactor ?? 1.0).toFixed(1)}</div>
+            <div style={{ fontSize: "16px", fontFamily: "JetBrains Mono", fontWeight: 700, color: (intelligence?.setup_memory?.overall_profit_factor ?? stock.profitFactor ?? 1) > 1.5 ? "#00ffcc" : "#ffcc00" }}>
+              {(intelligence?.setup_memory?.overall_profit_factor ?? stock.profitFactor ?? 1.0).toFixed(1)}
+            </div>
             <div style={{ fontSize: "7px", color: "#767576", letterSpacing: "0.1em" }}>PROFIT F.</div>
           </div>
         </div>
-        {stock.decayRate && stock.decayRate > 0.3 && (
+
+        {/* Top setups from real data */}
+        {intelligence?.setup_memory?.top_setups && intelligence.setup_memory.top_setups.length > 0 && (
+          <div style={{ marginTop: "10px", display: "flex", flexDirection: "column", gap: "3px" }}>
+            <div style={{ fontSize: "7px", color: "#484849", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: "2px" }}>Top Setups</div>
+            {intelligence.setup_memory.top_setups.slice(0, 3).map((s: any, i: number) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: "9px" }}>
+                <span style={{ color: "#adaaab" }}>{s.setup_type}</span>
+                <span style={{ fontFamily: "JetBrains Mono", color: s.win_rate > 0.6 ? "#00ffcc" : "#ffcc00" }}>
+                  {Math.round(s.win_rate * 100)}% \u00B7 {s.similar_setups} trades
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Decay warnings */}
+        {intelligence?.setup_memory?.decaying_setups && intelligence.setup_memory.decaying_setups.length > 0 && (
+          <div style={{ fontSize: "9px", color: "#ff7162", marginTop: "8px", display: "flex", alignItems: "center", gap: "4px" }}>
+            <span className="material-symbols-outlined" style={{ fontSize: "11px" }}>trending_down</span>
+            {intelligence.setup_memory.decaying_setups.length} setup(s) decaying \u2014 edge weakening
+          </div>
+        )}
+        {!intelligence?.setup_memory?.decaying_setups?.length && stock.decayRate && stock.decayRate > 0.3 && (
           <div style={{ fontSize: "9px", color: "#ff7162", marginTop: "8px", display: "flex", alignItems: "center", gap: "4px" }}>
             <span className="material-symbols-outlined" style={{ fontSize: "11px" }}>trending_down</span>
             Setup decay detected \u2014 edge weakening
@@ -1031,6 +1080,7 @@ export default function BrainPage() {
   const { data: consciousness } = useBrainConsciousness();
   const livePrices = useLivePrices();
   const { decisions: siDecisions, connected: sseConnected } = useSIStream();
+  const { data: intelligence } = useBrainIntelligence(selectedStock?.symbol ?? "");
 
   const stocks = useMemo(() => {
     if (!brainEntities?.length) return MOCK_STOCKS;
@@ -1170,7 +1220,7 @@ export default function BrainPage() {
       </div>
 
       {/* Stock intelligence drawer */}
-      <StockDrawer stock={selectedStock} onClose={() => setSelectedStock(null)} decisions={siDecisions} />
+      <StockDrawer stock={selectedStock} onClose={() => setSelectedStock(null)} decisions={siDecisions} intelligence={intelligence} />
 
       {/* Backdrop */}
       {selectedStock && (

@@ -361,3 +361,52 @@ export function useCreateTrade() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["trades"] }); },
   });
 }
+
+// ─── Brain Intelligence (Market DNA + Setup Memory + Context) ────────────────
+export function useBrainIntelligence(symbol: string) {
+  return useQuery({
+    queryKey: ["brain", symbol, "intelligence"],
+    queryFn: () => apiFetch<{
+      symbol: string;
+      dna: {
+        trendiness: number;
+        fakeout_risk: number;
+        breakout_quality: number;
+        spread_stability: number;
+        news_sensitivity: number;
+        momentum_persistence: number;
+        mean_reversion: number;
+        volatility_regime: string;
+        bar_count: number;
+        decision_count: number;
+      } | null;
+      setup_memory: {
+        total_decisions: number;
+        total_approved: number;
+        total_with_outcome: number;
+        overall_win_rate: number;
+        overall_profit_factor: number;
+        by_setup: Array<{
+          setup_type: string;
+          direction: string;
+          similar_setups: number;
+          win_rate: number;
+          profit_factor: number;
+          decay_detected: boolean;
+          decay_rate: number;
+          best_regime: string | null;
+          worst_regime: string | null;
+        }>;
+        top_setups: Array<{ setup_type: string; win_rate: number; similar_setups: number }>;
+        decaying_setups: Array<{ setup_type: string; decay_rate: number }>;
+      } | null;
+      context: {
+        entity: any;
+        memories: any[];
+      } | null;
+    }>(`/brain/${symbol}/intelligence`),
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+    enabled: !!symbol,
+  });
+}

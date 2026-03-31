@@ -532,4 +532,117 @@ router.get("/brain/:symbol/context", async (req, res) => {
   }
 });
 
+// ─── Market DNA endpoint ───────────────────────────────────────────────────
+router.get("/brain/:symbol/dna", async (req, res) => {
+  try {
+    const symbol = req.params.symbol.toUpperCase();
+    const { getMarketDNA } = await import("../lib/market_dna");
+    
+    // Fetch recent bars from Alpaca for DNA computation
+    let bars: Array<{ open: number; high: number; low: number; close: number; volume: number }> = [];
+    try {
+      const { getBars } = await import("../lib/alpaca");
+      const rawBars = await getBars(symbol, "1Min", 300);
+      bars = rawBars.map((b: any) => ({
+        open: Number(b.o ?? b.open ?? 0),
+        high: Number(b.h ?? b.high ?? 0),
+        low: Number(b.l ?? b.low ?? 0),
+        close: Number(b.c ?? b.close ?? 0),
+        volume: Number(b.v ?? b.volume ?? 0),
+      }));
+    } catch {
+      // If 1Min fails, try 5Min with fewer bars
+      try {
+        const { getBars } = await import("../lib/alpaca");
+        const rawBars = await getBars(symbol, "5Min", 100);
+        bars = rawBars.map((b: any) => ({
+          open: Number(b.o ?? b.open ?? 0),
+          high: Number(b.h ?? b.high ?? 0),
+          low: Number(b.l ?? b.low ?? 0),
+          close: Number(b.c ?? b.close ?? 0),
+          volume: Number(b.v ?? b.volume ?? 0),
+        }));
+      } catch {
+        // Return default DNA if no bar data available
+      }
+    }
+
+    const dna = await getMarketDNA(symbol, bars);
+    res.json(dna);
+  } catch (err) {
+    req.log.error({ err }, "Failed to compute Market DNA");
+    res.status(500).json({ error: "internal_error", message: "Failed to compute Market DNA" });
+  }
+});
+
+// ─── Setup Memory endpoint ─────────────────────────────────────────────────
+router.get("/brain/:symbol/memory", async (req, res) => {
+  try {
+    const symbol = req.params.symbol.toUpperCase();
+    const { getSetupMemory } = await import("../lib/setup_memory");
+    const memory = await getSetupMemory(symbol);
+    res.json(memory);
+  } catch (err) {
+    req.log.error({ err }, "Failed to compute setup memory");
+    res.status(500).json({ error: "internal_error", message: "Failed to compute setup memory" });
+  }
+});
+
+// ─── Combined intelligence endpoint (DNA + Memory + Context) ───────────────
+router.get("/brain/:symbol/intelligence", async (req, res) => {
+  try {
+    const symbol = req.params.symbol.toUpperCase();
+    
+    const [dnaResult, memoryResult, contextResult] = await Promise.allSettled([
+      (async () => {
+        const { getMarketDNA } = await import("../lib/market_dna");
+        let bars: Array<{ open: number; high: number; low: number; close: number; volume: number }> = [];
+        try {
+          const { getBars } = await import("../lib/alpaca");
+          const rawBars = await getBars(symbol, "1Min", 300);
+          bars = rawBars.map((b: any) => ({
+            open: Number(b.o ?? b.open ?? 0), high: Number(b.h ?? b.high ?? 0),
+            low: Number(b.l ?? b.low ?? 0), close: Number(b.c ?? b.close ?? 0),
+            volume: Number(b.v ?? b.volume ?? 0),
+          }));
+        } catch { /* use empty bars */ }
+        return getMarketDNA(symbol, bars);
+      })(),
+      (async () => {
+        const { getSetupMemory } = await import("../lib/setup_memory");
+        return getSetupMemory(symbol);
+      })(),
+      (async () => {
+        await ensureBrainTables();
+        const entityRows = await db
+          .select()
+          .from(brainEntitiesTable)
+          .where(eq(brainEntitiesTable.symbol, symbol))
+          .orderBy(desc(brainEntitiesTable.updated_at))
+          .limit(1);
+        if (entityRows.length === 0) return null;
+        const entity = entityRows[0];
+        const memories = await db
+          .select()
+          .from(brainMemoriesTable)
+          .where(eq(brainMemoriesTable.entity_id, entity.id))
+          .orderBy(desc(brainMemoriesTable.created_at))
+          .limit(20);
+        return { entity, memories };
+      })(),
+    ]);
+
+    res.json({
+      symbol,
+      dna: dnaResult.status === "fulfilled" ? dnaResult.value : null,
+      setup_memory: memoryResult.status === "fulfilled" ? memoryResult.value : null,
+      context: contextResult.status === "fulfilled" ? contextResult.value : null,
+      computed_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch brain intelligence");
+    res.status(500).json({ error: "internal_error", message: "Failed to fetch brain intelligence" });
+  }
+});
+
 export default router;
