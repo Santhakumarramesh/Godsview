@@ -228,6 +228,20 @@ export default function Dashboard() {
     staleTime: 30_000,
     retry: 2,
   });
+  const { data: siStatus } = useQuery<{ status: string; ensemble: any; message: string }>({
+    queryKey: ["super-intelligence-status"],
+    queryFn: () => fetch("/api/super-intelligence/status").then((r) => r.json()),
+    refetchInterval: 45_000,
+    staleTime: 30_000,
+    retry: 1,
+  });
+  const { data: prodStats } = useQuery<{ daily_trades: number; max_daily_trades: number }>({
+    queryKey: ["production-stats"],
+    queryFn: () => fetch("/api/super-intelligence/production-stats").then((r) => r.json()),
+    refetchInterval: 30_000,
+    staleTime: 25_000,
+    retry: 1,
+  });
   const { data: proofBySetup, refetch: refetchProofBySetup } = useQuery<ProofPayload>({
     queryKey: ["proof-by-setup"],
     queryFn: () => fetch("/api/system/proof/by-setup?days=30&min_signals=20").then((r) => r.json()),
@@ -1281,14 +1295,14 @@ export default function Dashboard() {
       {/* ── AI Pipeline Intelligence — Model Accuracy & Win Rate ── */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         {(() => {
-          const mlMeta = (modelDiag?.status as any)?.meta;
-          const mlStatus = modelDiag?.status?.status ?? "warning";
+          const mlMeta = (modelDiagnostics?.status as any)?.meta;
+          const mlStatus = modelDiagnostics?.status?.status ?? "warning";
           const mlAccuracy = mlMeta?.accuracy ?? null;
           const mlAuc = mlMeta?.auc ?? null;
           const mlWinRate = mlMeta?.winRate ?? null;
           const mlSamples = mlMeta?.samples ?? null;
-          const cvAuc = modelDiag?.validation?.auc ?? null;
-          const driftStatus = modelDiag?.drift?.status ?? null;
+          const cvAuc = modelDiagnostics?.validation?.auc ?? null;
+          const driftStatus = modelDiagnostics?.drift?.status ?? null;
 
           return (
             <>
@@ -1335,6 +1349,69 @@ export default function Dashboard() {
                 </div>
                 <div style={{ fontSize: "9px", color: C.outline, fontFamily: "Space Grotesk", marginTop: "4px" }}>
                   {driftStatus === "stable" ? "No regime shift detected" : driftStatus === "drift" ? "Retrain recommended" : "Monitoring..."}
+                </div>
+              </div>
+            </>
+          );
+        })()}
+      </div>
+
+      {/* ── Super Intelligence Engine — Ensemble, Kelly, Production Gate ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        {(() => {
+          const ens = siStatus?.ensemble;
+          const siActive = siStatus?.status === "active";
+          const ensAccuracy = ens?.ensemble_accuracy ?? null;
+          const gbmAcc = ens?.gbm_accuracy ?? null;
+          const lrAcc = ens?.lr_accuracy ?? null;
+          const dailyTrades = prodStats?.daily_trades ?? 0;
+          const maxTrades = prodStats?.max_daily_trades ?? 15;
+
+          return (
+            <>
+              <div className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+                <MicroLabel>Ensemble Accuracy</MicroLabel>
+                <div className="mt-2 font-headline font-bold text-xl" style={{ color: ensAccuracy != null ? (ensAccuracy >= 0.65 ? C.primary : ensAccuracy >= 0.55 ? "#fbbf24" : C.tertiary) : C.muted }}>
+                  {ensAccuracy != null ? `${(ensAccuracy * 100).toFixed(1)}%` : "—"}
+                </div>
+                <div style={{ fontSize: "9px", color: C.outline, fontFamily: "Space Grotesk", marginTop: "4px" }}>
+                  {siActive ? "GBM + LR Voting" : "Ensemble training..."}
+                </div>
+              </div>
+              <div className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+                <MicroLabel>GBM vs LR</MicroLabel>
+                <div className="mt-2 font-headline font-bold text-xl" style={{ color: C.secondary }}>
+                  {gbmAcc != null && lrAcc != null ? `${(gbmAcc * 100).toFixed(0)}/${(lrAcc * 100).toFixed(0)}` : "—"}
+                </div>
+                <div style={{ fontSize: "9px", color: C.outline, fontFamily: "Space Grotesk", marginTop: "4px" }}>
+                  Gradient Boosted / Logistic Reg
+                </div>
+              </div>
+              <div className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+                <MicroLabel>SI Engine</MicroLabel>
+                <div className="mt-2 font-headline font-bold text-xl" style={{ color: siActive ? C.primary : "#fbbf24" }}>
+                  {siActive ? "ACTIVE" : siStatus?.status === "partial" ? "PARTIAL" : "OFFLINE"}
+                </div>
+                <div style={{ fontSize: "9px", color: C.outline, fontFamily: "Space Grotesk", marginTop: "4px" }}>
+                  Kelly + Regime + Confluence
+                </div>
+              </div>
+              <div className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+                <MicroLabel>Daily Trades</MicroLabel>
+                <div className="mt-2 font-headline font-bold text-xl" style={{ color: dailyTrades < maxTrades * 0.8 ? C.primary : dailyTrades < maxTrades ? "#fbbf24" : C.tertiary }}>
+                  {dailyTrades}/{maxTrades}
+                </div>
+                <div style={{ fontSize: "9px", color: C.outline, fontFamily: "Space Grotesk", marginTop: "4px" }}>
+                  Production gate limit
+                </div>
+              </div>
+              <div className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+                <MicroLabel>Samples</MicroLabel>
+                <div className="mt-2 font-headline font-bold text-xl" style={{ color: C.secondary }}>
+                  {ens?.samples != null ? (ens.samples >= 1000 ? `${(ens.samples / 1000).toFixed(1)}k` : ens.samples) : "—"}
+                </div>
+                <div style={{ fontSize: "9px", color: C.outline, fontFamily: "Space Grotesk", marginTop: "4px" }}>
+                  {ens?.trained_at ? `Trained ${new Date(ens.trained_at).toLocaleTimeString()}` : "Awaiting training data"}
                 </div>
               </div>
             </>

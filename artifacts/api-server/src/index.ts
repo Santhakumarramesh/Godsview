@@ -2,6 +2,7 @@ import type { AddressInfo } from "node:net";
 import app from "./app";
 import { logger } from "./lib/logger";
 import { trainModel } from "./lib/ml_model";
+import { trainEnsemble } from "./lib/super_intelligence";
 import { runtimeConfig, getRuntimeConfigForLog } from "./lib/runtime_config";
 import {
   markMlBootstrapFailed,
@@ -29,11 +30,15 @@ const server = app.listen(runtimeConfig.port, (err) => {
   trainModel()
     .then(() => {
       markMlBootstrapReady();
-      logger.info("ML bootstrap completed");
+      logger.info("ML bootstrap completed — training super intelligence ensemble...");
+      return trainEnsemble();
+    })
+    .then(() => {
+      logger.info("Super Intelligence ensemble ready");
     })
     .catch((bootstrapErr) => {
       markMlBootstrapFailed(bootstrapErr);
-      logger.error({ err: bootstrapErr }, "ML model training failed during bootstrap");
+      logger.error({ err: bootstrapErr }, "ML/ensemble training failed during bootstrap");
     });
 });
 
