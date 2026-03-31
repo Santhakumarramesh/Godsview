@@ -13,7 +13,11 @@
  * liquidity map from market/liquidityMap.ts with event-level detection.
  */
 
-import type { OrderBookSnapshot, PriceLevel } from "./market/types";
+import type { OrderBookSnapshot } from "./market/types";
+import { OrderflowSchema, OrderflowState } from "./schemas";
+import { z } from "zod";
+
+export type { OrderflowState };
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -24,31 +28,6 @@ export interface OrderflowBar {
   Low: number;
   Close: number;
   Volume: number;
-}
-
-export interface OrderflowState {
-  /** Net buying - selling volume for most recent bar */
-  delta: number;
-  /** Cumulative volume delta over the analysis window */
-  cvd: number;
-  /** Slope of CVD (positive = growing buy pressure) */
-  cvdSlope: number;
-  /** (bidSize - askSize) / (bidSize + askSize) from orderbook */
-  quoteImbalance: number;
-  /** Estimated spread in basis points */
-  spreadBps: number;
-  /** 0-1 how aggressively one side is trading */
-  aggressionScore: number;
-  /** Overall buy/sell bias */
-  orderflowBias: "bullish" | "bearish" | "neutral";
-  /** 0-1 composite orderflow quality score */
-  orderflowScore: number;
-  /** Buy volume ratio 0-1 */
-  buyVolumeRatio: number;
-  /** Whether last bar had outsized delta */
-  largeDeltaBar: boolean;
-  /** Price vs CVD divergence detected */
-  divergence: boolean;
 }
 
 export interface LiquidityMapState {
@@ -225,7 +204,7 @@ export function computeOrderflowState(
     ),
   );
 
-  return {
+  return OrderflowSchema.parse({
     delta: Math.round(delta),
     cvd: Math.round(cvd),
     cvdSlope: round4(cvdSlope),
@@ -237,7 +216,7 @@ export function computeOrderflowState(
     buyVolumeRatio: round4(buyVolumeRatio),
     largeDeltaBar,
     divergence,
-  };
+  });
 }
 
 // ── Liquidity Map State ────────────────────────────────────────────────────────

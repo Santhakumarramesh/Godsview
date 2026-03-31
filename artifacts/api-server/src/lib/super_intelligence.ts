@@ -13,6 +13,7 @@
  */
 
 import { predictWinProbability, getModelStatus } from "./ml_model";
+import { reasonTradeDecision } from "./reasoning_engine";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -497,7 +498,11 @@ function ensemblePredict(input: {
 // MAIN ENTRY POINT: Process a signal through Super Intelligence
 // ══════════════════════════════════════════════════════════════════════════════
 
-export function processSuperSignal(input: SuperIntelligenceInput): SuperSignal {
+export async function processSuperSignal(
+  signalId: number,
+  symbol: string,
+  input: SuperIntelligenceInput
+): Promise<SuperSignal> {
   const {
     structure_score, order_flow_score, recall_score,
     setup_type, regime, direction,
@@ -515,8 +520,17 @@ export function processSuperSignal(input: SuperIntelligenceInput): SuperSignal {
     setup_type, regime, direction,
   });
 
-  // Claude layer: deterministic confidence from structure alignment
-  const claude_est = 0.52 + (structure_score + order_flow_score) * 0.22;
+  // Claude / Heuristic Reasoning layer: strict fallback policy
+  const reasoning = await reasonTradeDecision(signalId, symbol, {
+    structure: structure_score,
+    order_flow: order_flow_score,
+    recall: recall_score,
+    setup_type,
+    regime,
+    direction,
+  });
+
+  const claude_est = reasoning.winProbability;
 
   const enhanced_quality = Math.max(0, Math.min(1,
     weights.structure * structure_score +

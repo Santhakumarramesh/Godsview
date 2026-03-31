@@ -79,33 +79,33 @@ function resetDailyIfNeeded(): void {
 
 // ── Main Production Gate ───────────────────────────────────────────────────
 
-export function evaluateForProduction(
+export async function evaluateForProduction(
   input: SuperIntelligenceInput & {
     spread?: number;
     volume?: number;
     symbol: string;
   }
-): ProductionDecision {
+): Promise<ProductionDecision> {
   resetDailyIfNeeded();
   const blockReasons: string[] = [];
   const now = Date.now();
 
   // 1. Kill switch check
   if (isKillSwitchActive()) {
-    const signal = processSuperSignal(input);
+    const signal = await processSuperSignal(0, input.symbol, input);
     return buildDecision("KILL_SWITCH", signal, 0, 0, ["Kill switch is active"], input);
   }
 
   // 2. Session check
   const currentSession = getCurrentTradingSession();
   if (!isSessionAllowed(currentSession)) {
-    const signal = processSuperSignal(input);
+    const signal = await processSuperSignal(0, input.symbol, input);
     return buildDecision("BLOCKED_BY_SESSION", signal, 0, 0, [`Outside allowed trading session (${currentSession})`], input);
   }
 
   // 3. Daily trade cap
   if (dailyTradeCount >= PROD_MAX_DAILY_TRADES) {
-    const signal = processSuperSignal(input);
+    const signal = await processSuperSignal(0, input.symbol, input);
     return buildDecision("BLOCKED_BY_RISK", signal, 0, 0,
       [`Daily trade limit reached (${dailyTradeCount}/${PROD_MAX_DAILY_TRADES})`], input);
   }
@@ -113,7 +113,7 @@ export function evaluateForProduction(
   // 4. Cooldown per symbol
   const lastTrade = recentTrades.get(input.symbol);
   if (lastTrade && now - lastTrade < PROD_COOLDOWN_MS) {
-    const signal = processSuperSignal(input);
+    const signal = await processSuperSignal(0, input.symbol, input);
     const remaining = Math.ceil((PROD_COOLDOWN_MS - (now - lastTrade)) / 1000);
     return buildDecision("BLOCKED_BY_RISK", signal, 0, 0,
       [`Symbol cooldown: ${remaining}s remaining for ${input.symbol}`], input);
@@ -142,7 +142,7 @@ export function evaluateForProduction(
   // that the brain bridge enforces per-cycle.
 
   // 8. Run Super Intelligence pipeline
-  const signal = processSuperSignal(input);
+  const signal = await processSuperSignal(0, input.symbol, input);
 
   // 9. Super Intelligence gate
   if (!signal.approved) {

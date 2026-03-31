@@ -16,6 +16,8 @@
 
 import { processSuperSignal } from "./super_intelligence";
 import { computeFinalQuality } from "./strategy_engine";
+import { getBars, AlpacaBar } from "./alpaca";
+import pLimit from "p-limit";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -118,6 +120,7 @@ export async function runBacktest(config: BacktestConfig): Promise<BacktestResul
   const rows = await db
     .select({
       id: accuracyResultsTable.id,
+      symbol: accuracyResultsTable.symbol,
       structure_score: accuracyResultsTable.structure_score,
       order_flow_score: accuracyResultsTable.order_flow_score,
       recall_score: accuracyResultsTable.recall_score,
@@ -125,6 +128,7 @@ export async function runBacktest(config: BacktestConfig): Promise<BacktestResul
       setup_type: accuracyResultsTable.setup_type,
       regime: accuracyResultsTable.regime,
       direction: accuracyResultsTable.direction,
+      bar_time: accuracyResultsTable.bar_time,
       tp_ticks: accuracyResultsTable.tp_ticks,
       sl_ticks: accuracyResultsTable.sl_ticks,
       outcome: accuracyResultsTable.outcome,
@@ -145,34 +149,39 @@ export async function runBacktest(config: BacktestConfig): Promise<BacktestResul
     .limit(100_000);
 
   // Process each signal through both pipelines
-  const trades: TradeResult[] = [];
-  // Synthetic base price for tick-based PnL calculation
-  const BASE_PRICE = 100;
-  const TICK_VALUE = 0.25;
+  const limit = pLimit(10); // Concurrent bar fetching limit
+  
+  const trades = await Promise.all((rows as any[]).map(row => limit(async () => {
+    const r = row as any; // Cast for easier access to dynamic columns
+    const structure = parseFloat(String(r.structure_score ?? "0"));
+    const orderFlow = parseFloat(String(r.order_flow_score ?? "0"));
+    const recall = parseFloat(String(r.recall_score ?? "0"));
+    const direction = (r.direction ?? "long") as "long" | "short";
+    const setupType = r.setup_type ?? "absorption_reversal";
+    const regime = r.regime ?? "ranging";
+    const symbol = r.symbol ?? "BTCUSD";
+    const tpTicks = r.tp_ticks ?? 8;
+    const slTicks = r.sl_ticks ?? 4;
+    const barTime = r.bar_time;
 
-  for (const row of rows) {
-    const structure = parseFloat(String(row.structure_score ?? "0"));
-    const orderFlow = parseFloat(String(row.order_flow_score ?? "0"));
-    const recall = parseFloat(String(row.recall_score ?? "0"));
-    const direction = (row.direction ?? "long") as "long" | "short";
-    const setupType = row.setup_type ?? "absorption_reversal";
-    const regime = row.regime ?? "ranging";
-    const outcome = row.outcome as "win" | "loss";
-    const tpTicks = row.tp_ticks ?? 8;
-    const slTicks = row.sl_ticks ?? 4;
+    if (!barTime) return null;
 
-    // Compute synthetic entry/SL/TP from ticks
-    const entryPrice = BASE_PRICE;
+    // ── STRICT REPLAY ────────────────────────────────────────────────────────
+    // Fetch 4 hours of 1m bars starting from signal time
+    const bars = await getBars(symbol, "1Min", 240, barTime.toISOString());
+    if (bars.length === 0) return null;
+
+    // Entry price is the Close of the first bar (the signal bar)
+    const entryPrice = bars[0].Close;
+
+    // Tick-based distance for SL/TP
+    const TICK_VALUE = symbol.includes("USD") ? 0.25 : 0.01;
     const slDistance = slTicks * TICK_VALUE;
     const tpDistance = tpTicks * TICK_VALUE;
     const stopLoss = direction === "long" ? entryPrice - slDistance : entryPrice + slDistance;
     const takeProfit = direction === "long" ? entryPrice + tpDistance : entryPrice - tpDistance;
 
-    const risk = slDistance;
-    const reward = tpDistance;
-    const pnlPct = outcome === "win"
-      ? (reward / entryPrice) * 100
-      : -(risk / entryPrice) * 100;
+    const replay = replaySignal(bars.slice(1), direction, entryPrice, stopLoss, takeProfit);
 
     // Baseline quality
     const baselineQuality = computeFinalQuality(structure, orderFlow, recall, {
@@ -182,7 +191,7 @@ export async function runBacktest(config: BacktestConfig): Promise<BacktestResul
     });
 
     // Super Intelligence evaluation
-    const siResult = processSuperSignal({
+    const siResult = await processSuperSignal(row.id ?? 0, symbol, {
       structure_score: structure,
       order_flow_score: orderFlow,
       recall_score: recall,
@@ -192,30 +201,33 @@ export async function runBacktest(config: BacktestConfig): Promise<BacktestResul
       entry_price: entryPrice,
       stop_loss: stopLoss,
       take_profit: takeProfit,
-      atr: risk * 0.8, // Estimate ATR from risk
+      atr: slDistance * 0.8,
       equity: initial_equity,
     });
 
-    trades.push({
-      signal_id: row.id ?? 0,
+    return {
+      signal_id: r.id ?? 0,
       setup_type: setupType,
-      regime,
+      regime: regime,
       direction,
       entry_price: entryPrice,
       stop_loss: stopLoss,
       take_profit: takeProfit,
-      outcome,
-      pnl_pct: pnlPct,
+      outcome: replay.outcome === "unresolved" ? (r.outcome as "win"|"loss") : replay.outcome,
+      pnl_pct: replay.pnl_pct,
       si_approved: siResult.approved,
       si_win_prob: siResult.win_probability,
       si_edge_score: siResult.edge_score,
       si_kelly_pct: siResult.kelly_fraction * 100,
       baseline_quality: baselineQuality,
       enhanced_quality: siResult.enhanced_quality,
-    });
-  }
+    } as TradeResult;
+  })));
 
-  if (trades.length < min_signals) {
+  // Filter out nulls and unresolved trades
+  const validTrades = trades.filter((t): t is TradeResult => t !== null && (t.outcome === "win" || t.outcome === "loss"));
+
+  if (validTrades.length < min_signals) {
     // Not enough data — return empty result with message
     const empty = emptyMetrics();
     return {
@@ -233,9 +245,9 @@ export async function runBacktest(config: BacktestConfig): Promise<BacktestResul
   }
 
   // Baseline: all trades that passed old quality threshold
-  const baselineTrades = trades.filter(t => t.baseline_quality >= BASELINE_QUALITY_THRESHOLD);
+  const baselineTrades = validTrades.filter(t => t.baseline_quality >= BASELINE_QUALITY_THRESHOLD);
   // SI: only trades that Super Intelligence approved
-  const siTrades = trades.filter(t => t.si_approved);
+  const siTrades = validTrades.filter(t => t.si_approved);
 
   const baseline = computeMetrics(baselineTrades, initial_equity);
   const si = computeMetrics(siTrades, initial_equity);
@@ -245,11 +257,11 @@ export async function runBacktest(config: BacktestConfig): Promise<BacktestResul
   const equity_curve_si = buildEquityCurve(siTrades, initial_equity);
 
   // Per-regime breakdown
-  const regimes = [...new Set(trades.map(t => t.regime))];
+  const regimes = [...new Set(validTrades.map(t => t.regime))];
   const by_regime: Record<string, { baseline: BacktestMetrics; si: BacktestMetrics }> = {};
   for (const r of regimes) {
-    const rBaseline = trades.filter(t => t.regime === r && t.baseline_quality >= BASELINE_QUALITY_THRESHOLD);
-    const rSi = trades.filter(t => t.regime === r && t.si_approved);
+    const rBaseline = validTrades.filter(t => t.regime === r && t.baseline_quality >= BASELINE_QUALITY_THRESHOLD);
+    const rSi = validTrades.filter(t => t.regime === r && t.si_approved);
     if (rBaseline.length > 0 || rSi.length > 0) {
       by_regime[r] = {
         baseline: computeMetrics(rBaseline, initial_equity),
@@ -259,11 +271,11 @@ export async function runBacktest(config: BacktestConfig): Promise<BacktestResul
   }
 
   // Per-setup breakdown
-  const setups = [...new Set(trades.map(t => t.setup_type))];
+  const setups = [...new Set(validTrades.map(t => t.setup_type))];
   const by_setup: Record<string, { baseline: BacktestMetrics; si: BacktestMetrics }> = {};
   for (const s of setups) {
-    const sBaseline = trades.filter(t => t.setup_type === s && t.baseline_quality >= BASELINE_QUALITY_THRESHOLD);
-    const sSi = trades.filter(t => t.setup_type === s && t.si_approved);
+    const sBaseline = validTrades.filter(t => t.setup_type === s && t.baseline_quality >= BASELINE_QUALITY_THRESHOLD);
+    const sSi = validTrades.filter(t => t.setup_type === s && t.si_approved);
     if (sBaseline.length > 0 || sSi.length > 0) {
       by_setup[s] = {
         baseline: computeMetrics(sBaseline, initial_equity),
@@ -287,8 +299,8 @@ export async function runBacktest(config: BacktestConfig): Promise<BacktestResul
       profit_factor_delta: si.profit_factor - baseline.profit_factor,
       sharpe_delta: si.sharpe_ratio - baseline.sharpe_ratio,
       max_dd_improvement: baseline.max_drawdown_pct - si.max_drawdown_pct,
-      signals_filtered_pct: trades.length > 0
-        ? ((trades.length - siTrades.length) / trades.length) * 100 : 0,
+      signals_filtered_pct: validTrades.length > 0
+        ? ((validTrades.length - siTrades.length) / validTrades.length) * 100 : 0,
     },
     by_regime,
     by_setup,
@@ -429,4 +441,45 @@ function approxNormalCDF(x: number): number {
   const t = 1 / (1 + p * absX);
   const y = 1 - ((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t * Math.exp(-absX * absX);
   return 0.5 * (1 + sign * y);
+}
+
+/**
+ * REPLAY LOGIC: Walks through bars to find TP/SL hit
+ * Handles slippage by checking if bar opens beyond the level
+ */
+function replaySignal(
+  bars: AlpacaBar[],
+  direction: "long" | "short",
+  entryPrice: number,
+  stopLoss: number,
+  takeProfit: number,
+): { outcome: "win" | "loss" | "unresolved"; pnl_pct: number } {
+  if (bars.length === 0) return { outcome: "unresolved", pnl_pct: 0 };
+
+  for (const bar of bars) {
+    if (direction === "long") {
+      // Check SL hit first (conservative)
+      if (bar.Low <= stopLoss) {
+        const exit = Math.min(bar.Open, stopLoss); // Slippage if Open < SL
+        return { outcome: "loss", pnl_pct: ((exit - entryPrice) / entryPrice) * 100 };
+      }
+      // Check TP hit
+      if (bar.High >= takeProfit) {
+        const exit = Math.max(bar.Open, takeProfit); // Slippage if Open > TP
+        return { outcome: "win", pnl_pct: ((exit - entryPrice) / entryPrice) * 100 };
+      }
+    } else {
+      // Short
+      if (bar.High >= stopLoss) {
+        const exit = Math.max(bar.Open, stopLoss); // Slippage if Open > SL
+        return { outcome: "loss", pnl_pct: ((entryPrice - exit) / entryPrice) * 100 };
+      }
+      if (bar.Low <= takeProfit) {
+        const exit = Math.min(bar.Open, takeProfit); // Slippage if Open < TP
+        return { outcome: "win", pnl_pct: ((entryPrice - exit) / entryPrice) * 100 };
+      }
+    }
+  }
+
+  return { outcome: "unresolved", pnl_pct: 0 };
 }

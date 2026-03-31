@@ -15,115 +15,30 @@
  * Reference implementations: godsview-openbb/app/analysis/{structure,order_blocks,fvg,sweep,liquidity}.py
  */
 
+import { z } from "zod";
+import { 
+  SMCSchema, 
+  SMCState, 
+  SMCBarSchema, 
+  SwingPointSchema, 
+  StructureStateSchema, 
+  OrderBlockSchema, 
+  FairValueGapSchema,
+  DisplacementEventSchema, 
+  LiquidityPoolSchema,
+} from "./schemas";
+
+export type { SMCState };
+
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-export interface SMCBar {
-  Timestamp: string;
-  Open: number;
-  High: number;
-  Low: number;
-  Close: number;
-  Volume: number;
-}
-
-export interface SwingPoint {
-  index: number;
-  ts: string;
-  price: number;
-  kind: "high" | "low";
-}
-
-export type StructureTrend = "bullish" | "bearish" | "range";
-export type BOSDirection = "bullish" | "bearish" | "none";
-
-export interface StructureState {
-  trend: StructureTrend;
-  trendReturn20: number;
-  /** Break of Structure detected */
-  bos: boolean;
-  /** Change of Character (BOS against prevailing trend) */
-  choch: boolean;
-  bosDirection: BOSDirection;
-  swingHighs: SwingPoint[];
-  swingLows: SwingPoint[];
-  /** Price level that invalidates current structure thesis */
-  invalidation: number | null;
-  /** 0-1 overall structure quality */
-  structureScore: number;
-  /** Most recent HH/HL or LH/LL pattern */
-  pattern: "HH_HL" | "LH_LL" | "mixed" | "insufficient";
-}
-
-export interface OrderBlock {
-  index: number;
-  ts: string;
-  side: "bullish" | "bearish";
-  low: number;
-  high: number;
-  mid: number;
-  /** 0-1 strength based on volume and body ratio */
-  strength: number;
-  /** Whether price has returned to this zone */
-  tested: boolean;
-  /** Whether the OB zone has been fully broken */
-  broken: boolean;
-}
-
-export interface FairValueGap {
-  index: number;
-  ts: string;
-  side: "bullish" | "bearish";
-  low: number;
-  high: number;
-  sizePct: number;
-  /** Whether gap has been partially or fully filled */
-  filled: boolean;
-  fillPct: number;
-}
-
-export interface DisplacementEvent {
-  startIndex: number;
-  endIndex: number;
-  direction: "up" | "down";
-  /** Total move in price units */
-  magnitude: number;
-  /** Move as % of starting price */
-  magnitudePct: number;
-  /** Number of consecutive directional bars */
-  barCount: number;
-  /** Average range compared to lookback average */
-  rangeMultiple: number;
-}
-
-export interface LiquidityPool {
-  price: number;
-  kind: "equal_highs" | "equal_lows";
-  /** Number of touches at this level */
-  touches: number;
-  firstIndex: number;
-  lastIndex: number;
-  /** Whether this pool has been swept (price went through then reversed) */
-  swept: boolean;
-}
-
-export interface SMCState {
-  symbol: string;
-  structure: StructureState;
-  orderBlocks: OrderBlock[];
-  fairValueGaps: FairValueGap[];
-  displacements: DisplacementEvent[];
-  liquidityPools: LiquidityPool[];
-  /** Active (untested) order blocks */
-  activeOBs: OrderBlock[];
-  /** Unfilled fair value gaps */
-  unfilledFVGs: FairValueGap[];
-  /** Nearest liquidity targets above and below current price */
-  nearestLiquidityAbove: LiquidityPool | null;
-  nearestLiquidityBelow: LiquidityPool | null;
-  /** Computed SMC confluence score 0-1 */
-  confluenceScore: number;
-  computedAt: string;
-}
+export type SMCBar = z.infer<typeof SMCBarSchema>;
+export type SwingPoint = z.infer<typeof SwingPointSchema>;
+export type StructureState = z.infer<typeof StructureStateSchema>;
+export type OrderBlock = z.infer<typeof OrderBlockSchema>;
+export type FairValueGap = z.infer<typeof FairValueGapSchema>;
+export type DisplacementEvent = z.infer<typeof DisplacementEventSchema>;
+export type LiquidityPool = z.infer<typeof LiquidityPoolSchema>;
 
 // ── Swing Detection ────────────────────────────────────────────────────────────
 
@@ -158,7 +73,7 @@ export function detectSwings(
       }
     }
     if (isSwingHigh) {
-      highs.push({ index: i, ts: bars[i].Timestamp, price: h, kind: "high" });
+      highs.push(SwingPointSchema.parse({ index: i, ts: bars[i].Timestamp, price: h, kind: "high" }));
     }
 
     // Check swing low
@@ -172,7 +87,7 @@ export function detectSwings(
       }
     }
     if (isSwingLow) {
-      lows.push({ index: i, ts: bars[i].Timestamp, price: l, kind: "low" });
+      lows.push(SwingPointSchema.parse({ index: i, ts: bars[i].Timestamp, price: l, kind: "low" }));
     }
   }
 
@@ -190,7 +105,7 @@ export function detectSwings(
  */
 export function analyzeStructure(bars: SMCBar[]): StructureState {
   if (bars.length < 30) {
-    return {
+    return StructureStateSchema.parse({
       trend: "range",
       trendReturn20: 0,
       bos: false,
@@ -201,7 +116,7 @@ export function analyzeStructure(bars: SMCBar[]): StructureState {
       invalidation: null,
       structureScore: 0,
       pattern: "insufficient",
-    };
+    });
   }
 
   const { highs: swingHighs, lows: swingLows } = detectSwings(bars, 3, 3);
@@ -212,7 +127,7 @@ export function analyzeStructure(bars: SMCBar[]): StructureState {
   const trendReturn20 =
     closes[len - 21] > 0 ? closes[len - 1] / closes[len - 21] - 1 : 0;
 
-  let trend: StructureTrend = "range";
+  let trend: "bullish" | "bearish" | "range" = "range";
   if (trendReturn20 > 0.02) trend = "bullish";
   else if (trendReturn20 < -0.02) trend = "bearish";
 
@@ -222,7 +137,7 @@ export function analyzeStructure(bars: SMCBar[]): StructureState {
   const lastLow = swingLows.length > 0 ? swingLows[swingLows.length - 1].price : null;
 
   let bos = false;
-  let bosDirection: BOSDirection = "none";
+  let bosDirection: "bullish" | "bearish" | "none" = "none";
 
   if (lastHigh !== null && lastClose > lastHigh) {
     bos = true;
@@ -239,7 +154,7 @@ export function analyzeStructure(bars: SMCBar[]): StructureState {
       (trend === "bearish" && bosDirection === "bullish"));
 
   // HH/HL vs LH/LL pattern detection
-  let pattern: StructureState["pattern"] = "insufficient";
+  let pattern: "HH_HL" | "LH_LL" | "mixed" | "insufficient" = "insufficient";
   if (swingHighs.length >= 2 && swingLows.length >= 2) {
     const lastTwoHighs = swingHighs.slice(-2);
     const lastTwoLows = swingLows.slice(-2);
@@ -269,7 +184,7 @@ export function analyzeStructure(bars: SMCBar[]): StructureState {
     invalidation = lastHigh;
   }
 
-  return {
+  return StructureStateSchema.parse({
     trend,
     trendReturn20: round4(trendReturn20),
     bos,
@@ -280,7 +195,7 @@ export function analyzeStructure(bars: SMCBar[]): StructureState {
     invalidation,
     structureScore: round4(score),
     pattern,
-  };
+  });
 }
 
 // ── Order Block Detection ──────────────────────────────────────────────────────
@@ -297,7 +212,6 @@ export function detectOrderBlocks(bars: SMCBar[], maxBlocks = 50): OrderBlock[] 
 
   const avgVol = bars.reduce((s, b) => s + b.Volume, 0) / bars.length;
   const blocks: OrderBlock[] = [];
-  const lastClose = bars[bars.length - 1].Close;
 
   for (let i = 2; i < bars.length - 2; i++) {
     const prev = bars[i - 1];
@@ -346,7 +260,7 @@ export function detectOrderBlocks(bars: SMCBar[], maxBlocks = 50): OrderBlock[] 
       }
     }
 
-    blocks.push({
+    blocks.push(OrderBlockSchema.parse({
       index: i,
       ts: bar.Timestamp,
       side,
@@ -356,7 +270,7 @@ export function detectOrderBlocks(bars: SMCBar[], maxBlocks = 50): OrderBlock[] 
       strength: round4(Math.min(1, volStrength * 0.5 + (1 - bodyRatio) * 0.5)),
       tested,
       broken,
-    });
+    }));
   }
 
   return blocks.slice(-maxBlocks);
@@ -396,7 +310,7 @@ export function detectFVG(bars: SMCBar[], maxGaps = 100): FairValueGap[] {
         }
       }
 
-      gaps.push({
+      gaps.push(FairValueGapSchema.parse({
         index: i,
         ts: bars[i].Timestamp,
         side: "bullish",
@@ -405,7 +319,7 @@ export function detectFVG(bars: SMCBar[], maxGaps = 100): FairValueGap[] {
         sizePct: round6((high - low) / Math.max(low, 1e-9)),
         filled: maxFill >= 0.95,
         fillPct: round4(Math.min(1, maxFill)),
-      });
+      }));
     }
 
     // Bearish FVG: current high below 2-bars-ago low
@@ -422,7 +336,7 @@ export function detectFVG(bars: SMCBar[], maxGaps = 100): FairValueGap[] {
         }
       }
 
-      gaps.push({
+      gaps.push(FairValueGapSchema.parse({
         index: i,
         ts: bars[i].Timestamp,
         side: "bearish",
@@ -431,7 +345,7 @@ export function detectFVG(bars: SMCBar[], maxGaps = 100): FairValueGap[] {
         sizePct: round6((high - low) / Math.max(high, 1e-9)),
         filled: maxFill >= 0.95,
         fillPct: round4(Math.min(1, maxFill)),
-      });
+      }));
     }
   }
 
@@ -669,20 +583,23 @@ export function computeSMCState(
       (currentPrice - poolsBelow[0].price) / currentPrice < 0.01);
   confluenceScore += (hasNearbyLiquidity ? 1 : 0.3) * weights.liquidity;
 
-  return {
+  return SMCSchema.parse({
     symbol,
-    structure,
-    orderBlocks,
-    fairValueGaps,
-    displacements,
-    liquidityPools,
-    activeOBs,
-    unfilledFVGs,
-    nearestLiquidityAbove: poolsAbove[0] ?? null,
-    nearestLiquidityBelow: poolsBelow[0] ?? null,
+    structure: {
+      ...structure,
+    },
+    activeOBs: activeOBs.map(ob => ({
+      ...ob,
+    })),
+    unfilledFVGs: unfilledFVGs.map(fvg => ({
+      ...fvg,
+    })),
+    liquidityPools: liquidityPools.map(p => ({
+      ...p,
+    })),
     confluenceScore: round4(Math.max(0, Math.min(1, confluenceScore))),
     computedAt: new Date().toISOString(),
-  };
+  });
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────

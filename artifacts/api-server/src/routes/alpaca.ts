@@ -1849,7 +1849,7 @@ router.post("/alpaca/analyze", async (req, res) => {
         obFeatures = extractOrderbookFeatures(snap);
       } catch { /* orderbook not available */ }
 
-      siEnhancedSetups = enrichedSetups.map((s) => {
+      siEnhancedSetups = await Promise.all(enrichedSetups.map(async (s) => {
         if (!s.meets_threshold) return s;
 
         // Adjust order_flow_score with live orderbook data
@@ -1859,7 +1859,7 @@ router.post("/alpaca/analyze", async (req, res) => {
           adjustedOrderFlow = Math.max(0, Math.min(1, s.order_flow_score * obMult));
         }
 
-        const siResult = processSuperSignal({
+        const siResult = await processSuperSignal(0, s.instrument, {
           structure_score: s.structure_score,
           order_flow_score: adjustedOrderFlow,
           recall_score: s.recall_score,
@@ -1887,7 +1887,7 @@ router.post("/alpaca/analyze", async (req, res) => {
           si_trailing_stop: siResult.trailing_stop, si_profit_targets: siResult.profit_targets,
           ob_features: obFeatures, mtf_scores: mtfScores,
           order_flow_adjusted: adjustedOrderFlow };
-      });
+      }));
       siPipelineLatencyMs = Date.now() - siStartMs;
     } catch {
       siEnhancedSetups = enrichedSetups; // Fallback: SI unavailable

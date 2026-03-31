@@ -38,7 +38,8 @@ router.post("/super-intelligence/signal", async (req, res): Promise<void> => {
       return;
     }
 
-    const result = processSuperSignal(input);
+    const symbol = (req.body as any).symbol || "UNKNOWN";
+    const result = await processSuperSignal(0, symbol, input);
     res.json(result);
   } catch (err) {
     req.log.error({ err }, "Super Intelligence signal processing failed");
@@ -75,7 +76,7 @@ router.get("/super-intelligence/edge-analysis", async (req, res) => {
       recall = "0.6",
     } = req.query as Record<string, string>;
 
-    const result = processSuperSignal({
+    const result = await processSuperSignal(0, (req.query.symbol as string) || "UNKNOWN", {
       structure_score: parseFloat(structure),
       order_flow_score: parseFloat(order_flow),
       recall_score: parseFloat(recall),
@@ -119,7 +120,7 @@ router.post("/super-intelligence/production-gate", async (req, res): Promise<voi
       });
       return;
     }
-    const decision = evaluateForProduction(input);
+    const decision = await evaluateForProduction(input);
     res.json(decision);
   } catch (err) {
     req.log.error({ err }, "Production gate evaluation failed");
