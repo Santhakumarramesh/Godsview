@@ -1,5 +1,5 @@
 {
-  "count": 92,
+  "count": 95,
   "categories": [
     "Brain",
     "Candle X-Ray",
@@ -663,6 +663,27 @@
       "category": "Other",
       "hasScreen": true,
       "hasHtml": true
+    },
+    {
+      "id": "chatgpt_image_mar_30_2026_at_02_47_04_am.png",
+      "title": "ChatGPT Image Mar 30 2026 At 02 47 04 AM",
+      "category": "Other",
+      "hasScreen": true,
+      "hasHtml": false
+    },
+    {
+      "id": "chatgpt_image_mar_30_2026_at_02_47_13_am.png",
+      "title": "ChatGPT Image Mar 30 2026 At 02 47 13 AM",
+      "category": "Other",
+      "hasScreen": true,
+      "hasHtml": false
+    },
+    {
+      "id": "screenshot_2026_03_29_at_3.55.53_pm.png",
+      "title": "Screenshot 2026 03 29 At 3 55 53 PM",
+      "category": "Other",
+      "hasScreen": true,
+      "hasHtml": false
     }
   ]
 }
