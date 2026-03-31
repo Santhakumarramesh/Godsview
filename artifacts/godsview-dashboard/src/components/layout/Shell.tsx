@@ -319,6 +319,8 @@ const navItems = [
   { href: "/proof", label: "Proof", icon: "check_circle", sub: "Performance" },
   { href: "/checklist", label: "Checklist", icon: "task_alt", sub: "Validation" },
   { href: "/ops", label: "Ops Monitor", icon: "monitor_heart", sub: "Health" },
+  { href: "/quant-lab", label: "Quant Lab", icon: "science", sub: "Backtest" },
+  { href: "/portfolio", label: "Portfolio", icon: "account_balance", sub: "Allocation" },
   { href: "/reports", label: "Session Reports", icon: "summarize", sub: "Intelligence" },
   { href: "/risk", label: "Risk Command", icon: "shield", sub: "Safety Rails" },
   { href: "/super-intelligence", label: "Super Intelligence", icon: "auto_awesome", sub: "AI Engine" },

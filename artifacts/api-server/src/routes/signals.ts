@@ -17,7 +17,7 @@ import { claudeVeto, isClaudeAvailable, type SetupContext } from "../lib/claude"
 import { autoEvaluateChecklist } from "../lib/checklist_engine";
 import { runWarRoom, type RiskInput } from "../lib/war_room";
 import { checkNewsLockout } from "../lib/macro_engine";
-import { markEngineRun, updateDataFreshness } from "../lib/ops_monitor";
+import { markEngineRun, markEngineError, updateDataFreshness } from "../lib/ops_monitor";
 import {
   applyNoTradeFilters,
   buildRecallFeatures,
@@ -300,78 +300,72 @@ signalsRouter.post("/signals", async (req: Request, res: Response) => {
     let warRoomVerdict = null as any;
     let newsLocked = false;
 
+    // Build pseudo-SMC state from signal context (used by checklist + war room)
+    const pseudoSMC = {
+      symbol,
+      structure: {
+        trend: setupCtx.sk_bias === "bull" ? "bullish" as const : setupCtx.sk_bias === "bear" ? "bearish" as const : "range" as const,
+        lastBOS: setupCtx.sk_sequence_stage === "impulse" ? { direction: direction === "long" ? "up" as const : "down" as const, price: setupCtx.entry_price, index: 0 } : null,
+        lastCHoCH: null,
+        swings: [],
+      },
+      activeOBs: setupCtx.sk_in_zone ? [{ type: direction === "long" ? "bullish" as const : "bearish" as const, high: setupCtx.entry_price * 1.001, low: setupCtx.entry_price * 0.999, index: 0, mitigated: false }] : [],
+      unfilledFVGs: [],
+      liquidityPools: [],
+      displacements: setupCtx.momentum_1m > 0.002 ? [{ direction: direction === "long" ? "up" as const : "down" as const, magnitude: setupCtx.momentum_1m * 100, index: 0 }] : [],
+      confluenceScore: final_quality,
+      computedAt: new Date().toISOString(),
+    };
+
     try {
       // Gate 1: Macro lockout — fastest check first
-      newsLocked = checkNewsLockout(symbol);
+      const lockoutResult = checkNewsLockout(symbol);
+      newsLocked = lockoutResult.locked;
       if (newsLocked) {
         gateBlocked = true;
-        gateReason = "NEWS_LOCKOUT: High-impact macro event active";
+        gateReason = `NEWS_LOCKOUT: ${lockoutResult.reason ?? "High-impact macro event active"}`;
       }
 
-      // Gate 2: Checklist — build lightweight SMC state from signal body
+      // Gate 2: Checklist
       if (!gateBlocked) {
-        const pseudoSMC = {
+        checklistResult = autoEvaluateChecklist(
           symbol,
-          structure: {
-            trend: setupCtx.sk_bias === "bull" ? "bullish" as const : setupCtx.sk_bias === "bear" ? "bearish" as const : "range" as const,
-            lastBOS: setupCtx.sk_sequence_stage === "impulse" ? { direction: direction === "long" ? "up" as const : "down" as const, price: setupCtx.entry_price, index: 0 } : null,
-            lastCHoCH: null,
-            swings: [],
-          },
-          activeOBs: setupCtx.sk_in_zone ? [{ type: direction === "long" ? "bullish" as const : "bearish" as const, high: setupCtx.entry_price * 1.001, low: setupCtx.entry_price * 0.999, index: 0, mitigated: false }] : [],
-          unfilledFVGs: [],
-          liquidityPools: [],
-          displacements: setupCtx.momentum_1m > 0.002 ? [{ direction: direction === "long" ? "up" as const : "down" as const, magnitude: setupCtx.momentum_1m * 100, index: 0 }] : [],
-          confluenceScore: final_quality,
-          computedAt: new Date().toISOString(),
-        };
+          pseudoSMC as any,
+          { regime: "normal" },
+          "auto",
+          "smc",
+        );
 
-        checklistResult = autoEvaluateChecklist({
-          symbol,
-          direction,
-          smcState: pseudoSMC,
-          entryPrice: setupCtx.entry_price,
-          stopLoss: setupCtx.stop_loss,
-          takeProfit: setupCtx.take_profit,
-          newsLockout: newsLocked,
-        });
-
-        if (!checklistResult.allPassed) {
-          const failedItems = checklistResult.items.filter((i: any) => !i.passed).map((i: any) => i.key);
+        if (!checklistResult.passed) {
+          const failedItems = checklistResult.blocked_reasons ?? [];
           gateBlocked = true;
-          gateReason = `CHECKLIST_FAILED: ${failedItems.join(", ")} (${checklistResult.passedCount}/${checklistResult.totalCount})`;
+          gateReason = `CHECKLIST_FAILED: ${failedItems.join(", ")} (score=${checklistResult.score})`;
         }
       }
 
       // Gate 3: War Room consensus
       if (!gateBlocked) {
         const riskInput: RiskInput = {
-          entryPrice: setupCtx.entry_price,
-          stopLoss: setupCtx.stop_loss,
-          takeProfit: setupCtx.take_profit,
-          atrPct: setupCtx.atr_pct,
+          volatilityRegime: "normal",
+          spreadBps: 5,
+          maxLossToday: 0,
+          sessionActive: true,
         };
 
-        warRoomVerdict = runWarRoom({
+        warRoomVerdict = runWarRoom(
           symbol,
-          direction,
-          smcState: pseudoSMC ?? {
-            symbol,
-            structure: { trend: "range" as const, lastBOS: null, lastCHoCH: null, swings: [] },
-            activeOBs: [], unfilledFVGs: [], liquidityPools: [], displacements: [],
-            confluenceScore: 0, computedAt: new Date().toISOString(),
-          },
-          orderflowState: {
-            symbol,
+          pseudoSMC as any,
+          {
+            delta: 0,
             cvd: 0,
-            cvdSlope: setupCtx.cvd_slope,
-            buyVolumeRatio: setupCtx.buy_volume_ratio,
-            deltaImbalance: 0,
-            largeBlockActivity: false,
-            computedAt: new Date().toISOString(),
+            cvdSlope: setupCtx.cvd_slope ?? 0,
+            quoteImbalance: 0,
+            aggressionScore: 0.5,
+            orderflowBias: direction === "long" ? "bullish" as const : "bearish" as const,
+            orderflowScore: 0.5,
           },
           riskInput,
-        });
+        );
 
         if (warRoomVerdict.consensus === "NO_GO") {
           gateBlocked = true;
@@ -379,11 +373,11 @@ signalsRouter.post("/signals", async (req: Request, res: Response) => {
         }
       }
 
-      markEngineRun("hard-gates", Date.now() - gateStart);
+      markEngineRun("hard-gates");
     } catch (gateErr) {
       // Gates fail open — log but don't block
       logger.error(`[signals] Hard gate error: ${gateErr instanceof Error ? gateErr.message : "unknown"}`);
-      markEngineRun("hard-gates", Date.now() - gateStart, true);
+      markEngineError("hard-gates");
     }
 
     logger.info(`[signals] Hard gates: blocked=${gateBlocked} reason="${gateReason}" latency=${Date.now() - gateStart}ms`);
@@ -410,7 +404,7 @@ signalsRouter.post("/signals", async (req: Request, res: Response) => {
       })
       .returning();
 
-    updateDataFreshness("signals");
+    updateDataFreshness("signals", new Date());
 
     res.status(201).json({
       signal: created,

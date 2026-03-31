@@ -26,6 +26,8 @@ import WarRoom from "@/pages/war-room";
 import Proof from "@/pages/proof";
 import Checklist from "@/pages/checklist";
 import OpsPage from "@/pages/ops";
+import QuantLabPage from "@/pages/quant-lab";
+import PortfolioPage from "@/pages/portfolio";
 import { GlobalDataProvider } from "@/components/GlobalDataProvider";
 import { NotificationSystem } from "@/components/NotificationSystem";
 
@@ -129,6 +131,8 @@ function Router() {
         <RoutedPage path="/proof" component={Proof} scope="page:proof" />
         <RoutedPage path="/checklist" component={Checklist} scope="page:checklist" />
         <RoutedPage path="/ops" component={OpsPage} scope="page:ops" />
+        <RoutedPage path="/quant-lab" component={QuantLabPage} scope="page:quant-lab" />
+        <RoutedPage path="/portfolio" component={PortfolioPage} scope="page:portfolio" />
         <Route>
           <AppErrorBoundary scope="page:not-found">
             <NotFound />
