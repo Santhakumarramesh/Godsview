@@ -18,6 +18,7 @@ import { Float, Billboard, Text, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import { useBrainConsciousness, useBrainEntities, useBrainIntelligence } from "@/lib/api";
 import { useLivePrices } from "@/lib/market-store";
+import BrainFocusMode from "@/components/BrainFocusMode";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -842,11 +843,13 @@ function TopOpportunities({ stocks, onSelect }: { stocks: StockNodeData[]; onSel
 function StockDrawer({
   stock,
   onClose,
+  onOpenFocus,
   decisions,
   intelligence,
 }: {
   stock: StockNodeData | null;
   onClose: () => void;
+  onOpenFocus: () => void;
   decisions: SIDecisionEvent[];
   intelligence?: { dna: any; setup_memory: any; context: any } | null;
 }) {
@@ -885,6 +888,30 @@ function StockDrawer({
             {stock.changePct >= 0 ? "+" : ""}{stock.changePct.toFixed(2)}%
           </span>
         </div>
+        <button
+          type="button"
+          onClick={onOpenFocus}
+          style={{
+            marginTop: "10px",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "6px",
+            borderRadius: "6px",
+            border: "1px solid rgba(0,255,204,0.32)",
+            backgroundColor: "rgba(0,255,204,0.08)",
+            color: "#00ffcc",
+            padding: "6px 10px",
+            fontSize: "9px",
+            letterSpacing: "0.12em",
+            textTransform: "uppercase",
+            fontFamily: "Space Grotesk, sans-serif",
+            fontWeight: 700,
+            cursor: "pointer",
+          }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: "12px" }}>radar</span>
+          Brain Focus Mode
+        </button>
       </div>
 
       {/* Intelligence Metrics Grid */}
@@ -1074,6 +1101,7 @@ function StockDrawer({
 
 export default function BrainPage() {
   const [selectedStock, setSelectedStock] = useState<StockNodeData | null>(null);
+  const [focusModeOpen, setFocusModeOpen] = useState(false);
 
   // Real API hooks with graceful fallback
   const { data: brainEntities } = useBrainEntities();
@@ -1128,6 +1156,12 @@ export default function BrainPage() {
   const handleSelectStock = useCallback((stock: StockNodeData) => {
     setSelectedStock((prev) => (prev?.symbol === stock.symbol ? null : stock));
   }, []);
+
+  useEffect(() => {
+    if (!selectedStock) {
+      setFocusModeOpen(false);
+    }
+  }, [selectedStock]);
 
   return (
     <div style={{ position: "relative", width: "100%", height: "calc(100vh - 40px)", overflow: "hidden" }}>
@@ -1220,13 +1254,31 @@ export default function BrainPage() {
       </div>
 
       {/* Stock intelligence drawer */}
-      <StockDrawer stock={selectedStock} onClose={() => setSelectedStock(null)} decisions={siDecisions} intelligence={intelligence} />
+      <StockDrawer
+        stock={selectedStock}
+        onClose={() => {
+          setFocusModeOpen(false);
+          setSelectedStock(null);
+        }}
+        onOpenFocus={() => setFocusModeOpen(true)}
+        decisions={siDecisions}
+        intelligence={intelligence}
+      />
 
       {/* Backdrop */}
       {selectedStock && (
         <div
           onClick={() => setSelectedStock(null)}
           style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.3)", zIndex: 99 }}
+        />
+      )}
+
+      {/* Candle-level deep intelligence modal */}
+      {focusModeOpen && selectedStock && (
+        <BrainFocusMode
+          symbol={selectedStock.symbol}
+          displaySymbol={selectedStock.displaySymbol}
+          onClose={() => setFocusModeOpen(false)}
         />
       )}
     </div>
