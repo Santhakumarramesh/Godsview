@@ -1,29 +1,22 @@
-modules = ["nodejs-24", "postgresql-16"]
-
-[[artifacts]]
-id = "artifacts/api-server"
-
-[[artifacts]]
-id = "artifacts/mockup-sandbox"
-
-[deployment]
-router = "application"
-deploymentTarget = "autoscale"
-
-[deployment.postBuild]
-args = ["pnpm", "store", "prune"]
-env = { "CI" = "true" }
-
-[workflows]
-runButton = "Project"
-
-[agent]
-stack = "PNPM_WORKSPACE"
-expertMode = true
-
-[postMerge]
-path = "scripts/post-merge.sh"
-timeoutMs = 20000
+run = "cd artifacts/api-server && npm run dev"
+entrypoint = "artifacts/api-server/src/index.ts"
 
 [nix]
-channel = "stable-25_05"
+channel = "stable-24_05"
+
+[env]
+NODE_ENV = "development"
+PORT = "3000"
+
+[deployment]
+run = ["sh", "-c", "cd artifacts/api-server && npm start"]
+build = ["sh", "-c", "npm install && cd artifacts/godsview-dashboard && npm run build && cp -r dist/ ../api-server/public/ && cd ../api-server && npm run build"]
+deploymentTarget = "cloudrun"
+
+[[ports]]
+localPort = 3000
+externalPort = 80
+
+[[ports]]
+localPort = 5173
+externalPort = 3001

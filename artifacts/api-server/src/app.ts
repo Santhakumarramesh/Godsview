@@ -97,13 +97,32 @@ app.use(express.urlencoded({ extended: true, limit: runtimeConfig.requestBodyLim
 
 app.use("/api", createRateLimiter({ windowMs: runtimeConfig.rateLimitWindowMs, max: runtimeConfig.rateLimitMax }));
 app.use("/api", router);
+// Also mount non-prefixed routes (backtest, health)
+app.use(router);
 
-app.use((_req: Request, res: Response) => {
-  res.status(404).json({
-    error: "not_found",
-    message: "The requested endpoint does not exist.",
+// ── Static file serving for Replit / single-process deployment ──────────────
+import path from "node:path";
+import fs from "node:fs";
+const publicDir = path.resolve(__dirname, "../public");
+if (fs.existsSync(publicDir)) {
+  app.use(express.static(publicDir));
+  // SPA fallback — serve index.html for non-API routes
+  app.get("*", (_req: Request, res: Response) => {
+    const indexPath = path.join(publicDir, "index.html");
+    if (fs.existsSync(indexPath)) {
+      res.sendFile(indexPath);
+    } else {
+      res.status(404).json({ error: "not_found", message: "The requested endpoint does not exist." });
+    }
   });
-});
+} else {
+  app.use((_req: Request, res: Response) => {
+    res.status(404).json({
+      error: "not_found",
+      message: "The requested endpoint does not exist.",
+    });
+  });
+}
 
 const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   const status = Number.isFinite((err as { status?: number }).status)
