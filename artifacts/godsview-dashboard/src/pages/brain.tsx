@@ -16,7 +16,7 @@ import { useState, useRef, useMemo, useCallback, useEffect, Suspense } from "rea
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Float, Billboard, Text, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
-import { useBrainConsciousness, useBrainEntities, useBrainIntelligence, useBrainState, useSMCState, useRegimeState } from "@/lib/api";
+import { useBrainConsciousness, useBrainEntities, useBrainIntelligence, useBrainState, useSMCState, useRegimeState, useMarketStress } from "@/lib/api";
 import { useLivePrices } from "@/lib/market-store";
 import BrainFocusMode from "@/components/BrainFocusMode";
 
@@ -739,7 +739,7 @@ function AttentionPanel({ stocks }: { stocks: StockNodeData[] }) {
   );
 }
 
-function RiskGatePanel({ stocks }: { stocks: StockNodeData[] }) {
+function RiskGatePanel({ stocks, stress }: { stocks: StockNodeData[]; stress?: any }) {
   const blocked = stocks.filter((s) => s.riskGate === "BLOCK").length;
   const watching = stocks.filter((s) => s.riskGate === "WATCH" || s.riskGate === "REDUCE").length;
   const allowed = stocks.filter((s) => s.riskGate === "ALLOW").length;
@@ -760,6 +760,24 @@ function RiskGatePanel({ stocks }: { stocks: StockNodeData[] }) {
           <div style={{ fontSize: "8px", color: "#767576", letterSpacing: "0.1em" }}>BLOCK</div>
         </div>
       </div>
+      {stress && (
+        <div style={{ marginTop: "12px", borderTop: "1px solid rgba(72,72,73,0.12)", paddingTop: "10px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: "8px", color: (stress.systemicStressScore ?? 0) > 0.6 ? "#ff4444" : "#767576", letterSpacing: "0.1em", fontWeight: 700 }}>
+              SYSTEMIC STRESS
+            </span>
+            <span style={{ fontSize: "9px", fontFamily: "JetBrains Mono", color: (stress.systemicStressScore ?? 0) > 0.6 ? "#ff4444" : (stress.systemicStressScore ?? 0) > 0.3 ? "#ffcc00" : "#00ffcc" }}>
+              {Math.round((stress.systemicStressScore ?? 0) * 100)}%
+            </span>
+          </div>
+          <div style={{ height: "2px", borderRadius: "1px", backgroundColor: "rgba(255,255,255,0.05)", marginTop: "4px" }}>
+            <div style={{ height: "100%", borderRadius: "1px", width: `${(stress.systemicStressScore ?? 0) * 100}%`, backgroundColor: (stress.systemicStressScore ?? 0) > 0.6 ? "#ff4444" : (stress.systemicStressScore ?? 0) > 0.3 ? "#ffcc00" : "#00ffcc", transition: "width 0.8s ease" }} />
+          </div>
+          <div style={{ fontSize: "7px", color: "#484849", marginTop: "4px", textTransform: "uppercase" }}>
+            {stress.stressRegime} \u00B7 {stress.symbolCount} SYMBOLS
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1294,6 +1312,9 @@ export default function BrainPage() {
   const { data: brainState } = useBrainState(selectedStock?.symbol ?? "");
   const { data: smcState } = useSMCState(selectedStock?.symbol ?? "");
   const { data: regimeState } = useRegimeState(selectedStock?.symbol ?? "");
+  
+  const entitiesSymbols = useMemo(() => brainEntities?.map((e: any) => e.symbol) || [], [brainEntities]);
+  const { data: marketStress } = useMarketStress(entitiesSymbols);
 
   const stocks = useMemo(() => {
     if (!brainEntities?.length) return MOCK_STOCKS;
@@ -1398,7 +1419,7 @@ export default function BrainPage() {
       <div style={{ position: "absolute", top: "16px", left: "20px", marginTop: "52px", zIndex: 10, display: "flex", flexDirection: "column", gap: "10px", width: "220px" }}>
         <RegimePanel supreme={supreme} />
         <AttentionPanel stocks={stocks} />
-        <RiskGatePanel stocks={stocks} />
+        <RiskGatePanel stocks={stocks} stress={marketStress} />
         <LiveSIFeed decisions={siDecisions} />
       </div>
 

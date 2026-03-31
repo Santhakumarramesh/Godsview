@@ -542,3 +542,21 @@ export function useBrainState(symbol: string) {
     enabled: !!symbol,
   });
 }
+
+// ─── Global Market Stress ───────────────────────────────────────────────────
+export function useMarketStress(symbols: string[]) {
+  return useQuery({
+    queryKey: ["brain", "market-stress", symbols.join(",")],
+    queryFn: () => apiFetch<{
+      avgCorrelation: number;
+      correlationSpikeCount: number;
+      breadthWeakness: number;
+      systemicStressScore: number;
+      stressRegime: string;
+      symbolCount: number;
+      topCorrelations: any[];
+    }>(`/brain/market-stress?symbols=${symbols.join(",")}`),
+    staleTime: 60_000,
+    enabled: symbols.length >= 2,
+  });
+}

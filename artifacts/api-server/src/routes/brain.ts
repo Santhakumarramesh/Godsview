@@ -814,4 +814,43 @@ router.get("/brain/:symbol/brain-state", async (req, res) => {
   }
 });
 
+// ─── Global Market Stress endpoint ────────────────────────────────────────
+router.get("/brain/market-stress", async (req, res) => {
+  try {
+    const symbolsQuery = (req.query.symbols as string) || "";
+    const symbols = symbolsQuery.split(",").filter(Boolean).map((s) => s.toUpperCase());
+
+    if (symbols.length < 2) {
+      return res.json({ systemicStressScore: 0, stressRegime: "low", symbolCount: symbols.length });
+    }
+
+    const { computeMarketStress } = await import("../lib/stress_engine");
+
+    const symbolReturns = new Map<string, number[]>();
+
+    for (const symbol of symbols) {
+      try {
+        const bars = await fetchSMCBars(symbol, "1Min", 100);
+        const returns: number[] = [];
+        for (let i = 1; i < bars.length; i++) {
+          const prev = bars[i - 1].Close;
+          const curr = bars[i].Close;
+          if (prev > 0 && curr > 0) returns.push(Math.log(curr / prev));
+        }
+        if (returns.length > 5) {
+          symbolReturns.set(symbol, returns);
+        }
+      } catch {
+        /* skip failing symbols */
+      }
+    }
+
+    const marketStress = computeMarketStress(symbolReturns);
+    return res.json(marketStress);
+  } catch (err) {
+    req.log.error({ err }, "Failed to compute global market stress");
+    return res.status(500).json({ error: "internal_error", message: "Failed to compute global market stress" });
+  }
+});
+
 export default router;
