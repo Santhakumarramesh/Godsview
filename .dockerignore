@@ -1,15 +1,49 @@
+# ── Dependencies (rebuilt in container) ──────────────────────────
 node_modules
 **/node_modules
+
+# ── Build artifacts (rebuilt in container) ───────────────────────
 **/dist
+**/build
+**/*.tsbuildinfo
+
+# ── Git / IDE ────────────────────────────────────────────────────
 .git
+.gitignore
+.github
+.vscode
+.idea
+*.swp
+*.swo
+
+# ── Environment & secrets ────────────────────────────────────────
 .env
-.env.local
-*.tar.gz
-*.b64
-_tmp_*
-_bp.*
-mnt/
-.bash*
-.profile
-godsview-openbb/
+.env.*
+!.env.example
+
+# ── Docker (prevent recursive COPY) ─────────────────────────────
+docker-compose.yml
+docker-compose.*.yml
+
+# ── Replit-specific ──────────────────────────────────────────────
+.replit
+replit.md
+.replitignore
+.cache
+.config
+
+# ── Temp / logs ──────────────────────────────────────────────────
+*.log
+tmp/
+temp/
+coverage/
+.nyc_output/
+
+# ── PGlite local data (dev only) ────────────────────────────────
+pglite-data/
+*.pglite
+
+# ── Documentation (not needed in image) ──────────────────────────
+*.md
+!lib/db/migrations/**
 attached_assets/

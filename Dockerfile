@@ -1,63 +1,103 @@
-# ── GodsView Trading Dashboard — Multi-stage Production Build ────────
-# Produces a lean Node.js image serving both API + static dashboard.
-#
-# Build:  docker build -t godsview .
-# Run:    docker run -p 3000:3000 --env-file .env godsview
+# ─────────────────────────────────────────────────────────────────
+# GodsView — Multi-stage Production Dockerfile
+# Stage 1: deps     → install all workspace dependencies
+# Stage 2: build    → compile API (esbuild) + Dashboard (vite)
+# Stage 3: prod     → minimal runtime image with artifacts only
+# ─────────────────────────────────────────────────────────────────
 
-# ─── Stage 1: Install + Build ───────────────────────────────────────
-FROM node:22-slim AS builder
+# ── Stage 1: Dependencies ────────────────────────────────────────
+FROM node:22-slim AS deps
 
+# Enable corepack for pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
 WORKDIR /app
 
-# Copy workspace manifests first for layer caching
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
+# Copy workspace config first (cache-friendly layer)
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
+
+# Copy all package.json files for workspace packages
 COPY lib/db/package.json lib/db/
+COPY lib/api-zod/package.json lib/api-zod/
+COPY lib/api-client-react/package.json lib/api-client-react/
 COPY artifacts/api-server/package.json artifacts/api-server/
 COPY artifacts/godsview-dashboard/package.json artifacts/godsview-dashboard/
 
-# Install all dependencies (dev + prod for build step)
-RUN pnpm install --frozen-lockfile 2>/dev/null || pnpm install
+# Install ALL dependencies (dev included — needed for build)
+RUN pnpm install --frozen-lockfile
 
-# Copy source code
-COPY lib/ lib/
-COPY artifacts/ artifacts/
+# ── Stage 2: Build ───────────────────────────────────────────────
+FROM deps AS build
 
-# Build shared libs
-RUN pnpm run typecheck:libs 2>/dev/null || true
+WORKDIR /app
+
+# Copy full source tree
+COPY . .
+
+# Build shared libs (TypeScript declarations)
+RUN pnpm run typecheck:libs
 
 # Build API server (esbuild → dist/index.mjs)
 RUN cd artifacts/api-server && pnpm run build
 
-# Build dashboard (Vite → dist/public/)
+# Build Dashboard (vite → dist/public/)
 RUN cd artifacts/godsview-dashboard && pnpm run build
 
-# ─── Stage 2: Production Runtime ────────────────────────────────────
-FROM node:22-slim AS runtime
+# ── Stage 3: Production Runtime ──────────────────────────────────
+FROM node:22-slim AS prod
 
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
+# Install curl for Docker health checks + tini for PID 1
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl tini \
+  && rm -rf /var/lib/apt/lists/*
+
+# Non-root user for security
+RUN groupadd --gid 1001 godsview && \
+    useradd --uid 1001 --gid godsview --shell /bin/sh --create-home godsview
+
 WORKDIR /app
 
-# Copy only production artifacts
-COPY --from=builder /app/package.json /app/pnpm-workspace.yaml ./
-COPY --from=builder /app/artifacts/api-server/package.json artifacts/api-server/
-COPY --from=builder /app/artifacts/api-server/dist/ artifacts/api-server/dist/
-COPY --from=builder /app/artifacts/godsview-dashboard/dist/public/ artifacts/godsview-dashboard/dist/public/
-COPY --from=builder /app/lib/db/package.json lib/db/
-COPY --from=builder /app/lib/db/src/ lib/db/src/
+# Copy workspace config for production install
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
+COPY lib/db/package.json lib/db/
+COPY lib/api-zod/package.json lib/api-zod/
+COPY lib/api-client-react/package.json lib/api-client-react/
+COPY artifacts/api-server/package.json artifacts/api-server/
+COPY artifacts/godsview-dashboard/package.json artifacts/godsview-dashboard/
 
 # Install production deps only
-RUN pnpm install --prod --frozen-lockfile 2>/dev/null || pnpm install --prod
+RUN pnpm install --frozen-lockfile --prod
 
-# Runtime config
+# Copy built API bundle
+COPY --from=build /app/artifacts/api-server/dist ./artifacts/api-server/dist
+
+# Copy built Dashboard static assets
+COPY --from=build /app/artifacts/godsview-dashboard/dist/public ./artifacts/godsview-dashboard/dist/public
+
+# Copy shared lib source (needed at runtime for drizzle schema + migrate)
+COPY --from=build /app/lib/db/src ./lib/db/src
+COPY --from=build /app/lib/db/migrations ./lib/db/migrations
+COPY --from=build /app/lib/db/drizzle.config.ts ./lib/db/drizzle.config.ts
+COPY --from=build /app/lib/api-zod/src ./lib/api-zod/src
+
+# Copy entrypoint script
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
+
+# Switch to non-root user
+USER godsview
+
 ENV NODE_ENV=production
-ENV PORT=3000
-EXPOSE 3000
+ENV PORT=3001
 
-# Health check — hits the /api/system/status endpoint
+EXPOSE 3001
+
+# Health check — hits the liveness probe every 30s
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD node -e "fetch('http://localhost:3000/api/system/status').then(r=>{if(!r.ok)throw 1}).catch(()=>process.exit(1))"
+  CMD curl -f http://localhost:3001/healthz || exit 1
 
-CMD ["node", "--enable-source-maps", "artifacts/api-server/dist/index.mjs"]
+# Use tini as PID 1 for proper signal handling
+ENTRYPOINT ["tini", "--"]
+CMD ["/app/docker-entrypoint.sh"]

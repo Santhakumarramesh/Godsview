@@ -1,53 +1,104 @@
-version: "3.9"
+# ─────────────────────────────────────────────────────────────────
+# GodsView — Production Docker Compose Stack
+#
+# Services:
+#   postgres   — PostgreSQL 16 with persistent volume
+#   api        — GodsView API server (Express 5 + esbuild bundle)
+#   nginx      — Reverse proxy serving dashboard + API
+#
+# Usage:
+#   docker compose up -d              # start all
+#   docker compose logs -f api        # tail API logs
+#   docker compose down -v            # stop + remove volumes
+# ─────────────────────────────────────────────────────────────────
 
 services:
-  # ── PostgreSQL (Neon-compatible) ───────────────────────────────────────────
+  # ── PostgreSQL ─────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-godsview}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-godsview_dev}
-      POSTGRES_DB: ${POSTGRES_DB:-godsview}
+      POSTGRES_DB: godsview
+      POSTGRES_USER: godsview
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-godsview_secret}
     ports:
-      - "5432:5432"
+      - "${DB_EXTERNAL_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U godsview"]
+      test: ["CMD-SHELL", "pg_isready -U godsview -d godsview"]
       interval: 5s
       timeout: 3s
-      retries: 5
+      retries: 10
+      start_period: 10s
+    networks:
+      - godsview-net
 
-  # ── API Server ─────────────────────────────────────────────────────────────
+  # ── API Server ─────────────────────────────────────────────────
   api:
     build:
       context: .
-      dockerfile: artifacts/api-server/Dockerfile
-    ports:
-      - "3000:3000"
-    environment:
-      NODE_ENV: production
-      PORT: "3000"
-      DATABASE_URL: postgres://${POSTGRES_USER:-godsview}:${POSTGRES_PASSWORD:-godsview_dev}@postgres:5432/${POSTGRES_DB:-godsview}
-      ALPACA_API_KEY: ${ALPACA_API_KEY:-}
-      ALPACA_SECRET_KEY: ${ALPACA_SECRET_KEY:-}
-      ALPACA_BASE_URL: ${ALPACA_BASE_URL:-https://paper-api.alpaca.markets}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      dockerfile: Dockerfile
+    restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
-    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "3001"
+      DATABASE_URL: postgresql://godsview:${POSTGRES_PASSWORD:-godsview_secret}@postgres:5432/godsview
+      DB_POOL_MAX: "${DB_POOL_MAX:-10}"
+      # Trading keys (inject via .env file)
+      ALPACA_API_KEY: "${ALPACA_API_KEY:-}"
+      ALPACA_SECRET_KEY: "${ALPACA_SECRET_KEY:-}"
+      ALPACA_BASE_URL: "${ALPACA_BASE_URL:-https://paper-api.alpaca.markets}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      CLAUDE_VETO_MODEL: "${CLAUDE_VETO_MODEL:-claude-sonnet-4-5-20241022}"
+      CLAUDE_TIMEOUT_MS: "${CLAUDE_TIMEOUT_MS:-30000}"
+      CLAUDE_MAX_RETRIES: "${CLAUDE_MAX_RETRIES:-1}"
+      # Safety controls
+      GODSVIEW_ENABLE_LIVE_TRADING: "${GODSVIEW_ENABLE_LIVE_TRADING:-false}"
+      GODSVIEW_SYSTEM_MODE: "${GODSVIEW_SYSTEM_MODE:-live_disabled}"
+      GODSVIEW_KILL_SWITCH: "${GODSVIEW_KILL_SWITCH:-false}"
+      GODSVIEW_MAX_DAILY_LOSS_USD: "${GODSVIEW_MAX_DAILY_LOSS_USD:-250}"
+      GODSVIEW_MAX_OPEN_EXPOSURE_PCT: "${GODSVIEW_MAX_OPEN_EXPOSURE_PCT:-0.6}"
+      GODSVIEW_MAX_TRADES_PER_SESSION: "${GODSVIEW_MAX_TRADES_PER_SESSION:-10}"
+      GODSVIEW_COOLDOWN_AFTER_LOSSES: "${GODSVIEW_COOLDOWN_AFTER_LOSSES:-3}"
+      GODSVIEW_COOLDOWN_MINUTES: "${GODSVIEW_COOLDOWN_MINUTES:-30}"
+      GODSVIEW_BLOCK_ON_DEGRADED_DATA: "${GODSVIEW_BLOCK_ON_DEGRADED_DATA:-true}"
+      GODSVIEW_OPERATOR_TOKEN: "${GODSVIEW_OPERATOR_TOKEN:-change-me}"
+      CORS_ORIGIN: "${CORS_ORIGIN:-http://localhost}"
+      ECON_CALENDAR_URL: "${ECON_CALENDAR_URL:-https://nfs.faireconomy.media/ff_calendar_thisweek.json}"
+    # API not exposed directly — nginx proxies it
+    expose:
+      - "3001"
+    networks:
+      - godsview-net
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
 
-  # ── Dashboard (Vite + Nginx) ───────────────────────────────────────────────
-  dashboard:
-    build:
-      context: .
-      dockerfile: artifacts/godsview-dashboard/Dockerfile
-    ports:
-      - "80:80"
+  # ── Nginx Reverse Proxy ────────────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
     depends_on:
       - api
-    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./artifacts/godsview-dashboard/dist/public:/usr/share/nginx/html:ro
+    networks:
+      - godsview-net
 
 volumes:
   pgdata:
+    driver: local
+
+networks:
+  godsview-net:
+    driver: bridge
