@@ -11,6 +11,7 @@ import researchRouter from "./research";
 import brainRouter from "./brain";
 import superIntelligenceRouter from "./super_intelligence";
 import backtestRouter from "./backtest";
+import alertsRouter from "./alerts";
 
 const router: IRouter = Router();
 
@@ -26,5 +27,6 @@ router.use(researchRouter);
 router.use(brainRouter);
 router.use(superIntelligenceRouter);
 router.use(backtestRouter);
+router.use(alertsRouter);
 
 export default router;
