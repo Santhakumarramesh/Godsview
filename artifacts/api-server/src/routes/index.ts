@@ -21,6 +21,7 @@ import opsRouter from "./ops";
 import featuresRouter from "./features";
 import engineHealthRouter from "./engine_health";
 import executionRouter from "./execution";
+import sessionsRouter from "./sessions";
 
 const router: IRouter = Router();
 
@@ -46,5 +47,6 @@ router.use(opsRouter);
 router.use("/api/features", featuresRouter);
 router.use(engineHealthRouter);
 router.use("/api/execution", executionRouter);
+router.use("/api", sessionsRouter);
 
 export default router;

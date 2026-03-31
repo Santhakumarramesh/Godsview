@@ -5,6 +5,7 @@ import { validateEnv } from "./lib/env";
 import { setupGracefulShutdown, onShutdown } from "./lib/shutdown";
 import { closePool, checkDbHealth } from "@workspace/db";
 import { runPreflight } from "./lib/preflight";
+import { startSession, endSession } from "./lib/session_manager";
 
 // ── Validate environment before anything else ───────────────────
 validateEnv();
@@ -51,6 +52,10 @@ const server = app.listen(port, (err) => {
     })
     .catch((err) => logger.error({ err }, "DB health check threw"));
 
+  // Start trading session
+  const systemMode = process.env.GODSVIEW_SYSTEM_MODE || "paper";
+  startSession(systemMode).catch((err) => logger.error({ err }, "Failed to start trading session"));
+
   // Train ML model from accuracy_results data (non-blocking)
   trainModel().catch((err) => logger.error({ err }, "ML model training failed"));
 });
@@ -69,7 +74,13 @@ onShutdown(async () => {
   }
 });
 
-// Register cleanup: drain database pool
+// Register cleanup: end trading session
+onShutdown(async () => {
+  logger.info("Ending trading session...");
+  await endSession("server_shutdown");
+});
+
+// Register cleanup: drain database pool (must be last)
 onShutdown(async () => {
   logger.info("Draining database connection pool...");
   await closePool();

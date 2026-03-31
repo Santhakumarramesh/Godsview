@@ -29,6 +29,7 @@ import OpsPage from "@/pages/ops";
 import QuantLabPage from "@/pages/quant-lab";
 import PortfolioPage from "@/pages/portfolio";
 import ExecutionPage from "@/pages/execution";
+import AuditPage from "@/pages/audit";
 import { GlobalDataProvider } from "@/components/GlobalDataProvider";
 import { NotificationSystem } from "@/components/NotificationSystem";
 
@@ -135,6 +136,7 @@ function Router() {
         <RoutedPage path="/quant-lab" component={QuantLabPage} scope="page:quant-lab" />
         <RoutedPage path="/portfolio" component={PortfolioPage} scope="page:portfolio" />
         <RoutedPage path="/execution" component={ExecutionPage} scope="page:execution" />
+        <RoutedPage path="/audit" component={AuditPage} scope="page:audit" />
         <Route>
           <AppErrorBoundary scope="page:not-found">
             <NotFound />
