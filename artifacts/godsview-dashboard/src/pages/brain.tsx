@@ -1,10 +1,15 @@
 /**
- * brain.tsx — The Brain Page
+ * brain.tsx — GodsView Living Market Brain
  *
- * Hero page of GodsView: a massive 3D central brain surrounded by
- * live stock nodes, connected by glowing neural links.
- * Node size/glow scales with opportunity score + confidence.
- * Click a node → opens detailed stock drawer.
+ * A massive 3D neural intelligence visualization where:
+ * - Central brain breathes and pulses with neural energy
+ * - Stock nodes orbit with dynamic size/glow based on SI confidence
+ * - Energy particles flow along neural connections
+ * - Strong opportunities rise and glow brighter
+ * - Weak/blocked stocks dim and shrink
+ * - Real-time SSE feeds SI decisions into the visualization
+ * - Click a node → deep intelligence drawer with Market DNA,
+ *   Setup Memory, Claude Reasoning, Risk Gate
  */
 
 import { useState, useRef, useMemo, useCallback, useEffect, Suspense } from "react";
@@ -19,15 +24,25 @@ import { useLivePrices } from "@/lib/market-store";
 type StockNodeData = {
   symbol: string;
   displaySymbol: string;
-  confidence: number;      // 0-100
+  confidence: number;
   sentiment: "bullish" | "bearish" | "neutral";
   regime: string;
   attentionLevel: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "BACKGROUND";
-  opportunityScore: number; // 0-100
-  setupFamily: string;  state: "WATCH_LONG" | "WATCH_SHORT" | "STRONG_LONG" | "STRONG_SHORT" | "BLOCKED" | "IDLE";
+  opportunityScore: number;
+  setupFamily: string;
+  state: "WATCH_LONG" | "WATCH_SHORT" | "STRONG_LONG" | "STRONG_SHORT" | "BLOCKED" | "IDLE";
   price: number;
   changePct: number;
   riskGate: "ALLOW" | "WATCH" | "REDUCE" | "BLOCK";
+  winRate?: number;
+  similarSetups?: number;
+  profitFactor?: number;
+  decayRate?: number;
+  trendiness?: number;
+  fakeoutRisk?: number;
+  breakoutQuality?: number;
+  spreadStability?: number;
+  newsSensitivity?: number;
 };
 
 type SupremeState = {
@@ -39,19 +54,33 @@ type SupremeState = {
   decayDetected: boolean;
 };
 
-// ─── Mock Data (will be replaced by API) ────────────────────────────────────
+type SIDecisionEvent = {
+  symbol: string;
+  approved: boolean;
+  direction: string;
+  win_probability: number;
+  edge_score: number;
+  quality: number;
+  rejection_reason?: string;
+  entry_price?: number;
+  stop_loss?: number;
+  take_profit?: number;
+  timestamp: string;
+};
+
+// ─── Mock Data ──────────────────────────────────────────────────────────────
 
 const MOCK_STOCKS: StockNodeData[] = [
-  { symbol: "BTCUSD", displaySymbol: "BTC", confidence: 88, sentiment: "bullish", regime: "risk-on", attentionLevel: "CRITICAL", opportunityScore: 92, setupFamily: "breakout", state: "STRONG_LONG", price: 87245, changePct: 2.34, riskGate: "ALLOW" },
-  { symbol: "ETHUSD", displaySymbol: "ETH", confidence: 74, sentiment: "bullish", regime: "risk-on", attentionLevel: "HIGH", opportunityScore: 78, setupFamily: "continuation", state: "WATCH_LONG", price: 3412, changePct: 1.87, riskGate: "ALLOW" },
-  { symbol: "NVDA", displaySymbol: "NVDA", confidence: 82, sentiment: "bullish", regime: "risk-on", attentionLevel: "HIGH", opportunityScore: 85, setupFamily: "breakout", state: "STRONG_LONG", price: 924.5, changePct: 3.12, riskGate: "ALLOW" },
-  { symbol: "AAPL", displaySymbol: "AAPL", confidence: 65, sentiment: "neutral", regime: "choppy", attentionLevel: "MEDIUM", opportunityScore: 55, setupFamily: "pullback", state: "WATCH_LONG", price: 198.2, changePct: -0.32, riskGate: "WATCH" },
-  { symbol: "TSLA", displaySymbol: "TSLA", confidence: 45, sentiment: "bearish", regime: "high-vol", attentionLevel: "LOW", opportunityScore: 35, setupFamily: "reversal", state: "BLOCKED", price: 172.8, changePct: -2.14, riskGate: "BLOCK" },
-  { symbol: "SPY", displaySymbol: "SPY", confidence: 70, sentiment: "bullish", regime: "risk-on", attentionLevel: "MEDIUM", opportunityScore: 62, setupFamily: "trend", state: "WATCH_LONG", price: 562.4, changePct: 0.45, riskGate: "ALLOW" },
-  { symbol: "QQQ", displaySymbol: "QQQ", confidence: 72, sentiment: "bullish", regime: "risk-on", attentionLevel: "MEDIUM", opportunityScore: 68, setupFamily: "trend", state: "WATCH_LONG", price: 485.3, changePct: 0.78, riskGate: "ALLOW" },
-  { symbol: "AMZN", displaySymbol: "AMZN", confidence: 58, sentiment: "neutral", regime: "choppy", attentionLevel: "LOW", opportunityScore: 42, setupFamily: "range", state: "IDLE", price: 186.7, changePct: -0.65, riskGate: "WATCH" },
-  { symbol: "META", displaySymbol: "META", confidence: 76, sentiment: "bullish", regime: "risk-on", attentionLevel: "HIGH", opportunityScore: 80, setupFamily: "breakout", state: "WATCH_LONG", price: 512.3, changePct: 1.56, riskGate: "ALLOW" },
-  { symbol: "SOLUSD", displaySymbol: "SOL", confidence: 69, sentiment: "bullish", regime: "risk-on", attentionLevel: "MEDIUM", opportunityScore: 71, setupFamily: "continuation", state: "WATCH_LONG", price: 187.5, changePct: 4.21, riskGate: "ALLOW" },
+  { symbol: "BTCUSD", displaySymbol: "BTC", confidence: 88, sentiment: "bullish", regime: "risk-on", attentionLevel: "CRITICAL", opportunityScore: 92, setupFamily: "breakout", state: "STRONG_LONG", price: 87245, changePct: 2.34, riskGate: "ALLOW", winRate: 63, similarSetups: 47, profitFactor: 1.9, trendiness: 85, fakeoutRisk: 22, breakoutQuality: 88, spreadStability: 91, newsSensitivity: 45 },
+  { symbol: "ETHUSD", displaySymbol: "ETH", confidence: 74, sentiment: "bullish", regime: "risk-on", attentionLevel: "HIGH", opportunityScore: 78, setupFamily: "continuation", state: "WATCH_LONG", price: 3412, changePct: 1.87, riskGate: "ALLOW", winRate: 58, similarSetups: 32, profitFactor: 1.6, trendiness: 72, fakeoutRisk: 35, breakoutQuality: 65, spreadStability: 82, newsSensitivity: 55 },
+  { symbol: "NVDA", displaySymbol: "NVDA", confidence: 82, sentiment: "bullish", regime: "risk-on", attentionLevel: "HIGH", opportunityScore: 85, setupFamily: "breakout", state: "STRONG_LONG", price: 924.5, changePct: 3.12, riskGate: "ALLOW", winRate: 61, similarSetups: 28, profitFactor: 2.1, trendiness: 90, fakeoutRisk: 18, breakoutQuality: 92, spreadStability: 88, newsSensitivity: 62 },
+  { symbol: "AAPL", displaySymbol: "AAPL", confidence: 65, sentiment: "neutral", regime: "choppy", attentionLevel: "MEDIUM", opportunityScore: 55, setupFamily: "pullback", state: "WATCH_LONG", price: 198.2, changePct: -0.32, riskGate: "WATCH", winRate: 52, similarSetups: 65, profitFactor: 1.3, trendiness: 58, fakeoutRisk: 42, breakoutQuality: 55, spreadStability: 95, newsSensitivity: 48 },
+  { symbol: "TSLA", displaySymbol: "TSLA", confidence: 45, sentiment: "bearish", regime: "high-vol", attentionLevel: "LOW", opportunityScore: 35, setupFamily: "reversal", state: "BLOCKED", price: 172.8, changePct: -2.14, riskGate: "BLOCK", winRate: 38, similarSetups: 12, profitFactor: 0.8, trendiness: 35, fakeoutRisk: 72, breakoutQuality: 30, spreadStability: 55, newsSensitivity: 88 },
+  { symbol: "SPY", displaySymbol: "SPY", confidence: 70, sentiment: "bullish", regime: "risk-on", attentionLevel: "MEDIUM", opportunityScore: 62, setupFamily: "trend", state: "WATCH_LONG", price: 562.4, changePct: 0.45, riskGate: "ALLOW", winRate: 55, similarSetups: 120, profitFactor: 1.4, trendiness: 68, fakeoutRisk: 30, breakoutQuality: 62, spreadStability: 98, newsSensitivity: 35 },
+  { symbol: "QQQ", displaySymbol: "QQQ", confidence: 72, sentiment: "bullish", regime: "risk-on", attentionLevel: "MEDIUM", opportunityScore: 68, setupFamily: "trend", state: "WATCH_LONG", price: 485.3, changePct: 0.78, riskGate: "ALLOW", winRate: 56, similarSetups: 95, profitFactor: 1.5, trendiness: 70, fakeoutRisk: 28, breakoutQuality: 66, spreadStability: 96, newsSensitivity: 40 },
+  { symbol: "AMZN", displaySymbol: "AMZN", confidence: 58, sentiment: "neutral", regime: "choppy", attentionLevel: "LOW", opportunityScore: 42, setupFamily: "range", state: "IDLE", price: 186.7, changePct: -0.65, riskGate: "WATCH", winRate: 48, similarSetups: 55, profitFactor: 1.1, trendiness: 45, fakeoutRisk: 50, breakoutQuality: 40, spreadStability: 90, newsSensitivity: 52 },
+  { symbol: "META", displaySymbol: "META", confidence: 76, sentiment: "bullish", regime: "risk-on", attentionLevel: "HIGH", opportunityScore: 80, setupFamily: "breakout", state: "WATCH_LONG", price: 512.3, changePct: 1.56, riskGate: "ALLOW", winRate: 59, similarSetups: 35, profitFactor: 1.7, trendiness: 78, fakeoutRisk: 25, breakoutQuality: 80, spreadStability: 85, newsSensitivity: 58 },
+  { symbol: "SOLUSD", displaySymbol: "SOL", confidence: 69, sentiment: "bullish", regime: "risk-on", attentionLevel: "MEDIUM", opportunityScore: 71, setupFamily: "continuation", state: "WATCH_LONG", price: 187.5, changePct: 4.21, riskGate: "ALLOW", winRate: 54, similarSetups: 22, profitFactor: 1.5, trendiness: 75, fakeoutRisk: 38, breakoutQuality: 68, spreadStability: 72, newsSensitivity: 65 },
 ];
 
 const MOCK_SUPREME: SupremeState = {
@@ -96,22 +125,56 @@ function getStateColor(state: string): string {
   if (state === "BLOCKED") return "#ff4444";
   return "#666688";
 }
+
+function getRiskGateColor(gate: string): string {
+  if (gate === "ALLOW") return "#00ffcc";
+  if (gate === "WATCH") return "#ffcc00";
+  if (gate === "REDUCE") return "#ff8844";
+  return "#ff4444";
+}
+
+// ─── SSE Hook for SI Decisions ──────────────────────────────────────────────
+
+function useSIStream(maxEvents = 30) {
+  const [decisions, setDecisions] = useState<SIDecisionEvent[]>([]);
+  const [connected, setConnected] = useState(false);
+  const esRef = useRef<EventSource | null>(null);
+
+  useEffect(() => {
+    const es = new EventSource("/api/super-intelligence/stream");
+    esRef.current = es;
+    es.onopen = () => setConnected(true);
+    es.onerror = () => setConnected(false);
+    es.addEventListener("si_decision", (e) => {
+      try {
+        const data = JSON.parse(e.data) as SIDecisionEvent;
+        setDecisions((prev) => [data, ...prev].slice(0, maxEvents));
+      } catch { /* ignore */ }
+    });
+    return () => { es.close(); esRef.current = null; };
+  }, [maxEvents]);
+
+  return { decisions, connected };
+}
+
 // ─── 3D Components ──────────────────────────────────────────────────────────
 
-/** Animated central brain sphere with breathing + glow */
-function CentralBrain() {
+/** Central brain — breathing sphere with neural particle cloud and energy waves */
+function CentralBrain({ intensity }: { intensity: number }) {
   const meshRef = useRef<THREE.Mesh>(null);
+  const wireRef = useRef<THREE.Mesh>(null);
   const glowRef = useRef<THREE.Mesh>(null);
   const particlesRef = useRef<THREE.Points>(null);
+  const pulseRing1Ref = useRef<THREE.Mesh>(null);
+  const pulseRing2Ref = useRef<THREE.Mesh>(null);
 
-  // Brain particle system
   const particlePositions = useMemo(() => {
-    const count = 800;
+    const count = 1200;
     const positions = new Float32Array(count * 3);
     for (let i = 0; i < count; i++) {
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(2 * Math.random() - 1);
-      const r = 1.2 + Math.random() * 0.6;
+      const r = 0.8 + Math.random() * 0.8;
       positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
       positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
       positions[i * 3 + 2] = r * Math.cos(phi);
@@ -120,61 +183,106 @@ function CentralBrain() {
   }, []);
 
   useFrame(({ clock }) => {
-    const t = clock.getElapsedTime();    // Breathing animation
+    const t = clock.getElapsedTime();
+    const breathe = 1 + Math.sin(t * 0.7) * 0.05 * intensity;
+
+    // Core sphere — slow breathe + gentle rotation
     if (meshRef.current) {
-      const scale = 1 + Math.sin(t * 0.8) * 0.04;
-      meshRef.current.scale.setScalar(scale);
-      meshRef.current.rotation.y = t * 0.05;
+      meshRef.current.scale.setScalar(breathe * 0.75);
+      meshRef.current.rotation.y = t * 0.04;
+      meshRef.current.rotation.x = Math.sin(t * 0.15) * 0.1;
+      const mat = meshRef.current.material as THREE.MeshStandardMaterial;
+      mat.emissiveIntensity = 0.3 + Math.sin(t * 1.5) * 0.15 * intensity;
     }
+
+    // Wireframe shell — opposite rotation for depth
+    if (wireRef.current) {
+      wireRef.current.scale.setScalar(breathe * 1.15);
+      wireRef.current.rotation.y = -t * 0.03;
+      wireRef.current.rotation.z = t * 0.02;
+    }
+
+    // Outer glow
     if (glowRef.current) {
-      const glowScale = 1.5 + Math.sin(t * 0.6) * 0.1;
-      glowRef.current.scale.setScalar(glowScale);
-      (glowRef.current.material as THREE.MeshBasicMaterial).opacity = 0.08 + Math.sin(t * 1.2) * 0.03;
+      const gs = 1.6 + Math.sin(t * 0.5) * 0.15;
+      glowRef.current.scale.setScalar(gs);
+      (glowRef.current.material as THREE.MeshBasicMaterial).opacity = 0.06 + Math.sin(t * 1.0) * 0.03 * intensity;
     }
-    // Rotate particle cloud
+
+    // Particle cloud — gentle drift
     if (particlesRef.current) {
-      particlesRef.current.rotation.y = t * 0.03;
-      particlesRef.current.rotation.x = Math.sin(t * 0.2) * 0.1;
+      particlesRef.current.rotation.y = t * 0.025;
+      particlesRef.current.rotation.x = Math.sin(t * 0.18) * 0.08;
+      const pMat = particlesRef.current.material as THREE.PointsMaterial;
+      pMat.opacity = 0.35 + Math.sin(t * 2.0) * 0.15;
+    }
+
+    // Expanding pulse rings
+    if (pulseRing1Ref.current) {
+      const phase1 = (t * 0.4) % 1;
+      const s1 = 1.2 + phase1 * 2.5;
+      pulseRing1Ref.current.scale.set(s1, s1, 1);
+      (pulseRing1Ref.current.material as THREE.MeshBasicMaterial).opacity = 0.12 * (1 - phase1);
+    }
+    if (pulseRing2Ref.current) {
+      const phase2 = ((t * 0.4) + 0.5) % 1;
+      const s2 = 1.2 + phase2 * 2.5;
+      pulseRing2Ref.current.scale.set(s2, s2, 1);
+      (pulseRing2Ref.current.material as THREE.MeshBasicMaterial).opacity = 0.12 * (1 - phase2);
     }
   });
 
   return (
     <group>
-      {/* Inner brain sphere */}
+      {/* Solid core */}
       <mesh ref={meshRef}>
-        <icosahedronGeometry args={[1.1, 4]} />
+        <sphereGeometry args={[0.75, 32, 32]} />
         <meshStandardMaterial
-          color="#0a2a22"          emissive="#00ffcc"
-          emissiveIntensity={0.15}
-          wireframe
+          color="#051a12"
+          emissive="#00ffaa"
+          emissiveIntensity={0.3}
           transparent
-          opacity={0.6}
+          opacity={0.7}
         />
       </mesh>
 
-      {/* Solid core */}
-      <mesh>
-        <sphereGeometry args={[0.7, 32, 32]} />
+      {/* Wireframe shell */}
+      <mesh ref={wireRef}>
+        <icosahedronGeometry args={[1.15, 3]} />
         <meshStandardMaterial
-          color="#061a14"
-          emissive="#00ffaa"
-          emissiveIntensity={0.3}
+          color="#0a2a1e"
+          emissive="#00ffcc"
+          emissiveIntensity={0.12}
+          wireframe
           transparent
           opacity={0.5}
         />
       </mesh>
 
-      {/* Outer glow */}
+      {/* Outer glow sphere */}
       <mesh ref={glowRef}>
-        <sphereGeometry args={[1.5, 32, 32]} />
+        <sphereGeometry args={[1.6, 32, 32]} />
         <meshBasicMaterial
-          color="#00ffcc"          transparent
-          opacity={0.08}
+          color="#00ffcc"
+          transparent
+          opacity={0.06}
           side={THREE.BackSide}
         />
       </mesh>
 
-      {/* Floating particle cloud */}
+      {/* Pulse ring 1 */}
+      <mesh ref={pulseRing1Ref} rotation={[Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.95, 1.0, 64]} />
+        <meshBasicMaterial color="#00ffcc" transparent opacity={0.1} side={THREE.DoubleSide} />
+      </mesh>
+
+      {/* Pulse ring 2 (offset phase) */}
+      <mesh ref={pulseRing2Ref} rotation={[Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.95, 1.0, 64]} />
+        <meshBasicMaterial color="#00ddbb" transparent opacity={0.1} side={THREE.DoubleSide} />
+      </mesh>
+
+      {/* Neural particle cloud */}
       <points ref={particlesRef}>
         <bufferGeometry>
           {/* @ts-ignore R3F bufferAttribute typing */}
@@ -186,184 +294,273 @@ function CentralBrain() {
             itemSize={3}
           />
         </bufferGeometry>
-        <pointsMaterial
-          color="#00ffcc"
-          size={0.015}
-          transparent
-          opacity={0.5}
-          sizeAttenuation
-        />
+        <pointsMaterial color="#00ffcc" size={0.012} transparent opacity={0.4} sizeAttenuation />
       </points>
-    </group>  );
+    </group>
+  );
 }
 
-/** Neural link from center to stock node */
+/** Neural link with energy particles flowing from brain to node */
 function NeuralLink({
   target,
   strength,
   color,
+  isActive,
 }: {
   target: [number, number, number];
   strength: number;
   color: string;
+  isActive: boolean;
 }) {
   const lineRef = useRef<THREE.Line>(null);
+  const particlesRef = useRef<THREE.Points>(null);
+  const particleCount = 12;
 
   const geometry = useMemo(() => {
     const points: THREE.Vector3[] = [];
     const start = new THREE.Vector3(0, 0, 0);
     const end = new THREE.Vector3(...target);
-    const segments = 30;
+    const segments = 40;
     for (let i = 0; i <= segments; i++) {
       const t = i / segments;
       const point = start.clone().lerp(end, t);
-      // Add a slight curve
-      const mid = 1 - Math.abs(t - 0.5) * 2;      point.y += mid * 0.3 * (Math.sin(t * Math.PI) * 0.5);
+      const curve = Math.sin(t * Math.PI);
+      point.y += curve * 0.4;
       points.push(point);
     }
     return new THREE.BufferGeometry().setFromPoints(points);
   }, [target]);
 
+  // Particle positions along the link
+  const particlePositions = useMemo(() => new Float32Array(particleCount * 3), []);
+
   useFrame(({ clock }) => {
+    const t = clock.getElapsedTime();
     if (lineRef.current) {
       const mat = lineRef.current.material as THREE.LineBasicMaterial;
-      mat.opacity = 0.15 + Math.sin(clock.getElapsedTime() * 2 + strength) * 0.1;
+      const baseOpacity = isActive ? 0.35 : 0.12;
+      mat.opacity = baseOpacity + Math.sin(t * 2.5 + strength * 3) * 0.1;
+    }
+
+    // Animate particles flowing along the link
+    if (particlesRef.current && isActive) {
+      const start = new THREE.Vector3(0, 0, 0);
+      const end = new THREE.Vector3(...target);
+      const positions = particlesRef.current.geometry.attributes.position;
+      for (let i = 0; i < particleCount; i++) {
+        const phase = ((t * 0.8 + i / particleCount) % 1);
+        const point = start.clone().lerp(end, phase);
+        point.y += Math.sin(phase * Math.PI) * 0.4;
+        positions.setXYZ(i, point.x, point.y, point.z);
+      }
+      positions.needsUpdate = true;
+      const pMat = particlesRef.current.material as THREE.PointsMaterial;
+      pMat.opacity = 0.6 + Math.sin(t * 3) * 0.2;
     }
   });
 
   const Line = "line" as any;
   return (
-    <Line ref={lineRef} geometry={geometry}>
-      <lineBasicMaterial
-        color={color}
-        transparent
-        opacity={0.2}
-        linewidth={1}
-      />
-    </Line>
+    <group>
+      <Line ref={lineRef} geometry={geometry}>
+        <lineBasicMaterial
+          color={color}
+          transparent
+          opacity={0.15}
+          linewidth={1}
+        />
+      </Line>
+
+      {/* Energy particles flowing along the link */}
+      {isActive && (
+        <points ref={particlesRef}>
+          <bufferGeometry>
+            {/* @ts-ignore R3F bufferAttribute typing */}
+            <bufferAttribute
+              attach="attributes-position"
+              args={[particlePositions, 3]}
+              count={particleCount}
+              array={particlePositions}
+              itemSize={3}
+            />
+          </bufferGeometry>
+          <pointsMaterial color={color} size={0.04} transparent opacity={0.7} sizeAttenuation />
+        </points>
+      )}
+    </group>
   );
 }
-/** Individual stock node sphere with label */
+
+/** Stock node with dynamic elevation, pulsing aura, and confidence-based glow */
 function StockNode({
   stock,
   position,
   onClick,
   isSelected,
+  hasNewDecision,
 }: {
   stock: StockNodeData;
   position: [number, number, number];
   onClick: (stock: StockNodeData) => void;
   isSelected: boolean;
+  hasNewDecision: boolean;
 }) {
+  const groupRef = useRef<THREE.Group>(null);
   const meshRef = useRef<THREE.Mesh>(null);
   const ringRef = useRef<THREE.Mesh>(null);
+  const auraRef = useRef<THREE.Mesh>(null);
+  const flashRef = useRef(0);
 
-  // Scale based on opportunity score (0.25 to 0.65)
-  const baseScale = 0.25 + (stock.opportunityScore / 100) * 0.4;
+  // Dynamic scaling: strong stocks are bigger (0.28 to 0.68)
+  const baseScale = 0.28 + (stock.opportunityScore / 100) * 0.4;
   const color = getNodeColor(stock);
   const emissive = getNodeEmissive(stock);
 
+  // Elevation: strong stocks float higher
+  const elevation = (stock.opportunityScore / 100) * 0.8 - 0.2;
+
+  // Track new decision flash
+  useEffect(() => {
+    if (hasNewDecision) flashRef.current = 1.0;
+  }, [hasNewDecision]);
+
   useFrame(({ clock }) => {
     const t = clock.getElapsedTime();
-    if (meshRef.current) {
-      // Pulse based on attention level
-      const pulseSpeed = stock.attentionLevel === "CRITICAL" ? 3 : stock.attentionLevel === "HIGH" ? 2 : 1;      const pulseAmp = stock.attentionLevel === "CRITICAL" ? 0.06 : 0.03;
-      const scale = baseScale + Math.sin(t * pulseSpeed) * pulseAmp;
-      meshRef.current.scale.setScalar(isSelected ? scale * 1.3 : scale);
+
+    // Elevate position
+    if (groupRef.current) {
+      groupRef.current.position.set(
+        position[0],
+        position[1] + elevation + Math.sin(t * 0.5 + position[0]) * 0.08,
+        position[2]
+      );
     }
+
+    if (meshRef.current) {
+      const pulseSpeed = stock.attentionLevel === "CRITICAL" ? 3.5 :
+        stock.attentionLevel === "HIGH" ? 2.5 : 1.2;
+      const pulseAmp = stock.attentionLevel === "CRITICAL" ? 0.07 : 0.03;
+      const scale = baseScale + Math.sin(t * pulseSpeed) * pulseAmp;
+      meshRef.current.scale.setScalar(isSelected ? scale * 1.35 : scale);
+
+      // Flash on new decision
+      if (flashRef.current > 0) {
+        const mat = meshRef.current.material as THREE.MeshStandardMaterial;
+        mat.emissiveIntensity = 0.5 + flashRef.current * 2.0;
+        flashRef.current = Math.max(0, flashRef.current - 0.02);
+      }
+    }
+
+    // Rotating pulse ring
     if (ringRef.current) {
-      ringRef.current.rotation.z = t * 0.5;
-      ringRef.current.rotation.x = Math.sin(t * 0.3) * 0.2;
-      (ringRef.current.material as THREE.MeshBasicMaterial).opacity =
-        isSelected ? 0.5 : 0.15 + Math.sin(t * 2) * 0.1;
+      ringRef.current.rotation.z = t * 0.6;
+      ringRef.current.rotation.x = Math.sin(t * 0.35) * 0.25;
+      const opacity = isSelected ? 0.5 : 0.15 + Math.sin(t * 2.2) * 0.1;
+      (ringRef.current.material as THREE.MeshBasicMaterial).opacity = opacity;
+    }
+
+    // Expanding aura for high-confidence nodes
+    if (auraRef.current) {
+      const auraPhase = (t * 0.6) % 1;
+      const auraScale = baseScale * (1.5 + auraPhase * 1.5);
+      auraRef.current.scale.setScalar(auraScale);
+      const auraOpacity = stock.confidence > 70 ? 0.08 * (1 - auraPhase) : 0;
+      (auraRef.current.material as THREE.MeshBasicMaterial).opacity = auraOpacity;
     }
   });
 
   return (
-    <Float speed={1.5} rotationIntensity={0.1} floatIntensity={0.3}>
-      <group position={position}>
-        {/* Node sphere */}
+    <Float speed={1.2} rotationIntensity={0.08} floatIntensity={0.2}>
+      <group ref={groupRef} position={position}>
+        {/* Main node sphere */}
         <mesh
           ref={meshRef}
-          onClick={(e) => {
-            e.stopPropagation();
-            onClick(stock);
-          }}
-          onPointerOver={(e) => {
-            e.stopPropagation();
-            document.body.style.cursor = "pointer";          }}
-          onPointerOut={() => {
-            document.body.style.cursor = "default";
-          }}
+          onClick={(e) => { e.stopPropagation(); onClick(stock); }}
+          onPointerOver={(e) => { e.stopPropagation(); document.body.style.cursor = "pointer"; }}
+          onPointerOut={() => { document.body.style.cursor = "default"; }}
         >
           <sphereGeometry args={[1, 24, 24]} />
           <meshStandardMaterial
             color={color}
             emissive={emissive}
-            emissiveIntensity={0.5}
+            emissiveIntensity={0.5 + (stock.confidence / 100) * 0.5}
             transparent
             opacity={0.85}
           />
         </mesh>
 
-        {/* Pulse ring */}
-        <mesh ref={ringRef} scale={[baseScale * 1.8, baseScale * 1.8, 1]}>
-          <ringGeometry args={[0.9, 1.0, 32]} />
-          <meshBasicMaterial
-            color={color}
-            transparent
-            opacity={0.2}
-            side={THREE.DoubleSide}
-          />
+        {/* Rotating pulse ring */}
+        <mesh ref={ringRef} scale={[baseScale * 1.9, baseScale * 1.9, 1]}>
+          <ringGeometry args={[0.88, 1.0, 32]} />
+          <meshBasicMaterial color={color} transparent opacity={0.2} side={THREE.DoubleSide} />
         </mesh>
-        {/* Symbol label */}
+
+        {/* Confidence aura (only for high-confidence nodes) */}
+        <mesh ref={auraRef}>
+          <sphereGeometry args={[1, 16, 16]} />
+          <meshBasicMaterial color={color} transparent opacity={0} side={THREE.BackSide} />
+        </mesh>
+
+        {/* Labels */}
         <Billboard>
           <Text
-            position={[0, baseScale + 0.35, 0]}
-            fontSize={0.22}
+            position={[0, baseScale + 0.4, 0]}
+            fontSize={0.24}
             color="#ffffff"
             anchorX="center"
             anchorY="bottom"
             font="/fonts/SpaceGrotesk-Bold.ttf"
-            outlineWidth={0.01}
+            outlineWidth={0.012}
             outlineColor="#000000"
           >
             {stock.displaySymbol}
           </Text>
           <Text
-            position={[0, baseScale + 0.12, 0]}
-            fontSize={0.12}
+            position={[0, baseScale + 0.15, 0]}
+            fontSize={0.11}
             color={getStateColor(stock.state)}
             anchorX="center"
             anchorY="bottom"
           >
-            {`${stock.confidence}% · ${getStateLabel(stock.state)}`}
+            {`${stock.confidence}% \u00B7 ${getStateLabel(stock.state)}`}
           </Text>
-        </Billboard>      </group>
+          {/* Price change indicator */}
+          <Text
+            position={[0, -(baseScale + 0.15), 0]}
+            fontSize={0.10}
+            color={stock.changePct >= 0 ? "#00ffcc" : "#ff7162"}
+            anchorX="center"
+            anchorY="top"
+          >
+            {`${stock.changePct >= 0 ? "\u25B2" : "\u25BC"} ${Math.abs(stock.changePct).toFixed(2)}%`}
+          </Text>
+        </Billboard>
+      </group>
     </Float>
   );
 }
 
-/** Ambient particle field in the background */
+/** Background particle field */
 function ParticleField() {
   const ref = useRef<THREE.Points>(null);
-
   const positions = useMemo(() => {
-    const count = 2000;
+    const count = 2500;
     const arr = new Float32Array(count * 3);
     for (let i = 0; i < count; i++) {
-      arr[i * 3] = (Math.random() - 0.5) * 30;
-      arr[i * 3 + 1] = (Math.random() - 0.5) * 30;
-      arr[i * 3 + 2] = (Math.random() - 0.5) * 30;
+      arr[i * 3] = (Math.random() - 0.5) * 40;
+      arr[i * 3 + 1] = (Math.random() - 0.5) * 40;
+      arr[i * 3 + 2] = (Math.random() - 0.5) * 40;
     }
     return arr;
   }, []);
 
   useFrame(({ clock }) => {
     if (ref.current) {
-      ref.current.rotation.y = clock.getElapsedTime() * 0.01;
+      ref.current.rotation.y = clock.getElapsedTime() * 0.008;
+      ref.current.rotation.x = Math.sin(clock.getElapsedTime() * 0.05) * 0.02;
     }
   });
+
   return (
     <points ref={ref}>
       <bufferGeometry>
@@ -376,54 +573,78 @@ function ParticleField() {
           itemSize={3}
         />
       </bufferGeometry>
-      <pointsMaterial color="#334455" size={0.02} transparent opacity={0.4} sizeAttenuation />
+      <pointsMaterial color="#223344" size={0.018} transparent opacity={0.35} sizeAttenuation />
     </points>
   );
 }
 
-/** Full 3D scene */
+/** Complete 3D scene */
 function BrainScene({
   stocks,
   selectedSymbol,
   onSelectStock,
+  recentDecisions,
 }: {
   stocks: StockNodeData[];
   selectedSymbol: string | null;
-  onSelectStock: (stock: StockNodeData) => void;}) {
-  // Arrange nodes in an elliptical orbit around the center
+  onSelectStock: (stock: StockNodeData) => void;
+  recentDecisions: SIDecisionEvent[];
+}) {
+  // Arrange nodes in a 3D orbital layout — strong stocks get prime positions
   const nodePositions = useMemo(() => {
-    return stocks.map((_, i) => {
-      const angle = (i / stocks.length) * Math.PI * 2;
-      const rx = 4.5 + Math.sin(i * 1.7) * 0.6;
-      const ry = 3.2 + Math.cos(i * 2.3) * 0.4;
-      const x = Math.cos(angle) * rx;
-      const y = Math.sin(angle) * ry * 0.5 + Math.sin(i * 0.9) * 0.5;
-      const z = Math.sin(angle) * rx * 0.3;
-      return [x, y, z] as [number, number, number];
+    const sorted = [...stocks].map((s, origIdx) => ({ s, origIdx }))
+      .sort((a, b) => b.s.opportunityScore - a.s.opportunityScore);
+
+    const positions = new Array<[number, number, number]>(stocks.length);
+    sorted.forEach(({ origIdx }, rank) => {
+      const angle = (rank / stocks.length) * Math.PI * 2 - Math.PI / 2;
+      // Inner orbit for top stocks, outer for weaker
+      const orbitRadius = rank < 3 ? 3.8 : rank < 6 ? 4.8 : 5.6;
+      const x = Math.cos(angle) * orbitRadius;
+      const y = Math.sin(angle) * orbitRadius * 0.35 + Math.sin(rank * 1.1) * 0.3;
+      const z = Math.sin(angle) * orbitRadius * 0.3;
+      positions[origIdx] = [x, y, z];
     });
-  }, [stocks.length]);
+    return positions;
+  }, [stocks]);
+
+  // Track which symbols got recent decisions (for flash effect)
+  const recentSymbols = useMemo(() => {
+    const set = new Set<string>();
+    recentDecisions.slice(0, 5).forEach((d) => set.add(d.symbol));
+    return set;
+  }, [recentDecisions]);
+
+  // Compute brain intensity from average confidence
+  const brainIntensity = useMemo(() => {
+    const avg = stocks.reduce((sum, s) => sum + s.confidence, 0) / (stocks.length || 1);
+    return avg / 100;
+  }, [stocks]);
 
   return (
     <>
-      <ambientLight intensity={0.15} />
-      <pointLight position={[0, 0, 0]} intensity={1.5} color="#00ffcc" distance={12} decay={2} />
-      <pointLight position={[5, 5, 5]} intensity={0.3} color="#4488ff" />
-      <pointLight position={[-5, -3, -5]} intensity={0.2} color="#ff6644" />
+      <ambientLight intensity={0.12} />
+      <pointLight position={[0, 0, 0]} intensity={2.0} color="#00ffcc" distance={14} decay={2} />
+      <pointLight position={[6, 5, 5]} intensity={0.25} color="#4488ff" />
+      <pointLight position={[-6, -4, -5]} intensity={0.15} color="#ff6644" />
 
-      <CentralBrain />
+      <CentralBrain intensity={brainIntensity} />
       <ParticleField />
 
-      {stocks.map((stock, i) => (        <group key={stock.symbol}>
+      {stocks.map((stock, i) => (
+        <group key={stock.symbol}>
           <NeuralLink
             target={nodePositions[i]}
             strength={stock.opportunityScore / 100}
             color={getNodeColor(stock)}
+            isActive={stock.attentionLevel === "CRITICAL" || stock.attentionLevel === "HIGH" || selectedSymbol === stock.symbol}
           />
           <StockNode
             stock={stock}
             position={nodePositions[i]}
             onClick={onSelectStock}
             isSelected={selectedSymbol === stock.symbol}
+            hasNewDecision={recentSymbols.has(stock.symbol)}
           />
         </group>
       ))}
@@ -432,24 +653,25 @@ function BrainScene({
         enablePan={false}
         enableZoom
         minDistance={3}
-        maxDistance={15}
+        maxDistance={16}
         autoRotate
-        autoRotateSpeed={0.3}
+        autoRotateSpeed={0.25}
         maxPolarAngle={Math.PI * 0.75}
         minPolarAngle={Math.PI * 0.25}
-      />    </>
+      />
+    </>
   );
 }
 
 // ─── 2D UI Panels ───────────────────────────────────────────────────────────
 
 const panelStyle: React.CSSProperties = {
-  backgroundColor: "rgba(14,14,15,0.85)",
-  border: "1px solid rgba(72,72,73,0.25)",
+  backgroundColor: "rgba(10,10,11,0.88)",
+  border: "1px solid rgba(72,72,73,0.2)",
   borderRadius: "10px",
   padding: "14px",
-  backdropFilter: "blur(16px)",
-  WebkitBackdropFilter: "blur(16px)",
+  backdropFilter: "blur(20px)",
+  WebkitBackdropFilter: "blur(20px)",
 };
 
 const labelStyle: React.CSSProperties = {
@@ -460,11 +682,6 @@ const labelStyle: React.CSSProperties = {
   fontFamily: "Space Grotesk, sans-serif",
   fontWeight: 700,
   marginBottom: "10px",
-};const valueStyle: React.CSSProperties = {
-  fontSize: "20px",
-  fontFamily: "JetBrains Mono, monospace",
-  fontWeight: 700,
-  color: "#ffffff",
 };
 
 function RegimePanel({ supreme }: { supreme: SupremeState }) {
@@ -472,19 +689,23 @@ function RegimePanel({ supreme }: { supreme: SupremeState }) {
   return (
     <div style={panelStyle}>
       <div style={labelStyle}>Market Regime</div>
-      <div style={{ ...valueStyle, color: regimeColor, fontSize: "16px" }}>{supreme.regime}</div>
+      <div style={{ fontSize: "16px", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, color: regimeColor }}>{supreme.regime}</div>
       <div style={{ fontSize: "10px", color: "#767576", marginTop: "6px" }}>
-        Risk Appetite: <span style={{ color: "#adaaab" }}>{supreme.riskAppetite}</span>
+        Appetite: <span style={{ color: "#adaaab" }}>{supreme.riskAppetite}</span>
       </div>
       <div style={{ fontSize: "10px", color: "#767576", marginTop: "3px" }}>
-        Active Brains: <span style={{ color: "#adaaab" }}>{supreme.activeBrains}</span>
+        Capital: <span style={{ color: "#adaaab" }}>{supreme.totalCapitalAllocated}%</span>
+      </div>
+      <div style={{ fontSize: "10px", color: "#767576", marginTop: "3px" }}>
+        Cycle: <span style={{ color: "#adaaab" }}>{supreme.lastCycleMs}ms</span>
       </div>
       {supreme.decayDetected && (
         <div style={{ fontSize: "9px", color: "#ff7162", marginTop: "6px", display: "flex", alignItems: "center", gap: "4px" }}>
           <span className="material-symbols-outlined" style={{ fontSize: "12px" }}>warning</span>
           Decay Detected
         </div>
-      )}    </div>
+      )}
+    </div>
   );
 }
 
@@ -507,8 +728,9 @@ function AttentionPanel({ stocks }: { stocks: StockNodeData[] }) {
                 </span>
               </div>
               <div style={{ height: "3px", borderRadius: "2px", backgroundColor: "rgba(255,255,255,0.05)" }}>
-                <div style={{ height: "100%", borderRadius: "2px", width: `${s.opportunityScore}%`, backgroundColor: barColor, transition: "width 0.5s ease" }} />
-              </div>            </div>
+                <div style={{ height: "100%", borderRadius: "2px", width: `${s.opportunityScore}%`, backgroundColor: barColor, transition: "width 0.8s ease" }} />
+              </div>
+            </div>
           );
         })}
       </div>
@@ -516,60 +738,10 @@ function AttentionPanel({ stocks }: { stocks: StockNodeData[] }) {
   );
 }
 
-function TopOpportunities({ stocks, onSelect }: { stocks: StockNodeData[]; onSelect: (s: StockNodeData) => void }) {
-  const top = [...stocks]
-    .filter((s) => s.riskGate !== "BLOCK")
-    .sort((a, b) => b.opportunityScore - a.opportunityScore)
-    .slice(0, 4);
-
-  return (
-    <div style={panelStyle}>
-      <div style={labelStyle}>Top Opportunities</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-        {top.map((s) => (
-          <div
-            key={s.symbol}
-            onClick={() => onSelect(s)}
-            style={{
-              display: "flex",
-              alignItems: "center",              justifyContent: "space-between",
-              padding: "8px 10px",
-              borderRadius: "6px",
-              backgroundColor: "rgba(255,255,255,0.03)",
-              border: "1px solid rgba(72,72,73,0.18)",
-              cursor: "pointer",
-              transition: "background-color 0.15s",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "rgba(0,255,204,0.06)")}
-            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.03)")}
-          >
-            <div>
-              <div style={{ fontSize: "11px", fontWeight: 700, color: "#ffffff", fontFamily: "Space Grotesk" }}>
-                {s.displaySymbol}
-              </div>
-              <div style={{ fontSize: "9px", color: getStateColor(s.state) }}>
-                {getStateLabel(s.state)} · {s.setupFamily}
-              </div>
-            </div>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: "11px", fontFamily: "JetBrains Mono", fontWeight: 700, color: "#ffffff" }}>
-                {s.confidence}%
-              </div>
-              <div style={{ fontSize: "8px", color: s.changePct >= 0 ? "#00ffcc" : "#ff7162", fontFamily: "JetBrains Mono" }}>
-                {s.changePct >= 0 ? "▲" : "▼"} {Math.abs(s.changePct).toFixed(2)}%              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function RiskGatePanel({ stocks }: { stocks: StockNodeData[] }) {
   const blocked = stocks.filter((s) => s.riskGate === "BLOCK").length;
-  const watching = stocks.filter((s) => s.riskGate === "WATCH").length;
+  const watching = stocks.filter((s) => s.riskGate === "WATCH" || s.riskGate === "REDUCE").length;
   const allowed = stocks.filter((s) => s.riskGate === "ALLOW").length;
-
   return (
     <div style={panelStyle}>
       <div style={labelStyle}>Risk Gate</div>
@@ -580,7 +752,8 @@ function RiskGatePanel({ stocks }: { stocks: StockNodeData[] }) {
         </div>
         <div style={{ textAlign: "center", flex: 1 }}>
           <div style={{ fontSize: "18px", fontFamily: "JetBrains Mono", fontWeight: 700, color: "#ffcc00" }}>{watching}</div>
-          <div style={{ fontSize: "8px", color: "#767576", letterSpacing: "0.1em" }}>WATCH</div>        </div>
+          <div style={{ fontSize: "8px", color: "#767576", letterSpacing: "0.1em" }}>WATCH</div>
+        </div>
         <div style={{ textAlign: "center", flex: 1 }}>
           <div style={{ fontSize: "18px", fontFamily: "JetBrains Mono", fontWeight: 700, color: "#ff4444" }}>{blocked}</div>
           <div style={{ fontSize: "8px", color: "#767576", letterSpacing: "0.1em" }}>BLOCK</div>
@@ -590,78 +763,115 @@ function RiskGatePanel({ stocks }: { stocks: StockNodeData[] }) {
   );
 }
 
-/** Stock detail drawer (slides in from right) */
+function LiveSIFeed({ decisions }: { decisions: SIDecisionEvent[] }) {
+  if (!decisions.length) return null;
+  return (
+    <div style={panelStyle}>
+      <div style={labelStyle}>Live SI Decisions</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: "4px", maxHeight: "160px", overflowY: "auto" }}>
+        {decisions.slice(0, 6).map((d, i) => (
+          <div key={i} style={{
+            display: "flex", alignItems: "center", gap: "8px", padding: "5px 8px",
+            borderRadius: "4px", backgroundColor: d.approved ? "rgba(0,255,204,0.04)" : "rgba(255,68,68,0.04)",
+            border: `1px solid ${d.approved ? "rgba(0,255,204,0.12)" : "rgba(255,68,68,0.12)"}`,
+          }}>
+            <div style={{ width: "5px", height: "5px", borderRadius: "50%", backgroundColor: d.approved ? "#00ffcc" : "#ff4444", boxShadow: `0 0 6px ${d.approved ? "#00ffcc" : "#ff4444"}` }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: "9px", fontWeight: 700, color: "#fff", fontFamily: "Space Grotesk" }}>
+                {d.symbol} <span style={{ color: d.approved ? "#00ffcc" : "#ff4444", fontWeight: 600 }}>{d.approved ? "APPROVED" : "REJECTED"}</span>
+              </div>
+              <div style={{ fontSize: "8px", color: "#767576", fontFamily: "JetBrains Mono" }}>
+                {d.direction} \u00B7 {(d.win_probability * 100).toFixed(0)}% win \u00B7 edge {d.edge_score?.toFixed(2)}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TopOpportunities({ stocks, onSelect }: { stocks: StockNodeData[]; onSelect: (s: StockNodeData) => void }) {
+  const top = [...stocks]
+    .filter((s) => s.riskGate !== "BLOCK")
+    .sort((a, b) => b.opportunityScore - a.opportunityScore)
+    .slice(0, 4);
+  return (
+    <div style={panelStyle}>
+      <div style={labelStyle}>Top Opportunities</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+        {top.map((s) => (
+          <div
+            key={s.symbol}
+            onClick={() => onSelect(s)}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "8px 10px", borderRadius: "6px",
+              backgroundColor: "rgba(255,255,255,0.03)",
+              border: "1px solid rgba(72,72,73,0.18)",
+              cursor: "pointer", transition: "background-color 0.15s",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "rgba(0,255,204,0.06)")}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.03)")}
+          >
+            <div>
+              <div style={{ fontSize: "11px", fontWeight: 700, color: "#ffffff", fontFamily: "Space Grotesk" }}>
+                {s.displaySymbol}
+              </div>
+              <div style={{ fontSize: "9px", color: getStateColor(s.state) }}>
+                {getStateLabel(s.state)} \u00B7 {s.setupFamily}
+              </div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: "11px", fontFamily: "JetBrains Mono", fontWeight: 700, color: "#ffffff" }}>
+                {s.confidence}%
+              </div>
+              <div style={{ fontSize: "8px", color: s.changePct >= 0 ? "#00ffcc" : "#ff7162", fontFamily: "JetBrains Mono" }}>
+                {s.changePct >= 0 ? "\u25B2" : "\u25BC"} {Math.abs(s.changePct).toFixed(2)}%
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Stock Intelligence Drawer ──────────────────────────────────────────────
+
 function StockDrawer({
   stock,
   onClose,
+  decisions,
 }: {
   stock: StockNodeData | null;
   onClose: () => void;
+  decisions: SIDecisionEvent[];
 }) {
   if (!stock) return null;
 
   const color = getNodeColor(stock);
+  const stockDecisions = decisions.filter((d) => d.symbol === stock.symbol);
 
   return (
-    <div
-      style={{        position: "fixed",
-        top: 0,
-        right: 0,
-        bottom: 0,
-        width: "380px",
-        maxWidth: "90vw",
-        backgroundColor: "rgba(14,14,15,0.95)",
-        borderLeft: "1px solid rgba(72,72,73,0.25)",
-        backdropFilter: "blur(20px)",
-        WebkitBackdropFilter: "blur(20px)",
-        zIndex: 100,
-        padding: "24px",
-        overflowY: "auto",
-        animation: "slideInRight 0.25s ease-out",
-      }}
-    >
-      {/* Close button */}
-      <button
-        onClick={onClose}
-        style={{
-          position: "absolute",
-          top: "16px",
-          right: "16px",
-          background: "none",
-          border: "none",          color: "#767576",
-          cursor: "pointer",
-          fontSize: "20px",
-        }}
-      >
+    <div style={{
+      position: "fixed", top: 0, right: 0, bottom: 0, width: "400px", maxWidth: "92vw",
+      backgroundColor: "rgba(10,10,11,0.96)", borderLeft: "1px solid rgba(72,72,73,0.2)",
+      backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)",
+      zIndex: 100, padding: "24px", overflowY: "auto",
+      animation: "slideInRight 0.25s ease-out",
+    }}>
+      {/* Close */}
+      <button onClick={onClose} style={{ position: "absolute", top: "16px", right: "16px", background: "none", border: "none", color: "#767576", cursor: "pointer", fontSize: "20px" }}>
         <span className="material-symbols-outlined">close</span>
       </button>
 
       {/* Header */}
-      <div style={{ marginBottom: "24px" }}>
+      <div style={{ marginBottom: "20px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
-          <div
-            style={{
-              width: "10px",
-              height: "10px",
-              borderRadius: "50%",
-              backgroundColor: color,
-              boxShadow: `0 0 12px ${color}`,
-            }}
-          />
-          <span style={{ fontSize: "22px", fontFamily: "Space Grotesk", fontWeight: 700, color: "#ffffff" }}>
-            {stock.displaySymbol}
-          </span>
-          <span
-            style={{              fontSize: "9px",
-              padding: "2px 8px",
-              borderRadius: "4px",
-              backgroundColor: `${getStateColor(stock.state)}15`,
-              color: getStateColor(stock.state),
-              fontFamily: "Space Grotesk",
-              fontWeight: 600,
-              letterSpacing: "0.1em",
-            }}
-          >
+          <div style={{ width: "12px", height: "12px", borderRadius: "50%", backgroundColor: color, boxShadow: `0 0 14px ${color}` }} />
+          <span style={{ fontSize: "24px", fontFamily: "Space Grotesk", fontWeight: 700, color: "#ffffff" }}>{stock.displaySymbol}</span>
+          <span style={{ fontSize: "9px", padding: "2px 8px", borderRadius: "4px", backgroundColor: `${getStateColor(stock.state)}15`, color: getStateColor(stock.state), fontFamily: "Space Grotesk", fontWeight: 600, letterSpacing: "0.1em" }}>
             {getStateLabel(stock.state)}
           </span>
         </div>
@@ -669,67 +879,144 @@ function StockDrawer({
           <span style={{ fontSize: "28px", fontFamily: "JetBrains Mono", fontWeight: 700, color: "#ffffff" }}>
             ${stock.price > 1000 ? stock.price.toLocaleString() : stock.price.toFixed(2)}
           </span>
-          <span style={{ fontSize: "12px", fontFamily: "JetBrains Mono", fontWeight: 700, color: stock.changePct >= 0 ? "#00ffcc" : "#ff7162" }}>
+          <span style={{ fontSize: "13px", fontFamily: "JetBrains Mono", fontWeight: 700, color: stock.changePct >= 0 ? "#00ffcc" : "#ff7162" }}>
             {stock.changePct >= 0 ? "+" : ""}{stock.changePct.toFixed(2)}%
           </span>
         </div>
       </div>
 
-      {/* Metrics grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "24px" }}>        {[
+      {/* Intelligence Metrics Grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "20px" }}>
+        {[
           { label: "Confidence", value: `${stock.confidence}%`, color: stock.confidence > 70 ? "#00ffcc" : stock.confidence > 50 ? "#ffcc00" : "#ff7162" },
           { label: "Opportunity", value: `${stock.opportunityScore}%`, color: "#00ffcc" },
-          { label: "Sentiment", value: stock.sentiment.toUpperCase(), color: stock.sentiment === "bullish" ? "#00ffcc" : stock.sentiment === "bearish" ? "#ff7162" : "#8888aa" },
+          { label: "Risk Gate", value: stock.riskGate, color: getRiskGateColor(stock.riskGate) },
           { label: "Regime", value: stock.regime.toUpperCase(), color: "#adaaab" },
-          { label: "Setup Family", value: stock.setupFamily.toUpperCase(), color: "#adaaab" },
-          { label: "Risk Gate", value: stock.riskGate, color: stock.riskGate === "ALLOW" ? "#00ffcc" : stock.riskGate === "BLOCK" ? "#ff4444" : "#ffcc00" },
-          { label: "Attention", value: stock.attentionLevel, color: stock.attentionLevel === "CRITICAL" ? "#00ffcc" : "#adaaab" },
         ].map((m) => (
-          <div key={m.label} style={{ padding: "10px", borderRadius: "6px", backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(72,72,73,0.15)" }}>
-            <div style={{ fontSize: "8px", color: "#484849", letterSpacing: "0.15em", textTransform: "uppercase", fontFamily: "Space Grotesk", fontWeight: 700, marginBottom: "4px" }}>
-              {m.label}
-            </div>
-            <div style={{ fontSize: "13px", fontFamily: "JetBrains Mono", fontWeight: 700, color: m.color }}>
-              {m.value}
-            </div>
+          <div key={m.label} style={{ padding: "10px", borderRadius: "6px", backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(72,72,73,0.12)" }}>
+            <div style={{ fontSize: "8px", color: "#484849", letterSpacing: "0.15em", textTransform: "uppercase", fontFamily: "Space Grotesk", fontWeight: 700, marginBottom: "4px" }}>{m.label}</div>
+            <div style={{ fontSize: "14px", fontFamily: "JetBrains Mono", fontWeight: 700, color: m.color }}>{m.value}</div>
           </div>
         ))}
       </div>
 
-      {/* Claude reasoning placeholder */}
-      <div style={{ ...panelStyle, marginBottom: "16px" }}>
-        <div style={labelStyle}>Claude Reasoning</div>
-        <div style={{ fontSize: "11px", color: "#adaaab", lineHeight: 1.6 }}>
-          {stock.state.includes("STRONG")            ? `${stock.displaySymbol} shows strong ${stock.setupFamily} setup with ${stock.confidence}% confidence. Structure aligns with ${stock.regime} regime. Order flow confirms directional bias. Risk gate is clear — position sizing at standard.`
-            : stock.riskGate === "BLOCK"
-            ? `${stock.displaySymbol} is currently BLOCKED. Spread instability and adverse regime conditions make execution unreliable. Waiting for improved microstructure.`
-            : `${stock.displaySymbol} is on watch. Setup is forming but not yet confirmed. Monitoring for trigger conditions before entry consideration.`
-          }
-        </div>
-      </div>
-
-      {/* Market DNA placeholder */}
-      <div style={panelStyle}>
+      {/* Market DNA */}
+      <div style={{ ...panelStyle, marginBottom: "12px" }}>
         <div style={labelStyle}>Market DNA</div>
         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
           {[
-            { trait: "Trendiness", value: 72 },
-            { trait: "Breakout Cleanliness", value: 68 },
-            { trait: "Fakeout Risk", value: 35 },
-            { trait: "Spread Stability", value: 81 },
-            { trait: "News Sensitivity", value: 55 },
+            { trait: "Trendiness", value: stock.trendiness ?? 60 },
+            { trait: "Breakout Quality", value: stock.breakoutQuality ?? 55 },
+            { trait: "Fakeout Risk", value: stock.fakeoutRisk ?? 40, invert: true },
+            { trait: "Spread Stability", value: stock.spreadStability ?? 75 },
+            { trait: "News Sensitivity", value: stock.newsSensitivity ?? 50 },
           ].map((d) => (
             <div key={d.trait}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
                 <span style={{ fontSize: "9px", color: "#adaaab" }}>{d.trait}</span>
                 <span style={{ fontSize: "9px", fontFamily: "JetBrains Mono", color: "#767576" }}>{d.value}%</span>
               </div>
-              <div style={{ height: "2px", borderRadius: "1px", backgroundColor: "rgba(255,255,255,0.05)" }}>                <div style={{ height: "100%", borderRadius: "1px", width: `${d.value}%`, backgroundColor: d.value > 60 ? "#00ffcc" : "#ffcc00" }} />
+              <div style={{ height: "2px", borderRadius: "1px", backgroundColor: "rgba(255,255,255,0.05)" }}>
+                <div style={{
+                  height: "100%", borderRadius: "1px", width: `${d.value}%`,
+                  backgroundColor: d.invert ? (d.value > 50 ? "#ff7162" : "#00ffcc") : (d.value > 60 ? "#00ffcc" : "#ffcc00"),
+                  transition: "width 0.5s ease",
+                }} />
               </div>
             </div>
           ))}
         </div>
       </div>
+
+      {/* Setup Memory */}
+      <div style={{ ...panelStyle, marginBottom: "12px" }}>
+        <div style={labelStyle}>Setup Memory</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: "16px", fontFamily: "JetBrains Mono", fontWeight: 700, color: "#00ffcc" }}>{stock.similarSetups ?? 0}</div>
+            <div style={{ fontSize: "7px", color: "#767576", letterSpacing: "0.1em" }}>SIMILAR</div>
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: "16px", fontFamily: "JetBrains Mono", fontWeight: 700, color: (stock.winRate ?? 50) > 55 ? "#00ffcc" : "#ffcc00" }}>{stock.winRate ?? 50}%</div>
+            <div style={{ fontSize: "7px", color: "#767576", letterSpacing: "0.1em" }}>WIN RATE</div>
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: "16px", fontFamily: "JetBrains Mono", fontWeight: 700, color: (stock.profitFactor ?? 1) > 1.5 ? "#00ffcc" : "#ffcc00" }}>{(stock.profitFactor ?? 1.0).toFixed(1)}</div>
+            <div style={{ fontSize: "7px", color: "#767576", letterSpacing: "0.1em" }}>PROFIT F.</div>
+          </div>
+        </div>
+        {stock.decayRate && stock.decayRate > 0.3 && (
+          <div style={{ fontSize: "9px", color: "#ff7162", marginTop: "8px", display: "flex", alignItems: "center", gap: "4px" }}>
+            <span className="material-symbols-outlined" style={{ fontSize: "11px" }}>trending_down</span>
+            Setup decay detected \u2014 edge weakening
+          </div>
+        )}
+      </div>
+
+      {/* Claude Reasoning */}
+      <div style={{ ...panelStyle, marginBottom: "12px" }}>
+        <div style={labelStyle}>
+          <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+            <span className="material-symbols-outlined" style={{ fontSize: "10px", color: "#00ffcc" }}>psychology</span>
+            Claude Reasoning
+          </span>
+        </div>
+        <div style={{ fontSize: "11px", color: "#adaaab", lineHeight: 1.65 }}>
+          {stock.state.includes("STRONG")
+            ? `${stock.displaySymbol} presents a strong ${stock.setupFamily} setup with ${stock.confidence}% confidence. Structure aligns with ${stock.regime} regime. Order flow confirms directional bias with ${stock.winRate ?? 50}% historical win rate across ${stock.similarSetups ?? 0} similar setups. Risk gate is clear \u2014 position sizing at standard Kelly fraction.`
+            : stock.riskGate === "BLOCK"
+            ? `${stock.displaySymbol} is currently BLOCKED. ${stock.fakeoutRisk && stock.fakeoutRisk > 50 ? "High fakeout risk (" + stock.fakeoutRisk + "%) " : ""}and adverse regime conditions make execution unreliable. Spread stability at ${stock.spreadStability ?? 0}%. Waiting for improved microstructure before re-evaluation.`
+            : `${stock.displaySymbol} is on watch with a forming ${stock.setupFamily} setup. Confidence at ${stock.confidence}% needs confirmation. ${stock.similarSetups ?? 0} similar historical patterns show ${stock.winRate ?? 50}% win rate. Monitoring for trigger conditions and improved order flow alignment.`
+          }
+        </div>
+      </div>
+
+      {/* Execution Signature */}
+      <div style={{ ...panelStyle, marginBottom: "12px" }}>
+        <div style={labelStyle}>Execution Signature</div>
+        <div style={{ fontSize: "10px", color: "#adaaab", display: "flex", flexDirection: "column", gap: "4px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <span style={{ color: "#767576" }}>Spread Stability</span>
+            <span style={{ fontFamily: "JetBrains Mono", color: (stock.spreadStability ?? 75) > 80 ? "#00ffcc" : "#ffcc00" }}>{stock.spreadStability ?? 75}%</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <span style={{ color: "#767576" }}>Fill Quality</span>
+            <span style={{ fontFamily: "JetBrains Mono", color: "#adaaab" }}>GOOD</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <span style={{ color: "#767576" }}>Best Entry</span>
+            <span style={{ fontFamily: "JetBrains Mono", color: "#adaaab" }}>LIMIT</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Recent SI Decisions for this stock */}
+      {stockDecisions.length > 0 && (
+        <div style={{ ...panelStyle, marginBottom: "12px" }}>
+          <div style={labelStyle}>Recent SI Decisions</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+            {stockDecisions.slice(0, 4).map((d, i) => (
+              <div key={i} style={{
+                padding: "6px 8px", borderRadius: "4px", fontSize: "9px",
+                backgroundColor: d.approved ? "rgba(0,255,204,0.04)" : "rgba(255,68,68,0.04)",
+                border: `1px solid ${d.approved ? "rgba(0,255,204,0.1)" : "rgba(255,68,68,0.1)"}`,
+              }}>
+                <div style={{ fontWeight: 700, color: d.approved ? "#00ffcc" : "#ff4444", fontFamily: "Space Grotesk" }}>
+                  {d.approved ? "APPROVED" : "REJECTED"} \u00B7 {d.direction}
+                </div>
+                <div style={{ color: "#767576", fontFamily: "JetBrains Mono", marginTop: "2px" }}>
+                  Win: {(d.win_probability * 100).toFixed(0)}% \u00B7 Edge: {d.edge_score?.toFixed(3)} \u00B7 Quality: {(d.quality * 100).toFixed(0)}%
+                </div>
+                {d.entry_price && (
+                  <div style={{ color: "#555", fontFamily: "JetBrains Mono", marginTop: "2px" }}>
+                    Entry: ${d.entry_price.toFixed(2)} \u00B7 SL: ${d.stop_loss?.toFixed(2)} \u00B7 TP: ${d.take_profit?.toFixed(2)}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -739,10 +1026,11 @@ function StockDrawer({
 export default function BrainPage() {
   const [selectedStock, setSelectedStock] = useState<StockNodeData | null>(null);
 
-  // Real API hooks — graceful fallback to mock data
+  // Real API hooks with graceful fallback
   const { data: brainEntities } = useBrainEntities();
   const { data: consciousness } = useBrainConsciousness();
   const livePrices = useLivePrices();
+  const { decisions: siDecisions, connected: sseConnected } = useSIStream();
 
   const stocks = useMemo(() => {
     if (!brainEntities?.length) return MOCK_STOCKS;
@@ -762,6 +1050,15 @@ export default function BrainPage() {
         price: lp?.price ?? entity.last_price ?? 0,
         changePct: lp?.changePct ?? 0,
         riskGate: sj.riskGate ?? "ALLOW",
+        winRate: sj.winRate,
+        similarSetups: sj.similarSetups,
+        profitFactor: sj.profitFactor,
+        decayRate: sj.decayRate,
+        trendiness: sj.trendiness,
+        fakeoutRisk: sj.fakeoutRisk,
+        breakoutQuality: sj.breakoutQuality,
+        spreadStability: sj.spreadStability,
+        newsSensitivity: sj.newsSensitivity,
       };
     });
   }, [brainEntities, livePrices]);
@@ -784,18 +1081,18 @@ export default function BrainPage() {
 
   return (
     <div style={{ position: "relative", width: "100%", height: "calc(100vh - 40px)", overflow: "hidden" }}>
-      {/* CSS animation for drawer */}
-      <style>{`        @keyframes slideInRight {
+      <style>{`
+        @keyframes slideInRight {
           from { transform: translateX(100%); opacity: 0; }
           to   { transform: translateX(0);    opacity: 1; }
         }
       `}</style>
 
-      {/* 3D Canvas — full background */}
+      {/* 3D Canvas */}
       <div style={{ position: "absolute", inset: 0 }}>
         <Canvas
-          camera={{ position: [0, 2, 8], fov: 55 }}
-          style={{ background: "radial-gradient(ellipse at center, #0a1a15 0%, #0e0e0f 70%)" }}
+          camera={{ position: [0, 1.5, 9], fov: 52 }}
+          style={{ background: "radial-gradient(ellipse at center, #081a14 0%, #0a0a0b 60%, #050506 100%)" }}
           gl={{ antialias: true, alpha: true }}
         >
           <Suspense fallback={null}>
@@ -803,96 +1100,83 @@ export default function BrainPage() {
               stocks={stocks}
               selectedSymbol={selectedStock?.symbol ?? null}
               onSelectStock={handleSelectStock}
+              recentDecisions={siDecisions}
             />
           </Suspense>
         </Canvas>
       </div>
 
-      {/* Page title overlay */}
-      <div style={{ position: "absolute", top: "16px", left: "20px", zIndex: 10 }}>        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+      {/* Title + SSE status */}
+      <div style={{ position: "absolute", top: "16px", left: "20px", zIndex: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
           <span className="material-symbols-outlined" style={{ fontSize: "18px", color: "#00ffcc" }}>neurology</span>
           <span style={{ fontSize: "14px", fontFamily: "Space Grotesk", fontWeight: 700, letterSpacing: "0.2em", color: "#ffffff" }}>
-            BRAIN
+            GODSVIEW BRAIN
           </span>
+          <div style={{
+            width: "6px", height: "6px", borderRadius: "50%",
+            backgroundColor: sseConnected ? "#00ffcc" : "#ff4444",
+            boxShadow: `0 0 6px ${sseConnected ? "#00ffcc" : "#ff4444"}`,
+          }} />
         </div>
         <div style={{ fontSize: "9px", color: "#484849", fontFamily: "JetBrains Mono", letterSpacing: "0.1em" }}>
-          {stocks.length} NODES · CYCLE {supreme.lastCycleMs}ms · {supreme.regime}
+          {stocks.length} NODES \u00B7 CYCLE {supreme.lastCycleMs}ms \u00B7 {supreme.regime}
+          {sseConnected ? " \u00B7 SI LIVE" : ""}
         </div>
       </div>
 
       {/* Left panels */}
-      <div style={{ position: "absolute", top: "16px", left: "20px", marginTop: "50px", zIndex: 10, display: "flex", flexDirection: "column", gap: "10px", width: "220px" }}>
+      <div style={{ position: "absolute", top: "16px", left: "20px", marginTop: "52px", zIndex: 10, display: "flex", flexDirection: "column", gap: "10px", width: "220px" }}>
         <RegimePanel supreme={supreme} />
         <AttentionPanel stocks={stocks} />
         <RiskGatePanel stocks={stocks} />
+        <LiveSIFeed decisions={siDecisions} />
       </div>
 
-      {/* Right panel — Top Opportunities */}
-      <div style={{ position: "absolute", top: "16px", right: selectedStock ? "400px" : "20px", zIndex: 10, width: "220px", transition: "right 0.25s ease" }}>
+      {/* Right panel */}
+      <div style={{ position: "absolute", top: "16px", right: selectedStock ? "420px" : "20px", zIndex: 10, width: "220px", transition: "right 0.25s ease" }}>
         <TopOpportunities stocks={stocks} onSelect={handleSelectStock} />
       </div>
 
-      {/* Bottom center — Live Signal Strip */}
-      <div style={{        position: "absolute",
-        bottom: "16px",
-        left: "50%",
-        transform: "translateX(-50%)",
-        zIndex: 10,
-        display: "flex",
-        gap: "8px",
+      {/* Bottom signal strip */}
+      <div style={{
+        position: "absolute", bottom: "16px", left: "50%", transform: "translateX(-50%)",
+        zIndex: 10, display: "flex", gap: "8px",
       }}>
         {stocks
           .filter((s) => s.state !== "IDLE")
           .sort((a, b) => b.confidence - a.confidence)
-          .slice(0, 5)
+          .slice(0, 6)
           .map((s) => (
             <div
               key={s.symbol}
               onClick={() => handleSelectStock(s)}
               style={{
-                ...panelStyle,
-                padding: "8px 14px",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                minWidth: "120px",
-                transition: "border-color 0.15s",                borderColor: selectedStock?.symbol === s.symbol ? getNodeColor(s) : "rgba(72,72,73,0.25)",
+                ...panelStyle, padding: "8px 14px", cursor: "pointer",
+                display: "flex", alignItems: "center", gap: "8px", minWidth: "115px",
+                transition: "border-color 0.15s",
+                borderColor: selectedStock?.symbol === s.symbol ? getNodeColor(s) : "rgba(72,72,73,0.2)",
               }}
             >
-              <div
-                style={{
-                  width: "6px",
-                  height: "6px",
-                  borderRadius: "50%",
-                  backgroundColor: getNodeColor(s),
-                  boxShadow: `0 0 6px ${getNodeColor(s)}`,
-                }}
-              />
+              <div style={{ width: "6px", height: "6px", borderRadius: "50%", backgroundColor: getNodeColor(s), boxShadow: `0 0 6px ${getNodeColor(s)}` }} />
               <div>
-                <div style={{ fontSize: "10px", fontWeight: 700, color: "#ffffff", fontFamily: "Space Grotesk" }}>
-                  {s.displaySymbol}
-                </div>
+                <div style={{ fontSize: "10px", fontWeight: 700, color: "#ffffff", fontFamily: "Space Grotesk" }}>{s.displaySymbol}</div>
                 <div style={{ fontSize: "8px", color: getStateColor(s.state), fontFamily: "JetBrains Mono" }}>
-                  {getStateLabel(s.state)} · {s.confidence}%
+                  {getStateLabel(s.state)} \u00B7 {s.confidence}%
                 </div>
               </div>
             </div>
           ))}
       </div>
 
-      {/* Stock detail drawer */}      <StockDrawer stock={selectedStock} onClose={() => setSelectedStock(null)} />
+      {/* Stock intelligence drawer */}
+      <StockDrawer stock={selectedStock} onClose={() => setSelectedStock(null)} decisions={siDecisions} />
 
-      {/* Backdrop for drawer */}
+      {/* Backdrop */}
       {selectedStock && (
         <div
           onClick={() => setSelectedStock(null)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            backgroundColor: "rgba(0,0,0,0.3)",
-            zIndex: 99,
-          }}
+          style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.3)", zIndex: 99 }}
         />
       )}
     </div>
