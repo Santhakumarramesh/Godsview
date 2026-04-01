@@ -7,8 +7,16 @@ channel = "stable-24_05"
 [env]
 NODE_ENV = "development"
 PORT = "3000"
-CORS_ORIGIN = "http://localhost:5173"
+CORS_ORIGIN = "http://localhost:5173,https://*.repl.co,https://*.replit.app,https://*.replit.dev"
 GODSVIEW_SYSTEM_MODE = "paper"
+GODSVIEW_TRUST_PROXY = "1"
+# SECRETS: Set these in the Replit Secrets panel (not here):
+#   DATABASE_URL       — Neon/Supabase/Railway Postgres connection string
+#   ALPACA_API_KEY     — Alpaca paper/live API key
+#   ALPACA_SECRET_KEY  — Alpaca paper/live secret key
+#   ALPACA_BASE_URL    — https://paper-api.alpaca.markets (default)
+#   ANTHROPIC_API_KEY  — Claude API key for veto layer
+#   GODSVIEW_OPERATOR_TOKEN — Operator admin token (required for system mutations)
 
 [deployment]
 run = ["sh", "-c", "corepack pnpm --filter @workspace/api-server run start"]

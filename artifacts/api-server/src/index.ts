@@ -7,6 +7,9 @@ import { closePool, checkDbHealth } from "@workspace/db";
 import { runPreflight } from "./lib/preflight";
 import { startSession, endSession } from "./lib/session_manager";
 import { alpacaStream } from "./lib/alpaca_stream";
+import { seedHistoricalData } from "./lib/historical_seeder";
+import { seedBrainEntities } from "./lib/brain_seeder";
+import { startRetrainScheduler, stopRetrainScheduler } from "./lib/retrain_scheduler";
 
 // ── Validate environment before anything else ───────────────────
 validateEnv();
@@ -57,8 +60,37 @@ const server = app.listen(port, (err) => {
   const systemMode = process.env.GODSVIEW_SYSTEM_MODE || "paper";
   startSession(systemMode).catch((err) => logger.error({ err }, "Failed to start trading session"));
 
-  // Train ML model from accuracy_results data (non-blocking)
-  trainModel().catch((err) => logger.error({ err }, "ML model training failed"));
+  // ── Phase 35: Seed historical data for ML bootstrap (non-blocking) ──────────
+  seedHistoricalData()
+    .then((result) => {
+      if (!result.skipped) {
+        logger.info({ seededRows: result.seededRows, durationMs: result.durationMs }, "Historical data seeded");
+      }
+    })
+    .catch((err) => logger.error({ err }, "Historical seeder failed"))
+    .then(async () => {
+      // Train ML model AFTER ensuring seed data exists (non-blocking)
+      try {
+        await trainModel();
+        logger.info("ML model trained from accuracy_results");
+      } catch (err) {
+        logger.error({ err }, "ML model training failed");
+      }
+      // ── Phase 36: Start auto-retrain scheduler ────────────────────────────
+      startRetrainScheduler().catch((err) => logger.error({ err }, "Retrain scheduler failed to start"));
+    });
+
+  // ── Phase 37: Initialize Brain knowledge graph (non-blocking) ───────────────
+  seedBrainEntities()
+    .then((result) => {
+      if (!result.skipped) {
+        logger.info(
+          { entitiesInserted: result.entitiesInserted, memoriesInserted: result.memoriesInserted },
+          "Brain knowledge graph initialized"
+        );
+      }
+    })
+    .catch((err) => logger.error({ err }, "Brain seeder failed"));
 
   // Start Alpaca market data stream (non-blocking — feeds candle SSE)
   if (process.env.ALPACA_API_KEY) {
@@ -87,6 +119,12 @@ onShutdown(async () => {
 onShutdown(async () => {
   logger.info("Stopping Alpaca market data stream...");
   alpacaStream.stop();
+});
+
+// Register cleanup: stop retrain scheduler
+onShutdown(async () => {
+  logger.info("Stopping retrain scheduler...");
+  stopRetrainScheduler();
 });
 
 // Register cleanup: end trading session
