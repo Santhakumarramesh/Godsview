@@ -119,9 +119,9 @@ async function maybeTriggerRetrain(): Promise<void> {
       );
 
       // Log model status after retraining
-      const status = getModelStatus();
+      const modelStatus = getModelStatus();
       logger.info(
-        { trained: status.trained, source: status.source, trainedAt: status.trainedAt },
+        { status: modelStatus.status, message: modelStatus.message, trainedAt: modelStatus.meta?.trainedAt },
         "[retrain-scheduler] model status after retrain"
       );
 
