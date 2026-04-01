@@ -45,6 +45,42 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          // Must test most-specific paths first to avoid circular chunk issues.
+          // Rule: each id should match at most one bucket.
+
+          // React core
+          if (/node_modules\/react(-dom)?\//.test(id)) return "vendor-react";
+
+          // Charting
+          if (/node_modules\/(recharts|lightweight-charts|d3-)/.test(id)) return "vendor-charts";
+
+          // Radix UI
+          if (id.includes("node_modules/@radix-ui/")) return "vendor-radix";
+
+          // TanStack
+          if (id.includes("node_modules/@tanstack/")) return "vendor-query";
+
+          // Framer Motion
+          if (id.includes("node_modules/framer-motion")) return "vendor-motion";
+
+          // Zod + react-hook-form — small, used everywhere
+          if (/node_modules\/(zod|react-hook-form|@hookform)/.test(id)) return "vendor-forms";
+
+          // Date utilities
+          if (/node_modules\/(date-fns|dayjs|luxon)/.test(id)) return "vendor-dates";
+
+          // Lucide icons
+          if (id.includes("node_modules/lucide-react")) return "vendor-icons";
+
+          // Everything else in node_modules
+          if (id.includes("node_modules/")) return "vendor-misc";
+        },
+      },
+    },
   },
   server: {
     port,

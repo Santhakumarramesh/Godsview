@@ -1,39 +1,43 @@
-import React, { type ErrorInfo, type ReactNode } from "react";
+import React, { type ErrorInfo, type ReactNode, Suspense } from "react";
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Shell } from "@/components/layout/Shell";
-import NotFound from "@/pages/not-found";
-
-import Dashboard from "@/pages/dashboard";
-import Signals from "@/pages/signals";
-import Trades from "@/pages/trades";
-import Performance from "@/pages/performance";
-import System from "@/pages/system";
-import AlpacaPage from "@/pages/alpaca";
-import InfinityPage from "@/pages/infinity";
-import BrainPage from "@/pages/brain";
-import StitchLabPage from "@/pages/stitch-lab";
-import PipelinePage from "@/pages/pipeline";
-import CandleXRayPage from "@/pages/candle-xray";
-import SetupExplorerPage from "@/pages/setup-explorer";
-import ReportsPage from "@/pages/reports";
-import RiskPage from "@/pages/risk";
-import SettingsPage from "@/pages/settings";
-import SuperIntelligencePage from "@/pages/super-intelligence";
-import WarRoom from "@/pages/war-room";
-import Proof from "@/pages/proof";
-import Checklist from "@/pages/checklist";
-import OpsPage from "@/pages/ops";
-import QuantLabPage from "@/pages/quant-lab";
-import PortfolioPage from "@/pages/portfolio";
-import ExecutionPage from "@/pages/execution";
-import AuditPage from "@/pages/audit";
-import AlertsPage from "@/pages/alerts";
 import { GlobalDataProvider } from "@/components/GlobalDataProvider";
 import { NotificationSystem } from "@/components/NotificationSystem";
 
+// ── Eager: primary landing page (fastest first paint) ───────────────────────
+import Dashboard from "@/pages/dashboard";
+
+// ── Lazy: all other pages (each becomes its own JS chunk) ───────────────────
+const Signals            = React.lazy(() => import("@/pages/signals"));
+const Trades             = React.lazy(() => import("@/pages/trades"));
+const Performance        = React.lazy(() => import("@/pages/performance"));
+const System             = React.lazy(() => import("@/pages/system"));
+const AlpacaPage         = React.lazy(() => import("@/pages/alpaca"));
+const InfinityPage       = React.lazy(() => import("@/pages/infinity"));
+const BrainPage          = React.lazy(() => import("@/pages/brain"));
+const StitchLabPage      = React.lazy(() => import("@/pages/stitch-lab"));
+const PipelinePage       = React.lazy(() => import("@/pages/pipeline"));
+const CandleXRayPage     = React.lazy(() => import("@/pages/candle-xray"));
+const SetupExplorerPage  = React.lazy(() => import("@/pages/setup-explorer"));
+const ReportsPage        = React.lazy(() => import("@/pages/reports"));
+const RiskPage           = React.lazy(() => import("@/pages/risk"));
+const SettingsPage       = React.lazy(() => import("@/pages/settings"));
+const SuperIntelligencePage = React.lazy(() => import("@/pages/super-intelligence"));
+const WarRoom            = React.lazy(() => import("@/pages/war-room"));
+const Proof              = React.lazy(() => import("@/pages/proof"));
+const Checklist          = React.lazy(() => import("@/pages/checklist"));
+const OpsPage            = React.lazy(() => import("@/pages/ops"));
+const QuantLabPage       = React.lazy(() => import("@/pages/quant-lab"));
+const PortfolioPage      = React.lazy(() => import("@/pages/portfolio"));
+const ExecutionPage      = React.lazy(() => import("@/pages/execution"));
+const AuditPage          = React.lazy(() => import("@/pages/audit"));
+const AlertsPage         = React.lazy(() => import("@/pages/alerts"));
+const NotFound           = React.lazy(() => import("@/pages/not-found"));
+
+// ── QueryClient ─────────────────────────────────────────────────────────────
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -44,6 +48,19 @@ const queryClient = new QueryClient({
   },
 });
 
+// ── Page-load skeleton shown while lazy chunks download ─────────────────────
+function PageSkeleton() {
+  return (
+    <div className="flex items-center justify-center h-[60vh] w-full">
+      <div className="flex flex-col items-center gap-3 text-muted-foreground">
+        <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+        <span className="text-sm">Loading…</span>
+      </div>
+    </div>
+  );
+}
+
+// ── Error boundary ───────────────────────────────────────────────────────────
 class AppErrorBoundary extends React.Component<
   { children: ReactNode; scope: string },
   { hasError: boolean; message: string }
@@ -54,19 +71,14 @@ class AppErrorBoundary extends React.Component<
   }
 
   static getDerivedStateFromError(error: unknown) {
-    return {
-      hasError: true,
-      message: String(error ?? "Unknown UI error"),
-    };
+    return { hasError: true, message: String(error ?? "Unknown UI error") };
   }
 
   componentDidCatch(error: unknown, errorInfo: ErrorInfo) {
     console.error(`[ui-error:${this.props.scope}]`, error, errorInfo);
   }
 
-  private handleReload = () => {
-    window.location.reload();
-  };
+  private handleReload = () => window.location.reload();
 
   render() {
     if (this.state.hasError) {
@@ -75,14 +87,11 @@ class AppErrorBoundary extends React.Component<
           <div className="text-center">
             <h1 className="text-3xl font-bold text-red-400 mb-4">UI Error</h1>
             <p className="text-gray-400 mb-6">{this.state.message}</p>
-            <pre className="bg-gray-900 text-gray-300 p-4 rounded text-sm max-w-2xl mx-auto text-left mb-6 overflow-auto max-h-64">
-              {this.state.message}
-            </pre>
             <button
               onClick={this.handleReload}
-              className="px-4 py-2 rounded bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 hover:bg-emerald-500/30"
+              className="px-4 py-2 bg-primary text-primary-foreground rounded hover:opacity-90"
             >
-              Reload App
+              Reload
             </button>
           </div>
         </div>
@@ -92,6 +101,7 @@ class AppErrorBoundary extends React.Component<
   }
 }
 
+// ── Route wrapper: Suspense + ErrorBoundary per page ────────────────────────
 function RoutedPage({
   path,
   component: Component,
@@ -104,44 +114,56 @@ function RoutedPage({
   return (
     <Route path={path}>
       <AppErrorBoundary scope={scope}>
-        <Component />
+        <Suspense fallback={<PageSkeleton />}>
+          <Component />
+        </Suspense>
       </AppErrorBoundary>
     </Route>
   );
 }
 
+// ── Router ───────────────────────────────────────────────────────────────────
 function Router() {
   return (
     <Shell>
       <Switch>
-        <RoutedPage path="/" component={Dashboard} scope="page:dashboard" />
-        <RoutedPage path="/signals" component={Signals} scope="page:signals" />
-        <RoutedPage path="/trades" component={Trades} scope="page:trades" />
-        <RoutedPage path="/performance" component={Performance} scope="page:performance" />
-        <RoutedPage path="/system" component={System} scope="page:system" />
-        <RoutedPage path="/alpaca" component={AlpacaPage} scope="page:alpaca" />
-        <RoutedPage path="/infinity" component={InfinityPage} scope="page:infinity" />
-        <RoutedPage path="/brain" component={BrainPage} scope="page:brain" />
-        <RoutedPage path="/stitch-lab" component={StitchLabPage} scope="page:stitch-lab" />
-        <RoutedPage path="/pipeline" component={PipelinePage} scope="page:pipeline" />
-        <RoutedPage path="/candle-xray" component={CandleXRayPage} scope="page:candle-xray" />
-        <RoutedPage path="/setup-explorer" component={SetupExplorerPage} scope="page:setup-explorer" />
-        <RoutedPage path="/reports" component={ReportsPage} scope="page:reports" />
-        <RoutedPage path="/risk" component={RiskPage} scope="page:risk" />
+        {/* Eager — no Suspense needed */}
+        <Route path="/">
+          <AppErrorBoundary scope="page:dashboard">
+            <Dashboard />
+          </AppErrorBoundary>
+        </Route>
+
+        <RoutedPage path="/signals"           component={Signals}               scope="page:signals" />
+        <RoutedPage path="/trades"            component={Trades}                scope="page:trades" />
+        <RoutedPage path="/performance"       component={Performance}           scope="page:performance" />
+        <RoutedPage path="/system"            component={System}                scope="page:system" />
+        <RoutedPage path="/alpaca"            component={AlpacaPage}            scope="page:alpaca" />
+        <RoutedPage path="/infinity"          component={InfinityPage}          scope="page:infinity" />
+        <RoutedPage path="/brain"             component={BrainPage}             scope="page:brain" />
+        <RoutedPage path="/stitch-lab"        component={StitchLabPage}         scope="page:stitch-lab" />
+        <RoutedPage path="/pipeline"          component={PipelinePage}          scope="page:pipeline" />
+        <RoutedPage path="/candle-xray"       component={CandleXRayPage}        scope="page:candle-xray" />
+        <RoutedPage path="/setup-explorer"    component={SetupExplorerPage}     scope="page:setup-explorer" />
+        <RoutedPage path="/reports"           component={ReportsPage}           scope="page:reports" />
+        <RoutedPage path="/risk"              component={RiskPage}              scope="page:risk" />
         <RoutedPage path="/super-intelligence" component={SuperIntelligencePage} scope="page:super-intelligence" />
-        <RoutedPage path="/settings" component={SettingsPage} scope="page:settings" />
-        <RoutedPage path="/war-room" component={WarRoom} scope="page:war-room" />
-        <RoutedPage path="/proof" component={Proof} scope="page:proof" />
-        <RoutedPage path="/checklist" component={Checklist} scope="page:checklist" />
-        <RoutedPage path="/ops" component={OpsPage} scope="page:ops" />
-        <RoutedPage path="/quant-lab" component={QuantLabPage} scope="page:quant-lab" />
-        <RoutedPage path="/portfolio" component={PortfolioPage} scope="page:portfolio" />
-        <RoutedPage path="/execution" component={ExecutionPage} scope="page:execution" />
-        <RoutedPage path="/audit" component={AuditPage} scope="page:audit" />
-        <RoutedPage path="/alerts" component={AlertsPage} scope="page:alerts" />
+        <RoutedPage path="/settings"          component={SettingsPage}          scope="page:settings" />
+        <RoutedPage path="/war-room"          component={WarRoom}               scope="page:war-room" />
+        <RoutedPage path="/proof"             component={Proof}                 scope="page:proof" />
+        <RoutedPage path="/checklist"         component={Checklist}             scope="page:checklist" />
+        <RoutedPage path="/ops"               component={OpsPage}               scope="page:ops" />
+        <RoutedPage path="/quant-lab"         component={QuantLabPage}          scope="page:quant-lab" />
+        <RoutedPage path="/portfolio"         component={PortfolioPage}         scope="page:portfolio" />
+        <RoutedPage path="/execution"         component={ExecutionPage}         scope="page:execution" />
+        <RoutedPage path="/audit"             component={AuditPage}             scope="page:audit" />
+        <RoutedPage path="/alerts"            component={AlertsPage}            scope="page:alerts" />
+
         <Route>
           <AppErrorBoundary scope="page:not-found">
-            <NotFound />
+            <Suspense fallback={<PageSkeleton />}>
+              <NotFound />
+            </Suspense>
           </AppErrorBoundary>
         </Route>
       </Switch>
@@ -149,6 +171,7 @@ function Router() {
   );
 }
 
+// ── Root ─────────────────────────────────────────────────────────────────────
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
