@@ -1,194 +1,239 @@
 /**
- * Signal Stream — Server-Sent Events (SSE) for real-time SI decisions
+ * signal_stream.ts — SSE broadcast hub for live signals, candles & system events.
  *
- * Broadcasts Super Intelligence decisions, production gate verdicts,
- * and ensemble model updates to connected dashboard clients.
+ * Central fan-out: any module can publish events, all connected SSE clients receive them.
+ * Used by:
+ *   - /api/signals/stream   → live signal decisions (APPLY/VETO/REVIEW)
+ *   - /api/candles/stream   → real-time candle updates from alpaca_stream
+ *   - /api/alerts/stream    → triggered alert notifications
  *
- * Uses SSE instead of WebSocket for simplicity:
- * - No additional library needed
- * - Works through HTTP proxies / load balancers
- * - Auto-reconnect built into EventSource API
- * - One-directional (server → client) which is all we need
+ * Lifecycle:
+ *   - Server boot:     import { signalHub } from "./lib/signal_stream"
+ *   - Server shutdown:  closeAllClients() to drain SSE connections gracefully
  */
 
 import type { Response } from "express";
-import type { SuperSignal } from "./super_intelligence";
-import type { ProductionDecision } from "./production_gate";
+import { logger } from "./logger";
 
-// ── Types ──────────────────────────────────────────────────────────────────
+// ── Event types that flow through the hub ────────────────────────
+export type StreamEventType =
+  | "signal"        // New signal decision
+  | "candle"        // Live candle update
+  | "alert"         // Triggered alert
+  | "trade"         // Trade executed / closed
+  | "breaker"       // Drawdown breaker level change
+  | "system"        // System status change (kill switch, mode change)
+  | "heartbeat";    // Keep-alive ping
 
-export type StreamEvent =
-  | { type: "si_decision"; data: SIDecisionEvent }
-  | { type: "production_gate"; data: ProductionGateEvent }
-  | { type: "ensemble_update"; data: EnsembleUpdateEvent }
-  | { type: "heartbeat"; data: { ts: string } };
-
-export interface SIDecisionEvent {
-  symbol: string;
-  setup_type: string;
-  direction: "long" | "short";
-  approved: boolean;
-  win_probability: number;
-  edge_score: number;
-  enhanced_quality: number;
-  kelly_pct: number;
-  regime: string;
-  rejection_reason?: string;
+export interface StreamEvent {
+  type: StreamEventType;
   timestamp: string;
+  payload: Record<string, unknown>;
 }
 
-export interface ProductionGateEvent {
-  symbol: string;
-  action: string;
-  quantity: number;
-  dollar_risk: number;
-  win_probability: number;
-  edge_score: number;
-  block_reasons: string[];
-  timestamp: string;
+interface SSEClient {
+  id: string;
+  res: Response;
+  connectedAt: number;
+  filter?: StreamEventType[];  // if set, only receive these event types
+  lastEventId: number;
 }
 
-export interface EnsembleUpdateEvent {
-  ensemble_accuracy: number;
-  gbm_accuracy: number;
-  lr_accuracy: number;
-  samples: number;
-  timestamp: string;
-}
+// ── Hub singleton ────────────────────────────────────────────────
+class SignalStreamHub {
+  private clients = new Map<string, SSEClient>();
+  private eventCounter = 0;
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private recentEvents: Array<StreamEvent & { id: number }> = [];
+  private static readonly MAX_RECENT = 200;
+  private static readonly HEARTBEAT_MS = 15_000;
 
-// ── SSE Client Manager ─────────────────────────────────────────────────────
+  constructor() {
+    this.startHeartbeat();
+  }
 
-const clients = new Set<Response>();
-const MAX_CLIENTS = 50;
-const HEARTBEAT_INTERVAL_MS = 30_000;
+  /**
+   * Register a new SSE client. Sets up headers, sends initial connection event,
+   * and handles client disconnect cleanup.
+   */
+  addClient(res: Response, filter?: StreamEventType[]): string {
+    const id = `sse-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-// Heartbeat to keep connections alive
-setInterval(() => {
-  const event: StreamEvent = { type: "heartbeat", data: { ts: new Date().toISOString() } };
-  broadcast(event);
-}, HEARTBEAT_INTERVAL_MS);
+    // SSE headers
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
 
-/** Register an SSE client */
-export function addSSEClient(res: Response): void {
-  if (clients.size >= MAX_CLIENTS) {
-    // Remove oldest client
-    const oldest = clients.values().next().value;
-    if (oldest) {
-      clients.delete(oldest);
-      try { oldest.end(); } catch { /* ignore */ }
+    const client: SSEClient = { id, res, connectedAt: Date.now(), filter, lastEventId: this.eventCounter };
+    this.clients.set(id, client);
+
+    // Send connection confirmation
+    this.sendToClient(client, {
+      type: "system",
+      timestamp: new Date().toISOString(),
+      payload: { action: "connected", clientId: id, filterActive: !!filter },
+    });
+
+    // Cleanup on disconnect
+    res.on("close", () => {
+      this.clients.delete(id);
+      logger.debug({ clientId: id }, "SSE client disconnected");
+    });
+
+    logger.info({ clientId: id, filter: filter ?? "all" }, "SSE client connected");
+    return id;
+  }
+
+  /** Remove a specific client by ID */
+  removeClient(id: string): void {
+    const client = this.clients.get(id);
+    if (client) {
+      try { client.res.end(); } catch { /* already closed */ }
+      this.clients.delete(id);
     }
   }
 
-  res.writeHead(200, {
-    "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache",
-    Connection: "keep-alive",
-    "X-Accel-Buffering": "no", // Disable nginx buffering
-  });
+  /** Broadcast an event to all connected clients (respecting filters) */
+  publish(event: StreamEvent): void {
+    this.eventCounter++;
+    const numbered = { ...event, id: this.eventCounter };
 
-  // Send initial connection message
-  res.write(`data: ${JSON.stringify({ type: "connected", clients: clients.size + 1 })}\n\n`);
-  clients.add(res);
+    // Store in recent buffer for replay on reconnect
+    this.recentEvents.push(numbered);
+    if (this.recentEvents.length > SignalStreamHub.MAX_RECENT) {
+      this.recentEvents = this.recentEvents.slice(-SignalStreamHub.MAX_RECENT);
+    }
 
-  // Clean up on disconnect
-  res.on("close", () => {
-    clients.delete(res);
-  });
-}
+    let sent = 0;
+    for (const client of this.clients.values()) {
+      if (client.filter && !client.filter.includes(event.type)) continue;
+      this.sendToClient(client, event);
+      client.lastEventId = this.eventCounter;
+      sent++;
+    }
 
-/** Broadcast an event to all connected clients */
-export function broadcast(event: StreamEvent): void {
-  const payload = `event: ${event.type}\ndata: ${JSON.stringify(event.data)}\n\n`;
-  const dead: Response[] = [];
+    if (event.type !== "heartbeat") {
+      logger.debug({ type: event.type, clients: sent, total: this.clients.size }, "Event broadcast");
+    }
+  }
 
-  for (const client of clients) {
+  /** Replay missed events for a reconnecting client (Last-Event-ID support) */
+  replay(clientId: string, afterEventId: number): void {
+    const client = this.clients.get(clientId);
+    if (!client) return;
+
+    const missed = this.recentEvents.filter((e) => e.id > afterEventId);
+    for (const event of missed) {
+      if (client.filter && !client.filter.includes(event.type)) continue;
+      this.sendToClient(client, event);
+    }
+    client.lastEventId = this.eventCounter;
+    logger.info({ clientId, replayed: missed.length, fromId: afterEventId }, "SSE replay sent");
+  }
+
+  /** Get hub status for monitoring */
+  status() {
+    return {
+      connectedClients: this.clients.size,
+      totalEventsPublished: this.eventCounter,
+      recentBufferSize: this.recentEvents.length,
+      clients: [...this.clients.values()].map((c) => ({
+        id: c.id,
+        connectedAt: new Date(c.connectedAt).toISOString(),
+        filter: c.filter ?? "all",
+        lastEventId: c.lastEventId,
+      })),
+    };
+  }
+
+  /** Gracefully close all SSE connections (called on shutdown) */
+  closeAll(): void {
+    logger.info({ clients: this.clients.size }, "Closing all SSE clients");
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+    for (const client of this.clients.values()) {
+      try {
+        // Send goodbye event before closing
+        this.sendToClient(client, {
+          type: "system",
+          timestamp: new Date().toISOString(),
+          payload: { action: "shutdown", reason: "server_stopping" },
+        });
+        client.res.end();
+      } catch { /* already closed */ }
+    }
+    this.clients.clear();
+  }
+
+  // ── Private helpers ──────────────────────────────────────────
+  private sendToClient(client: SSEClient, event: StreamEvent): void {
     try {
-      client.write(payload);
+      const data = JSON.stringify(event);
+      client.res.write(`id: ${this.eventCounter}\n`);
+      client.res.write(`event: ${event.type}\n`);
+      client.res.write(`data: ${data}\n\n`);
+      if (typeof (client.res as any).flush === "function") {
+        (client.res as any).flush();
+      }
     } catch {
-      dead.push(client);
+      // Client disconnected — remove
+      this.clients.delete(client.id);
     }
   }
 
-  // Clean up dead connections
-  for (const d of dead) {
-    clients.delete(d);
-    try { d.end(); } catch { /* ignore */ }
+  private startHeartbeat(): void {
+    this.heartbeatTimer = setInterval(() => {
+      this.publish({
+        type: "heartbeat",
+        timestamp: new Date().toISOString(),
+        payload: { clients: this.clients.size, uptime: process.uptime() },
+      });
+    }, SignalStreamHub.HEARTBEAT_MS);
+    // Don't prevent process exit
+    if (this.heartbeatTimer.unref) this.heartbeatTimer.unref();
   }
 }
 
-/** Get number of connected clients */
-export function getSSEClientCount(): number {
-  return clients.size;
+// ── Singleton + exported convenience functions ───────────────────
+export const signalHub = new SignalStreamHub();
+
+/** Publish an event to all connected SSE clients */
+export function publishEvent(event: StreamEvent): void {
+  signalHub.publish(event);
 }
 
-/** Close all SSE clients (used during graceful shutdown) */
+/** Close all SSE clients — called during graceful shutdown */
 export function closeAllClients(): void {
-  for (const client of clients) {
-    try {
-      client.write(`event: shutdown\ndata: ${JSON.stringify({ reason: "server_shutdown" })}\n\n`);
-      client.end();
-    } catch { /* ignore */ }
-  }
-  clients.clear();
+  signalHub.closeAll();
 }
 
-// ── Convenience Emitters ───────────────────────────────────────────────────
-
-/** Emit an SI decision event */
-export function emitSIDecision(
-  symbol: string,
-  signal: SuperSignal,
-  setupType: string,
-  direction: "long" | "short",
-  regime: string,
-): void {
-  broadcast({
-    type: "si_decision",
-    data: {
-      symbol,
-      setup_type: setupType,
-      direction,
-      approved: signal.approved,
-      win_probability: signal.win_probability,
-      edge_score: signal.edge_score,
-      enhanced_quality: signal.enhanced_quality,
-      kelly_pct: signal.kelly_fraction * 100,
-      regime,
-      rejection_reason: signal.rejection_reason,
-      timestamp: new Date().toISOString(),
-    },
-  });
+/** Convenience: publish a signal decision event */
+export function publishSignal(payload: Record<string, unknown>): void {
+  signalHub.publish({ type: "signal", timestamp: new Date().toISOString(), payload });
 }
 
-/** Emit a production gate verdict */
-export function emitProductionGate(decision: ProductionDecision, symbol: string): void {
-  broadcast({
-    type: "production_gate",
-    data: {
-      symbol,
-      action: decision.action,
-      quantity: decision.quantity,
-      dollar_risk: decision.dollar_risk,
-      win_probability: decision.meta.win_probability,
-      edge_score: decision.meta.edge_score,
-      block_reasons: decision.block_reasons,
-      timestamp: decision.meta.timestamp,
-    },
-  });
+/** Convenience: publish a candle update event */
+export function publishCandle(symbol: string, timeframe: string, candle: Record<string, unknown>): void {
+  signalHub.publish({ type: "candle", timestamp: new Date().toISOString(), payload: { symbol, timeframe, ...candle } });
 }
 
-/** Emit ensemble model update */
-export function emitEnsembleUpdate(meta: {
-  ensemble_accuracy: number;
-  gbm_accuracy: number;
-  lr_accuracy: number;
-  samples: number;
-}): void {
-  broadcast({
-    type: "ensemble_update",
-    data: {
-      ...meta,
-      timestamp: new Date().toISOString(),
-    },
+/** Convenience: publish an alert event */
+export function publishAlert(payload: Record<string, unknown>): void {
+  signalHub.publish({ type: "alert", timestamp: new Date().toISOString(), payload });
+}
+
+/**
+ * Legacy broadcast() — used by alerts.ts which sends { type, data } shaped events.
+ * Maps to the unified SSE hub format.
+ */
+export function broadcast(event: { type: string; data: Record<string, unknown> }): void {
+  signalHub.publish({
+    type: event.type === "si_decision" ? "signal" : "alert",
+    timestamp: new Date().toISOString(),
+    payload: event.data,
   });
 }

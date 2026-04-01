@@ -22,6 +22,7 @@ import featuresRouter from "./features";
 import engineHealthRouter from "./engine_health";
 import executionRouter from "./execution";
 import sessionsRouter from "./sessions";
+import streamingRouter from "./streaming";
 
 const router: IRouter = Router();
 
@@ -48,5 +49,6 @@ router.use("/api/features", featuresRouter);
 router.use(engineHealthRouter);
 router.use("/api/execution", executionRouter);
 router.use("/api", sessionsRouter);
+router.use(streamingRouter);
 
 export default router;

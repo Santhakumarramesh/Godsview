@@ -6,6 +6,7 @@ import { setupGracefulShutdown, onShutdown } from "./lib/shutdown";
 import { closePool, checkDbHealth } from "@workspace/db";
 import { runPreflight } from "./lib/preflight";
 import { startSession, endSession } from "./lib/session_manager";
+import { alpacaStream } from "./lib/alpaca_stream";
 
 // ── Validate environment before anything else ───────────────────
 validateEnv();
@@ -58,6 +59,14 @@ const server = app.listen(port, (err) => {
 
   // Train ML model from accuracy_results data (non-blocking)
   trainModel().catch((err) => logger.error({ err }, "ML model training failed"));
+
+  // Start Alpaca market data stream (non-blocking — feeds candle SSE)
+  if (process.env.ALPACA_API_KEY) {
+    alpacaStream.start();
+    logger.info("Alpaca market data stream started");
+  } else {
+    logger.warn("ALPACA_API_KEY not set — market data stream disabled");
+  }
 });
 
 // ── Graceful shutdown with connection draining ──────────────────
@@ -72,6 +81,12 @@ onShutdown(async () => {
   } catch {
     // signal_stream may not be loaded
   }
+});
+
+// Register cleanup: stop Alpaca market data stream
+onShutdown(async () => {
+  logger.info("Stopping Alpaca market data stream...");
+  alpacaStream.stop();
 });
 
 // Register cleanup: end trading session
