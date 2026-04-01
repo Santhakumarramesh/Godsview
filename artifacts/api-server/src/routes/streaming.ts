@@ -38,7 +38,7 @@ router.get("/api/signals/stream", (req, res) => {
   // Replay missed events if Last-Event-ID header present
   const lastId = req.headers["last-event-id"];
   if (lastId) {
-    signalHub.replay(clientId, parseInt(String(lastId), 10) || 0);
+    signalHub.replay(clientId, String(lastId));
   }
 });
 
@@ -52,7 +52,7 @@ router.get("/api/candles/stream", (req, res) => {
 
   // Subscribe to alpaca_stream ticks and broadcast as candle events
   const listener = (payload: { symbol: string; price: number; timestamp: string; candle: Record<string, unknown> }) => {
-    publishCandle(payload.symbol, timeframe, payload.candle);
+    publishCandle({ symbol: payload.symbol, timeframe, candle: payload.candle });
   };
 
   alpacaStream.subscribe(symbol, timeframe, listener);
@@ -67,7 +67,7 @@ router.get("/api/candles/stream", (req, res) => {
   // Replay if reconnecting
   const lastId = req.headers["last-event-id"];
   if (lastId) {
-    signalHub.replay(clientId, parseInt(String(lastId), 10) || 0);
+    signalHub.replay(clientId, String(lastId));
   }
 });
 
@@ -78,7 +78,7 @@ router.get("/api/stream", (req, res) => {
 
   const lastId = req.headers["last-event-id"];
   if (lastId) {
-    signalHub.replay(clientId, parseInt(String(lastId), 10) || 0);
+    signalHub.replay(clientId, String(lastId));
   }
 });
 
@@ -93,7 +93,7 @@ router.get("/api/alerts/stream", (req, res) => {
 
   const lastId = req.headers["last-event-id"];
   if (lastId) {
-    signalHub.replay(clientId, parseInt(String(lastId), 10) || 0);
+    signalHub.replay(clientId, String(lastId));
   }
 });
 

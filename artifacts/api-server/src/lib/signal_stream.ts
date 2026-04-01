@@ -156,6 +156,26 @@ export function publishSignal(data: unknown): void { publishEvent("signal", data
 export function publishCandle(data: unknown): void { publishEvent("candle", data); }
 export function publishAlert(data: unknown): void { publishEvent("alert", data); }
 
+// ─── Compat aliases used by routes ─────────────────────────────────────────
+
+/** Alias so `import { signalHub }` works (streaming.ts) */
+export const signalHub = signalStreamHub;
+
+/** Add an SSE client — returns client id (super_intelligence.ts) */
+export function addSSEClient(res: Response, filter?: StreamEventType[]): string {
+  return signalStreamHub.addClient(res, filter);
+}
+
+/** Current SSE client count (super_intelligence.ts) */
+export function getSSEClientCount(): number {
+  return signalStreamHub.status().clientCount;
+}
+
+/** Emit an SI decision event (alpaca.ts) */
+export function emitSIDecision(data: unknown): void {
+  publishEvent("signal", data);
+}
+
 /**
  * Legacy broadcast() — maps old-style { type, data } calls from alerts.ts
  * to the new unified hub format.

@@ -1874,7 +1874,7 @@ router.post("/alpaca/analyze", async (req, res) => {
           timeframe_scores: mtfScores,
         });
         // Emit SSE event for real-time dashboard
-        emitSIDecision(s.instrument, siResult, s.setup_type, s.direction, s.recall_features?.regime ?? "ranging");
+        emitSIDecision({ symbol: s.instrument, result: siResult, setup: s.setup_type, direction: s.direction, regime: s.recall_features?.regime ?? "ranging" });
 
         // SI veto: if SI rejects, downgrade to rejected
         if (!siResult.approved) {

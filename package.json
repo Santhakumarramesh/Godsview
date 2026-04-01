@@ -7,7 +7,7 @@
     "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
     "setup": "corepack enable && corepack pnpm install && corepack pnpm run db:push && corepack pnpm run seed",
     "dev": "corepack pnpm -r --parallel --filter @workspace/api-server --filter @workspace/godsview-dashboard run dev",
-    "build": "corepack pnpm run typecheck && corepack pnpm -r --if-present run build",
+    "build": "corepack pnpm run typecheck && corepack pnpm -r --if-present run build && cp -r artifacts/godsview-dashboard/dist/public artifacts/api-server/public",
     "start": "corepack pnpm --filter @workspace/api-server run start",
     "typecheck:libs": "tsc --build",
     "typecheck": "corepack pnpm run typecheck:libs && corepack pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
