@@ -899,6 +899,53 @@ export default function System() {
         </div>
       </div>
 
+      {/* ML Auto-Retrain Scheduler */}
+      <div className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined" style={{ fontSize: "14px", color: data.ml_scheduler?.running ? C.primary : C.outline }}>model_training</span>
+            <MicroLabel>ML Auto-Retrain Scheduler</MicroLabel>
+            <StatusPill status={data.ml_scheduler?.running ? "live" : "degraded"} />
+            {data.ml_scheduler?.isRetraining && (
+              <span style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: "#fbbf24", animation: "pulse 1.5s infinite" }}>
+                ● RETRAINING…
+              </span>
+            )}
+          </div>
+          <span style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: C.outlineVar }}>
+            threshold {data.ml_scheduler?.newDataThreshold ?? 100} rows · poll {Math.round((data.ml_scheduler?.pollIntervalMs ?? 1800000) / 60000)}m
+          </span>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <div className="rounded p-2.5" style={{ backgroundColor: "#0e0e0f", border: `1px solid ${C.border}` }}>
+            <MicroLabel>Scheduler State</MicroLabel>
+            <div style={{ marginTop: "6px", fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: data.ml_scheduler?.running ? C.primary : C.tertiary }}>
+              {data.ml_scheduler?.running ? "RUNNING" : "STOPPED"}
+            </div>
+          </div>
+          <div className="rounded p-2.5" style={{ backgroundColor: "#0e0e0f", border: `1px solid ${C.border}` }}>
+            <MicroLabel>Total Retrains</MicroLabel>
+            <div style={{ marginTop: "6px", fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: C.secondary }}>
+              {data.ml_scheduler?.totalRetrains ?? 0}
+            </div>
+          </div>
+          <div className="rounded p-2.5" style={{ backgroundColor: "#0e0e0f", border: `1px solid ${C.border}` }}>
+            <MicroLabel>High Water Mark</MicroLabel>
+            <div style={{ marginTop: "6px", fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: C.muted }}>
+              {data.ml_scheduler?.highWaterMark ?? 0} rows
+            </div>
+          </div>
+          <div className="rounded p-2.5" style={{ backgroundColor: "#0e0e0f", border: `1px solid ${C.border}` }}>
+            <MicroLabel>Last Retrain</MicroLabel>
+            <div style={{ marginTop: "6px", fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: C.muted }}>
+              {data.ml_scheduler?.lastTrainedAt
+                ? format(new Date(data.ml_scheduler.lastTrainedAt), "HH:mm:ss")
+                : "n/a"}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Governance Readiness */}
       <div className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
         <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
