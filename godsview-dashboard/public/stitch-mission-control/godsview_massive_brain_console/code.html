@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>GodsView | Neural AI Terminal</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;400;700;800&amp;family=Inter:wght@300;400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "on-tertiary-fixed-variant": "#005228",
+                        "tertiary-fixed-dim": "#61de8a",
+                        "secondary-fixed": "#cbe7f5",
+                        "on-secondary-fixed-variant": "#304a55",
+                        "on-error-container": "#ffdad6",
+                        "secondary-fixed-dim": "#afcbd8",
+                        "outline-variant": "#414751",
+                        "on-primary": "#00315d",
+                        "surface-container": "#201f20",
+                        "on-tertiary": "#00391a",
+                        "tertiary-fixed": "#7efba4",
+                        "surface-container-lowest": "#0e0e0f",
+                        "surface-variant": "#353436",
+                        "on-tertiary-container": "#003115",
+                        "on-secondary-fixed": "#021f29",
+                        "surface-bright": "#3a393a",
+                        "inverse-surface": "#e5e2e3",
+                        "surface": "#131314",
+                        "on-primary-container": "#002a51",
+                        "on-error": "#690005",
+                        "primary-container": "#4d93e5",
+                        "on-tertiary-fixed": "#00210c",
+                        "secondary-container": "#334d58",
+                        "secondary": "#afcbd8",
+                        "inverse-primary": "#0060ac",
+                        "surface-container-highest": "#353436",
+                        "primary-fixed": "#d4e3ff",
+                        "tertiary": "#61de8a",
+                        "on-primary-fixed-variant": "#004883",
+                        "outline": "#8b919d",
+                        "on-surface-variant": "#c1c7d3",
+                        "surface-container-high": "#2a2a2b",
+                        "surface-container-low": "#1c1b1c",
+                        "inverse-on-surface": "#313031",
+                        "surface-dim": "#131314",
+                        "on-background": "#e5e2e3",
+                        "primary": "#a4c9ff",
+                        "on-primary-fixed": "#001c39",
+                        "primary-fixed-dim": "#a4c9ff",
+                        "on-surface": "#e5e2e3",
+                        "on-secondary": "#19343e",
+                        "surface-tint": "#a4c9ff",
+                        "error": "#ffb4ab",
+                        "background": "#131314",
+                        "tertiary-container": "#18a659",
+                        "error-container": "#93000a",
+                        "on-secondary-container": "#a1bdca"
+                    },
+                    fontFamily: {
+                        "headline": ["Manrope"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" },
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .tabular-nums { font-feature-settings: "tnum" 1; }
+        .glass-panel {
+            background: rgba(53, 52, 54, 0.6);
+            backdrop-filter: blur(12px);
+        }
+        .neural-glow {
+            box-shadow: 0 0 40px -10px rgba(164, 201, 255, 0.3);
+        }
+        .brain-gradient {
+            background: radial-gradient(circle at center, rgba(164, 201, 255, 0.15) 0%, transparent 70%);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface font-body selection:bg-primary/30 selection:text-primary overflow-x-hidden">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-[#131314]/80 backdrop-blur-xl border-b border-[#414751]/15 shadow-[0px_12px_32px_rgba(255,255,255,0.06)] flex items-center justify-between px-6 h-16">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-surface-container-highest border border-outline-variant/30 flex items-center justify-center overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="High-tech neural core avatar with blue pulsing light and crystalline data structures" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBGvw3sjPeSzSyLnLK5kNe30j9ta3V5cOzFKZ9fffF6zAtV2jsCb8-z7MktkH2qyvEixDC2fbaYOTB9BepHQKqgr25G95GXBuiX6RZJdSVRqizxZycj-9mLr5QTrc65rb8gn0u0YLHGnOsVjFY-gqxw3EA3ZHaJwbJz2N34Ms_uUhZmhGhsFRcPLt6CyvGr1MmhDSYnK1pHaYHgrx9oJqIiLmXAHoUTflaKKKjjzHmBlpUyQJo6dM5OoiI3vl2Ysv91YdO7naU1Hbo"/>
+</div>
+<span class="text-xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-br from-[#A4C9FF] to-[#4D93E2] font-headline uppercase">GodsView</span>
+</div>
+<div class="flex items-center gap-4">
+<span class="font-['Manrope'] tracking-widest uppercase text-sm font-bold text-[#A4C9FF]">AI Core Pulse</span>
+<div class="p-2 rounded-lg hover:bg-[#353436] transition-colors cursor-pointer active:scale-95 duration-200">
+<span class="material-symbols-outlined text-[#A4C9FF]">sensors</span>
+</div>
+</div>
+</header>
+<main class="pt-20 pb-24 px-4 min-h-screen relative max-w-md mx-auto">
+<!-- Massive Brain Section -->
+<section class="relative w-full aspect-square flex items-center justify-center mb-12">
+<div class="absolute inset-0 brain-gradient rounded-full"></div>
+<!-- Central Brain Image -->
+<div class="relative z-10 w-48 h-48 rounded-full neural-glow border border-primary/20 p-2 overflow-hidden bg-surface-container-lowest">
+<img class="w-full h-full object-cover opacity-80" data-alt="Intricate glowing 3D human brain composed of neural fiber optics and luminous data points in electric blue and silver" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCaW-ZUOKH-BEKlupGModn-eEhkDyeYL_WfGjnapeLH3snparAEp2lbfCylO9gomj-EC63n3ikgS3Ng2Kajnn0Q8H3goQGlTFXcejhaNdI7-s7hikNIiRKnckotnsXD32EVBsTnG66-tBnotlcYluEUtHnm_jdNn4amPAl0aKIW-Xd3As_938InuwZvCV2thkZleiU4jR7emntocPNIiBEaqyBwVYpbgoK3RoEfxdvLCMVuc2rh0h_GsCQC65Ex15-4RZOvwhRLeoE"/>
+<div class="absolute inset-0 flex items-center justify-center bg-surface/40">
+<span class="font-headline font-extrabold text-[10px] tracking-[0.3em] uppercase text-primary">MASSIVE BRAIN</span>
+</div>
+</div>
+<!-- Stock Nodes (Asymmetric Precision) -->
+<!-- NVDA (High Momentum) -->
+<div class="absolute top-[10%] right-[15%] flex flex-col items-center">
+<div class="w-14 h-14 rounded-full border-2 border-tertiary flex items-center justify-center glass-panel shadow-[0_0_15px_rgba(97,222,138,0.4)]">
+<span class="font-headline font-bold text-xs">NVDA</span>
+</div>
+<div class="mt-1 h-1 w-8 bg-tertiary rounded-full"></div>
+<span class="text-[8px] font-label text-tertiary uppercase mt-0.5 tracking-tighter">Bullish 98%</span>
+</div>
+<!-- TSLA -->
+<div class="absolute bottom-[20%] left-[5%] flex flex-col items-center">
+<div class="w-10 h-10 rounded-full border border-error flex items-center justify-center glass-panel opacity-80">
+<span class="font-headline font-bold text-[10px]">TSLA</span>
+</div>
+<div class="mt-1 h-1 w-6 bg-error/40 rounded-full overflow-hidden">
+<div class="h-full w-1/3 bg-error"></div>
+</div>
+</div>
+<!-- AAPL -->
+<div class="absolute top-[25%] left-[10%] flex flex-col items-center">
+<div class="w-12 h-12 rounded-full border border-primary flex items-center justify-center glass-panel">
+<span class="font-headline font-bold text-[10px]">AAPL</span>
+</div>
+<div class="mt-1 h-1 w-8 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full w-3/4 bg-primary"></div>
+</div>
+</div>
+<!-- SPY -->
+<div class="absolute bottom-[10%] right-[25%] flex flex-col items-center">
+<div class="w-11 h-11 rounded-full border border-outline-variant flex items-center justify-center glass-panel">
+<span class="font-headline font-bold text-[10px]">SPY</span>
+</div>
+<div class="mt-1 h-1 w-7 bg-primary-container/30 rounded-full overflow-hidden">
+<div class="h-full w-1/2 bg-primary-container"></div>
+</div>
+</div>
+<!-- Neural Pathways (SVG Overlay) -->
+<svg class="absolute inset-0 w-full h-full pointer-events-none opacity-20" viewbox="0 0 400 400">
+<path d="M200 200 L320 80" fill="none" stroke="#A4C9FF" stroke-width="0.5"></path>
+<path d="M200 200 L80 300" fill="none" stroke="#A4C9FF" stroke-width="0.5"></path>
+<path d="M200 200 L100 120" fill="none" stroke="#A4C9FF" stroke-width="0.5"></path>
+<path d="M200 200 L280 340" fill="none" stroke="#A4C9FF" stroke-width="0.5"></path>
+</svg>
+</section>
+<!-- Stats Grid (Bento) -->
+<div class="grid grid-cols-2 gap-4 mb-8">
+<div class="col-span-2 bg-surface-container-low p-5 rounded-xl border-l-2 border-primary">
+<div class="flex justify-between items-start mb-4">
+<h3 class="font-headline text-xs font-bold tracking-widest text-secondary uppercase">Brain Board</h3>
+<span class="text-[10px] tabular-nums text-primary">SYNC: 100%</span>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="text-3xl font-headline font-extrabold tracking-tight">$2,482,109</span>
+<span class="text-tertiary text-xs font-bold font-label">+12.4%</span>
+</div>
+<p class="text-[10px] text-outline mt-2 leading-relaxed">Neural analysis complete. Volatility clusters identified in Nasdaq sectors. Execution ready.</p>
+</div>
+<div class="bg-surface-container-low p-4 rounded-xl">
+<h3 class="font-headline text-[10px] font-bold tracking-widest text-outline uppercase mb-3">Market DNA</h3>
+<div class="space-y-2">
+<div class="flex justify-between text-[10px] font-label">
+<span class="text-on-surface-variant">Momentum</span>
+<span class="text-tertiary">92%</span>
+</div>
+<div class="h-1 bg-surface-container-high rounded-full overflow-hidden">
+<div class="h-full w-[92%] bg-tertiary"></div>
+</div>
+<div class="flex justify-between text-[10px] font-label mt-2">
+<span class="text-on-surface-variant">Liquidity</span>
+<span class="text-primary">48%</span>
+</div>
+<div class="h-1 bg-surface-container-high rounded-full overflow-hidden">
+<div class="h-full w-[48%] bg-primary"></div>
+</div>
+</div>
+</div>
+<div class="bg-surface-container-low p-4 rounded-xl overflow-hidden relative">
+<h3 class="font-headline text-[10px] font-bold tracking-widest text-outline uppercase mb-3">Claude Reasoning</h3>
+<div class="flex flex-col gap-2">
+<div class="p-2 bg-surface-container-highest rounded text-[10px] font-label border-l border-primary/40">
+                        Synthesizing NVDA ER data...
+                    </div>
+<div class="p-2 bg-surface-container-highest/50 rounded text-[10px] font-label italic text-outline">
+                        Logic: Cluster Alpha detected.
+                    </div>
+</div>
+</div>
+</div>
+<!-- System Logs / Terminal Feed -->
+<div class="bg-surface-container-lowest p-4 rounded-xl border border-outline-variant/10 mb-20">
+<div class="flex items-center gap-2 mb-3">
+<span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+<span class="font-headline text-[10px] font-extrabold tracking-widest text-primary uppercase">Neural Activity Feed</span>
+</div>
+<div class="space-y-3 font-label text-[10px]">
+<div class="flex gap-3">
+<span class="text-outline-variant tabular-nums">09:41:02</span>
+<span class="text-on-surface-variant">Inbound data burst from <span class="text-primary">@NYSE_GATE</span></span>
+</div>
+<div class="flex gap-3">
+<span class="text-outline-variant tabular-nums">09:41:05</span>
+<span class="text-tertiary">SIGNAL: LONG NVDA (Neural Confidence 0.98)</span>
+</div>
+<div class="flex gap-3">
+<span class="text-outline-variant tabular-nums">09:41:12</span>
+<span class="text-on-surface-variant">Hedge logic deployed on QQQ options chain.</span>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full h-20 flex justify-around items-center px-4 pb-4 bg-[#1C1B1C]/60 backdrop-blur-2xl border-t border-[#414751]/10 z-50">
+<button class="flex flex-col items-center justify-center text-[#A4C9FF] bg-[#A4C9FF]/10 rounded-xl px-3 py-1 Active: translate-y-[-2px] transition-transform">
+<span class="material-symbols-outlined">psychology</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-wider uppercase mt-1">Brain</span>
+</button>
+<button class="flex flex-col items-center justify-center text-[#8E918F] opacity-70 hover:text-[#A4C9FF] hover:opacity-100 transition-all">
+<span class="material-symbols-outlined">genetics</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-wider uppercase mt-1">DNA</span>
+</button>
+<button class="flex flex-col items-center justify-center text-[#8E918F] opacity-70 hover:text-[#A4C9FF] hover:opacity-100 transition-all">
+<span class="material-symbols-outlined">insights</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-wider uppercase mt-1">Reasoning</span>
+</button>
+<button class="flex flex-col items-center justify-center text-[#8E918F] opacity-70 hover:text-[#A4C9FF] hover:opacity-100 transition-all">
+<span class="material-symbols-outlined">hub</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-wider uppercase mt-1">Nodes</span>
+</button>
+<button class="flex flex-col items-center justify-center text-[#8E918F] opacity-70 hover:text-[#A4C9FF] hover:opacity-100 transition-all">
+<span class="material-symbols-outlined">terminal</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-wider uppercase mt-1">Terminal</span>
+</button>
+</nav>
+<!-- Background Elements -->
+<div class="fixed inset-0 pointer-events-none -z-10">
+<div class="absolute top-[-10%] right-[-10%] w-[80%] h-[80%] bg-primary/5 rounded-full blur-[120px]"></div>
+<div class="absolute bottom-[-10%] left-[-10%] w-[60%] h-[60%] bg-tertiary/5 rounded-full blur-[100px]"></div>
+</div>
+</body></html>

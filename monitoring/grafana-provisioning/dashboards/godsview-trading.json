@@ -1,0 +1,259 @@
+{
+  "title": "GodsView Trading System",
+  "uid": "godsview-main",
+  "tags": ["godsview", "trading"],
+  "timezone": "browser",
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Kill Switch",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 3, "x": 0, "y": 0 },
+      "targets": [{ "expr": "godsview_kill_switch", "legendFormat": "Kill Switch", "datasource": "Prometheus" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "OFF", "color": "green" }, "1": { "text": "ACTIVE", "color": "red" } } }
+          ]
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Breaker Level",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 3, "x": 3, "y": 0 },
+      "targets": [{ "expr": "godsview_breaker_level", "legendFormat": "Level", "datasource": "Prometheus" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": {
+              "0": { "text": "NORMAL", "color": "green" },
+              "1": { "text": "WARNING", "color": "yellow" },
+              "2": { "text": "THROTTLE", "color": "orange" },
+              "3": { "text": "HALT", "color": "red" }
+            }}
+          ]
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Realized PnL Today",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 3, "x": 6, "y": 0 },
+      "targets": [{ "expr": "godsview_breaker_realized_pnl_usd", "legendFormat": "PnL", "datasource": "Prometheus" }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "thresholds": { "steps": [{ "value": null, "color": "red" }, { "value": 0, "color": "green" }] }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Open Positions",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 3, "x": 9, "y": 0 },
+      "targets": [{ "expr": "godsview_managed_positions", "legendFormat": "Positions", "datasource": "Prometheus" }],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 3, "color": "yellow" }, { "value": 5, "color": "red" }] }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Position Size Multiplier",
+      "type": "gauge",
+      "gridPos": { "h": 4, "w": 3, "x": 12, "y": 0 },
+      "targets": [{ "expr": "godsview_breaker_position_size_multiplier", "legendFormat": "Multiplier", "datasource": "Prometheus" }],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0, "max": 1,
+          "thresholds": { "steps": [{ "value": null, "color": "red" }, { "value": 0.5, "color": "yellow" }, { "value": 0.9, "color": "green" }] }
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Consecutive Losses",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 3, "x": 15, "y": 0 },
+      "targets": [{ "expr": "godsview_breaker_consecutive_losses", "legendFormat": "Losses", "datasource": "Prometheus" }],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 2, "color": "yellow" }, { "value": 3, "color": "red" }] }
+        }
+      }
+    },
+    {
+      "id": 7,
+      "title": "Active Alerts",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 3, "x": 18, "y": 0 },
+      "targets": [{ "expr": "godsview_active_alerts", "legendFormat": "Alerts", "datasource": "Prometheus" }],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 1, "color": "yellow" }, { "value": 5, "color": "red" }] }
+        }
+      }
+    },
+    {
+      "id": 8,
+      "title": "Fills Today",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 3, "x": 21, "y": 0 },
+      "targets": [{ "expr": "godsview_fills_today_total", "legendFormat": "Fills", "datasource": "Prometheus" }]
+    },
+    {
+      "id": 9,
+      "title": "PnL Over Time (Realized / Unrealized / Total)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [
+        { "expr": "godsview_breaker_realized_pnl_usd", "legendFormat": "Realized", "datasource": "Prometheus" },
+        { "expr": "godsview_breaker_unrealized_pnl_usd", "legendFormat": "Unrealized", "datasource": "Prometheus" },
+        { "expr": "godsview_breaker_realized_pnl_usd + godsview_breaker_unrealized_pnl_usd", "legendFormat": "Total", "datasource": "Prometheus" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" } }
+    },
+    {
+      "id": 10,
+      "title": "Breaker Level Timeline",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "targets": [
+        { "expr": "godsview_breaker_level", "legendFormat": "Breaker Level", "datasource": "Prometheus" },
+        { "expr": "godsview_kill_switch", "legendFormat": "Kill Switch", "datasource": "Prometheus" }
+      ],
+      "fieldConfig": { "defaults": { "min": 0, "max": 3 } }
+    },
+    {
+      "id": 11,
+      "title": "HTTP Request Rate (req/s)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 12 },
+      "targets": [{ "expr": "rate(godsview_http_requests_total[5m])", "legendFormat": "{{method}} {{path}}", "datasource": "Prometheus" }]
+    },
+    {
+      "id": 12,
+      "title": "HTTP Latency (P50 / P95 / P99)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 12 },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, rate(godsview_http_request_duration_seconds_bucket[5m]))", "legendFormat": "P50", "datasource": "Prometheus" },
+        { "expr": "histogram_quantile(0.95, rate(godsview_http_request_duration_seconds_bucket[5m]))", "legendFormat": "P95", "datasource": "Prometheus" },
+        { "expr": "histogram_quantile(0.99, rate(godsview_http_request_duration_seconds_bucket[5m]))", "legendFormat": "P99", "datasource": "Prometheus" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "id": 13,
+      "title": "Trades — Wins / Losses / Total",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 12 },
+      "targets": [
+        { "expr": "godsview_trades_today_total", "legendFormat": "Total", "datasource": "Prometheus" },
+        { "expr": "godsview_wins_today_total", "legendFormat": "Wins", "datasource": "Prometheus" },
+        { "expr": "godsview_losses_today_total", "legendFormat": "Losses", "datasource": "Prometheus" }
+      ]
+    },
+    {
+      "id": 14,
+      "title": "Hourly PnL Velocity ($/hr)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "targets": [{ "expr": "godsview_hourly_pnl_velocity_usd", "legendFormat": "$/hr", "datasource": "Prometheus" }],
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" } }
+    },
+    {
+      "id": 15,
+      "title": "Signal Pipeline Throughput",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "targets": [
+        { "expr": "rate(godsview_signals_processed_total[5m])", "legendFormat": "Signals/s", "datasource": "Prometheus" },
+        { "expr": "rate(godsview_si_decisions_total[5m])", "legendFormat": "SI Decisions/s", "datasource": "Prometheus" },
+        { "expr": "rate(godsview_production_gate_total[5m])", "legendFormat": "Gate Evals/s", "datasource": "Prometheus" }
+      ]
+    },
+    {
+      "id": 16,
+      "title": "Win Rate (trailing 1h)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 28 },
+      "targets": [
+        {
+          "expr": "rate(godsview_wins_today_total[1h]) / clamp_min(rate(godsview_trades_today_total[1h]), 0.0001)",
+          "legendFormat": "Win Rate",
+          "datasource": "Prometheus"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": { "steps": [{ "value": null, "color": "red" }, { "value": 0.5, "color": "yellow" }, { "value": 0.6, "color": "green" }] }
+        }
+      }
+    },
+    {
+      "id": 17,
+      "title": "Requests In-Flight",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 28 },
+      "targets": [{ "expr": "godsview_http_requests_in_flight", "legendFormat": "In-Flight", "datasource": "Prometheus" }],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 20, "color": "yellow" }, { "value": 50, "color": "red" }] }
+        }
+      }
+    },
+    {
+      "id": 18,
+      "title": "Unmatched Fills",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 28 },
+      "targets": [{ "expr": "godsview_unmatched_fills_total", "legendFormat": "Unmatched", "datasource": "Prometheus" }],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 1, "color": "yellow" }, { "value": 5, "color": "red" }] }
+        }
+      }
+    },
+    {
+      "id": 19,
+      "title": "Max Daily Loss Limit",
+      "type": "gauge",
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 28 },
+      "targets": [
+        {
+          "expr": "abs(clamp_max(godsview_breaker_realized_pnl_usd, 0)) / 250 * 100",
+          "legendFormat": "% of $250 limit used",
+          "datasource": "Prometheus"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0, "max": 100,
+          "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 60, "color": "yellow" }, { "value": 85, "color": "red" }] }
+        }
+      }
+    },
+    {
+      "id": 20,
+      "title": "Equity Curve",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 },
+      "targets": [
+        { "expr": "godsview_equity_current_usd", "legendFormat": "Account Equity", "datasource": "Prometheus" },
+        { "expr": "godsview_equity_peak_usd", "legendFormat": "Peak Equity", "datasource": "Prometheus" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" } }
+    }
+  ]
+}

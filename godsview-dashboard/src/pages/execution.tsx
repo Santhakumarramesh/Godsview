@@ -1,0 +1,538 @@
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+
+type BreakerLevel = "NORMAL" | "WARNING" | "THROTTLE" | "HALT";
+
+type BreakerSnapshot = {
+  level: BreakerLevel;
+  realized_pnl_today: number;
+  unrealized_pnl: number;
+  total_pnl: number;
+  daily_loss_limit: number;
+  consecutive_losses: number;
+  cooldown_active: boolean;
+  cooldown_until: string | null;
+  position_size_multiplier: number;
+  trades_today: number;
+  wins_today: number;
+  losses_today: number;
+  hourly_pnl_velocity: number;
+  peak_equity: number;
+  drawdown_from_peak: number;
+  last_updated: string;
+};
+
+type ManagedPosition = {
+  symbol: string;
+  direction: string;
+  entry: number;
+  current_stop: number;
+  peak_price: number;
+  trail_active: boolean;
+  remaining_qty: number;
+  targets_hit: number;
+};
+
+type ExecutionStatus = {
+  mode: { mode: string; canWrite: boolean; isLive: boolean };
+  kill_switch: boolean;
+  breaker: BreakerSnapshot;
+  reconciliation: {
+    fills_today: number;
+    realized_pnl_today: number;
+    unmatched_fills: number;
+    is_running: boolean;
+  };
+  managed_positions: number;
+  positions: ManagedPosition[];
+  gate_stats: {
+    daily_trades: number;
+    max_daily_trades: number;
+  };
+  last_liquidation: null | {
+    triggered_by: string;
+    timestamp: string;
+    positions_closed: number;
+    positions_failed: number;
+  };
+};
+
+type ReconciledFill = {
+  fill_id: string;
+  symbol: string;
+  side: string;
+  quantity: number;
+  price: number;
+  timestamp: string;
+  matched_position: boolean;
+  realized_pnl: number | null;
+};
+
+type AutoTradeConfig = {
+  enabled: boolean;
+  qualityFloor: number;
+  maxExecutionsPerSession: number;
+  cooldownPerSymbolSec: number;
+  globalCooldownSec: number;
+  sizingMethod: "fixed_fractional" | "half_kelly";
+  allowedSetups: string[];
+};
+
+type AutoTradeStatus = {
+  config: AutoTradeConfig;
+  executionsThisSession: number;
+  lastExecutedAt: string | null;
+  lastSymbol: string | null;
+  globalCooldownActive: boolean;
+  globalCooldownRemainingMs: number;
+};
+
+type AutoTradeExecution = {
+  id: string;
+  symbol: string;
+  setupType: string;
+  direction: "long" | "short";
+  quality: number;
+  entryPrice: number;
+  orderId: string | null;
+  accepted: boolean;
+  rejectReason: string | null;
+  executedAt: string;
+};
+
+const LEVEL_COLORS: Record<BreakerLevel, string> = {
+  NORMAL: "#9cff93",
+  WARNING: "#fbbf24",
+  THROTTLE: "#fb923c",
+  HALT: "#ff7162",
+};
+
+function StatusBadge({ label, value, color }: { label: string; value: string; color: string }) {
+  return (
+    <div className="rounded px-4 py-3" style={{ backgroundColor: "rgba(255,255,255,0.03)", border: `1px solid ${color}33` }}>
+      <div style={{ fontSize: "9px", color: "#767576", fontFamily: "Space Grotesk", letterSpacing: "0.1em", textTransform: "uppercase" }}>{label}</div>
+      <div className="mt-1 font-bold font-headline" style={{ fontSize: "18px", color }}>{value}</div>
+    </div>
+  );
+}
+
+function KillSwitchButton({ active, onToggle }: { active: boolean; onToggle: (v: boolean) => void }) {
+  const [confirm, setConfirm] = useState(false);
+
+  if (active && !confirm) {
+    return (
+      <div className="flex gap-2">
+        <div className="rounded px-4 py-3 flex items-center gap-2" style={{ backgroundColor: "rgba(255,113,98,0.15)", border: "1px solid rgba(255,113,98,0.4)" }}>
+          <span className="material-symbols-outlined" style={{ color: "#ff7162", fontSize: "18px" }}>emergency</span>
+          <span className="font-headline font-bold" style={{ color: "#ff7162", fontSize: "12px" }}>KILL SWITCH ACTIVE</span>
+        </div>
+        <button onClick={() => onToggle(false)} className="rounded px-3 py-2" style={{ backgroundColor: "rgba(156,255,147,0.1)", border: "1px solid rgba(156,255,147,0.3)", color: "#9cff93", fontSize: "10px", fontFamily: "Space Grotesk" }}>
+          Deactivate
+        </button>
+      </div>
+    );
+  }
+
+  if (confirm) {
+    return (
+      <div className="flex items-center gap-2">
+        <span style={{ fontSize: "10px", color: "#ff7162" }}>Confirm kill switch?</span>
+        <button onClick={() => { onToggle(true); setConfirm(false); }} className="rounded px-3 py-1.5" style={{ backgroundColor: "rgba(255,113,98,0.2)", border: "1px solid rgba(255,113,98,0.5)", color: "#ff7162", fontSize: "10px" }}>
+          YES — HALT ALL
+        </button>
+        <button onClick={() => setConfirm(false)} className="rounded px-3 py-1.5" style={{ backgroundColor: "rgba(255,255,255,0.05)", border: "1px solid rgba(72,72,73,0.3)", color: "#767576", fontSize: "10px" }}>
+          Cancel
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <button onClick={() => setConfirm(true)} className="rounded px-4 py-2 flex items-center gap-2" style={{ backgroundColor: "rgba(255,255,255,0.05)", border: "1px solid rgba(72,72,73,0.3)" }}>
+      <span className="material-symbols-outlined" style={{ color: "#767576", fontSize: "16px" }}>power_settings_new</span>
+      <span style={{ color: "#adaaab", fontSize: "10px", fontFamily: "Space Grotesk" }}>Kill Switch</span>
+    </button>
+  );
+}
+
+// ── Auto-Trade Panel ──────────────────────────────────────────────────────────
+
+function AutoTradePanel() {
+  const qc = useQueryClient();
+
+  const { data: atStatus } = useQuery<AutoTradeStatus>({
+    queryKey: ["auto-trade-status"],
+    queryFn: () => fetch("/api/watchlist/auto-trade/status").then(r => r.json()),
+    refetchInterval: 5000,
+  });
+
+  const { data: atLogData } = useQuery<{ log: AutoTradeExecution[]; count: number }>({
+    queryKey: ["auto-trade-log"],
+    queryFn: () => fetch("/api/watchlist/auto-trade/log?limit=10").then(r => r.json()),
+    refetchInterval: 10000,
+  });
+
+  const enableMutation = useMutation({
+    mutationFn: (enabled: boolean) =>
+      fetch(`/api/watchlist/auto-trade/${enabled ? "enable" : "disable"}`, { method: "POST" }).then(r => r.json()),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["auto-trade-status"] }),
+  });
+
+  const configMutation = useMutation({
+    mutationFn: (patch: Partial<AutoTradeConfig>) =>
+      fetch("/api/watchlist/auto-trade/config", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      }).then(r => r.json()),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["auto-trade-status"] }),
+  });
+
+  const resetMutation = useMutation({
+    mutationFn: () => fetch("/api/watchlist/auto-trade/reset-session", { method: "POST" }).then(r => r.json()),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["auto-trade-status"] }),
+  });
+
+  const cfg    = atStatus?.config;
+  const isOn   = cfg?.enabled ?? false;
+  const executions = atStatus?.executionsThisSession ?? 0;
+  const log    = atLogData?.log ?? [];
+
+  return (
+    <div className="rounded-lg p-4" style={{ backgroundColor: "rgba(255,255,255,0.02)", border: `1px solid ${isOn ? "rgba(156,255,147,0.25)" : "rgba(72,72,73,0.2)"}` }}>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <span className="material-symbols-outlined" style={{ color: isOn ? "#9cff93" : "#767576", fontSize: "18px" }}>smart_toy</span>
+          <span className="font-headline font-bold text-sm" style={{ color: "#ffffff" }}>Autonomous Execution</span>
+          {isOn && (
+            <span className="rounded px-2 py-0.5" style={{ backgroundColor: "rgba(156,255,147,0.12)", border: "1px solid rgba(156,255,147,0.3)", fontSize: "8px", color: "#9cff93", fontFamily: "Space Grotesk", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 700 }}>
+              ACTIVE
+            </span>
+          )}
+          {atStatus?.globalCooldownActive && (
+            <span className="rounded px-2 py-0.5" style={{ backgroundColor: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.3)", fontSize: "8px", color: "#fbbf24", fontFamily: "Space Grotesk" }}>
+              cooldown {Math.ceil((atStatus.globalCooldownRemainingMs ?? 0) / 1000)}s
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => resetMutation.mutate()}
+            style={{ fontSize: "9px", color: "#484849", fontFamily: "Space Grotesk", background: "none", border: "none", cursor: "pointer" }}
+          >
+            Reset Session
+          </button>
+          <button
+            onClick={() => enableMutation.mutate(!isOn)}
+            disabled={enableMutation.isPending}
+            className="rounded px-3 py-1.5 font-headline font-bold"
+            style={{
+              fontSize: "10px",
+              backgroundColor: isOn ? "rgba(255,113,98,0.15)" : "rgba(156,255,147,0.1)",
+              border: `1px solid ${isOn ? "rgba(255,113,98,0.4)" : "rgba(156,255,147,0.3)"}`,
+              color: isOn ? "#ff7162" : "#9cff93",
+            }}
+          >
+            {isOn ? "DISABLE" : "ENABLE"}
+          </button>
+        </div>
+      </div>
+
+      {/* Config Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        {[
+          { label: "Quality Floor", value: cfg ? `${(cfg.qualityFloor * 100).toFixed(0)}%` : "—", color: "#fbbf24" },
+          { label: "Max / Session",  value: cfg ? `${executions} / ${cfg.maxExecutionsPerSession}` : "—", color: "#67e8f9" },
+          { label: "Symbol CD",  value: cfg ? `${cfg.cooldownPerSymbolSec}s` : "—", color: "#adaaab" },
+          { label: "Sizing",     value: cfg?.sizingMethod === "half_kelly" ? "½ Kelly" : "Fixed-Frac", color: "#9cff93" },
+        ].map(item => (
+          <div key={item.label} className="rounded px-3 py-2" style={{ backgroundColor: "rgba(255,255,255,0.025)", border: "1px solid rgba(72,72,73,0.15)" }}>
+            <div style={{ fontSize: "8px", color: "#484849", fontFamily: "Space Grotesk", letterSpacing: "0.1em", textTransform: "uppercase" }}>{item.label}</div>
+            <div className="font-bold font-headline mt-1" style={{ fontSize: "14px", color: item.color }}>{item.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Quality Floor slider */}
+      <div className="mb-4 flex items-center gap-3">
+        <span style={{ fontSize: "9px", color: "#767576", fontFamily: "Space Grotesk", width: "80px" }}>Quality Floor</span>
+        <input
+          type="range" min="50" max="95" step="5"
+          value={cfg ? cfg.qualityFloor * 100 : 70}
+          onChange={e => configMutation.mutate({ qualityFloor: parseInt(e.target.value, 10) / 100 })}
+          style={{ flex: 1, accentColor: "#9cff93", height: "3px" }}
+        />
+        <span style={{ fontSize: "9px", color: "#9cff93", fontFamily: "JetBrains Mono, monospace", width: "32px" }}>
+          {cfg ? `${(cfg.qualityFloor * 100).toFixed(0)}%` : "70%"}
+        </span>
+        <select
+          value={cfg?.sizingMethod ?? "fixed_fractional"}
+          onChange={e => configMutation.mutate({ sizingMethod: e.target.value as AutoTradeConfig["sizingMethod"] })}
+          style={{ backgroundColor: "rgba(255,255,255,0.05)", border: "1px solid rgba(72,72,73,0.3)", color: "#adaaab", fontSize: "9px", borderRadius: "4px", padding: "2px 6px", fontFamily: "Space Grotesk" }}
+        >
+          <option value="fixed_fractional">Fixed-Frac</option>
+          <option value="half_kelly">½ Kelly</option>
+        </select>
+      </div>
+
+      {/* Execution Log */}
+      {log.length > 0 && (
+        <div>
+          <div style={{ fontSize: "8px", color: "#484849", fontFamily: "Space Grotesk", letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: "8px" }}>Recent Auto-Executions</div>
+          <div className="space-y-1">
+            {log.map(e => (
+              <div key={e.id} className="flex items-center gap-3 rounded px-3 py-1.5" style={{ backgroundColor: "rgba(255,255,255,0.02)", border: `1px solid ${e.accepted ? "rgba(156,255,147,0.12)" : "rgba(255,113,98,0.12)"}` }}>
+                <span style={{ fontSize: "8px", color: e.accepted ? "#9cff93" : "#ff7162", fontFamily: "Space Grotesk", fontWeight: 700, width: "44px" }}>
+                  {e.accepted ? "FILLED" : "SKIP"}
+                </span>
+                <span className="font-bold" style={{ fontSize: "9px", color: "#ffffff", width: "60px" }}>{e.symbol}</span>
+                <span style={{ fontSize: "9px", color: e.direction === "long" ? "#9cff93" : "#ff7162", width: "36px" }}>{e.direction.toUpperCase()}</span>
+                <span style={{ fontSize: "9px", color: "#adaaab", fontFamily: "Space Grotesk" }}>{e.setupType.replace(/_/g, " ")}</span>
+                <span style={{ fontSize: "9px", color: "#fbbf24", fontFamily: "JetBrains Mono, monospace", marginLeft: "auto" }}>{(e.quality * 100).toFixed(0)}%</span>
+                {!e.accepted && e.rejectReason && (
+                  <span style={{ fontSize: "8px", color: "#767576", fontFamily: "JetBrains Mono, monospace", maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {e.rejectReason}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!isOn && (
+        <div className="mt-2 rounded p-3" style={{ backgroundColor: "rgba(251,191,36,0.05)", border: "1px solid rgba(251,191,36,0.15)" }}>
+          <p style={{ fontSize: "10px", color: "#767576", fontFamily: "Space Grotesk", lineHeight: 1.5 }}>
+            Autonomous execution is <strong style={{ color: "#fbbf24" }}>disabled</strong>. Scanner alerts are emitted but no orders are placed automatically. Enable only when Alpaca paper/live keys are configured and the circuit breaker is disarmed.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function ExecutionPage() {
+  const { data: status, refetch: refetchStatus } = useQuery<ExecutionStatus>({
+    queryKey: ["execution-status"],
+    queryFn: () => fetch("/api/execution/execution-status").then((r) => r.json()),
+    refetchInterval: 3000,
+  });
+
+  const { data: fillsData } = useQuery<{ fills: ReconciledFill[] }>({
+    queryKey: ["execution-fills"],
+    queryFn: () => fetch("/api/execution/fills?limit=20").then((r) => r.json()),
+    refetchInterval: 5000,
+  });
+
+  const killMutation = useMutation({
+    mutationFn: (active: boolean) =>
+      fetch("/api/execution/kill-switch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active, liquidate: active, reason: "dashboard_manual" }),
+      }).then((r) => r.json()),
+    onSuccess: () => refetchStatus(),
+  });
+
+  const emergencyMutation = useMutation({
+    mutationFn: () =>
+      fetch("/api/execution/emergency-close", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: "dashboard_emergency" }),
+      }).then((r) => r.json()),
+    onSuccess: () => refetchStatus(),
+  });
+
+  const breaker = status?.breaker;
+  const mode = status?.mode;
+  const positions = status?.positions ?? [];
+  const fills = fillsData?.fills ?? [];
+  const levelColor = LEVEL_COLORS[breaker?.level ?? "NORMAL"];
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="font-headline font-bold text-xl tracking-wide" style={{ color: "#ffffff" }}>Execution Command</h1>
+          <p style={{ fontSize: "11px", color: "#767576", fontFamily: "Space Grotesk" }}>
+            Live execution pipeline · Fill reconciliation · Circuit breaker
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <KillSwitchButton
+            active={status?.kill_switch ?? false}
+            onToggle={(v) => killMutation.mutate(v)}
+          />
+        </div>
+      </div>
+
+      {/* Status Cards Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+        <StatusBadge label="Mode" value={mode?.mode ?? "—"} color={mode?.isLive ? "#ff7162" : "#9cff93"} />
+        <StatusBadge label="Breaker" value={breaker?.level ?? "—"} color={levelColor} />
+        <StatusBadge label="Realized PnL" value={`$${(breaker?.realized_pnl_today ?? 0).toFixed(2)}`} color={(breaker?.realized_pnl_today ?? 0) >= 0 ? "#9cff93" : "#ff7162"} />
+        <StatusBadge label="Unrealized" value={`$${(breaker?.unrealized_pnl ?? 0).toFixed(2)}`} color={(breaker?.unrealized_pnl ?? 0) >= 0 ? "#9cff93" : "#ff7162"} />
+        <StatusBadge label="Trades" value={`${breaker?.trades_today ?? 0}`} color="#67e8f9" />
+        <StatusBadge label="Win/Loss" value={`${breaker?.wins_today ?? 0}/${breaker?.losses_today ?? 0}`} color="#fbbf24" />
+        <StatusBadge label="Size Multi" value={`${((breaker?.position_size_multiplier ?? 1) * 100).toFixed(0)}%`} color={(breaker?.position_size_multiplier ?? 1) >= 0.75 ? "#9cff93" : "#fb923c"} />
+        <StatusBadge label="Positions" value={`${status?.managed_positions ?? 0}`} color="#67e8f9" />
+      </div>
+
+      {/* Breaker + Gate Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Breaker Detail */}
+        <div className="rounded-lg p-4" style={{ backgroundColor: "rgba(255,255,255,0.02)", border: "1px solid rgba(72,72,73,0.2)" }}>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="material-symbols-outlined" style={{ color: levelColor, fontSize: "18px" }}>shield</span>
+            <span className="font-headline font-bold text-sm" style={{ color: "#ffffff" }}>Circuit Breaker</span>
+          </div>
+          <div className="space-y-2" style={{ fontSize: "11px", fontFamily: "JetBrains Mono, monospace" }}>
+            <div className="flex justify-between"><span style={{ color: "#767576" }}>Daily Loss Limit</span><span style={{ color: "#ffffff" }}>${breaker?.daily_loss_limit ?? 250}</span></div>
+            <div className="flex justify-between"><span style={{ color: "#767576" }}>Consecutive Losses</span><span style={{ color: (breaker?.consecutive_losses ?? 0) >= 3 ? "#ff7162" : "#ffffff" }}>{breaker?.consecutive_losses ?? 0}</span></div>
+            <div className="flex justify-between"><span style={{ color: "#767576" }}>Cooldown</span><span style={{ color: breaker?.cooldown_active ? "#fb923c" : "#9cff93" }}>{breaker?.cooldown_active ? "ACTIVE" : "None"}</span></div>
+            <div className="flex justify-between"><span style={{ color: "#767576" }}>PnL Velocity (1hr)</span><span style={{ color: (breaker?.hourly_pnl_velocity ?? 0) < 0 ? "#ff7162" : "#9cff93" }}>${(breaker?.hourly_pnl_velocity ?? 0).toFixed(2)}/hr</span></div>
+            <div className="flex justify-between"><span style={{ color: "#767576" }}>Peak Equity</span><span style={{ color: "#ffffff" }}>${(breaker?.peak_equity ?? 0).toFixed(0)}</span></div>
+            <div className="flex justify-between"><span style={{ color: "#767576" }}>Drawdown from Peak</span><span style={{ color: "#ffffff" }}>{((breaker?.drawdown_from_peak ?? 0) * 100).toFixed(2)}%</span></div>
+          </div>
+
+          {/* Breaker level bar */}
+          <div className="mt-3 flex gap-1">
+            {(["NORMAL", "WARNING", "THROTTLE", "HALT"] as BreakerLevel[]).map((lvl) => (
+              <div key={lvl} className="flex-1 h-2 rounded-sm" style={{
+                backgroundColor: breaker?.level === lvl || (["NORMAL", "WARNING", "THROTTLE", "HALT"].indexOf(lvl) <= ["NORMAL", "WARNING", "THROTTLE", "HALT"].indexOf(breaker?.level ?? "NORMAL"))
+                  ? LEVEL_COLORS[lvl] : "rgba(72,72,73,0.2)",
+                opacity: breaker?.level === lvl ? 1 : 0.4,
+              }} />
+            ))}
+          </div>
+          <div className="flex justify-between mt-1" style={{ fontSize: "7px", color: "#484849" }}>
+            <span>NORMAL</span><span>WARNING</span><span>THROTTLE</span><span>HALT</span>
+          </div>
+        </div>
+
+        {/* Gate Stats + Reconciliation */}
+        <div className="rounded-lg p-4" style={{ backgroundColor: "rgba(255,255,255,0.02)", border: "1px solid rgba(72,72,73,0.2)" }}>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="material-symbols-outlined" style={{ color: "#67e8f9", fontSize: "18px" }}>sync</span>
+            <span className="font-headline font-bold text-sm" style={{ color: "#ffffff" }}>Reconciliation & Gate</span>
+          </div>
+          <div className="space-y-2" style={{ fontSize: "11px", fontFamily: "JetBrains Mono, monospace" }}>
+            <div className="flex justify-between"><span style={{ color: "#767576" }}>Reconciler</span><span style={{ color: status?.reconciliation?.is_running ? "#9cff93" : "#ff7162" }}>{status?.reconciliation?.is_running ? "RUNNING" : "STOPPED"}</span></div>
+            <div className="flex justify-between"><span style={{ color: "#767576" }}>Fills Today</span><span style={{ color: "#ffffff" }}>{status?.reconciliation?.fills_today ?? 0}</span></div>
+            <div className="flex justify-between"><span style={{ color: "#767576" }}>Unmatched</span><span style={{ color: (status?.reconciliation?.unmatched_fills ?? 0) > 0 ? "#fbbf24" : "#9cff93" }}>{status?.reconciliation?.unmatched_fills ?? 0}</span></div>
+            <div className="flex justify-between"><span style={{ color: "#767576" }}>Gate Trades</span><span style={{ color: "#ffffff" }}>{status?.gate_stats?.daily_trades ?? 0} / {status?.gate_stats?.max_daily_trades ?? 15}</span></div>
+          </div>
+
+          {status?.last_liquidation && (
+            <div className="mt-3 rounded p-2" style={{ backgroundColor: "rgba(255,113,98,0.08)", border: "1px solid rgba(255,113,98,0.2)" }}>
+              <div style={{ fontSize: "8px", color: "#ff7162", fontFamily: "Space Grotesk", letterSpacing: "0.1em", textTransform: "uppercase" }}>Last Liquidation</div>
+              <div style={{ fontSize: "10px", color: "#adaaab", fontFamily: "JetBrains Mono, monospace", marginTop: "4px" }}>
+                {status.last_liquidation.triggered_by} · {status.last_liquidation.positions_closed} closed
+                {status.last_liquidation.positions_failed > 0 && ` · ${status.last_liquidation.positions_failed} failed`}
+              </div>
+            </div>
+          )}
+
+          <button
+            onClick={() => emergencyMutation.mutate()}
+            disabled={emergencyMutation.isPending}
+            className="mt-3 w-full rounded py-2 font-headline font-bold text-xs"
+            style={{ backgroundColor: "rgba(255,113,98,0.1)", border: "1px solid rgba(255,113,98,0.3)", color: "#ff7162" }}
+          >
+            {emergencyMutation.isPending ? "LIQUIDATING..." : "EMERGENCY CLOSE ALL"}
+          </button>
+        </div>
+      </div>
+
+      {/* Autonomous Execution Panel */}
+      <AutoTradePanel />
+
+      {/* Managed Positions */}
+      {positions.length > 0 && (
+        <div className="rounded-lg p-4" style={{ backgroundColor: "rgba(255,255,255,0.02)", border: "1px solid rgba(72,72,73,0.2)" }}>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="material-symbols-outlined" style={{ color: "#fbbf24", fontSize: "18px" }}>monitoring</span>
+            <span className="font-headline font-bold text-sm" style={{ color: "#ffffff" }}>Managed Positions</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full" style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace" }}>
+              <thead>
+                <tr style={{ color: "#767576", borderBottom: "1px solid rgba(72,72,73,0.2)" }}>
+                  <th className="text-left py-2 pr-4">Symbol</th>
+                  <th className="text-left py-2 pr-4">Dir</th>
+                  <th className="text-right py-2 pr-4">Entry</th>
+                  <th className="text-right py-2 pr-4">Stop</th>
+                  <th className="text-right py-2 pr-4">Peak</th>
+                  <th className="text-center py-2 pr-4">Trail</th>
+                  <th className="text-right py-2 pr-4">Qty</th>
+                  <th className="text-right py-2">Targets</th>
+                </tr>
+              </thead>
+              <tbody>
+                {positions.map((p) => (
+                  <tr key={p.symbol} style={{ borderBottom: "1px solid rgba(72,72,73,0.1)" }}>
+                    <td className="py-2 pr-4 font-bold" style={{ color: "#ffffff" }}>{p.symbol}</td>
+                    <td className="py-2 pr-4" style={{ color: p.direction === "long" ? "#9cff93" : "#ff7162" }}>{p.direction.toUpperCase()}</td>
+                    <td className="text-right py-2 pr-4" style={{ color: "#adaaab" }}>${p.entry.toFixed(2)}</td>
+                    <td className="text-right py-2 pr-4" style={{ color: "#fb923c" }}>${p.current_stop.toFixed(2)}</td>
+                    <td className="text-right py-2 pr-4" style={{ color: "#67e8f9" }}>${p.peak_price.toFixed(2)}</td>
+                    <td className="text-center py-2 pr-4"><span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: p.trail_active ? "#9cff93" : "#484849" }} /></td>
+                    <td className="text-right py-2 pr-4" style={{ color: "#ffffff" }}>{p.remaining_qty}</td>
+                    <td className="text-right py-2" style={{ color: "#fbbf24" }}>{p.targets_hit}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Recent Fills */}
+      <div className="rounded-lg p-4" style={{ backgroundColor: "rgba(255,255,255,0.02)", border: "1px solid rgba(72,72,73,0.2)" }}>
+        <div className="flex items-center gap-2 mb-3">
+          <span className="material-symbols-outlined" style={{ color: "#9cff93", fontSize: "18px" }}>receipt_long</span>
+          <span className="font-headline font-bold text-sm" style={{ color: "#ffffff" }}>Recent Fills</span>
+          <span style={{ fontSize: "9px", color: "#484849", fontFamily: "JetBrains Mono, monospace" }}>{fills.length} shown</span>
+        </div>
+        {fills.length === 0 ? (
+          <div style={{ fontSize: "11px", color: "#484849", fontFamily: "Space Grotesk", padding: "16px 0", textAlign: "center" }}>
+            No fills today. Reconciler polls every 10 seconds.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full" style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace" }}>
+              <thead>
+                <tr style={{ color: "#767576", borderBottom: "1px solid rgba(72,72,73,0.2)" }}>
+                  <th className="text-left py-2 pr-4">Time</th>
+                  <th className="text-left py-2 pr-4">Symbol</th>
+                  <th className="text-left py-2 pr-4">Side</th>
+                  <th className="text-right py-2 pr-4">Qty</th>
+                  <th className="text-right py-2 pr-4">Price</th>
+                  <th className="text-center py-2 pr-4">Matched</th>
+                  <th className="text-right py-2">PnL</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fills.map((f) => (
+                  <tr key={f.fill_id} style={{ borderBottom: "1px solid rgba(72,72,73,0.1)" }}>
+                    <td className="py-2 pr-4" style={{ color: "#484849" }}>{new Date(f.timestamp).toLocaleTimeString()}</td>
+                    <td className="py-2 pr-4 font-bold" style={{ color: "#ffffff" }}>{f.symbol}</td>
+                    <td className="py-2 pr-4" style={{ color: f.side === "buy" ? "#9cff93" : "#ff7162" }}>{f.side.toUpperCase()}</td>
+                    <td className="text-right py-2 pr-4" style={{ color: "#adaaab" }}>{f.quantity}</td>
+                    <td className="text-right py-2 pr-4" style={{ color: "#ffffff" }}>${f.price.toFixed(2)}</td>
+                    <td className="text-center py-2 pr-4"><span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: f.matched_position ? "#9cff93" : "#fbbf24" }} /></td>
+                    <td className="text-right py-2" style={{ color: f.realized_pnl !== null ? (f.realized_pnl >= 0 ? "#9cff93" : "#ff7162") : "#484849" }}>
+                      {f.realized_pnl !== null ? `$${f.realized_pnl.toFixed(2)}` : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
