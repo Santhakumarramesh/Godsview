@@ -107,7 +107,8 @@ const publicDir = path.resolve(__dirname, "../public");
 if (fs.existsSync(publicDir)) {
   app.use(express.static(publicDir));
   // SPA fallback — serve index.html for non-API routes
-  app.get("*", (_req: Request, res: Response) => {
+  // Express 5 requires a named wildcard: use /{*path} instead of bare *
+  app.get("/{*path}", (_req: Request, res: Response) => {
     const indexPath = path.join(publicDir, "index.html");
     if (fs.existsSync(indexPath)) {
       res.sendFile(indexPath);
