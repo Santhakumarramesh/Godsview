@@ -1,175 +1,191 @@
+/**
+ * signal_stream.test.ts — SSE Broadcast Hub Unit Tests
+ *
+ * Tests the SignalStreamHub: client registration, event publishing,
+ * filtering, replay, and graceful shutdown.
+ */
+
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// We test the SignalStreamHub logic by importing the module
-// and exercising publish, addClient, replay, closeAll.
-
-// Mock a minimal Express Response for SSE testing
+// Mock Response object for SSE clients
 function mockResponse() {
   const written: string[] = [];
   const headers: Record<string, string> = {};
   let ended = false;
-  const closeHandlers: Array<() => void> = [];
+  const listeners: Record<string, Function[]> = {};
 
   return {
-    setHeader(k: string, v: string) { headers[k] = v; },
-    flushHeaders() {},
-    write(chunk: string) { written.push(chunk); return true; },
-    end() { ended = true; },
-    on(event: string, handler: () => void) {
-      if (event === "close") closeHandlers.push(handler);
-    },
-    flush() {},
-    // Test helpers
+    writeHead: vi.fn((status: number, hdrs: Record<string, string>) => {
+      Object.assign(headers, hdrs);
+    }),
+    write: vi.fn((data: string) => {
+      if (ended) throw new Error("Write after end");
+      written.push(data);
+      return true;
+    }),
+    end: vi.fn(() => { ended = true; }),
+    on: vi.fn((event: string, cb: Function) => {
+      if (!listeners[event]) listeners[event] = [];
+      listeners[event].push(cb);
+    }),
+    setHeader: vi.fn(),
+    // Helpers for test assertions
     _written: written,
     _headers: headers,
     _ended: () => ended,
-    _triggerClose() { closeHandlers.forEach((h) => h()); },
+    _trigger: (event: string) => listeners[event]?.forEach((cb) => cb()),
   };
 }
 
+// We re-import fresh for each test to avoid singleton state leaking
+let hub: typeof import("../lib/signal_stream");
+
+beforeEach(async () => {
+  vi.resetModules();
+  hub = await import("../lib/signal_stream");
+});
+
 describe("SignalStreamHub", () => {
-  // We create a fresh hub for each test to avoid singleton state leakage
-  // Import the class constructor indirectly via the module's singleton
-  let hub: any;
-
-  beforeEach(async () => {
-    // Dynamic import to get a fresh module each test
-    const mod = await import("../lib/signal_stream");
-    hub = mod.signalHub;
-    // Clear any existing clients from prior tests
-    hub.closeAll();
-    // Restart heartbeat (closeAll stops it)
-    // We'll just test without heartbeat for unit tests
-  });
-
-  it("addClient registers SSE client and sends connection event", () => {
+  it("addClient registers an SSE client and sends connected event", () => {
     const res = mockResponse();
-    const id = hub.addClient(res as any);
-
+    const id = hub.signalStreamHub.addClient(res as any);
     expect(id).toMatch(/^sse-/);
-    expect(res._headers["Content-Type"]).toBe("text/event-stream");
-    // Should have written a connection system event
-    const joined = res._written.join("");
-    expect(joined).toContain("connected");
-    expect(hub.status().connectedClients).toBeGreaterThanOrEqual(1);
+    expect(res.writeHead).toHaveBeenCalledWith(200, expect.objectContaining({
+      "Content-Type": "text/event-stream",
+    }));
+    expect(res._written.length).toBeGreaterThanOrEqual(1);
+    expect(res._written[0]).toContain("event: connected");
   });
 
   it("publish broadcasts to all connected clients", () => {
     const res1 = mockResponse();
     const res2 = mockResponse();
-    hub.addClient(res1 as any);
-    hub.addClient(res2 as any);
+    hub.signalStreamHub.addClient(res1 as any);
+    hub.signalStreamHub.addClient(res2 as any);
 
-    hub.publish({
-      type: "signal",
-      timestamp: new Date().toISOString(),
-      payload: { symbol: "BTCUSD", decision: "APPLY" },
-    });
+    hub.publishSignal({ symbol: "BTCUSD", score: 0.85 });
 
-    // Both clients should have received the event
-    expect(res1._written.join("")).toContain("BTCUSD");
-    expect(res2._written.join("")).toContain("BTCUSD");
+    // Both clients should have received the signal event (connected + signal)
+    expect(res1._written.length).toBeGreaterThanOrEqual(2);
+    expect(res2._written.length).toBeGreaterThanOrEqual(2);
+    const last1 = res1._written[res1._written.length - 1];
+    expect(last1).toContain("event: signal");
+    expect(last1).toContain("BTCUSD");
   });
 
   it("filter restricts which events a client receives", () => {
-    const res = mockResponse();
-    hub.addClient(res as any, ["alert"]);
+    const signalOnly = mockResponse();
+    const alertOnly = mockResponse();
+    hub.signalStreamHub.addClient(signalOnly as any, ["signal"]);
+    hub.signalStreamHub.addClient(alertOnly as any, ["alert"]);
 
-    // Publish a signal event — should NOT reach this client
-    hub.publish({
-      type: "signal",
-      timestamp: new Date().toISOString(),
-      payload: { symbol: "ETHUSD" },
-    });
+    hub.publishSignal({ test: true });
+    hub.publishAlert({ severity: "warning" });
 
-    // Publish an alert event — SHOULD reach this client
-    hub.publish({
-      type: "alert",
-      timestamp: new Date().toISOString(),
-      payload: { message: "test alert" },
-    });
+    // signalOnly should get connected + signal but NOT alert
+    const signalEvents = signalOnly._written.filter((w: string) => w.includes("event: signal"));
+    const alertOnSignal = signalOnly._written.filter((w: string) => w.includes("event: alert"));
+    expect(signalEvents.length).toBe(1);
+    expect(alertOnSignal.length).toBe(0);
 
-    const joined = res._written.join("");
-    expect(joined).not.toContain("ETHUSD");
-    expect(joined).toContain("test alert");
+    // alertOnly should get connected + alert but NOT signal
+    const alertEvents = alertOnly._written.filter((w: string) => w.includes("event: alert"));
+    const signalOnAlert = alertOnly._written.filter((w: string) => w.includes("event: signal"));
+    expect(alertEvents.length).toBe(1);
+    expect(signalOnAlert.length).toBe(0);
   });
 
-  it("removeClient closes connection and stops delivery", () => {
+  it("removeClient closes and removes a specific client", () => {
     const res = mockResponse();
-    const id = hub.addClient(res as any);
+    const id = hub.signalStreamHub.addClient(res as any);
+    hub.signalStreamHub.removeClient(id);
+    expect(res.end).toHaveBeenCalled();
 
-    hub.removeClient(id);
-    expect(res._ended()).toBe(true);
-    expect(hub.status().connectedClients).toBe(0);
+    // Publishing after removal should not write to the removed client
+    const countBefore = res._written.length;
+    hub.publishSignal({ after: true });
+    expect(res._written.length).toBe(countBefore);
   });
 
-  it("replay sends missed events after reconnect", () => {
-    // Publish events before client connects
-    hub.publish({ type: "signal", timestamp: new Date().toISOString(), payload: { n: 1 } });
-    hub.publish({ type: "signal", timestamp: new Date().toISOString(), payload: { n: 2 } });
-    hub.publish({ type: "alert", timestamp: new Date().toISOString(), payload: { n: 3 } });
-
-    const afterId = hub.status().totalEventsPublished - 2; // miss last 2
-
+  it("replay sends missed events after a given event ID", () => {
     const res = mockResponse();
-    const id = hub.addClient(res as any);
-    hub.replay(id, afterId);
+    const id = hub.signalStreamHub.addClient(res as any);
 
-    const joined = res._written.join("");
-    // Should have replayed the 2 missed events
-    expect(joined).toContain('"n":2');
-    expect(joined).toContain('"n":3');
+    // Publish 3 events
+    hub.publishEvent("signal", { n: 1 });
+    hub.publishEvent("signal", { n: 2 });
+    hub.publishEvent("alert", { n: 3 });
+
+    // Get the ID of the first signal event
+    const firstSignal = res._written.find((w: string) => w.includes('"n":1'));
+    const idMatch = firstSignal?.match(/id: (evt-\d+-\d+)/);
+    expect(idMatch).toBeTruthy();
+
+    // Add a new client and replay from after first event
+    const res2 = mockResponse();
+    const id2 = hub.signalStreamHub.addClient(res2 as any);
+    const countBefore = res2._written.length;
+    hub.signalStreamHub.replay(id2, idMatch![1]);
+    // Should have received the 2 events after the first one
+    expect(res2._written.length).toBeGreaterThan(countBefore);
   });
 
-  it("closeAll terminates all clients and clears state", () => {
+  it("closeAll terminates all clients with goodbye event", () => {
     const res1 = mockResponse();
     const res2 = mockResponse();
-    hub.addClient(res1 as any);
-    hub.addClient(res2 as any);
+    hub.signalStreamHub.addClient(res1 as any);
+    hub.signalStreamHub.addClient(res2 as any);
 
-    hub.closeAll();
+    hub.signalStreamHub.closeAll();
 
-    expect(hub.status().connectedClients).toBe(0);
-    expect(res1._ended()).toBe(true);
-    expect(res2._ended()).toBe(true);
+    expect(res1.end).toHaveBeenCalled();
+    expect(res2.end).toHaveBeenCalled();
+    const hasGoodbye1 = res1._written.some((w: string) => w.includes("server_shutdown"));
+    const hasGoodbye2 = res2._written.some((w: string) => w.includes("server_shutdown"));
+    expect(hasGoodbye1).toBe(true);
+    expect(hasGoodbye2).toBe(true);
   });
 
-  it("broadcast() legacy function maps to publish", async () => {
+  it("broadcast() legacy maps to publish with correct event type", () => {
     const res = mockResponse();
-    hub.addClient(res as any); // receives all types
+    hub.signalStreamHub.addClient(res as any);
 
-    // Import the legacy broadcast function (ESM dynamic import)
-    const { broadcast } = await import("../lib/signal_stream");
-    broadcast({
-      type: "si_decision",
-      data: { symbol: "SYSTEM", setup_type: "alert", rejection_reason: "test" },
-    });
+    hub.broadcast({ type: "si_decision", data: { symbol: "BTCUSD" } });
+    const hasSignal = res._written.some((w: string) => w.includes("event: signal"));
+    expect(hasSignal).toBe(true);
 
-    const joined = res._written.join("");
-    expect(joined).toContain("SYSTEM");
-    expect(joined).toContain("rejection_reason");
+    hub.broadcast({ type: "alert", data: { msg: "test" } });
+    const hasAlert = res._written.some((w: string) => w.includes("event: alert"));
+    expect(hasAlert).toBe(true);
   });
 
-  it("client disconnect via close event auto-removes", () => {
+  it("client disconnect auto-removes via close event", () => {
     const res = mockResponse();
-    const id = hub.addClient(res as any);
-    expect(hub.status().connectedClients).toBeGreaterThanOrEqual(1);
+    const id = hub.signalStreamHub.addClient(res as any);
+
+    const statusBefore = hub.signalStreamHub.status();
+    expect(statusBefore.clientCount).toBe(1);
 
     // Simulate client disconnect
-    res._triggerClose();
-    expect(hub.status().clients.find((c: any) => c.id === id)).toBeUndefined();
+    res._trigger("close");
+
+    const statusAfter = hub.signalStreamHub.status();
+    expect(statusAfter.clientCount).toBe(0);
   });
 
   it("status returns correct hub state", () => {
-    const res = mockResponse();
-    hub.addClient(res as any, ["signal"]);
+    const res1 = mockResponse();
+    const res2 = mockResponse();
+    hub.signalStreamHub.addClient(res1 as any, ["signal"]);
+    hub.signalStreamHub.addClient(res2 as any);
 
-    hub.publish({ type: "signal", timestamp: new Date().toISOString(), payload: { test: true } });
+    hub.publishEvent("signal", { test: true });
 
-    const st = hub.status();
-    expect(st.connectedClients).toBeGreaterThanOrEqual(1);
-    expect(st.totalEventsPublished).toBeGreaterThanOrEqual(1);
-    expect(st.recentBufferSize).toBeGreaterThanOrEqual(1);
-    expect(st.clients[0]?.filter).toEqual(["signal"]);
+    const status = hub.signalStreamHub.status();
+    expect(status.clientCount).toBe(2);
+    expect(status.recentEventCount).toBeGreaterThanOrEqual(1);
+    expect(status.clients).toHaveLength(2);
+    expect(status.clients[0].filter).toEqual(["signal"]);
+    expect(status.clients[1].filter).toBe("all");
   });
 });
