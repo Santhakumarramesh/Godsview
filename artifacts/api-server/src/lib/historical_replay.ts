@@ -44,6 +44,10 @@ export interface ReplayBar extends RawBar {
   event: GrammarBar["event"];
   /** Running market bias at this bar */
   bias: GrammarBar["bias"];
+  /** Last confirmed swing high price at this bar */
+  lastSwingHigh: number | null;
+  /** Last confirmed swing low price at this bar */
+  lastSwingLow: number | null;
 }
 
 export interface SetupCandidate {

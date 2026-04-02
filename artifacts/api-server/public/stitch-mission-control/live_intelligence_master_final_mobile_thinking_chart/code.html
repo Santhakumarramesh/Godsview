@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-panel {
+            background: rgba(44, 44, 45, 0.4);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+        .candlestick-container {
+            background-image: radial-gradient(circle at 2px 2px, #262627 1px, transparent 0);
+            background-size: 24px 24px;
+        }
+        /* Custom scrollbar for tactical feel */
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: #0e0e0f; }
+        ::-webkit-scrollbar-thumb { background: #2c2c2d; border-radius: 2px; }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "tertiary-dim": "#e2241f",
+                        "tertiary-container": "#f9362c",
+                        "on-primary": "#006413",
+                        "primary-fixed": "#00fc40",
+                        "on-surface-variant": "#adaaab",
+                        "on-secondary-fixed-variant": "#004ea5",
+                        "inverse-surface": "#fcf8f9",
+                        "outline-variant": "#484849",
+                        "on-tertiary": "#4a0001",
+                        "surface-dim": "#0e0e0f",
+                        "primary-dim": "#00ec3b",
+                        "on-surface": "#ffffff",
+                        "background": "#0e0e0f",
+                        "surface-bright": "#2c2c2d",
+                        "secondary-container": "#005bc0",
+                        "on-tertiary-container": "#000000",
+                        "surface-container-highest": "#262627",
+                        "tertiary-fixed-dim": "#ff7c6c",
+                        "tertiary": "#ff7162",
+                        "surface-variant": "#262627",
+                        "on-primary-fixed": "#00440a",
+                        "primary": "#9cff93",
+                        "surface-container": "#1a191b",
+                        "on-background": "#ffffff",
+                        "inverse-primary": "#006f16",
+                        "surface-container-lowest": "#000000",
+                        "surface": "#0e0e0f",
+                        "on-primary-fixed-variant": "#006513",
+                        "inverse-on-surface": "#565556",
+                        "on-secondary": "#001f49",
+                        "tertiary-fixed": "#ff9385",
+                        "surface-container-high": "#201f21",
+                        "error-container": "#b92902",
+                        "on-secondary-fixed": "#00326f",
+                        "surface-tint": "#9cff93",
+                        "on-secondary-container": "#f7f7ff",
+                        "secondary-fixed-dim": "#a8c4ff",
+                        "on-tertiary-fixed": "#3a0001",
+                        "error-dim": "#d53d18",
+                        "on-primary-container": "#005a10",
+                        "error": "#ff7351",
+                        "secondary": "#669dff",
+                        "outline": "#767576",
+                        "primary-container": "#00fc40",
+                        "on-error-container": "#ffd2c8",
+                        "on-error": "#450900",
+                        "secondary-fixed": "#bed2ff",
+                        "surface-container-low": "#131314",
+                        "primary-fixed-dim": "#00ec3b",
+                        "on-tertiary-fixed-variant": "#7a0004",
+                        "secondary-dim": "#0070ea"
+                    },
+                    fontFamily: {
+                        "headline": ["Space Grotesk"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                },
+            },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface font-body selection:bg-primary selection:text-on-primary-container overflow-hidden">
+<!-- TopAppBar -->
+<header class="bg-[#0e0e0f]/80 backdrop-blur-xl fixed top-0 w-full z-50 border-b border-[#484849]/15 flex justify-between items-center px-6 h-16 w-full">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[#9cff93]" data-icon="sensors">sensors</span>
+<span class="font-['Space_Grotesk'] tracking-[0.2em] text-xl font-bold text-[#9cff93]">GODSVIEW</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-[10px] font-medium text-[#9cff93] tracking-widest uppercase">System Status: Online</span>
+<div class="w-8 h-8 rounded-full bg-surface-container-highest border border-outline-variant flex items-center justify-center overflow-hidden">
+<img alt="Operator Avatar" class="w-full h-full object-cover" data-alt="professional military operator avatar in digital art style with tactical gear and futuristic visor" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC0scoOATyHeYppsVk8EvCnRcEONycVtWhFvUSQ4XkPkQkhjqQb-8YZDQR_U9d2tUPj6C8BZPSs8mQvlvYdnpe__ow_uUJbvemzIVpxExIA0pNnz73hw0abzbZ3B4sRvuozyOZ0RYL_fcq2a0Glo4wOHEd4FQr2ibcfbMtlwd-Oj5sx68XiQYXJhjpJi1sZ4M-TGL-y1mJgZ9SKftnxDwAdyaxy7ZJ2OPS2yf2bCXFl9Ou8N3Fbw_qpzimhQWx4tGW9yvFLPKDaKZw"/>
+</div>
+</div>
+</header>
+<!-- Navigation Drawer (Desktop Placeholder) / Hidden on Mobile based on rule -->
+<aside class="hidden md:flex flex-col h-full py-8 bg-[#131314] w-64 fixed left-0 top-0 border-r border-[#484849]/15 z-40">
+<div class="px-6 mb-8">
+<h2 class="text-[#9cff93] font-['Space_Grotesk'] font-bold tracking-tight">TERMINAL v1.0</h2>
+</div>
+<nav class="flex-1">
+<a class="flex items-center gap-4 px-6 py-4 text-[#2c2c2d] hover:bg-[#1a191b] transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-['Inter'] text-sm font-medium tracking-wide">Overview</span>
+</a>
+<a class="flex items-center gap-4 px-6 py-4 bg-[#9cff93]/10 text-[#9cff93] border-r-2 border-[#9cff93] transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="psychology">psychology</span>
+<span class="font-['Inter'] text-sm font-medium tracking-wide">Live Intelligence</span>
+</a>
+<a class="flex items-center gap-4 px-6 py-4 text-[#2c2c2d] hover:bg-[#1a191b] transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="security">security</span>
+<span class="font-['Inter'] text-sm font-medium tracking-wide">Risk</span>
+</a>
+<a class="flex items-center gap-4 px-6 py-4 text-[#2c2c2d] hover:bg-[#1a191b] transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+<span class="font-['Inter'] text-sm font-medium tracking-wide">Analytics</span>
+</a>
+</nav>
+</aside>
+<!-- Main Content Area -->
+<main class="pt-16 pb-12 md:pl-64 h-screen flex flex-col">
+<!-- Live Intelligence Header / Market Context -->
+<section class="p-4 border-b border-outline-variant/15 flex items-center justify-between bg-surface-container-low">
+<div class="flex flex-col">
+<div class="flex items-center gap-2">
+<span class="text-xs font-bold text-on-surface-variant tracking-tighter uppercase font-headline">BTC/USDT</span>
+<span class="text-[10px] px-1.5 py-0.5 bg-primary/10 text-primary border border-primary/20 rounded-sm font-bold">HTF: BULLISH</span>
+</div>
+<h1 class="text-xl font-bold font-headline tracking-tight text-white mt-1">$68,432.12 <span class="text-primary text-xs font-normal">+1.24%</span></h1>
+</div>
+<div class="flex gap-2">
+<button class="bg-surface-container-highest p-2 rounded-sm border border-outline-variant/30 text-on-surface-variant hover:text-white transition-colors">
+<span class="material-symbols-outlined text-lg" data-icon="query_stats">query_stats</span>
+</button>
+<button class="bg-surface-container-highest p-2 rounded-sm border border-outline-variant/30 text-on-surface-variant hover:text-white transition-colors">
+<span class="material-symbols-outlined text-lg" data-icon="tune">tune</span>
+</button>
+</div>
+</section>
+<!-- Dynamic Chart Area -->
+<section class="flex-1 relative candlestick-container overflow-hidden group">
+<!-- SK Structure Overlays -->
+<div class="absolute top-1/4 left-0 w-full h-16 bg-tertiary/5 border-y border-tertiary/20 flex items-center justify-end px-4 pointer-events-none">
+<span class="text-[9px] font-bold text-tertiary tracking-widest uppercase opacity-40">Supply Zone 1H</span>
+</div>
+<div class="absolute bottom-1/4 left-0 w-full h-24 bg-primary/5 border-y border-primary/20 flex items-center justify-end px-4 pointer-events-none">
+<span class="text-[9px] font-bold text-primary tracking-widest uppercase opacity-40">Demand Zone 4H</span>
+</div>
+<!-- Trade Structure Lines -->
+<div class="absolute top-[60%] left-0 w-full h-[1px] bg-primary shadow-[0_0_8px_rgba(156,255,147,0.5)] z-10 flex items-center">
+<span class="bg-primary text-on-primary text-[10px] font-bold px-2 py-0.5 ml-4">ENTRY 68,120.00</span>
+</div>
+<div class="absolute top-[75%] left-0 w-full h-[1px] border-t border-dashed border-tertiary/60 z-10 flex items-center">
+<span class="bg-tertiary/20 backdrop-blur-md text-tertiary text-[10px] font-bold px-2 py-0.5 ml-4 border border-tertiary/30">SL 67,840.50</span>
+</div>
+<div class="absolute top-[35%] left-0 w-full h-[1px] border-t border-dashed border-primary/60 z-10 flex items-center">
+<span class="bg-primary/20 backdrop-blur-md text-primary text-[10px] font-bold px-2 py-0.5 ml-4 border border-primary/30">TP 69,200.00</span>
+</div>
+<!-- Visualization of Candles (Abstracted for UI) -->
+<div class="absolute inset-0 flex items-center justify-around px-8 opacity-60">
+<!-- Simple Candle Visualization -->
+<div class="flex flex-col items-center gap-1">
+<div class="w-1 h-8 bg-tertiary-dim"></div>
+<div class="w-4 h-16 bg-tertiary-dim"></div>
+<div class="w-1 h-6 bg-tertiary-dim"></div>
+</div>
+<div class="flex flex-col items-center gap-1">
+<div class="w-1 h-12 bg-primary"></div>
+<div class="w-4 h-20 bg-primary shadow-[0_0_10px_rgba(156,255,147,0.2)]"></div>
+<div class="w-1 h-10 bg-primary"></div>
+<!-- Setup Marker -->
+<div class="mt-2 text-primary flex flex-col items-center">
+<span class="material-symbols-outlined text-lg" data-icon="north" data-weight="fill">north</span>
+<span class="text-[8px] font-bold font-headline bg-primary/20 px-1 rounded-sm mt-0.5">SR L 0.78</span>
+</div>
+</div>
+<div class="flex flex-col items-center gap-1 opacity-40">
+<div class="w-1 h-6 bg-tertiary-dim"></div>
+<div class="w-4 h-12 bg-tertiary-dim"></div>
+<div class="w-1 h-4 bg-tertiary-dim"></div>
+</div>
+<div class="flex flex-col items-center gap-1">
+<div class="w-1 h-10 bg-primary"></div>
+<div class="w-4 h-24 bg-primary"></div>
+<div class="w-1 h-12 bg-primary"></div>
+<!-- Direction Indicator -->
+<div class="mt-2 text-purple-400 flex flex-col items-center">
+<span class="material-symbols-outlined text-lg" data-icon="psychology" data-weight="fill">psychology</span>
+<span class="text-[8px] font-bold font-headline bg-purple-400/20 px-1 rounded-sm mt-0.5">AR L VETO</span>
+</div>
+</div>
+</div>
+<!-- Floating Decision Overlay (Mobile Friendly Side Panel) -->
+<div class="absolute right-4 top-4 bottom-4 w-72 glass-panel border border-outline-variant/20 rounded-lg flex flex-col overflow-hidden shadow-2xl z-20 md:w-80">
+<div class="p-4 border-b border-outline-variant/15 flex justify-between items-center bg-surface-container">
+<h3 class="font-headline font-bold text-xs tracking-widest text-on-surface-variant">AI INTELLIGENCE</h3>
+<div class="flex items-center gap-1 px-2 py-0.5 bg-primary/20 rounded-full border border-primary/30">
+<span class="text-[10px] font-bold text-primary">SCORE: 88</span>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto p-4 space-y-6">
+<!-- Inline Pipeline -->
+<div class="flex justify-between items-center bg-surface-container-lowest p-3 rounded-sm border border-outline-variant/10">
+<div class="flex flex-col items-center gap-1">
+<span class="text-[8px] text-on-surface-variant font-bold">SK</span>
+<span class="material-symbols-outlined text-primary text-sm" data-icon="check_circle" data-weight="fill">check_circle</span>
+</div>
+<div class="h-[1px] flex-1 bg-outline-variant/30 mx-1"></div>
+<div class="flex flex-col items-center gap-1">
+<span class="text-[8px] text-on-surface-variant font-bold">SETUP</span>
+<span class="material-symbols-outlined text-primary text-sm" data-icon="check_circle" data-weight="fill">check_circle</span>
+</div>
+<div class="h-[1px] flex-1 bg-outline-variant/30 mx-1"></div>
+<div class="flex flex-col items-center gap-1">
+<span class="text-[8px] text-on-surface-variant font-bold">OF</span>
+<span class="material-symbols-outlined text-primary text-sm" data-icon="check_circle" data-weight="fill">check_circle</span>
+</div>
+<div class="h-[1px] flex-1 bg-outline-variant/30 mx-1"></div>
+<div class="flex flex-col items-center gap-1">
+<span class="text-[8px] text-on-surface-variant font-bold">ML</span>
+<span class="material-symbols-outlined text-primary text-sm" data-icon="check_circle" data-weight="fill">check_circle</span>
+</div>
+<div class="h-[1px] flex-1 bg-outline-variant/30 mx-1"></div>
+<div class="flex flex-col items-center gap-1">
+<span class="text-[8px] text-on-surface-variant font-bold">CLAUDE</span>
+<span class="material-symbols-outlined text-tertiary text-sm" data-icon="cancel" data-weight="fill">cancel</span>
+</div>
+<div class="h-[1px] flex-1 bg-outline-variant/30 mx-1"></div>
+<div class="flex flex-col items-center gap-1">
+<span class="text-[8px] text-on-surface-variant font-bold">RISK</span>
+<span class="material-symbols-outlined text-tertiary text-sm" data-icon="cancel" data-weight="fill">cancel</span>
+</div>
+</div>
+<!-- Breakdown Details -->
+<div class="space-y-4">
+<div class="grid grid-cols-2 gap-3">
+<div class="space-y-1">
+<label class="text-[9px] uppercase tracking-wider text-on-surface-variant font-bold">Setup Type</label>
+<p class="text-xs font-medium text-white">Absorption Reversal</p>
+</div>
+<div class="space-y-1">
+<label class="text-[9px] uppercase tracking-wider text-on-surface-variant font-bold">Direction</label>
+<p class="text-xs font-medium text-primary">Long (Aligned)</p>
+</div>
+<div class="space-y-1">
+<label class="text-[9px] uppercase tracking-wider text-on-surface-variant font-bold">OF Score</label>
+<p class="text-xs font-medium text-white">0.92 (High)</p>
+</div>
+<div class="space-y-1">
+<label class="text-[9px] uppercase tracking-wider text-on-surface-variant font-bold">ML Prob</label>
+<p class="text-xs font-medium text-white">74.2%</p>
+</div>
+</div>
+<div class="bg-purple-500/10 border border-purple-500/20 p-3 rounded-sm">
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-purple-400 text-sm" data-icon="auto_awesome">auto_awesome</span>
+<span class="text-[10px] font-bold text-purple-400 uppercase tracking-widest">Claude Verdict: VETO</span>
+</div>
+<p class="text-[11px] text-on-surface-variant leading-relaxed">
+                                Liquidity sweep detected into H4 structure. OF confirms absorption, but macro volatility index is peaking. Risk of spread expansion high.
+                            </p>
+</div>
+<div class="space-y-3">
+<div class="flex justify-between items-center text-[11px]">
+<span class="text-on-surface-variant">Regime</span>
+<span class="text-white font-mono">TRENDING / BULLISH</span>
+</div>
+<div class="flex justify-between items-center text-[11px]">
+<span class="text-on-surface-variant">Session</span>
+<span class="text-white font-mono">NY OPEN (ACTIVE)</span>
+</div>
+<div class="flex justify-between items-center text-[11px]">
+<span class="text-on-surface-variant">News Conflict</span>
+<span class="text-primary font-mono uppercase">None Detected</span>
+</div>
+</div>
+</div>
+</div>
+<div class="p-4 bg-surface-container-high">
+<button class="w-full bg-secondary py-3 rounded-sm flex items-center justify-center gap-2 active:scale-95 transition-transform group">
+<span class="text-xs font-bold tracking-widest uppercase text-white">Override &amp; Execute Long</span>
+<span class="material-symbols-outlined text-sm text-white group-hover:translate-x-1 transition-transform" data-icon="bolt" data-weight="fill">bolt</span>
+</button>
+</div>
+</div>
+</section>
+<!-- Compact Signal Timeline -->
+<section class="h-24 bg-surface-container-low border-t border-outline-variant/15 flex overflow-x-auto items-center px-4 gap-4 no-scrollbar">
+<!-- Signal Items -->
+<button class="flex-shrink-0 w-48 h-16 bg-surface-container rounded-sm border-l-2 border-primary p-3 flex flex-col justify-between hover:bg-surface-container-high transition-colors">
+<div class="flex justify-between items-start">
+<span class="text-[10px] font-bold text-white">BTC - ABSORPTION</span>
+<span class="text-[9px] text-on-surface-variant font-mono">14:22:01</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-[9px] text-primary uppercase font-bold tracking-tighter">SUCCESS +$1,240</span>
+<span class="material-symbols-outlined text-xs text-primary" data-icon="verified">verified</span>
+</div>
+</button>
+<button class="flex-shrink-0 w-48 h-16 bg-surface-container rounded-sm border-l-2 border-tertiary p-3 flex flex-col justify-between border-opacity-50 hover:bg-surface-container-high transition-colors">
+<div class="flex justify-between items-start">
+<span class="text-[10px] font-bold text-white">ETH - SWEEP RECLAIM</span>
+<span class="text-[9px] text-on-surface-variant font-mono">13:45:12</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-[9px] text-tertiary uppercase font-bold tracking-tighter">STOPPED -$450</span>
+<span class="material-symbols-outlined text-xs text-tertiary" data-icon="error">error</span>
+</div>
+</button>
+<button class="flex-shrink-0 w-48 h-16 bg-[#9cff93]/10 rounded-sm border-l-2 border-primary p-3 flex flex-col justify-between border-primary shadow-[0_0_10px_rgba(156,255,147,0.1)]">
+<div class="flex justify-between items-start">
+<span class="text-[10px] font-bold text-primary">BTC - LIVE SIGNAL</span>
+<span class="text-[9px] text-on-surface-variant font-mono">NOW</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-[9px] text-on-surface uppercase font-bold tracking-tighter">WAITING EXECUTION</span>
+<div class="flex gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+</div>
+</div>
+</button>
+<button class="flex-shrink-0 w-48 h-16 bg-surface-container rounded-sm border-l-2 border-outline-variant p-3 flex flex-col justify-between hover:bg-surface-container-high transition-colors">
+<div class="flex justify-between items-start">
+<span class="text-[10px] font-bold text-white">SOL - LIQ REJECTION</span>
+<span class="text-[9px] text-on-surface-variant font-mono">12:10:55</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-[9px] text-on-surface-variant uppercase font-bold tracking-tighter">VETOED BY AI</span>
+<span class="material-symbols-outlined text-xs text-purple-400" data-icon="block">block</span>
+</div>
+</button>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full h-12 bg-[#0e0e0f]/90 backdrop-blur-lg border-t border-[#484849]/15 flex justify-around items-center px-12 z-50 md:hidden">
+<a class="text-[#484849] hover:text-white transition-colors active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined" data-icon="timeline">timeline</span>
+</a>
+<a class="text-[#9cff93] shadow-[0_0_8px_rgba(156,255,147,0.4)] active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined" data-icon="bolt">bolt</span>
+</a>
+<a class="text-[#484849] hover:text-white transition-colors active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined" data-icon="security_update_good">security_update_good</span>
+</a>
+<a class="text-[#484849] hover:text-white transition-colors active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined" data-icon="layers">layers</span>
+</a>
+<a class="text-[#484849] hover:text-white transition-colors active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</a>
+</nav>
+</body></html>

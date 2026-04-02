@@ -39,7 +39,7 @@ const server = app.listen(port, (err) => {
   // Run preflight checks (non-blocking — logs results)
   runPreflight()
     .then((result) => {
-      if (!!result.passed) {
+      if (!result.passed) {
         logger.warn({ checks: result.checks.filter(c => !c.passed) }, "Preflight checks had failures");
       }
     })

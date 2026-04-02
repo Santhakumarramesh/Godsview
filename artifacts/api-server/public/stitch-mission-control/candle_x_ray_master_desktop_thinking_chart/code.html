@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>OBSIDIAN_TERMINAL | Brain Focus Mode</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "surface-tint": "#a4c9ff",
+              "on-primary-fixed": "#001c39",
+              "on-primary": "#00315d",
+              "surface-container": "#201f20",
+              "on-primary-fixed-variant": "#004883",
+              "on-secondary-fixed-variant": "#304a55",
+              "secondary-fixed": "#cbe7f5",
+              "outline": "#8b919d",
+              "on-error": "#690005",
+              "surface-container-low": "#1c1b1c",
+              "primary-container": "#4d93e5",
+              "on-surface-variant": "#c1c7d3",
+              "surface-dim": "#131314",
+              "tertiary-container": "#18a659",
+              "on-primary-container": "#002a51",
+              "error-container": "#93000a",
+              "error": "#ffb4ab",
+              "inverse-surface": "#e5e2e3",
+              "background": "#131314",
+              "primary-fixed-dim": "#a4c9ff",
+              "primary": "#a4c9ff",
+              "on-tertiary-container": "#003115",
+              "on-tertiary": "#00391a",
+              "secondary-container": "#334d58",
+              "on-tertiary-fixed": "#00210c",
+              "primary-fixed": "#d4e3ff",
+              "inverse-on-surface": "#313031",
+              "surface-container-highest": "#353436",
+              "surface-container-high": "#2a2a2b",
+              "outline-variant": "#414751",
+              "inverse-primary": "#0060ac",
+              "on-secondary-container": "#a1bdca",
+              "on-secondary": "#19343e",
+              "tertiary-fixed-dim": "#61de8a",
+              "surface-variant": "#353436",
+              "on-error-container": "#ffdad6",
+              "secondary-fixed-dim": "#afcbd8",
+              "surface": "#131314",
+              "secondary": "#afcbd8",
+              "on-surface": "#e5e2e3",
+              "on-tertiary-fixed-variant": "#005228",
+              "tertiary-fixed": "#7efba4",
+              "surface-bright": "#3a393a",
+              "tertiary": "#61de8a",
+              "surface-container-lowest": "#0e0e0f",
+              "on-secondary-fixed": "#021f29",
+              "on-background": "#e5e2e3"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .tabular-nums { font-variant-numeric: tabular-nums; }
+        .glass-panel {
+            background: rgba(53, 52, 54, 0.6);
+            backdrop-filter: blur(16px);
+        }
+        .candle-glow {
+            box-shadow: 0 0 15px rgba(164, 201, 255, 0.4);
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body selection:bg-primary/30 overflow-hidden">
+<!-- Top Navigation -->
+<nav class="flex justify-between items-center px-6 h-14 w-full border-b border-[#414751]/15 bg-[#131314] fixed top-0 left-0 z-50">
+<div class="flex items-center gap-8">
+<span class="text-[#A4C9FF] font-black tracking-tighter text-lg">OBSIDIAN_TERMINAL</span>
+<div class="hidden md:flex gap-6 items-center">
+<a class="font-['Manrope'] tracking-wider uppercase text-xs font-semibold text-[#8E918F] hover:text-[#E2E2E2]" href="#">Market</a>
+<a class="font-['Manrope'] tracking-wider uppercase text-xs font-semibold text-[#A4C9FF] border-b-2 border-[#A4C9FF] pb-1" href="#">Microstructure</a>
+<a class="font-['Manrope'] tracking-wider uppercase text-xs font-semibold text-[#8E918F] hover:text-[#E2E2E2]" href="#">OrderFlow</a>
+<a class="font-['Manrope'] tracking-wider uppercase text-xs font-semibold text-[#8E918F] hover:text-[#E2E2E2]" href="#">Portfolio</a>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 hover:bg-[#2A2A2B] transition-colors duration-200 text-[#8E918F]">
+<span class="material-symbols-outlined">account_balance_wallet</span>
+</button>
+<button class="p-2 hover:bg-[#2A2A2B] transition-colors duration-200 text-[#8E918F]">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="p-2 hover:bg-[#2A2A2B] transition-colors duration-200 text-[#8E918F]">
+<span class="material-symbols-outlined">settings</span>
+</button>
+</div>
+</nav>
+<!-- Side Navigation -->
+<aside class="fixed right-0 top-14 bottom-0 w-64 flex flex-col h-screen bg-[#1C1B1C] border-l border-[#414751]/15 z-40 shadow-[-12px_0px_32px_rgba(255,255,255,0.06)]">
+<div class="p-4 border-b border-outline-variant/10">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 bg-surface-container-highest rounded-sm flex items-center justify-center text-primary font-bold">X</div>
+<div>
+<h3 class="font-headline text-xs font-bold tracking-widest uppercase">Microstructure</h3>
+<p class="text-[10px] text-tertiary font-medium">X-RAY ACTIVE</p>
+</div>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto py-2">
+<div class="flex flex-col gap-1">
+<button class="flex items-center gap-3 px-4 py-3 text-[#A4C9FF] bg-[#2A2A2B] border-r-2 border-[#A4C9FF] font-['Inter'] text-[11px] font-medium tracking-tight">
+<span class="material-symbols-outlined text-sm">biotech</span> X-Ray
+                </button>
+<button class="flex items-center gap-3 px-4 py-3 text-[#8E918F] hover:bg-[#353436] font-['Inter'] text-[11px] font-medium tracking-tight">
+<span class="material-symbols-outlined text-sm">grid_view</span> Heatmap
+                </button>
+<button class="flex items-center gap-3 px-4 py-3 text-[#8E918F] hover:bg-[#353436] font-['Inter'] text-[11px] font-medium tracking-tight">
+<span class="material-symbols-outlined text-sm">layers</span> DOM
+                </button>
+<button class="flex items-center gap-3 px-4 py-3 text-[#8E918F] hover:bg-[#353436] font-['Inter'] text-[11px] font-medium tracking-tight">
+<span class="material-symbols-outlined text-sm">reorder</span> Tape
+                </button>
+<button class="flex items-center gap-3 px-4 py-3 text-[#8E918F] hover:bg-[#353436] font-['Inter'] text-[11px] font-medium tracking-tight">
+<span class="material-symbols-outlined text-sm">notifications_active</span> Alerts
+                </button>
+</div>
+</div>
+<div class="p-4 bg-surface-container-lowest/50 border-t border-outline-variant/10">
+<button class="w-full py-2 bg-gradient-to-br from-primary to-primary-container text-on-primary-fixed font-headline font-extrabold text-xs tracking-widest rounded-sm mb-4">EXECUTE</button>
+<div class="flex flex-col gap-2">
+<button class="flex items-center gap-2 text-[#8E918F] hover:text-white transition-colors text-[10px] uppercase">
+<span class="material-symbols-outlined text-xs">help_outline</span> Support
+                </button>
+<button class="flex items-center gap-2 text-[#8E918F] hover:text-white transition-colors text-[10px] uppercase">
+<span class="material-symbols-outlined text-xs">terminal</span> Logs
+                </button>
+</div>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="fixed inset-0 top-14 right-64 bg-surface flex flex-col overflow-hidden">
+<!-- Dashboard Header -->
+<header class="h-12 border-b border-outline-variant/5 px-6 flex items-center justify-between bg-surface-container-low/30">
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2">
+<span class="font-headline font-extrabold text-lg tracking-tight">NVDA</span>
+<span class="text-on-surface-variant text-xs opacity-60">NVIDIA CORP</span>
+</div>
+<div class="flex gap-1">
+<span class="px-2 py-0.5 bg-surface-container-highest text-[10px] font-bold text-primary rounded-sm">1M</span>
+<span class="px-2 py-0.5 border border-outline-variant/20 text-[10px] text-on-surface-variant rounded-sm">X-RAY MODE</span>
+</div>
+</div>
+<div class="flex items-center gap-4 text-[10px] font-medium tracking-wider uppercase text-on-surface-variant/80">
+<span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span> LIVE FEED</span>
+<span class="tabular-nums">10:31:42 AM</span>
+</div>
+</header>
+<!-- Chart Workspace -->
+<div class="flex-1 relative overflow-hidden bg-[radial-gradient(circle_at_center,_#1C1B1C_0%,_#131314_100%)]">
+<!-- Grid Lines Simulation -->
+<div class="absolute inset-0 pointer-events-none opacity-5">
+<div class="w-full h-full" style="background-image: linear-gradient(#414751 0.5px, transparent 0.5px), linear-gradient(90deg, #414751 0.5px, transparent 0.5px); background-size: 80px 40px;"></div>
+</div>
+<!-- Candlestick Chart Simulation -->
+<div class="absolute inset-0 flex items-end justify-center px-12 pb-32 gap-6">
+<!-- Earlier Candles -->
+<div class="w-4 h-48 bg-error-container/40 rounded-sm relative"><div class="absolute -top-4 left-1.5 w-0.5 h-56 bg-error-container/60"></div></div>
+<div class="w-4 h-32 bg-error-container/40 rounded-sm relative"><div class="absolute -top-8 left-1.5 w-0.5 h-48 bg-error-container/60"></div></div>
+<div class="w-4 h-24 bg-tertiary-container/40 rounded-sm relative"><div class="absolute -top-6 left-1.5 w-0.5 h-40 bg-tertiary-container/60"></div></div>
+<!-- Highlighted Focus Candle (10:31:00 AM) -->
+<div class="relative group">
+<div class="absolute -top-32 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 z-10">
+<span class="bg-primary/20 text-primary px-3 py-1 rounded-full text-[10px] font-bold tracking-widest border border-primary/30 backdrop-blur-md">FOCUS_TARGET</span>
+<div class="w-px h-12 bg-gradient-to-b from-primary to-transparent"></div>
+</div>
+<!-- The Candle Body -->
+<div class="w-8 h-40 bg-gradient-to-b from-primary to-primary-container rounded-sm candle-glow relative z-10 transition-transform duration-300">
+<div class="absolute -top-12 left-3.5 w-1 h-64 bg-primary/40"></div>
+<!-- Inner Liquidity X-Ray Details (Micro-visuals) -->
+<div class="absolute inset-0 flex flex-col justify-around px-1 py-4 opacity-40">
+<div class="h-0.5 w-full bg-white/20"></div>
+<div class="h-0.5 w-full bg-white/40"></div>
+<div class="h-0.5 w-full bg-white/20"></div>
+</div>
+</div>
+<!-- Glow effect pulse -->
+<div class="absolute inset-0 bg-primary/20 blur-xl animate-pulse rounded-full -z-10 scale-150"></div>
+</div>
+<!-- Subsequent Candles -->
+<div class="w-4 h-28 bg-tertiary-container/40 rounded-sm relative"><div class="absolute -top-10 left-1.5 w-0.5 h-48 bg-tertiary-container/60"></div></div>
+<div class="w-4 h-36 bg-tertiary-container/40 rounded-sm relative"><div class="absolute -top-4 left-1.5 w-0.5 h-48 bg-tertiary-container/60"></div></div>
+</div>
+<!-- Trade Overlay Lines -->
+<div class="absolute inset-0 pointer-events-none">
+<!-- Take Profit -->
+<div class="absolute top-[25%] w-full flex items-center gap-4">
+<div class="flex-1 border-t-2 border-dashed border-tertiary/40"></div>
+<span class="bg-tertiary-container text-on-tertiary-container px-2 py-0.5 text-[10px] font-black tracking-widest uppercase">TP: 824.50</span>
+<div class="w-64"></div>
+</div>
+<!-- Entry -->
+<div class="absolute top-[45%] w-full flex items-center gap-4">
+<div class="flex-1 border-t-2 border-tertiary"></div>
+<span class="bg-tertiary text-on-tertiary px-2 py-0.5 text-[10px] font-black tracking-widest uppercase shadow-[0_0_15px_rgba(97,222,138,0.3)]">ENTRY: 818.20</span>
+<div class="w-64"></div>
+</div>
+<!-- Stop Loss -->
+<div class="absolute top-[65%] w-full flex items-center gap-4">
+<div class="flex-1 border-t-2 border-dashed border-error/40"></div>
+<span class="bg-error-container text-on-error-container px-2 py-0.5 text-[10px] font-black tracking-widest uppercase">SL: 812.10</span>
+<div class="w-64"></div>
+</div>
+</div>
+<!-- Focus Stats Overlay (Floating Left) -->
+<div class="absolute bottom-12 left-8 flex flex-col gap-4">
+<div class="glass-panel p-5 rounded-lg border border-outline-variant/10 w-72">
+<div class="flex justify-between items-start mb-4">
+<div>
+<h4 class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">Confidence Score</h4>
+<p class="text-4xl font-headline font-black text-primary italic">94<span class="text-xs uppercase ml-1 not-italic">%</span></p>
+</div>
+<div class="bg-primary/10 p-2 rounded-full">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">verified</span>
+</div>
+</div>
+<div class="space-y-3">
+<div class="flex items-center justify-between text-[11px]">
+<span class="text-on-surface-variant">Liquidity Sweep</span>
+<span class="text-tertiary font-bold uppercase">Confirmed</span>
+</div>
+<div class="w-full bg-surface-container-highest h-1 rounded-full overflow-hidden">
+<div class="bg-tertiary h-full w-[94%] shadow-[0_0_8px_rgba(97,222,138,0.5)]"></div>
+</div>
+<div class="flex items-center justify-between text-[11px]">
+<span class="text-on-surface-variant">Trend Alignment</span>
+<span class="text-tertiary font-bold uppercase">Strong</span>
+</div>
+</div>
+</div>
+<div class="flex gap-2">
+<div class="glass-panel px-4 py-2 rounded-lg border border-outline-variant/10">
+<p class="text-[9px] text-on-surface-variant uppercase tracking-widest font-bold">Delta</p>
+<p class="text-tertiary font-headline font-extrabold">+14.2k</p>
+</div>
+<div class="glass-panel px-4 py-2 rounded-lg border border-outline-variant/10">
+<p class="text-[9px] text-on-surface-variant uppercase tracking-widest font-bold">V-Score</p>
+<p class="text-primary font-headline font-extrabold">2.44</p>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Right Panel (Intelligence Drawer) -->
+<div class="fixed top-14 right-0 bottom-0 w-64 bg-[#1C1B1C] border-l border-[#414751]/15 z-30 flex flex-col p-4 overflow-y-auto custom-scrollbar">
+<!-- OHLC Summary -->
+<section class="mb-6">
+<h5 class="text-[10px] font-black tracking-[0.15em] text-on-surface-variant/40 uppercase mb-3">Candle Snapshot</h5>
+<div class="grid grid-cols-2 gap-2">
+<div class="bg-surface-container-low p-2 rounded-sm border border-outline-variant/5">
+<span class="block text-[8px] text-on-surface-variant/60 uppercase font-bold">Open</span>
+<span class="text-xs font-headline font-bold tabular-nums">817.40</span>
+</div>
+<div class="bg-surface-container-low p-2 rounded-sm border border-outline-variant/5">
+<span class="block text-[8px] text-on-surface-variant/60 uppercase font-bold">High</span>
+<span class="text-xs font-headline font-bold tabular-nums">819.50</span>
+</div>
+<div class="bg-surface-container-low p-2 rounded-sm border border-outline-variant/5">
+<span class="block text-[8px] text-on-surface-variant/60 uppercase font-bold">Low</span>
+<span class="text-xs font-headline font-bold tabular-nums">816.20</span>
+</div>
+<div class="bg-surface-container-low p-2 rounded-sm border border-outline-variant/5">
+<span class="block text-[8px] text-on-surface-variant/60 uppercase font-bold">Close</span>
+<span class="text-xs font-headline font-bold tabular-nums">818.90</span>
+</div>
+</div>
+<div class="mt-2 bg-surface-container-high/40 p-2 rounded-sm flex items-center justify-between border border-outline-variant/10">
+<span class="text-[9px] text-on-surface-variant uppercase font-bold tracking-widest">Volume</span>
+<span class="text-xs font-headline font-black text-primary uppercase">2.4M</span>
+</div>
+</section>
+<!-- Liquidity Heatmap Visual -->
+<section class="mb-6">
+<h5 class="text-[10px] font-black tracking-[0.15em] text-on-surface-variant/40 uppercase mb-3">Liquidity Map</h5>
+<div class="h-24 bg-surface-container-lowest relative rounded-sm overflow-hidden flex flex-col justify-between">
+<div class="flex items-center">
+<div class="h-4 bg-tertiary/20 w-[40%]"></div>
+<div class="h-4 bg-tertiary/60 w-[60%]"></div>
+</div>
+<div class="flex items-center">
+<div class="h-4 bg-error/40 w-[80%]"></div>
+<div class="h-4 bg-error/10 w-[20%]"></div>
+</div>
+<div class="flex items-center">
+<div class="h-4 bg-primary/30 w-full"></div>
+</div>
+<!-- Price Pointer -->
+<div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+<div class="w-full border-t border-white/40 border-dashed"></div>
+</div>
+<div class="absolute top-1 right-2 text-[8px] font-bold text-white/50">ABSORPTION ZONE</div>
+</div>
+</section>
+<!-- Order Book (DOM) -->
+<section class="mb-6 flex-1 flex flex-col">
+<h5 class="text-[10px] font-black tracking-[0.15em] text-on-surface-variant/40 uppercase mb-3">Bid/Ask Ladder</h5>
+<div class="flex-1 bg-surface-container-lowest/50 rounded-sm p-1 text-[10px] font-medium font-label">
+<div class="grid grid-cols-3 text-center border-b border-outline-variant/10 pb-1 mb-1 text-[8px] opacity-40 uppercase">
+<span>Size</span>
+<span>Price</span>
+<span>Size</span>
+</div>
+<!-- Ask side -->
+<div class="grid grid-cols-3 text-center py-0.5 opacity-60 hover:bg-error/5 cursor-crosshair">
+<span class="text-error">1.2k</span><span class="tabular-nums">819.20</span><span>-</span>
+</div>
+<div class="grid grid-cols-3 text-center py-0.5 hover:bg-error/5 cursor-crosshair">
+<span class="text-error font-bold">4.8k</span><span class="tabular-nums">819.10</span><span>-</span>
+</div>
+<!-- Spread -->
+<div class="grid grid-cols-1 text-center py-1 bg-surface-container-high/20 text-[9px] uppercase tracking-tighter opacity-30">
+                    Spread: 0.10
+                </div>
+<!-- Bid side -->
+<div class="grid grid-cols-3 text-center py-0.5 hover:bg-tertiary/5 cursor-crosshair">
+<span>-</span><span class="tabular-nums">818.90</span><span class="text-tertiary font-bold">8.1k</span>
+</div>
+<div class="grid grid-cols-3 text-center py-0.5 opacity-60 hover:bg-tertiary/5 cursor-crosshair">
+<span>-</span><span class="tabular-nums">818.80</span><span class="text-tertiary">3.4k</span>
+</div>
+</div>
+</section>
+<!-- AI Microstructure Reasoning -->
+<section>
+<div class="bg-[#1C1126] border border-[#6B3FA0]/30 p-4 rounded-sm relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-1 opacity-20 group-hover:opacity-100 transition-opacity">
+<span class="material-symbols-outlined text-[10px] text-[#D0B3FF]">auto_awesome</span>
+</div>
+<h6 class="text-[9px] font-black text-[#D0B3FF] uppercase tracking-[0.2em] mb-2 flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-[#D0B3FF] animate-pulse"></span>
+                    AI Interpretation
+                </h6>
+<p class="text-[11px] leading-relaxed text-[#E5D9F2] font-medium">
+                    This candle swept sell-side liquidity below the prior swing, immediately reclaimed 5m demand, and closed with strong positive delta.
+                </p>
+</div>
+</section>
+</div>
+<!-- System Status Footer -->
+<footer class="fixed bottom-0 w-full z-40 flex justify-between items-center px-4 h-8 bg-[#131314] border-t border-[#414751]/15">
+<div class="flex items-center gap-4">
+<span class="font-['Inter'] tabular-nums text-[10px] uppercase tracking-[0.05em] text-[#61DE8A]">SYSTEM_STATUS: NOMINAL</span>
+<span class="font-['Inter'] tabular-nums text-[10px] uppercase tracking-[0.05em] text-[#8E918F]">LATENCY: 12ms</span>
+</div>
+<div class="flex items-center gap-4">
+<a class="font-['Inter'] tabular-nums text-[10px] uppercase tracking-[0.05em] text-[#8E918F] hover:text-white" href="#">Terms</a>
+<a class="font-['Inter'] tabular-nums text-[10px] uppercase tracking-[0.05em] text-[#8E918F] hover:text-white" href="#">API</a>
+<a class="font-['Inter'] tabular-nums text-[10px] uppercase tracking-[0.05em] text-[#8E918F] hover:text-white" href="#">Documentation</a>
+</div>
+</footer>
+</body></html>
