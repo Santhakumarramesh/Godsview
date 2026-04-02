@@ -36,6 +36,8 @@ services:
 
   # ── API Server ─────────────────────────────────────────────────
   api:
+    # Use pre-built image from GHCR (pushed by CI) or build locally as fallback
+    image: ${GODSVIEW_IMAGE:-ghcr.io/santhakumarramesh/godsview:latest}
     build:
       context: .
       dockerfile: Dockerfile
@@ -58,7 +60,7 @@ services:
       CLAUDE_MAX_RETRIES: "${CLAUDE_MAX_RETRIES:-1}"
       # Safety controls
       GODSVIEW_ENABLE_LIVE_TRADING: "${GODSVIEW_ENABLE_LIVE_TRADING:-false}"
-      GODSVIEW_SYSTEM_MODE: "${GODSVIEW_SYSTEM_MODE:-live_disabled}"
+      GODSVIEW_SYSTEM_MODE: "${GODSVIEW_SYSTEM_MODE:-paper}"
       GODSVIEW_KILL_SWITCH: "${GODSVIEW_KILL_SWITCH:-false}"
       GODSVIEW_MAX_DAILY_LOSS_USD: "${GODSVIEW_MAX_DAILY_LOSS_USD:-250}"
       GODSVIEW_MAX_OPEN_EXPOSURE_PCT: "${GODSVIEW_MAX_OPEN_EXPOSURE_PCT:-0.6}"

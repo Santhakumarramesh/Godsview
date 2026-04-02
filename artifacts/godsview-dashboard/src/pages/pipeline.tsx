@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface PipelineLayer {
@@ -582,26 +583,61 @@ function CompositeScorePanel({ layers }: { layers: PipelineLayer[] }) {
 
 // ─── Main Page ───────────────────────────────────────────────────────────────
 export default function PipelinePage() {
-  const [layers, setLayers] = useState<PipelineLayer[]>(LAYERS);
-  const [signals, setSignals] = useState<PipelineSignal[]>(() => Array.from({ length: 8 }, (_, i) => generateSignal(i)));
-  const [consoleEntries] = useState<ConsoleEntry[]>(generateConsoleEntries);
   const [activeLayer, setActiveLayer] = useState<string | null>("structure");
   const [view, setView] = useState<"pipeline" | "signals" | "console">("pipeline");
 
-  // Simulate live layer updates
-  useEffect(() => {
-    const iv = setInterval(() => {
-      setLayers((prev) =>
-        prev.map((l) => ({          ...l,
-          score: Math.min(1, Math.max(0.3, l.score + (Math.random() - 0.48) * 0.04)),
-          latencyMs: Math.max(1, l.latencyMs + Math.floor((Math.random() - 0.5) * 10)),
-          lastUpdate: Date.now(),
-        }))
-      );
-    }, 3000);
-    return () => clearInterval(iv);
-  }, []);
+  // Fetch real pipeline data
+  const { data: pipelineData } = useQuery({
+    queryKey: ["pipeline-latest"],
+    queryFn: () => fetch("/api/system/pipeline/latest").then(r => r.ok ? r.json() : null),
+    refetchInterval: 15_000,
+    retry: 1,
+  });
 
+  // Map backend stages to PipelineLayer format; fall back to LAYERS mock if no data
+  const layers: PipelineLayer[] = pipelineData?.has_data
+    ? (pipelineData.stages as any[]).map((s: any, i: number) => {
+        const statusMap: Record<string, PipelineLayer["status"]> = {
+          ok: "OPTIMAL", pass: "OPTIMAL", success: "OPTIMAL",
+          processing: "PROCESSING", scanning: "SCANNING", forming: "FORMING",
+          fail: "DEGRADED", failed: "DEGRADED", error: "DEGRADED",
+          blocked: "DEGRADED", unknown: "SCANNING", offline: "OFFLINE",
+        };
+        const normalized = String(s.status ?? "unknown").toLowerCase();
+        return {
+          id: s.id,
+          step: i + 1,
+          name: s.label,
+          shortName: s.label.split(" ")[0].toUpperCase(),
+          icon: ["candlestick_chart","shield","psychology","auto_awesome","reorder","history","rule","book"][i] ?? "circle",
+          weight: [0.30, 0.25, 0.15, 0.10, 0.20, 0][i] ?? 0.1,
+          status: statusMap[normalized] ?? "SCANNING",
+          latencyMs: Number(s.details?.latency_ms ?? s.details?.latencyMs ?? 0),
+          score: Number(s.details?.score ?? s.details?.final_score ?? 0.5),
+          details: String(s.details?.summary ?? s.details?.details ?? s.status ?? ""),
+          lastUpdate: Date.now(),
+        };
+      })
+    : LAYERS;
+
+  // Build signals from real pipeline summary
+  const signals: PipelineSignal[] = pipelineData?.has_data
+    ? [{
+        id: `SIG-${pipelineData.generated_at}`,
+        symbol: pipelineData.symbol ?? "BTCUSD",
+        direction: pipelineData.summary?.signal?.action === "sell" ? "SHORT" : "LONG",
+        scores: { ml: pipelineData.summary?.signal?.confidence ?? 0 },
+        compositeScore: Number(pipelineData.summary?.scoring?.final_score ?? 0),
+        decision: pipelineData.blocked ? "BLOCKED_BY_RISK"
+          : !pipelineData.summary?.hard_gates?.pass ? "REJECTED"
+          : pipelineData.summary?.scoring?.pass ? "TRADE" : "PASS",
+        reason: pipelineData.summary?.scoring?.reasons?.[0] ?? pipelineData.block_reason ?? "",
+        timestamp: new Date(pipelineData.generated_at).getTime() || Date.now(),
+        layers: [],
+      }]
+    : Array.from({ length: 8 }, (_, i) => generateSignal(i));
+
+  const consoleEntries: ConsoleEntry[] = generateConsoleEntries();
   const totalLatency = layers.reduce((s, l) => s + l.latencyMs, 0);
   const activeNodes = layers.filter((l) => l.status !== "OFFLINE").length;
 

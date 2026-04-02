@@ -56,8 +56,18 @@ const CREATE_BRAIN_TABLES_SQL = `
 let brainTablesReady = false;
 
 async function ensureBrainTables(): Promise<void> {
+  // Tables are created by @workspace/db on startup (PGlite auto-create block).
+  // This guard is kept for safety in case of external Postgres where migrations
+  // haven't run yet — but each statement must be executed separately because
+  // PGlite rejects multi-statement prepared statements.
   if (brainTablesReady) return;
-  await db.execute(sql.raw(CREATE_BRAIN_TABLES_SQL));
+  const statements = CREATE_BRAIN_TABLES_SQL
+    .split(";")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  for (const stmt of statements) {
+    await db.execute(sql.raw(stmt));
+  }
   brainTablesReady = true;
 }
 

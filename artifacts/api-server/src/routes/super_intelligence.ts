@@ -6,7 +6,7 @@ import {
   type SuperIntelligenceInput,
 } from "../lib/super_intelligence";
 import { evaluateForProduction, getProductionGateStats } from "../lib/production_gate";
-import { addSSEClient, getSSEClientCount } from "../lib/signal_stream";
+import { addSSEClient, getSSEClientCount, emitSIDecision } from "../lib/signal_stream";
 
 const router: IRouter = Router();
 
@@ -40,6 +40,25 @@ router.post("/super-intelligence/signal", async (req, res): Promise<void> => {
 
     const symbol = (req.body as any).symbol || "UNKNOWN";
     const result = await processSuperSignal(0, symbol, input);
+
+    // Broadcast to live SI feed
+    emitSIDecision({
+      symbol,
+      action: result.approved ? "APPROVED" : "REJECTED",
+      direction: input.direction,
+      setup_type: input.setup_type,
+      regime: input.regime,
+      win_probability: result.win_probability,
+      edge_score: result.edge_score,
+      kelly_pct: `${(result.kelly_fraction * 100).toFixed(2)}%`,
+      confluence: result.confluence_score,
+      aligned_timeframes: result.aligned_timeframes,
+      enhanced_quality: result.enhanced_quality,
+      approved: result.approved,
+      rejection_reason: result.rejection_reason,
+      timestamp: new Date().toISOString(),
+    });
+
     res.json(result);
   } catch (err) {
     req.log.error({ err }, "Super Intelligence signal processing failed");

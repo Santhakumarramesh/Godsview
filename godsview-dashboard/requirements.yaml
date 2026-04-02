@@ -1,0 +1,11 @@
+packages:
+  "recharts": "For performance charts and equity curves"
+  "date-fns": "For formatting timestamps"
+  "clsx": "Utility for constructing className strings"
+  "tailwind-merge": "Utility for merging tailwind classes"
+
+images: []
+
+notes:
+  - The application assumes a dark mode by default for the trading terminal aesthetic.
+  - Using generated hooks directly from @workspace/api-client-react.

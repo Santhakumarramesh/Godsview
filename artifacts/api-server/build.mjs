@@ -12,7 +12,12 @@ const artifactDir = path.dirname(fileURLToPath(import.meta.url));
 
 async function buildAll() {
   const distDir = path.resolve(artifactDir, "dist");
-  await rm(distDir, { recursive: true, force: true });
+  // Attempt to clear dist; ignore EPERM errors (mounted fs in CI/sandbox)
+  try {
+    await rm(distDir, { recursive: true, force: true });
+  } catch {
+    // EPERM on mounted filesystem — files will be overwritten in-place
+  }
 
   await esbuild({
     entryPoints: [path.resolve(artifactDir, "src/index.ts")],

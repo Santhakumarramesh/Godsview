@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>GodsView Brain Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-secondary-fixed-variant": "#304a55",
+              "surface-container-high": "#2a2a2b",
+              "inverse-surface": "#e5e2e3",
+              "surface-dim": "#131314",
+              "tertiary-fixed-dim": "#61de8a",
+              "secondary-fixed": "#cbe7f5",
+              "surface-tint": "#a4c9ff",
+              "surface-container": "#201f20",
+              "primary-fixed-dim": "#a4c9ff",
+              "primary": "#a4c9ff",
+              "surface-bright": "#3a393a",
+              "on-primary": "#00315d",
+              "secondary-container": "#334d58",
+              "secondary": "#afcbd8",
+              "surface-container-low": "#1c1b1c",
+              "outline-variant": "#414751",
+              "inverse-on-surface": "#313031",
+              "surface-container-highest": "#353436",
+              "on-tertiary-fixed": "#00210c",
+              "on-error": "#690005",
+              "inverse-primary": "#0060ac",
+              "on-primary-fixed": "#001c39",
+              "on-secondary": "#19343e",
+              "on-surface": "#e5e2e3",
+              "on-tertiary": "#00391a",
+              "on-primary-container": "#002a51",
+              "primary-fixed": "#d4e3ff",
+              "surface-variant": "#353436",
+              "on-surface-variant": "#c1c7d3",
+              "on-tertiary-container": "#003115",
+              "on-secondary-container": "#a1bdca",
+              "tertiary": "#61de8a",
+              "surface-container-lowest": "#0e0e0f",
+              "on-secondary-fixed": "#021f29",
+              "error": "#ffb4ab",
+              "tertiary-container": "#18a659",
+              "primary-container": "#4d93e5",
+              "outline": "#8b919d",
+              "tertiary-fixed": "#7efba4",
+              "error-container": "#93000a",
+              "surface": "#131314",
+              "secondary-fixed-dim": "#afcbd8",
+              "on-tertiary-fixed-variant": "#005228",
+              "on-error-container": "#ffdad6",
+              "on-background": "#e5e2e3",
+              "background": "#131314",
+              "on-primary-fixed-variant": "#004883"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+      .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      }
+      .tabular-nums { font-variant-numeric: tabular-nums; }
+      body { background-color: #131314; color: #e5e2e3; }
+      .glass-panel {
+        background: rgba(53, 52, 54, 0.6);
+        backdrop-filter: blur(12px);
+      }
+    </style>
+</head>
+<body class="font-body selection:bg-primary/30">
+<!-- SideNavBar (Shared Component) -->
+<aside class="fixed left-0 top-0 h-full z-50 flex flex-col h-screen w-20 md:w-64 border-none bg-[#1C1B1C] dark:bg-[#1C1B1C] transition-all duration-300">
+<div class="p-6">
+<h1 class="text-xl font-bold tracking-tighter text-[#A4C9FF] font-headline">GodsView</h1>
+<p class="font-['Manrope'] tracking-wider uppercase text-[10px] font-semibold text-slate-500 mt-1">Brain v2.4</p>
+</div>
+<nav class="flex-1 px-4 space-y-2 mt-4">
+<!-- Active: Overview -->
+<a class="flex items-center gap-4 px-4 py-3 text-[#A4C9FF] border-r-2 border-[#A4C9FF] bg-gradient-to-r from-[#A4C9FF]/10 to-transparent scale-95 duration-150 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-['Manrope'] tracking-wider uppercase text-[10px] font-semibold hidden md:block">Overview</span>
+</a>
+<a class="flex items-center gap-4 px-4 py-3 text-slate-500 hover:text-slate-300 transition-colors hover:bg-[#2A2A2B] duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="psychology">psychology</span>
+<span class="font-['Manrope'] tracking-wider uppercase text-[10px] font-semibold hidden md:block">Intelligence</span>
+</a>
+<a class="flex items-center gap-4 px-4 py-3 text-slate-500 hover:text-slate-300 transition-colors hover:bg-[#2A2A2B] duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="security">security</span>
+<span class="font-['Manrope'] tracking-wider uppercase text-[10px] font-semibold hidden md:block">Risk</span>
+</a>
+<a class="flex items-center gap-4 px-4 py-3 text-slate-500 hover:text-slate-300 transition-colors hover:bg-[#2A2A2B] duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+<span class="font-['Manrope'] tracking-wider uppercase text-[10px] font-semibold hidden md:block">Analytics</span>
+</a>
+</nav>
+<div class="px-4 mb-6">
+<button class="w-full bg-gradient-to-br from-primary to-primary-container text-on-primary py-2.5 rounded shadow-lg font-bold text-xs uppercase tracking-widest hidden md:block">
+                Deploy Agent
+            </button>
+</div>
+<div class="px-4 py-6 border-t border-outline-variant/10 space-y-2">
+<a class="flex items-center gap-4 px-4 py-2 text-slate-500 hover:text-slate-300" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-['Manrope'] tracking-wider uppercase text-[10px] font-semibold hidden md:block">Settings</span>
+</a>
+<div class="flex items-center gap-4 px-4 py-2">
+<div class="w-2 h-2 rounded-full bg-tertiary animate-pulse"></div>
+<span class="font-['Manrope'] tracking-wider uppercase text-[10px] font-semibold text-slate-500 hidden md:block">System Status Indicator</span>
+</div>
+</div>
+</aside>
+<!-- TopNavBar (Shared Component) -->
+<header class="fixed top-0 right-0 left-20 md:left-64 flex items-center justify-between px-6 z-40 bg-[#131314]/80 backdrop-blur-xl h-16 shadow-[0_1px_0_0_rgba(65,71,81,0.15)]">
+<div class="flex items-center gap-8">
+<span class="font-['Manrope'] font-black tracking-widest text-[#A4C9FF] uppercase text-sm">GODSVIEW BRAIN</span>
+<nav class="hidden lg:flex items-center gap-6">
+<span class="font-['Inter'] font-medium tabular-nums text-xs text-[#A4C9FF] font-bold">System: Active</span>
+<span class="font-['Inter'] font-medium tabular-nums text-xs text-slate-400">Latency: 4ms</span>
+<span class="font-['Inter'] font-medium tabular-nums text-xs text-slate-400">Agents: 12</span>
+</nav>
+</div>
+<div class="flex items-center gap-6">
+<div class="relative hidden sm:block">
+<input class="bg-surface-container-lowest border-none text-xs w-48 focus:ring-1 focus:ring-[#A4C9FF]/30 transition-all py-1.5 px-3 rounded" placeholder="Search Terminal..." type="text"/>
+</div>
+<div class="flex items-center gap-4 text-slate-400">
+<span class="material-symbols-outlined hover:text-[#A4C9FF] cursor-pointer" data-icon="notifications_paused">notifications_paused</span>
+<span class="material-symbols-outlined hover:text-[#A4C9FF] cursor-pointer" data-icon="dns">dns</span>
+<span class="material-symbols-outlined hover:text-[#A4C9FF] cursor-pointer" data-icon="account_tree">account_tree</span>
+</div>
+<button class="bg-surface-container-high border border-outline-variant/20 px-4 py-1.5 rounded text-xs font-bold text-primary hover:bg-surface-container-highest transition-all uppercase tracking-tighter">
+                Execute Terminal
+            </button>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="ml-20 md:ml-64 pt-16 min-h-screen grid grid-cols-10 gap-0 overflow-hidden">
+<!-- Central Visualization (70%) -->
+<section class="col-span-10 lg:col-span-7 p-6 flex flex-col gap-6 bg-surface">
+<!-- Brain Graph -->
+<div class="flex-1 bg-surface-container-low rounded relative overflow-hidden group">
+<!-- Background Map/Texture -->
+<div class="absolute inset-0 opacity-20 pointer-events-none">
+<img alt="abstract neural network" class="w-full h-full object-cover" data-alt="abstract complex neural network of glowing nodes and fine interconnected lines on a dark obsidian background with shallow depth of field" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAl_qIALKhCnq-sJwNuTELCBzgVtiYv3MH-oyUnL7vUDjAhB_J_UCTuDcd4mfuPFU08xJN3TbxYaCH3HzfhLl_bkCTWO4oqno-i1AZV3gw0DTLaCxoszE7Ao9VltGGmv1tFgS4AMZlS4A6QU3cpqqT07C8d3oa5UDMtV9m1C2k5_LoDuhTZToqxaXHQFjx7gSQ2L-dOME4-HT088MHw7ktNnhOlTFdiObHRdugakutoaNzJdgwJwlt3RI4UC6imw5GWdEjM5d96Th4"/>
+</div>
+<!-- Graph Header -->
+<div class="absolute top-6 left-6 z-10">
+<div class="flex items-center gap-3">
+<span class="w-3 h-3 rounded-full bg-primary shadow-[0_0_10px_rgba(164,201,255,0.5)]"></span>
+<h2 class="font-headline text-lg font-bold tracking-tight text-on-surface">Live Market Synapse</h2>
+</div>
+<p class="text-[10px] text-slate-500 font-label tracking-widest uppercase mt-1">Monitoring 4,209 correlating vectors</p>
+</div>
+<!-- Fake SVG Graph Visualization Overlay -->
+<div class="absolute inset-0 flex items-center justify-center p-12">
+<svg class="w-full h-full text-outline-variant/30" viewbox="0 0 800 500">
+<!-- Connecting Lines -->
+<line stroke="currentColor" stroke-width="1" x1="200" x2="400" y1="150" y2="250"></line>
+<line stroke="currentColor" stroke-width="1" x1="400" x2="600" y1="250" y2="200"></line>
+<line stroke="currentColor" stroke-width="1" x1="400" x2="450" y1="250" y2="400"></line>
+<line stroke="currentColor" stroke-width="1" x1="200" x2="150" y1="150" y2="350"></line>
+<line stroke="currentColor" stroke-width="1" x1="600" x2="650" y1="200" y2="350"></line>
+<!-- Dynamic Active Signal Edge -->
+<path d="M 400 250 L 200 150" fill="none" stroke="#a4c9ff" stroke-dasharray="5,5" stroke-width="2">
+<title>Active Propagation</title>
+</path>
+<!-- Nodes -->
+<circle cx="200" cy="150" fill="#131314" r="12" stroke="#a4c9ff" stroke-width="2"></circle>
+<text fill="#a4c9ff" font-family="Manrope" font-size="14" font-weight="bold" text-anchor="middle" x="200" y="125">AAPL</text>
+<circle class="animate-pulse" cx="200" cy="150" fill="#a4c9ff" fill-opacity="0.1" r="24"></circle>
+<circle cx="400" cy="250" fill="#131314" r="18" stroke="#61de8a" stroke-width="2"></circle>
+<text fill="#61de8a" font-family="Manrope" font-size="14" font-weight="bold" text-anchor="middle" x="400" y="225">BRAIN_CORE</text>
+<circle cx="600" cy="200" fill="#131314" r="10" stroke="#414751" stroke-width="2"></circle>
+<text fill="#c1c7d3" font-family="Manrope" font-size="14" font-weight="bold" text-anchor="middle" x="600" y="175">NVDA</text>
+<circle cx="450" cy="400" fill="#131314" r="10" stroke="#414751" stroke-width="2"></circle>
+<text fill="#c1c7d3" font-family="Manrope" font-size="14" font-weight="bold" text-anchor="middle" x="450" y="430">BTC</text>
+<circle cx="150" cy="350" fill="#131314" r="8" stroke="#414751" stroke-width="1.5"></circle>
+<circle cx="650" cy="350" fill="#131314" r="8" stroke="#414751" stroke-width="1.5"></circle>
+</svg>
+</div>
+<!-- Floating Stats -->
+<div class="absolute bottom-6 right-6 flex gap-4">
+<div class="bg-surface-container-highest/80 backdrop-blur p-4 rounded border-b border-primary">
+<p class="text-[10px] text-slate-400 font-label uppercase">Correlation Strength</p>
+<p class="text-xl font-headline font-bold text-primary tabular-nums">0.924</p>
+</div>
+<div class="bg-surface-container-highest/80 backdrop-blur p-4 rounded border-b border-tertiary">
+<p class="text-[10px] text-slate-400 font-label uppercase">Alpha Probability</p>
+<p class="text-xl font-headline font-bold text-tertiary tabular-nums">78.2%</p>
+</div>
+</div>
+</div>
+<!-- Bottom Section: Decision Timeline -->
+<div class="h-48 bg-surface-container-low rounded p-6 flex flex-col gap-4">
+<div class="flex justify-between items-center">
+<h3 class="font-headline text-xs font-bold tracking-widest uppercase text-slate-400">Decision Timeline</h3>
+<span class="text-[10px] font-label text-slate-500">Last 12 Transactions</span>
+</div>
+<div class="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
+<!-- Timeline Item -->
+<div class="flex-shrink-0 w-64 bg-surface-container-lowest p-4 rounded hover:bg-surface-container-high transition-all cursor-pointer border-l-2 border-primary">
+<div class="flex justify-between text-[10px] mb-2">
+<span class="font-bold text-primary">AAPL LONG</span>
+<span class="text-slate-500 tabular-nums">14:22:04</span>
+</div>
+<p class="text-xs text-on-surface line-clamp-2">Liquidity sweep into 184.50 demand zone confirmed by Signal Agent.</p>
+</div>
+<!-- Timeline Item -->
+<div class="flex-shrink-0 w-64 bg-surface-container-lowest p-4 rounded hover:bg-surface-container-high transition-all cursor-pointer border-l-2 border-error">
+<div class="flex justify-between text-[10px] mb-2">
+<span class="font-bold text-error">TSLA GATED</span>
+<span class="text-slate-500 tabular-nums">14:18:55</span>
+</div>
+<p class="text-xs text-on-surface line-clamp-2">Claude Veto: High macro volatility scheduled in 15m. Risk limit exceeded.</p>
+</div>
+<!-- Timeline Item -->
+<div class="flex-shrink-0 w-64 bg-surface-container-lowest p-4 rounded hover:bg-surface-container-high transition-all cursor-pointer border-l-2 border-slate-700">
+<div class="flex justify-between text-[10px] mb-2">
+<span class="font-bold text-slate-400">BTC WATCH</span>
+<span class="text-slate-500 tabular-nums">14:05:12</span>
+</div>
+<p class="text-xs text-on-surface line-clamp-2">Consolidation at $64k. Data agent scanning volume profiles for divergence.</p>
+</div>
+<!-- Timeline Item -->
+<div class="flex-shrink-0 w-64 bg-surface-container-lowest p-4 rounded hover:bg-surface-container-high transition-all cursor-pointer border-l-2 border-primary">
+<div class="flex justify-between text-[10px] mb-2">
+<span class="font-bold text-primary">NVDA CALL</span>
+<span class="text-slate-500 tabular-nums">13:58:30</span>
+</div>
+<p class="text-xs text-on-surface line-clamp-2">Institutional buy wall detected at $820 level. Signal confidence 0.88.</p>
+</div>
+</div>
+</div>
+</section>
+<!-- Right Panel (30%) -->
+<aside class="col-span-10 lg:col-span-3 border-l border-outline-variant/10 flex flex-col bg-surface-container-low overflow-hidden">
+<!-- Agent Pulse -->
+<div class="p-6 border-b border-outline-variant/10">
+<h3 class="font-headline text-[10px] font-bold tracking-widest uppercase text-slate-500 mb-6">Agent Pulse</h3>
+<div class="grid grid-cols-2 gap-4">
+<div class="bg-surface-container-lowest p-3 rounded flex items-center gap-3">
+<div class="w-1.5 h-1.5 rounded-full bg-tertiary shadow-[0_0_5px_#61de8a]"></div>
+<div>
+<p class="text-[9px] text-slate-500 font-label uppercase">Data</p>
+<p class="text-xs font-bold text-on-surface">SYNCHRONIZED</p>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-3 rounded flex items-center gap-3">
+<div class="w-1.5 h-1.5 rounded-full bg-tertiary shadow-[0_0_5px_#61de8a]"></div>
+<div>
+<p class="text-[9px] text-slate-500 font-label uppercase">Signal</p>
+<p class="text-xs font-bold text-on-surface">SCANNING</p>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-3 rounded flex items-center gap-3">
+<div class="w-1.5 h-1.5 rounded-full bg-primary-container shadow-[0_0_5px_#4d93e5]"></div>
+<div>
+<p class="text-[9px] text-slate-500 font-label uppercase">Reason</p>
+<p class="text-xs font-bold text-on-surface">PROCESSING</p>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-3 rounded flex items-center gap-3">
+<div class="w-1.5 h-1.5 rounded-full bg-slate-600"></div>
+<div>
+<p class="text-[9px] text-slate-500 font-label uppercase">Risk</p>
+<p class="text-xs font-bold text-on-surface">DORMANT</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Reasoning Stream -->
+<div class="flex-1 p-6 flex flex-col overflow-hidden">
+<h3 class="font-headline text-[10px] font-bold tracking-widest uppercase text-slate-500 mb-4">Reasoning Stream</h3>
+<div class="flex-1 bg-surface-container-lowest rounded p-4 font-['Inter'] text-[11px] leading-relaxed overflow-y-auto space-y-4 tabular-nums text-slate-300">
+<div class="border-l border-primary/20 pl-3">
+<span class="text-primary font-bold">[14:23:45] DataAgent:</span> AAPL spot flow showing significant institutional buying at 184.50. Delta +12.4M.
+                    </div>
+<div class="border-l border-primary-container/20 pl-3">
+<span class="text-primary-container font-bold">[14:23:50] SignalAgent:</span> Cross-referencing 15m RSI divergence with order book heat. Entry probability 0.78.
+                    </div>
+<div class="border-l border-purple-400/20 pl-3">
+<span class="text-purple-400 font-bold">[14:23:55] ClaudeVeto:</span> Macro check: PCE data release in 45m. Volatility window opens in 15m. 
+                    </div>
+<div class="border-l border-tertiary/20 pl-3">
+<span class="text-tertiary font-bold">[14:24:02] BrainCore:</span> Synthesizing signal. Risk-adjusted confidence 0.82. Veto conditions assessed: Neutral.
+                    </div>
+<div class="border-l border-slate-700/20 pl-3">
+<span class="text-slate-500">[14:24:05] System:</span> Waiting for final Risk Agent sign-off on position size...
+                    </div>
+<div class="opacity-30">
+<span class="text-slate-600">[14:21:12] DataAgent:</span> Scanning BTC/USD corridors for arbitrage leaks...
+                    </div>
+</div>
+</div>
+<!-- Final Consensus Badge -->
+<div class="p-6 bg-surface-container-high">
+<div class="flex flex-col gap-2 items-center justify-center border-2 border-tertiary/20 bg-tertiary/5 rounded-lg py-8 group transition-all">
+<span class="text-[10px] font-label text-tertiary tracking-[0.4em] uppercase font-bold">Consensus Status</span>
+<h4 class="text-5xl font-headline font-black text-tertiary tracking-tighter">APPROVED</h4>
+<div class="mt-4 flex items-center gap-2">
+<span class="text-slate-500 text-[10px] uppercase font-bold tracking-widest">Confidence Score:</span>
+<span class="bg-tertiary text-on-tertiary px-2 py-0.5 rounded text-xs font-black tabular-nums">0.82</span>
+</div>
+</div>
+<button class="w-full mt-6 bg-gradient-to-br from-primary to-primary-container text-on-primary font-bold py-4 rounded transition-all hover:scale-[1.01] active:scale-[0.98] uppercase tracking-[0.2em] text-xs">
+                    Execute Trade Strategy
+                </button>
+</div>
+</aside>
+</main>
+<!-- Modal (Floating Layer Example) -->
+<div class="hidden fixed inset-0 z-[60] flex items-center justify-center p-6 bg-surface/80 backdrop-blur-sm">
+<div class="w-full max-w-lg bg-surface-container-highest rounded border border-outline-variant/20 shadow-[0px_12px_32px_rgba(229,226,227,0.06)] p-8">
+<h5 class="text-xl font-headline font-bold mb-4">System Deployment</h5>
+<p class="text-sm text-slate-400 mb-6">Are you sure you want to deploy the GodMode-3 Agent to the primary production environment?</p>
+<div class="flex gap-4 justify-end">
+<button class="px-6 py-2 text-xs font-bold text-slate-400 hover:text-white transition-colors">CANCEL</button>
+<button class="px-6 py-2 bg-primary text-on-primary text-xs font-bold rounded">CONFIRM DEPLOYMENT</button>
+</div>
+</div>
+</div>
+</body></html>

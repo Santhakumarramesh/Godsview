@@ -1,0 +1,244 @@
+version: "3.9"
+
+# GodsView v2 — Python microservices stack
+# Usage:
+#   cd services/
+#   docker compose up -d
+#
+# Each service is independently scalable.
+# All services share the same Docker network and read from .env
+
+networks:
+  godsview-v2:
+    driver: bridge
+
+volumes:
+  market-data:
+  models:
+  lancedb:
+  mlflow-data:
+
+x-service-defaults: &svc-defaults
+  build:
+    context: ..
+    dockerfile: services/Dockerfile
+  networks:
+    - godsview-v2
+  env_file:
+    - ../.env
+  restart: unless-stopped
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "50m"
+      max-file: "5"
+
+services:
+
+  # ── Redis (shared cache / message bus) ────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    networks:
+      - godsview-v2
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── API Gateway ────────────────────────────────────────────────────────────
+  api-gateway:
+    <<: *svc-defaults
+    command: uvicorn services.api_gateway.main:app --host 0.0.0.0 --port 8000 --workers 2
+    ports:
+      - "8000:8000"
+    depends_on:
+      - market-data
+      - feature
+      - backtest
+      - ml
+      - execution
+      - risk
+      - memory
+    environment:
+      API_GATEWAY_PORT: "8000"
+      MARKET_DATA_URL: "http://market-data:8001"
+      FEATURE_URL: "http://feature:8002"
+      BACKTEST_URL: "http://backtest:8003"
+      ML_URL: "http://ml:8004"
+      EXECUTION_URL: "http://execution:8005"
+      RISK_URL: "http://risk:8006"
+      MEMORY_URL: "http://memory:8007"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── Market Data Service ───────────────────────────────────────────────────
+  market-data:
+    <<: *svc-defaults
+    command: uvicorn services.market_data_service.main:app --host 0.0.0.0 --port 8001 --workers 2
+    ports:
+      - "8001:8001"
+    volumes:
+      - market-data:/app/data
+    environment:
+      MARKET_DATA_PORT: "8001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── Feature Service ───────────────────────────────────────────────────────
+  feature:
+    <<: *svc-defaults
+    command: uvicorn services.feature_service.main:app --host 0.0.0.0 --port 8002 --workers 2
+    ports:
+      - "8002:8002"
+    depends_on:
+      - market-data
+    environment:
+      FEATURE_PORT: "8002"
+      MARKET_DATA_URL: "http://market-data:8001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── Backtest Service ──────────────────────────────────────────────────────
+  backtest:
+    <<: *svc-defaults
+    command: uvicorn services.backtest_service.main:app --host 0.0.0.0 --port 8003
+    ports:
+      - "8003:8003"
+    depends_on:
+      - market-data
+    environment:
+      BACKTEST_PORT: "8003"
+      MARKET_DATA_URL: "http://market-data:8001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+
+  # ── ML Service ────────────────────────────────────────────────────────────
+  ml:
+    <<: *svc-defaults
+    command: uvicorn services.ml_service.main:app --host 0.0.0.0 --port 8004
+    ports:
+      - "8004:8004"
+    depends_on:
+      - market-data
+      - mlflow
+    volumes:
+      - models:/app/data/models
+    environment:
+      ML_PORT: "8004"
+      MARKET_DATA_URL: "http://market-data:8001"
+      MLFLOW_TRACKING_URI: "http://mlflow:5000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── Execution Service ─────────────────────────────────────────────────────
+  execution:
+    <<: *svc-defaults
+    command: uvicorn services.execution_service.main:app --host 0.0.0.0 --port 8005
+    ports:
+      - "8005:8005"
+    environment:
+      EXECUTION_PORT: "8005"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8005/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── Risk Service ──────────────────────────────────────────────────────────
+  risk:
+    <<: *svc-defaults
+    command: uvicorn services.risk_service.main:app --host 0.0.0.0 --port 8006
+    ports:
+      - "8006:8006"
+    environment:
+      RISK_PORT: "8006"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8006/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── Memory Service ────────────────────────────────────────────────────────
+  memory:
+    <<: *svc-defaults
+    command: uvicorn services.memory_service.main:app --host 0.0.0.0 --port 8007
+    ports:
+      - "8007:8007"
+    volumes:
+      - lancedb:/app/data/lancedb
+    environment:
+      MEMORY_PORT: "8007"
+      LANCEDB_URI: "/app/data/lancedb"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8007/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── Scheduler Service ────────────────────────────────────────────────────
+  scheduler:
+    <<: *svc-defaults
+    command: uvicorn services.scheduler_service.main:app --host 0.0.0.0 --port 8008
+    ports:
+      - "8008:8008"
+    environment:
+      SCHEDULER_PORT: "8008"
+      SCAN_INTERVAL_SECONDS: "300"
+      RETRAIN_HOUR_UTC: "21"
+      API_GATEWAY_PORT: "8000"
+      MARKET_DATA_PORT: "8001"
+      FEATURE_PORT: "8002"
+      ML_PORT: "8004"
+      EXECUTION_PORT: "8005"
+      RISK_PORT: "8006"
+      MEMORY_PORT: "8007"
+    depends_on:
+      - api-gateway
+      - market-data
+      - feature
+      - ml
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8008/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── MLflow Tracking Server ────────────────────────────────────────────────
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.13.0
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri sqlite:///mlflow.db
+      --default-artifact-root /mlflow/artifacts
+    networks:
+      - godsview-v2
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow-data:/mlflow
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5

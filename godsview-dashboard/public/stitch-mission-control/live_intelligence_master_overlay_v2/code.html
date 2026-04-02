@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Godsview | Live Intelligence (Master)</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              colors: {
+                "surface-container-lowest": "#000000",
+                "secondary-fixed-dim": "#a8c4ff",
+                "surface-variant": "#262627",
+                "surface-tint": "#9cff93",
+                "on-secondary-fixed": "#00326f",
+                "surface": "#0e0e0f",
+                "on-tertiary": "#4a0001",
+                "primary-fixed-dim": "#00ec3b",
+                "on-surface": "#ffffff",
+                "inverse-on-surface": "#565556",
+                "on-secondary": "#001f49",
+                "surface-container": "#1a191b",
+                "primary": "#9cff93",
+                "surface-dim": "#0e0e0f",
+                "error-dim": "#d53d18",
+                "on-surface-variant": "#adaaab",
+                "error": "#ff7351",
+                "surface-container-high": "#201f21",
+                "on-primary-fixed": "#00440a",
+                "on-secondary-fixed-variant": "#004ea5",
+                "on-primary-fixed-variant": "#006513",
+                "tertiary-fixed": "#ff9385",
+                "primary-fixed": "#00fc40",
+                "error-container": "#b92902",
+                "on-primary-container": "#005a10",
+                "surface-container-highest": "#262627",
+                "on-primary": "#006413",
+                "outline": "#767576",
+                "outline-variant": "#484849",
+                "on-error": "#450900",
+                "secondary": "#669dff",
+                "background": "#0e0e0f",
+                "tertiary-fixed-dim": "#ff7c6c",
+                "primary-container": "#00fc40",
+                "on-secondary-container": "#f7f7ff",
+                "on-background": "#ffffff",
+                "secondary-container": "#005bc0",
+                "on-error-container": "#ffd2c8",
+                "surface-bright": "#2c2c2d",
+                "on-tertiary-fixed-variant": "#7a0004",
+                "inverse-surface": "#fcf8f9",
+                "surface-container-low": "#131314",
+                "secondary-dim": "#0070ea",
+                "tertiary-container": "#f9362c",
+                "inverse-primary": "#006f16",
+                "on-tertiary-container": "#000000",
+                "tertiary": "#ff7162",
+                "tertiary-dim": "#e2241f",
+                "secondary-fixed": "#bed2ff",
+                "on-tertiary-fixed": "#3a0001",
+                "primary-dim": "#00ec3b"
+              },
+              fontFamily: {
+                "headline": ["Space Grotesk"],
+                "body": ["Inter"],
+                "label": ["Inter"]
+              },
+              borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+            },
+          },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .glass-panel {
+            background: rgba(44, 44, 45, 0.4);
+            backdrop-filter: blur(20px);
+        }
+        .candlestick-green { fill: #9cff93; }
+        .candlestick-red { fill: #ff7162; }
+        .candlestick-wick { stroke: #484849; stroke-width: 1; }
+        .chart-grid { stroke: rgba(72, 72, 73, 0.1); stroke-width: 1; }
+        .trade-label { font-family: 'Space Grotesk'; font-weight: 700; font-size: 10px; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface font-body selection:bg-primary selection:text-on-primary">
+<!-- Top Navigation Shell -->
+<header class="fixed top-0 w-full flex justify-between items-center px-6 h-16 bg-[#0e0e0f]/80 backdrop-blur-xl border-b border-[#484849]/15 z-50">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-[#9cff93]" data-icon="analytics">analytics</span>
+<span class="font-['Space_Grotesk'] uppercase tracking-widest text-sm text-[#9cff93]">SYSTEM ONLINE</span>
+</div>
+<div class="flex items-center gap-6">
+<div class="hidden md:flex gap-8 items-center">
+<span class="font-['Space_Grotesk'] text-xs tracking-widest text-[#9cff93] cursor-pointer">TERMINAL</span>
+<span class="font-['Space_Grotesk'] text-xs tracking-widest text-gray-500 hover:text-[#669dff] transition-colors cursor-pointer">INTELLIGENCE</span>
+<span class="font-['Space_Grotesk'] text-xs tracking-widest text-gray-500 hover:text-[#669dff] transition-colors cursor-pointer">PIPELINE</span>
+</div>
+<div class="w-8 h-8 rounded-full bg-surface-container-high border border-outline-variant flex items-center justify-center overflow-hidden">
+<img alt="User" data-alt="Minimalist profile avatar placeholder for a professional trading interface" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDsc1eaSa_nF7Ixsq0H-ffZyl3I_PxrpkYgauF67RfYEk6P61zg0J6KMIDXhXaO0dVb_gjIiaevqxhKEYNscv9Nd3UNFz6voBGEvJKGlyVnMNqd3vBNNmzijxJ7q_aYEIBpfnqTdvhGUWrH28iC4bGXvK3xcjopKVRD9NuYK3UB4nZHWcNhescUbGCCPDYs8uoV5VaG8F0gwGkLujaxRKrC-vFlWGfK44lYz8QvzaKxtUuo-PCXgE9qTTnL-kTIB94-4cIqVa-fffQ"/>
+</div>
+</div>
+</header>
+<!-- Side Navigation Drawer (Desktop) -->
+<aside class="fixed left-0 top-0 h-full z-40 hidden md:flex flex-col bg-[#0e0e0f] w-20 items-center py-8 border-r border-[#484849]/15">
+<div class="font-black text-[#9cff93] text-lg mb-12 tracking-tighter">GV</div>
+<nav class="flex flex-col gap-8">
+<div class="text-[#9cff93] bg-[#1a191b] rounded-md shadow-[0_0_10px_rgba(156,255,147,0.2)] p-3 transition-all cursor-pointer">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+</div>
+<div class="text-gray-500 hover:bg-[#1a191b] hover:text-[#669dff] p-3 transition-all cursor-pointer rounded-md">
+<span class="material-symbols-outlined" data-icon="psychology">psychology</span>
+</div>
+<div class="text-gray-500 hover:bg-[#1a191b] hover:text-[#669dff] p-3 transition-all cursor-pointer rounded-md">
+<span class="material-symbols-outlined" data-icon="account_tree">account_tree</span>
+</div>
+<div class="text-gray-500 hover:bg-[#1a191b] hover:text-[#669dff] p-3 transition-all cursor-pointer rounded-md">
+<span class="material-symbols-outlined" data-icon="account_balance_wallet">account_balance_wallet</span>
+</div>
+<div class="mt-auto text-gray-500 hover:bg-[#1a191b] hover:text-[#669dff] p-3 transition-all cursor-pointer rounded-md">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</div>
+</nav>
+</aside>
+<main class="pt-16 md:pl-20 min-h-screen flex flex-col">
+<!-- Main Content Area: High-Fidelity Chart (70vh) -->
+<section class="flex-grow h-[618px] relative overflow-hidden bg-surface-container-lowest">
+<!-- Chart Header Info Overlay -->
+<div class="absolute top-4 left-6 z-20 flex items-center gap-6">
+<div>
+<h2 class="font-headline text-2xl font-bold tracking-tight text-on-surface">ESU4 <span class="text-sm font-medium text-on-surface-variant ml-2">S&amp;P 500 E-MINI</span></h2>
+<div class="flex gap-4 mt-1">
+<span class="text-primary text-xs font-mono font-bold">5292.50 <span class="ml-1 text-[10px] opacity-70">+0.12%</span></span>
+<span class="text-on-surface-variant text-xs font-mono">VOL: 1.2M</span>
+</div>
+</div>
+</div>
+<!-- SVG Candlestick Mockup -->
+<div class="absolute inset-0 w-full h-full flex items-center justify-center opacity-90">
+<svg class="chart-canvas" height="100%" preserveaspectratio="none" viewbox="0 0 1200 600" width="100%">
+<!-- Grid Lines -->
+<g class="chart-grid">
+<line x1="0" x2="1200" y1="100" y2="100"></line>
+<line x1="0" x2="1200" y1="200" y2="200"></line>
+<line x1="0" x2="1200" y1="300" y2="300"></line>
+<line x1="0" x2="1200" y1="400" y2="400"></line>
+<line x1="0" x2="1200" y1="500" y2="500"></line>
+<line x1="100" x2="100" y1="0" y2="600"></line>
+<line x1="300" x2="300" y1="0" y2="600"></line>
+<line x1="500" x2="500" y1="0" y2="600"></line>
+<line x1="700" x2="700" y1="0" y2="600"></line>
+<line x1="900" x2="900" y1="0" y2="600"></line>
+<line x1="1100" x2="1100" y1="0" y2="600"></line>
+</g>
+<!-- Candlesticks (Manual Plot) -->
+<!-- Approved Long Setup -->
+<line class="candlestick-wick" x1="200" x2="200" y1="380" y2="450"></line>
+<rect class="candlestick-green" height="30" width="10" x="195" y="400"></rect>
+<!-- Setup Detection Icon -->
+<circle cx="200" cy="415" fill="#9cff93" r="4"></circle>
+<text class="trade-label" fill="#9cff93" x="185" y="390">SR L 0.78</text>
+<!-- Trade Brackets -->
+<line stroke="#9cff93" stroke-width="1.5" x1="200" x2="1200" y1="400" y2="400"></line> <!-- Entry -->
+<text class="trade-label" fill="#9cff93" x="1100" y="395">ENTRY 5291.25</text>
+<line stroke="#ff7162" stroke-dasharray="4,4" stroke-width="1" x1="200" x2="1200" y1="430" y2="430"></line> <!-- SL -->
+<text class="trade-label" fill="#ff7162" x="1100" y="425">SL 5288.75</text>
+<line stroke="#9cff93" stroke-dasharray="4,4" stroke-width="1" x1="200" x2="1200" y1="340" y2="340"></line> <!-- TP -->
+<text class="trade-label" fill="#9cff93" x="1100" y="335">TP 5296.25</text>
+<!-- Claude Vetoed Short -->
+<line class="candlestick-wick" x1="500" x2="500" y1="280" y2="350"></line>
+<rect class="candlestick-red" height="40" width="10" x="495" y="290"></rect>
+<circle cx="500" cy="310" fill="#a8c4ff" r="4"></circle>
+<text class="trade-label" fill="#a8c4ff" x="480" y="280">AR S VETO</text>
+<!-- Risk Rejected Short -->
+<line class="candlestick-wick" x1="800" x2="800" y1="320" y2="400"></line>
+<rect class="candlestick-red" height="50" width="10" x="795" y="330"></rect>
+<circle cx="800" cy="355" fill="#ff9385" r="4"></circle>
+<text class="trade-label" fill="#ff9385" x="780" y="320">CT S REJ</text>
+<!-- Price Candles Continuation -->
+<rect class="candlestick-green" height="20" width="10" x="235" y="390"></rect>
+<rect class="candlestick-green" height="15" width="10" x="275" y="380"></rect>
+<rect class="candlestick-red" height="25" width="10" x="315" y="385"></rect>
+<rect class="candlestick-green" height="30" width="10" x="355" y="370"></rect>
+<rect class="candlestick-green" height="20" width="10" x="395" y="360"></rect>
+</svg>
+</div>
+<!-- Right Sidebar Overlay (Price Action) -->
+<div class="absolute right-0 top-0 h-full w-16 glass-panel border-l border-outline-variant/15 flex flex-col justify-between py-10">
+<div class="flex flex-col gap-8 text-[10px] font-mono text-on-surface-variant items-center">
+<span>5310.00</span>
+<span>5305.00</span>
+<span>5300.00</span>
+<span>5295.00</span>
+<span class="text-primary font-bold bg-primary/10 px-1">5292.50</span>
+<span>5290.00</span>
+<span>5285.00</span>
+<span>5280.00</span>
+</div>
+</div>
+</section>
+<!-- Intelligence Interface Footer -->
+<section class="bg-surface border-t border-outline-variant/15 p-6 flex flex-col gap-6">
+<!-- AI Decision Pipeline -->
+<div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+<div class="flex items-center gap-2">
+<span class="font-headline text-xs tracking-widest text-on-surface-variant uppercase">AI Pipeline Execution</span>
+<div class="h-[1px] w-12 bg-outline-variant/30"></div>
+</div>
+<div class="flex flex-wrap gap-4 items-center">
+<!-- Step 1: Setup -->
+<div class="flex items-center gap-2 bg-surface-container-high px-3 py-1.5 rounded border border-primary/20">
+<span class="text-[10px] font-bold tracking-tighter text-on-surface-variant">SETUP</span>
+<span class="material-symbols-outlined text-primary text-sm" data-icon="check_circle">check_circle</span>
+</div>
+<div class="text-outline-variant">→</div>
+<!-- Step 2: OF -->
+<div class="flex items-center gap-2 bg-surface-container-high px-3 py-1.5 rounded border border-primary/20">
+<span class="text-[10px] font-bold tracking-tighter text-on-surface-variant">OF</span>
+<span class="material-symbols-outlined text-primary text-sm" data-icon="check_circle">check_circle</span>
+</div>
+<div class="text-outline-variant">→</div>
+<!-- Step 3: ML -->
+<div class="flex items-center gap-2 bg-surface-container-high px-3 py-1.5 rounded border border-primary/20">
+<span class="text-[10px] font-bold tracking-tighter text-on-surface-variant">ML</span>
+<span class="material-symbols-outlined text-primary text-sm" data-icon="check_circle">check_circle</span>
+</div>
+<div class="text-outline-variant">→</div>
+<!-- Step 4: Claude -->
+<div class="flex items-center gap-2 bg-surface-container-high px-3 py-1.5 rounded border border-error/20">
+<span class="text-[10px] font-bold tracking-tighter text-on-surface-variant">CLAUDE</span>
+<span class="material-symbols-outlined text-error text-sm" data-icon="cancel">cancel</span>
+</div>
+<div class="text-outline-variant">→</div>
+<!-- Step 5: Risk -->
+<div class="flex items-center gap-2 bg-surface-container-high px-3 py-1.5 rounded border border-error/20">
+<span class="text-[10px] font-bold tracking-tighter text-on-surface-variant">RISK</span>
+<span class="material-symbols-outlined text-error text-sm" data-icon="cancel">cancel</span>
+</div>
+</div>
+</div>
+<!-- AI Reasoning Panel -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+<!-- Setup & Why -->
+<div class="md:col-span-1 p-4 bg-surface-container-low rounded border-l-2 border-primary/50">
+<h3 class="font-headline text-[10px] tracking-widest text-primary mb-3 uppercase">Setup Vector</h3>
+<p class="text-sm font-bold text-on-surface mb-1">Sweep Reclaim (Long)</p>
+<p class="text-xs text-on-surface-variant leading-relaxed">Liquidity sweep below primary support. Strong absorption identified at 5288.75. Significant Delta divergence observed on 1m timeframe.</p>
+</div>
+<!-- Context -->
+<div class="md:col-span-1 p-4 bg-surface-container-low rounded">
+<h3 class="font-headline text-[10px] tracking-widest text-secondary mb-3 uppercase">Environmental Context</h3>
+<div class="flex flex-col gap-2">
+<div class="flex justify-between items-center">
+<span class="text-[10px] text-on-surface-variant uppercase">Regime</span>
+<span class="text-[10px] font-bold text-on-surface uppercase">Trend / Expansion</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-[10px] text-on-surface-variant uppercase">Session</span>
+<span class="text-[10px] font-bold text-on-surface uppercase">NY Open Liquidity</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-[10px] text-on-surface-variant uppercase">Volatility</span>
+<span class="text-[10px] font-bold text-primary uppercase text-right">Standard (1.2σ)</span>
+</div>
+</div>
+</div>
+<!-- Claude Verdict -->
+<div class="md:col-span-1 p-4 bg-surface-container-low rounded">
+<h3 class="font-headline text-[10px] tracking-widest text-tertiary mb-3 uppercase">Claude 3.5 Sonnet</h3>
+<div class="flex items-end gap-3 mb-2">
+<span class="text-2xl font-headline font-bold text-on-surface">0.81</span>
+<span class="text-[10px] font-bold text-primary mb-1 uppercase tracking-tighter">Confidence: PASS</span>
+</div>
+<p class="text-[10px] text-on-surface-variant leading-tight">"The reclaim structure is textbook. Low volume on the re-test of the sweep level suggests seller exhaustion."</p>
+</div>
+<!-- Final Decision -->
+<div class="md:col-span-1 p-4 bg-surface-container-high rounded relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-4xl" data-icon="gavel">gavel</span>
+</div>
+<h3 class="font-headline text-[10px] tracking-widest text-on-surface-variant mb-3 uppercase">Master Decision</h3>
+<div class="flex items-baseline gap-2 mb-1">
+<span class="text-3xl font-headline font-black text-primary">0.79</span>
+<span class="text-xs font-bold text-primary uppercase">Approved</span>
+</div>
+<div class="mt-4">
+<button class="w-full bg-primary hover:bg-primary-container text-on-primary text-[10px] font-black py-2 rounded transition-all active:scale-95 uppercase tracking-widest">Execute Trade</button>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Bottom Navigation Bar (Mobile) -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center h-16 bg-[#0e0e0f]/90 backdrop-blur-md border-t border-[#484849]/15 md:hidden">
+<div class="flex flex-col items-center justify-center text-[#9cff93] scale-110">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="text-[10px] font-bold uppercase font-['Inter'] mt-1">Terminal</span>
+</div>
+<div class="flex flex-col items-center justify-center text-gray-600 active:bg-[#1a191b]">
+<span class="material-symbols-outlined" data-icon="psychology">psychology</span>
+<span class="text-[10px] font-bold uppercase font-['Inter'] mt-1">AI</span>
+</div>
+<div class="flex flex-col items-center justify-center text-gray-600 active:bg-[#1a191b]">
+<span class="material-symbols-outlined" data-icon="account_tree">account_tree</span>
+<span class="text-[10px] font-bold uppercase font-['Inter'] mt-1">Nodes</span>
+</div>
+<div class="flex flex-col items-center justify-center text-gray-600 active:bg-[#1a191b]">
+<span class="material-symbols-outlined" data-icon="account_balance_wallet">account_balance_wallet</span>
+<span class="text-[10px] font-bold uppercase font-['Inter'] mt-1">Wallet</span>
+</div>
+<div class="flex flex-col items-center justify-center text-gray-600 active:bg-[#1a191b]">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="text-[10px] font-bold uppercase font-['Inter'] mt-1">Setup</span>
+</div>
+</nav>
+</body></html>

@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>GodsView | Live Intelligence</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "surface": "#131314",
+              "on-primary-container": "#002a51",
+              "tertiary-container": "#18a659",
+              "primary-fixed-dim": "#a4c9ff",
+              "inverse-surface": "#e5e2e3",
+              "on-tertiary-container": "#003115",
+              "on-surface": "#e5e2e3",
+              "outline": "#8b919d",
+              "error-container": "#93000a",
+              "surface-container-highest": "#353436",
+              "secondary-fixed-dim": "#afcbd8",
+              "secondary-fixed": "#cbe7f5",
+              "primary-fixed": "#d4e3ff",
+              "on-error": "#690005",
+              "surface-container-lowest": "#0e0e0f",
+              "surface-container-low": "#1c1b1c",
+              "on-tertiary-fixed-variant": "#005228",
+              "surface-bright": "#3a393a",
+              "secondary": "#afcbd8",
+              "on-secondary-fixed-variant": "#304a55",
+              "tertiary-fixed-dim": "#61de8a",
+              "on-surface-variant": "#c1c7d3",
+              "inverse-primary": "#0060ac",
+              "on-primary-fixed": "#001c39",
+              "surface-variant": "#353436",
+              "tertiary": "#61de8a",
+              "on-tertiary-fixed": "#00210c",
+              "on-secondary-fixed": "#021f29",
+              "on-background": "#e5e2e3",
+              "secondary-container": "#334d58",
+              "on-error-container": "#ffdad6",
+              "on-tertiary": "#00391a",
+              "error": "#ffb4ab",
+              "on-primary": "#00315d",
+              "surface-tint": "#a4c9ff",
+              "surface-container": "#201f20",
+              "background": "#131314",
+              "tertiary-fixed": "#7efba4",
+              "primary-container": "#4d93e5",
+              "surface-container-high": "#2a2a2b",
+              "on-primary-fixed-variant": "#004883",
+              "inverse-on-surface": "#313031",
+              "on-secondary": "#19343e",
+              "primary": "#a4c9ff",
+              "outline-variant": "#414751",
+              "on-secondary-container": "#a1bdca",
+              "surface-dim": "#131314"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+      .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      }
+      .tnum { font-feature-settings: "tnum" 1; }
+      .glass-overlay {
+        background: rgba(53, 52, 54, 0.6);
+        backdrop-filter: blur(12px);
+      }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface font-body selection:bg-primary-container selection:text-on-primary-container">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-[#131314] flex justify-between items-center px-6 h-16 w-full max-w-none">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[#A4C9FF]" data-icon="hub">hub</span>
+<h1 class="font-['Manrope'] text-xl font-bold tracking-[0.15em] text-[#A4C9FF]">GodsView</h1>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex flex-col items-end">
+<span class="font-['Manrope'] tracking-wider uppercase text-[10px] font-semibold text-[#A4C9FF]">System Live</span>
+<span class="text-[9px] text-tertiary font-mono tracking-tighter uppercase">Latency: 14ms</span>
+</div>
+<span class="material-symbols-outlined text-[#A4C9FF]" data-icon="sensors">sensors</span>
+</div>
+</header>
+<main class="pt-16 pb-24 min-h-screen flex flex-col">
+<!-- Live Intelligence Chart Section (70% Height Simulation) -->
+<section class="relative w-full flex-grow min-h-[530px] bg-surface-container-lowest overflow-hidden">
+<!-- Asset Info Header -->
+<div class="absolute top-4 left-4 z-20 flex flex-col gap-1 p-3 bg-surface-container-low/80 backdrop-blur-md rounded-sm">
+<div class="flex items-center gap-2">
+<span class="font-headline font-extrabold text-lg tracking-tight uppercase">BTC / USD</span>
+<span class="bg-tertiary-container/20 text-tertiary text-[10px] px-1.5 py-0.5 font-bold rounded-sm">+2.41%</span>
+</div>
+<div class="flex items-center gap-3">
+<span class="text-xl font-mono font-bold tracking-tight tnum text-primary">64,281.40</span>
+<span class="text-xs font-medium text-outline uppercase tracking-widest">1m TF</span>
+</div>
+</div>
+<!-- SK Structure Legend Overlay -->
+<div class="absolute top-4 right-4 z-20 flex gap-2">
+<div class="px-2 py-1 bg-surface-container-high/60 backdrop-blur-sm rounded-sm flex items-center gap-2">
+<div class="w-2 h-2 bg-tertiary-container/40"></div>
+<span class="text-[9px] font-label font-semibold text-on-surface-variant uppercase tracking-wider">Demand Zone</span>
+</div>
+<div class="px-2 py-1 bg-surface-container-high/60 backdrop-blur-sm rounded-sm flex items-center gap-2">
+<div class="w-2 h-2 bg-error-container/40"></div>
+<span class="text-[9px] font-label font-semibold text-on-surface-variant uppercase tracking-wider">Supply Zone</span>
+</div>
+</div>
+<!-- Mock Chart Canvas with SK Layers -->
+<div class="absolute inset-0 z-0 opacity-80" data-alt="Dark financial candlestick chart with neon blue lines, green and red shaded boxes representing demand and supply zones, and technical annotations.">
+<!-- Background Grid -->
+<div class="absolute inset-0" style="background-image: radial-gradient(circle at 1px 1px, #414751 1px, transparent 0); background-size: 40px 40px; opacity: 0.1;"></div>
+<!-- Supply Zone (Shaded) -->
+<div class="absolute top-[15%] left-[10%] w-[60%] h-[8%] bg-error-container/10 border-b border-error/20"></div>
+<!-- Demand Zone (Shaded) -->
+<div class="absolute top-[75%] left-[30%] w-[70%] h-[12%] bg-tertiary-container/10 border-t border-tertiary/20"></div>
+<!-- Candlestick Visual Mock -->
+<svg class="w-full h-full" preserveaspectratio="none">
+<!-- Trade Visualization: Entry Line -->
+<line stroke="#a4c9ff" stroke-width="1.5" x1="0" x2="100%" y1="65%" y2="65%"></line>
+<text class="fill-primary text-[10px] font-bold font-mono" x="5" y="64.5%">ENTRY: 64,150.00</text>
+<!-- SL / TP Brackets -->
+<line stroke="#ffb4ab" stroke-dasharray="4 2" stroke-width="1.5" x1="80%" x2="100%" y1="80%" y2="80%"></line>
+<text class="fill-error text-[10px] font-bold font-mono" x="82%" y="79.5%">SL: 63,900.00</text>
+<line stroke="#61de8a" stroke-dasharray="4 2" stroke-width="1.5" x1="80%" x2="100%" y1="40%" y2="40%"></line>
+<text class="fill-tertiary text-[10px] font-bold font-mono" x="82%" y="39.5%">TP: 64,800.00</text>
+<!-- Price Action (Path) -->
+<path class="opacity-50" d="M0,150 L50,160 L100,140 L150,180 L200,220 L250,210 L300,250 L350,280 L400,260 L450,290 L500,280 L550,320 L600,310" fill="none" stroke="#414751" stroke-width="1"></path>
+</svg>
+<!-- Intelligent Overlays (Absolute Positioned Markers) -->
+<div class="absolute top-[28%] left-[45%] flex flex-col items-center">
+<div class="bg-purple-600/90 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-sm shadow-lg">AR S VETO</div>
+<div class="w-0.5 h-4 bg-purple-600"></div>
+</div>
+<div class="absolute top-[42%] left-[65%] flex flex-col items-center">
+<div class="bg-orange-500/90 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-sm shadow-lg">CT S REJ</div>
+<div class="w-0.5 h-4 bg-orange-500"></div>
+</div>
+<div class="absolute top-[78%] left-[82%] flex flex-col items-center">
+<div class="w-0.5 h-4 bg-tertiary"></div>
+<div class="bg-tertiary text-on-tertiary text-[9px] font-bold px-1.5 py-0.5 rounded-sm shadow-lg uppercase">SR L 0.78</div>
+</div>
+</div>
+</section>
+<!-- Decision Logic Panel -->
+<section class="bg-surface-container-low p-6 flex-grow border-t border-outline-variant/10">
+<div class="max-w-2xl mx-auto space-y-6">
+<!-- Inline Pipeline -->
+<div class="flex items-center justify-between gap-1 overflow-x-auto pb-2 scrollbar-hide">
+<div class="flex items-center gap-2 px-3 py-2 bg-surface-container-high rounded-sm border-b-2 border-tertiary">
+<span class="text-[10px] font-bold text-outline uppercase tracking-tighter">SK</span>
+<span class="material-symbols-outlined text-tertiary text-sm" data-icon="check_circle" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<span class="text-outline-variant">→</span>
+<div class="flex items-center gap-2 px-3 py-2 bg-surface-container-high rounded-sm border-b-2 border-tertiary">
+<span class="text-[10px] font-bold text-outline uppercase tracking-tighter">Setup</span>
+<span class="material-symbols-outlined text-tertiary text-sm" data-icon="check_circle" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<span class="text-outline-variant">→</span>
+<div class="flex items-center gap-2 px-3 py-2 bg-surface-container-high rounded-sm border-b-2 border-tertiary">
+<span class="text-[10px] font-bold text-outline uppercase tracking-tighter">OF</span>
+<span class="material-symbols-outlined text-tertiary text-sm" data-icon="check_circle" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<span class="text-outline-variant">→</span>
+<div class="flex items-center gap-2 px-3 py-2 bg-surface-container-high rounded-sm border-b-2 border-tertiary">
+<span class="text-[10px] font-bold text-outline uppercase tracking-tighter">ML</span>
+<span class="material-symbols-outlined text-tertiary text-sm" data-icon="check_circle" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<span class="text-outline-variant">→</span>
+<div class="flex items-center gap-2 px-3 py-2 bg-surface-container-high rounded-sm border-b-2 border-error">
+<span class="text-[10px] font-bold text-outline uppercase tracking-tighter">Claude</span>
+<span class="material-symbols-outlined text-error text-sm" data-icon="cancel" style="font-variation-settings: 'FILL' 1;">cancel</span>
+</div>
+<span class="text-outline-variant">→</span>
+<div class="flex items-center gap-2 px-3 py-2 bg-surface-container-high rounded-sm border-b-2 border-error">
+<span class="text-[10px] font-bold text-outline uppercase tracking-tighter">Risk</span>
+<span class="material-symbols-outlined text-error text-sm" data-icon="cancel" style="font-variation-settings: 'FILL' 1;">cancel</span>
+</div>
+</div>
+<!-- Neural Synthesis -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+<div class="space-y-2">
+<h4 class="text-[10px] font-bold text-primary tracking-[0.2em] uppercase">Why</h4>
+<div class="p-3 bg-surface-container-lowest border-l border-primary/30">
+<p class="text-xs text-on-surface-variant leading-relaxed italic">
+                                "Liquidity sweep at 64k completed but delta divergence indicates exhaustion. Absorption high."
+                            </p>
+</div>
+</div>
+<div class="space-y-2">
+<h4 class="text-[10px] font-bold text-primary tracking-[0.2em] uppercase">Context</h4>
+<div class="p-3 bg-surface-container-lowest border-l border-primary/30 space-y-1">
+<div class="flex justify-between">
+<span class="text-[10px] text-outline uppercase">Regime</span>
+<span class="text-[10px] font-bold text-tertiary uppercase">Trend</span>
+</div>
+<div class="flex justify-between">
+<span class="text-[10px] text-outline uppercase">Session</span>
+<span class="text-[10px] font-bold text-secondary uppercase">NY Open</span>
+</div>
+</div>
+</div>
+<div class="space-y-2">
+<h4 class="text-[10px] font-bold text-error tracking-[0.2em] uppercase">Decision</h4>
+<div class="p-3 bg-error-container/10 border-l-2 border-error flex items-center justify-between">
+<span class="text-xs font-extrabold text-error uppercase tracking-widest">Vetoed</span>
+<span class="material-symbols-outlined text-error text-sm" data-icon="gavel">gavel</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center px-4 pb-4 pt-2 bg-[#131314]/80 dark:bg-[#131314]/80 backdrop-blur-xl z-50 shadow-[0px_-12px_32px_rgba(255,255,255,0.03)] border-t border-[#414751]/15">
+<a class="flex flex-col items-center justify-center text-[#414751] py-1 hover:text-[#A4C9FF] transition-all" href="#">
+<span class="material-symbols-outlined text-xl" data-icon="psychology">psychology</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-[0.05em] uppercase mt-1">Brain</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#414751] py-1 hover:text-[#A4C9FF] transition-all" href="#">
+<span class="material-symbols-outlined text-xl" data-icon="monitoring">monitoring</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-[0.05em] uppercase mt-1">Market</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#A4C9FF] bg-gradient-to-br from-[#A4C9FF]/10 to-[#4D93E2]/10 rounded-sm py-1" href="#">
+<span class="material-symbols-outlined text-xl" data-icon="query_stats" style="font-variation-settings: 'FILL' 1;">query_stats</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-[0.05em] uppercase mt-1">Reason</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#414751] py-1 hover:text-[#A4C9FF] transition-all" href="#">
+<span class="material-symbols-outlined text-xl" data-icon="security">security</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-[0.05em] uppercase mt-1">Risk</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#414751] py-1 hover:text-[#A4C9FF] transition-all" href="#">
+<span class="material-symbols-outlined text-xl" data-icon="biotech">biotech</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-[0.05em] uppercase mt-1">DNA</span>
+</a>
+</nav>
+</body></html>

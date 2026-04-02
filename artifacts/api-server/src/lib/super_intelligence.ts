@@ -15,6 +15,7 @@
 
 import { predictWinProbability, getModelStatus } from "./ml_model";
 import { reasonTradeDecision } from "./reasoning_engine";
+import { logger } from "./logger";
 
 // ── Canonical constants (must match accuracy_seeder and DB data) ──────────────
 

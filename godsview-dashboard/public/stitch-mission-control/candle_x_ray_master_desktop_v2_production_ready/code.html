@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>OBSIDIAN_TERMINAL | Brain Focus Mode</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "surface-tint": "#a4c9ff",
+              "on-primary-fixed": "#001c39",
+              "on-primary": "#00315d",
+              "surface-container": "#201f20",
+              "on-primary-fixed-variant": "#004883",
+              "on-secondary-fixed-variant": "#304a55",
+              "secondary-fixed": "#cbe7f5",
+              "outline": "#8b919d",
+              "on-error": "#690005",
+              "surface-container-low": "#1c1b1c",
+              "primary-container": "#4d93e5",
+              "on-surface-variant": "#c1c7d3",
+              "surface-dim": "#131314",
+              "tertiary-container": "#18a659",
+              "on-primary-container": "#002a51",
+              "error-container": "#93000a",
+              "error": "#ffb4ab",
+              "inverse-surface": "#e5e2e3",
+              "background": "#131314",
+              "primary-fixed-dim": "#a4c9ff",
+              "primary": "#a4c9ff",
+              "on-tertiary-container": "#003115",
+              "on-tertiary": "#00391a",
+              "secondary-container": "#334d58",
+              "on-tertiary-fixed": "#00210c",
+              "primary-fixed": "#d4e3ff",
+              "inverse-on-surface": "#313031",
+              "surface-container-highest": "#353436",
+              "surface-container-high": "#2a2a2b",
+              "outline-variant": "#414751",
+              "inverse-primary": "#0060ac",
+              "on-secondary-container": "#a1bdca",
+              "on-secondary": "#19343e",
+              "tertiary-fixed-dim": "#61de8a",
+              "surface-variant": "#353436",
+              "on-error-container": "#ffdad6",
+              "secondary-fixed-dim": "#afcbd8",
+              "surface": "#131314",
+              "secondary": "#afcbd8",
+              "on-surface": "#e5e2e3",
+              "on-tertiary-fixed-variant": "#005228",
+              "tertiary-fixed": "#7efba4",
+              "surface-bright": "#3a393a",
+              "tertiary": "#61de8a",
+              "surface-container-lowest": "#0e0e0f",
+              "on-secondary-fixed": "#021f29",
+              "on-background": "#e5e2e3"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .tabular-nums { font-variant-numeric: tabular-nums; }
+        .glass-panel {
+            background: rgba(28, 27, 28, 0.7);
+            backdrop-filter: blur(24px);
+        }
+        .candle-glow {
+            box-shadow: 0 0 25px rgba(164, 201, 255, 0.5), inset 0 0 10px rgba(255, 255, 255, 0.2);
+        }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #414751; border-radius: 10px; }
+        .heatmap-grid {
+            background-image: linear-gradient(to right, rgba(164, 201, 255, 0.05) 1px, transparent 1px);
+            background-size: 20px 100%;
+        }
+        .scanline {
+            background: linear-gradient(to bottom, transparent 50%, rgba(164, 201, 255, 0.02) 50%);
+            background-size: 100% 4px;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body selection:bg-primary/30 overflow-hidden scanline">
+<!-- Top Navigation -->
+<nav class="flex justify-between items-center px-6 h-14 w-full border-b border-[#414751]/20 bg-[#131314]/80 backdrop-blur-md fixed top-0 left-0 z-50">
+<div class="flex items-center gap-8">
+<span class="text-[#A4C9FF] font-black tracking-tighter text-lg">OBSIDIAN_TERMINAL</span>
+<div class="hidden md:flex gap-6 items-center">
+<a class="font-['Manrope'] tracking-wider uppercase text-[10px] font-bold text-[#8E918F] hover:text-[#E2E2E2]" href="#">Market</a>
+<a class="font-['Manrope'] tracking-wider uppercase text-[10px] font-bold text-[#A4C9FF] border-b-2 border-[#A4C9FF] pb-1" href="#">Microstructure</a>
+<a class="font-['Manrope'] tracking-wider uppercase text-[10px] font-bold text-[#8E918F] hover:text-[#E2E2E2]" href="#">OrderFlow</a>
+<a class="font-['Manrope'] tracking-wider uppercase text-[10px] font-bold text-[#8E918F] hover:text-[#E2E2E2]" href="#">Portfolio</a>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 hover:bg-[#2A2A2B] transition-colors duration-200 text-[#8E918F]">
+<span class="material-symbols-outlined text-xl">account_balance_wallet</span>
+</button>
+<button class="p-2 hover:bg-[#2A2A2B] transition-colors duration-200 text-[#8E918F]">
+<span class="material-symbols-outlined text-xl">notifications</span>
+</button>
+<button class="p-2 hover:bg-[#2A2A2B] transition-colors duration-200 text-[#8E918F]">
+<span class="material-symbols-outlined text-xl">settings</span>
+</button>
+</div>
+</nav>
+<!-- Left Side Navigation (Minified) -->
+<aside class="fixed left-0 top-14 bottom-8 w-14 flex flex-col items-center py-4 bg-[#1C1B1C] border-r border-[#414751]/15 z-40">
+<div class="flex flex-col gap-6">
+<button class="p-2 text-primary bg-primary/10 rounded-sm shadow-[0_0_10px_rgba(164,201,255,0.2)]">
+<span class="material-symbols-outlined">biotech</span>
+</button>
+<button class="p-2 text-[#8E918F] hover:text-white">
+<span class="material-symbols-outlined">grid_view</span>
+</button>
+<button class="p-2 text-[#8E918F] hover:text-white">
+<span class="material-symbols-outlined">layers</span>
+</button>
+<button class="p-2 text-[#8E918F] hover:text-white">
+<span class="material-symbols-outlined">reorder</span>
+</button>
+<button class="p-2 text-[#8E918F] hover:text-white">
+<span class="material-symbols-outlined">notifications_active</span>
+</button>
+</div>
+<div class="mt-auto flex flex-col gap-4 mb-4">
+<button class="p-2 text-[#8E918F] hover:text-white"><span class="material-symbols-outlined">help_outline</span></button>
+<button class="p-2 text-[#8E918F] hover:text-white"><span class="material-symbols-outlined">terminal</span></button>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="fixed inset-0 top-14 left-14 right-[320px] bg-surface flex flex-col overflow-hidden">
+<!-- Dashboard Header -->
+<header class="h-12 border-b border-outline-variant/5 px-6 flex items-center justify-between bg-surface-container-low/30">
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-3">
+<span class="font-headline font-black text-xl tracking-tight">NVDA</span>
+<span class="text-on-surface-variant text-[10px] font-bold tracking-widest opacity-40">NVIDIA CORP</span>
+</div>
+<div class="flex gap-2">
+<span class="px-2 py-0.5 bg-surface-container-highest text-[9px] font-bold text-primary rounded-sm tracking-widest">1M</span>
+<span class="px-2 py-0.5 border border-primary/30 bg-primary/5 text-[9px] font-bold text-primary rounded-sm tracking-widest uppercase animate-pulse">X-Ray Active</span>
+</div>
+</div>
+<div class="flex items-center gap-6 text-[10px] font-bold tracking-[0.15em] uppercase text-on-surface-variant/80">
+<span class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-tertiary shadow-[0_0_8px_rgba(97,222,138,0.4)]"></span> LIVE_DATA</span>
+<span class="tabular-nums opacity-60">UTC 10:31:42</span>
+</div>
+</header>
+<!-- Chart Workspace -->
+<div class="flex-1 relative overflow-hidden bg-[radial-gradient(circle_at_center,_#1C1B1C_0%,_#131314_100%)]">
+<!-- Grid Lines Simulation -->
+<div class="absolute inset-0 pointer-events-none opacity-10">
+<div class="w-full h-full" style="background-image: linear-gradient(#414751 1px, transparent 1px), linear-gradient(90deg, #414751 1px, transparent 1px); background-size: 80px 40px;"></div>
+</div>
+<!-- Candlestick Chart Simulation -->
+<div class="absolute inset-0 flex items-end justify-center px-12 pb-32 gap-8">
+<!-- Earlier Candles -->
+<div class="w-5 h-48 bg-error-container/30 rounded-sm relative opacity-40"><div class="absolute -top-4 left-[9px] w-0.5 h-56 bg-error-container/40"></div></div>
+<div class="w-5 h-32 bg-error-container/30 rounded-sm relative opacity-60"><div class="absolute -top-8 left-[9px] w-0.5 h-48 bg-error-container/40"></div></div>
+<div class="w-5 h-24 bg-tertiary-container/30 rounded-sm relative opacity-60"><div class="absolute -top-6 left-[9px] w-0.5 h-40 bg-tertiary-container/40"></div></div>
+<!-- Highlighted Focus Candle -->
+<div class="relative group">
+<div class="absolute -top-40 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3 z-10">
+<div class="flex items-center gap-2 px-3 py-1 bg-primary/20 text-primary rounded-sm border border-primary/40 backdrop-blur-lg shadow-[0_0_20px_rgba(164,201,255,0.2)]">
+<span class="material-symbols-outlined text-xs animate-spin-slow">farsight_24</span>
+<span class="text-[10px] font-black tracking-[0.2em]">FOCUS_LOCKED</span>
+</div>
+<div class="w-px h-24 bg-gradient-to-b from-primary via-primary/50 to-transparent shadow-[0_0_10px_rgba(164,201,255,0.4)]"></div>
+</div>
+<!-- The Candle Body -->
+<div class="w-10 h-44 bg-gradient-to-b from-primary to-primary-container rounded-sm candle-glow relative z-10 ring-2 ring-primary/30">
+<div class="absolute -top-12 left-[18px] w-1 h-68 bg-primary/40"></div>
+<!-- Inner Liquidity Micro-visuals -->
+<div class="absolute inset-0 flex flex-col justify-around px-1.5 py-4 opacity-30">
+<div class="h-1 w-full bg-white/20 rounded-full"></div>
+<div class="h-1 w-8 bg-white/40 rounded-full self-center"></div>
+<div class="h-1 w-full bg-white/20 rounded-full"></div>
+<div class="h-1 w-6 bg-white/40 rounded-full self-center"></div>
+</div>
+</div>
+<div class="absolute inset-0 bg-primary/20 blur-2xl animate-pulse rounded-full -z-10 scale-150"></div>
+</div>
+<!-- Subsequent Candles -->
+<div class="w-5 h-28 bg-tertiary-container/30 rounded-sm relative opacity-60"><div class="absolute -top-10 left-[9px] w-0.5 h-48 bg-tertiary-container/40"></div></div>
+<div class="w-5 h-36 bg-tertiary-container/30 rounded-sm relative opacity-40"><div class="absolute -top-4 left-[9px] w-0.5 h-48 bg-tertiary-container/40"></div></div>
+</div>
+<!-- Focus Stats Floating (Bottom Left) -->
+<div class="absolute bottom-12 left-10 flex flex-col gap-4 animate-in fade-in slide-in-from-left-4 duration-700">
+<div class="glass-panel p-6 rounded-sm border border-primary/20 w-[300px] shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
+<div class="flex justify-between items-start mb-6">
+<div>
+<h4 class="text-[9px] font-black text-primary/60 uppercase tracking-[0.2em] mb-1">Confidence Model v4.1</h4>
+<p class="text-5xl font-headline font-black text-primary tracking-tighter">94<span class="text-sm opacity-50 ml-1">%</span></p>
+</div>
+<div class="w-12 h-12 flex items-center justify-center rounded-full border border-primary/20 bg-primary/5">
+<span class="material-symbols-outlined text-primary text-2xl" style="font-variation-settings: 'FILL' 1;">verified</span>
+</div>
+</div>
+<div class="space-y-4">
+<div class="space-y-1.5">
+<div class="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest">
+<span class="text-on-surface-variant">Liquidity Sweep</span>
+<span class="text-tertiary">Verified</span>
+</div>
+<div class="w-full bg-surface-container-highest/50 h-1.5 rounded-full overflow-hidden">
+<div class="bg-tertiary h-full w-[94%] shadow-[0_0_10px_rgba(97,222,138,0.5)]"></div>
+</div>
+</div>
+<div class="space-y-1.5">
+<div class="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest">
+<span class="text-on-surface-variant">Trend Exhaustion</span>
+<span class="text-primary">91% Prob.</span>
+</div>
+<div class="w-full bg-surface-container-highest/50 h-1.5 rounded-full overflow-hidden">
+<div class="bg-primary h-full w-[91%] shadow-[0_0_10px_rgba(164,201,255,0.5)]"></div>
+</div>
+</div>
+</div>
+</div>
+<div class="flex gap-3">
+<div class="glass-panel px-5 py-3 rounded-sm border border-white/5 flex flex-col gap-1">
+<span class="text-[8px] text-on-surface-variant font-black uppercase tracking-[0.2em]">Net Delta</span>
+<span class="text-tertiary font-headline font-black text-lg">+14.2k</span>
+</div>
+<div class="glass-panel px-5 py-3 rounded-sm border border-white/5 flex flex-col gap-1">
+<span class="text-[8px] text-on-surface-variant font-black uppercase tracking-[0.2em]">Vol Score</span>
+<span class="text-primary font-headline font-black text-lg">2.44</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Right Panel (Intelligence Drawer) - Redesigned -->
+<aside class="fixed top-14 right-0 bottom-8 w-[320px] bg-[#1C1B1C] border-l border-[#414751]/20 z-30 flex flex-col custom-scrollbar overflow-y-auto">
+<!-- Drawer Header -->
+<div class="sticky top-0 z-10 bg-[#1C1B1C] p-4 border-b border-outline-variant/10">
+<div class="flex items-center justify-between mb-1">
+<h2 class="text-xs font-black tracking-[0.2em] text-white uppercase">Intelligence Drawer</h2>
+<span class="text-[8px] font-bold bg-primary/10 text-primary px-1.5 py-0.5 rounded-sm">V.9.4.0</span>
+</div>
+<p class="text-[10px] text-on-surface-variant font-medium">Real-time microstructure analysis</p>
+</div>
+<div class="flex flex-col p-4 gap-6">
+<!-- 1. Premium Order Book Ladder (Institutional Style) -->
+<section>
+<div class="flex items-center justify-between mb-3">
+<h3 class="text-[9px] font-black text-on-surface-variant uppercase tracking-[0.15em]">Bid/Ask Ladder</h3>
+<span class="text-[8px] font-bold text-error uppercase">Spread: 0.04</span>
+</div>
+<div class="bg-black/20 rounded-sm border border-outline-variant/5 overflow-hidden font-mono text-[10px]">
+<div class="grid grid-cols-4 py-1 text-[8px] font-black text-white/30 uppercase text-center border-b border-outline-variant/10">
+<span>Size</span>
+<span>Price</span>
+<span>Size</span>
+<span>Heat</span>
+</div>
+<!-- Ask Side -->
+<div class="group grid grid-cols-4 py-1.5 text-center hover:bg-error/5 border-b border-white/5">
+<span class="text-error font-bold">12.4k</span>
+<span class="text-white/80">819.50</span>
+<span class="text-white/20">—</span>
+<div class="flex items-center justify-center"><div class="w-full h-1 bg-error/40 rounded-full mx-2"></div></div>
+</div>
+<div class="group grid grid-cols-4 py-1.5 text-center hover:bg-error/5 border-b border-white/5">
+<span class="text-error font-bold">8.1k</span>
+<span class="text-white/80">819.46</span>
+<span class="text-white/20">—</span>
+<div class="flex items-center justify-center"><div class="w-[60%] h-1 bg-error/20 rounded-full mx-2"></div></div>
+</div>
+<!-- Market Price Mid -->
+<div class="bg-primary/10 py-1 flex items-center justify-center gap-2 border-y border-primary/20">
+<span class="material-symbols-outlined text-xs text-primary">arrow_right</span>
+<span class="font-black text-primary tracking-widest">819.42</span>
+<span class="material-symbols-outlined text-xs text-primary transform rotate-180">arrow_right</span>
+</div>
+<!-- Bid Side -->
+<div class="group grid grid-cols-4 py-1.5 text-center hover:bg-tertiary/5 border-b border-white/5">
+<span class="text-white/20">—</span>
+<span class="text-white/80">819.38</span>
+<span class="text-tertiary font-bold">15.2k</span>
+<div class="flex items-center justify-center"><div class="w-full h-1 bg-tertiary/40 rounded-full mx-2"></div></div>
+</div>
+<div class="group grid grid-cols-4 py-1.5 text-center hover:bg-tertiary/5">
+<span class="text-white/20">—</span>
+<span class="text-white/80">819.34</span>
+<span class="text-tertiary font-bold">4.8k</span>
+<div class="flex items-center justify-center"><div class="w-[30%] h-1 bg-tertiary/20 rounded-full mx-2"></div></div>
+</div>
+</div>
+</section>
+<!-- 2. Liquidity Heatmap (Horizontal Timeline View) -->
+<section>
+<div class="flex items-center justify-between mb-3">
+<h3 class="text-[9px] font-black text-on-surface-variant uppercase tracking-[0.15em]">Liquidity Heatmap</h3>
+<span class="text-[8px] font-bold text-primary">SCANNING...</span>
+</div>
+<div class="h-32 bg-surface-container-lowest/50 border border-outline-variant/10 rounded-sm relative overflow-hidden flex flex-col heatmap-grid">
+<!-- Heat Clusters -->
+<div class="absolute top-4 left-10 right-4 h-6 bg-error/20 blur-sm rounded-full"></div>
+<div class="absolute top-6 left-20 right-0 h-4 bg-error/40 blur-md rounded-full"></div>
+<div class="absolute bottom-8 left-0 right-12 h-5 bg-tertiary/30 blur-sm rounded-full"></div>
+<div class="absolute bottom-4 left-0 right-0 h-6 bg-primary/20 blur-sm rounded-full"></div>
+<!-- Vertical Time Marker (Selected Candle Sync) -->
+<div class="absolute left-1/2 top-0 bottom-0 w-[2px] bg-primary/60 shadow-[0_0_10px_rgba(164,201,255,1)] z-10"></div>
+<div class="absolute inset-0 p-2 flex flex-col justify-between pointer-events-none">
+<div class="text-[8px] font-bold text-error/60 uppercase">Supply Wall $820</div>
+<div class="text-[8px] font-bold text-primary/60 uppercase text-right">Support Zone $815</div>
+</div>
+</div>
+<div class="flex justify-between mt-1 px-1">
+<span class="text-[7px] text-on-surface-variant opacity-40 uppercase">-2min</span>
+<span class="text-[7px] text-primary font-bold uppercase">Focus Period</span>
+<span class="text-[7px] text-on-surface-variant opacity-40 uppercase">Live</span>
+</div>
+</section>
+<!-- 3. Trade Flow / Tape Summary -->
+<section>
+<h3 class="text-[9px] font-black text-on-surface-variant uppercase tracking-[0.15em] mb-3">Trade Flow Summary</h3>
+<div class="space-y-2">
+<div class="flex items-center gap-3 bg-surface-container-high/30 p-2 rounded-sm border border-outline-variant/5">
+<div class="w-8 h-8 rounded-full bg-tertiary/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-tertiary text-lg">trending_up</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-center mb-0.5">
+<span class="text-[10px] font-bold text-white">Aggressive Bids</span>
+<span class="text-[9px] text-tertiary font-bold">+128%</span>
+</div>
+<div class="w-full bg-white/5 h-1 rounded-full">
+<div class="bg-tertiary h-full w-[75%]"></div>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-3 bg-surface-container-high/30 p-2 rounded-sm border border-outline-variant/5">
+<div class="w-8 h-8 rounded-full bg-error/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-error text-lg">trending_down</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-center mb-0.5">
+<span class="text-[10px] font-bold text-white">Passive Sells</span>
+<span class="text-[9px] text-error font-bold">-42%</span>
+</div>
+<div class="w-full bg-white/5 h-1 rounded-full">
+<div class="bg-error h-full w-[35%]"></div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- 4. Structured AI Reasoning Card -->
+<section>
+<div class="relative bg-gradient-to-br from-[#1C1126] to-[#0E0E0F] border border-[#6B3FA0]/40 p-4 rounded-sm overflow-hidden group">
+<!-- Glow effect -->
+<div class="absolute -top-10 -right-10 w-24 h-24 bg-[#D0B3FF]/10 blur-3xl group-hover:bg-[#D0B3FF]/20 transition-all duration-700"></div>
+<div class="flex items-center gap-2 mb-3">
+<div class="p-1.5 bg-[#D0B3FF]/10 rounded-sm">
+<span class="material-symbols-outlined text-sm text-[#D0B3FF]" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+</div>
+<h6 class="text-[10px] font-black text-[#D0B3FF] uppercase tracking-[0.2em]">Neural Engine Interpretation</h6>
+</div>
+<div class="space-y-3">
+<div>
+<span class="text-[8px] font-black text-[#D0B3FF]/60 uppercase tracking-widest block mb-1">Signal context</span>
+<p class="text-[11px] leading-relaxed text-[#E5D9F2] font-medium border-l-2 border-[#D0B3FF]/30 pl-3">
+                                Bullish rejection at structural low. Institutional absorption detected via high-delta footprint at candle wick.
+                            </p>
+</div>
+<div class="flex gap-2">
+<div class="flex-1 bg-white/5 p-2 rounded-sm text-center">
+<span class="text-[7px] text-[#D0B3FF] uppercase font-bold block mb-0.5">Prob. Up</span>
+<span class="text-xs font-headline font-black text-white">82.4%</span>
+</div>
+<div class="flex-1 bg-white/5 p-2 rounded-sm text-center">
+<span class="text-[7px] text-[#D0B3FF] uppercase font-bold block mb-0.5">Strength</span>
+<span class="text-xs font-headline font-black text-white">EXTREME</span>
+</div>
+</div>
+</div>
+<!-- Decorative scanning line -->
+<div class="absolute bottom-0 left-0 w-full h-[1px] bg-[#D0B3FF]/20">
+<div class="h-full bg-[#D0B3FF] w-1/4 animate-[move_3s_linear_infinite]" style="animation: move 3s linear infinite;"></div>
+</div>
+<style>
+                        @keyframes move {
+                            0% { transform: translateX(-100%); }
+                            100% { transform: translateX(400%); }
+                        }
+                        .animate-spin-slow {
+                            animation: spin 8s linear infinite;
+                        }
+                        @keyframes spin {
+                            from { transform: rotate(0deg); }
+                            to { transform: rotate(360deg); }
+                        }
+                    </style>
+</div>
+</section>
+</div>
+</aside>
+<!-- System Status Footer -->
+<footer class="fixed bottom-0 w-full z-50 flex justify-between items-center px-6 h-8 bg-[#131314] border-t border-[#414751]/20">
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2">
+<div class="w-1.5 h-1.5 rounded-full bg-[#61DE8A] shadow-[0_0_8px_rgba(97,222,138,0.5)]"></div>
+<span class="font-['Inter'] tabular-nums text-[9px] font-bold uppercase tracking-[0.1em] text-[#61DE8A]">SYSTEM_STATUS: NOMINAL</span>
+</div>
+<span class="font-['Inter'] tabular-nums text-[9px] font-bold uppercase tracking-[0.1em] text-[#8E918F]">NETWORK_LATENCY: 12ms</span>
+<span class="font-['Inter'] tabular-nums text-[9px] font-bold uppercase tracking-[0.1em] text-[#8E918F]">THROUGHPUT: 4.2GB/S</span>
+</div>
+<div class="flex items-center gap-6">
+<a class="font-['Inter'] tabular-nums text-[9px] font-bold uppercase tracking-[0.1em] text-[#8E918F] hover:text-white transition-colors" href="#">Legal_Protocol</a>
+<a class="font-['Inter'] tabular-nums text-[9px] font-bold uppercase tracking-[0.1em] text-[#8E918F] hover:text-white transition-colors" href="#">Public_API</a>
+<a class="font-['Inter'] tabular-nums text-[9px] font-bold uppercase tracking-[0.1em] text-[#A4C9FF] hover:text-white transition-colors" href="#">Architecture_Docs</a>
+</div>
+</footer>
+</body></html>

@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Godsview Mobile Live Signals</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "surface-container-low": "#131314",
+              "surface-container-highest": "#262627",
+              "secondary-container": "#005bc0",
+              "on-primary-fixed-variant": "#006513",
+              "primary-dim": "#00ec3b",
+              "primary-fixed": "#00fc40",
+              "tertiary-fixed-dim": "#ff7c6c",
+              "tertiary-fixed": "#ff9385",
+              "on-error": "#450900",
+              "tertiary-container": "#f9362c",
+              "inverse-surface": "#fcf8f9",
+              "error-dim": "#d53d18",
+              "primary-fixed-dim": "#00ec3b",
+              "on-secondary-container": "#f7f7ff",
+              "on-tertiary-fixed-variant": "#7a0004",
+              "outline-variant": "#484849",
+              "on-secondary-fixed": "#00326f",
+              "surface": "#0e0e0f",
+              "on-tertiary": "#4a0001",
+              "error": "#ff7351",
+              "outline": "#767576",
+              "on-tertiary-fixed": "#3a0001",
+              "on-surface": "#ffffff",
+              "surface-bright": "#2c2c2d",
+              "background": "#0e0e0f",
+              "primary": "#9cff93",
+              "on-secondary": "#001f49",
+              "on-error-container": "#ffd2c8",
+              "primary-container": "#00fc40",
+              "surface-tint": "#9cff93",
+              "on-secondary-fixed-variant": "#004ea5",
+              "secondary-fixed": "#bed2ff",
+              "surface-container": "#1a191b",
+              "secondary-dim": "#0070ea",
+              "surface-dim": "#0e0e0f",
+              "inverse-primary": "#006f16",
+              "surface-container-lowest": "#000000",
+              "on-tertiary-container": "#000000",
+              "on-surface-variant": "#adaaab",
+              "inverse-on-surface": "#565556",
+              "on-primary-container": "#005a10",
+              "surface-variant": "#262627",
+              "on-background": "#ffffff",
+              "surface-container-high": "#201f21",
+              "tertiary-dim": "#e2241f",
+              "error-container": "#b92902",
+              "secondary": "#669dff",
+              "on-primary-fixed": "#00440a",
+              "secondary-fixed-dim": "#a8c4ff",
+              "tertiary": "#ff7162",
+              "on-primary": "#006413"
+            },
+            fontFamily: {
+              "headline": ["Space Grotesk"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            background-color: #0e0e0f;
+            color: #ffffff;
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+        .steel-panel {
+            background: linear-gradient(145deg, #1a191b 0%, #131314 100%);
+            border: 1px solid rgba(72, 72, 73, 0.4);
+        }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen">
+<!-- TopAppBar -->
+<header class="bg-[#0e0e0f]/80 backdrop-blur-xl text-[#9cff93] font-['Space_Grotesk'] uppercase tracking-widest text-sm docked full-width top-0 sticky z-50 flex justify-between items-center px-6 h-16 w-full border-b border-outline-variant/10">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[#9cff93]" data-icon="monitoring">monitoring</span>
+<span class="text-[#9cff93] font-bold tracking-tighter text-base">MISSION CONTROL</span>
+</div>
+<div class="h-8 w-8 rounded-full bg-surface-container-high border border-outline-variant/15 flex items-center justify-center overflow-hidden active:scale-95 duration-100 hover:opacity-80 transition-opacity">
+<img class="w-full h-full object-cover" data-alt="Portrait of a professional male trader" src="https://lh3.googleusercontent.com/aida-public/AB6AXuASIOZosUl5vQ3dTtPyKIMdijFf_8pIWmj1mgIQzd0m-Oa0CG-Thqj-GURz2Lvf7r2L9c60MNWLxZmUvwIIBgjt_XwWW_0hPViI_wGSgvq56dVa5qAd-GpokaEq10mx6VWe4okcj3eyovM9uRV9lNlAIGGhdCZoTfFFCGgdMTkNnpoDGab0812uASSZVYQxBhnvHuPKwRwOFGWUd8JhgH3jzRdNDySp8-MBtHdWJ44q5J749DFvv8XznpDSgc_rubvsO6_0L7N_E6E"/>
+</div>
+</header>
+<main class="flex-grow px-4 pt-6 pb-24 max-w-md mx-auto w-full">
+<!-- Header Stats -->
+<div class="grid grid-cols-2 gap-3 mb-6">
+<div class="steel-panel p-4 rounded-lg border-l-2 border-primary shadow-sm">
+<p class="text-[10px] font-label uppercase tracking-widest text-on-surface-variant mb-1">Live Pipeline</p>
+<div class="flex items-baseline gap-2">
+<h2 class="text-2xl font-headline font-bold text-primary">14</h2>
+<span class="text-[10px] text-primary-dim">+3 New</span>
+</div>
+</div>
+<div class="steel-panel p-4 rounded-lg border-l-2 border-secondary shadow-sm">
+<p class="text-[10px] font-label uppercase tracking-widest text-on-surface-variant mb-1">Success Rate</p>
+<div class="flex items-baseline gap-2">
+<h2 class="text-2xl font-headline font-bold text-secondary">82.4%</h2>
+<span class="text-[10px] text-secondary-dim">Global</span>
+</div>
+</div>
+</div>
+<!-- Section Title -->
+<div class="flex justify-between items-center mb-6">
+<h3 class="font-headline font-bold text-lg tracking-tight flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+                LIVE SIGNALS
+            </h3>
+<button class="text-[10px] font-label font-bold uppercase tracking-wider text-primary bg-primary/10 border border-primary/20 px-3 py-1.5 rounded">
+                AUTO-SYNC ON
+            </button>
+</div>
+<!-- Signals Feed Queue -->
+<div class="space-y-4">
+<!-- Signal Item: Executed -->
+<div class="steel-panel rounded-lg p-5 relative overflow-hidden active:scale-[0.99] transition-all duration-200">
+<div class="flex justify-between items-start mb-4">
+<div>
+<div class="flex items-center gap-2 mb-1">
+<span class="font-headline font-bold text-xl tracking-tight">BTCUSDT</span>
+<span class="text-[10px] font-mono text-on-surface-variant bg-surface-container-highest px-2 py-0.5 rounded">14:02:11</span>
+</div>
+<p class="text-xs text-secondary font-semibold uppercase tracking-widest">Absorption Reversal</p>
+</div>
+<div class="bg-primary/20 text-primary border border-primary/30 px-3 py-1 rounded-sm text-[10px] font-bold tracking-widest uppercase">
+                        EXECUTED
+                    </div>
+</div>
+<div class="grid grid-cols-3 gap-6">
+<div>
+<p class="text-[9px] text-on-surface-variant uppercase tracking-[0.15em] mb-1 font-bold">Entry</p>
+<p class="font-headline font-medium text-base">64,281.50</p>
+</div>
+<div>
+<p class="text-[9px] text-on-surface-variant uppercase tracking-[0.15em] mb-1 font-bold">Target</p>
+<p class="font-headline font-medium text-base text-primary">64,850.00</p>
+</div>
+<div>
+<p class="text-[9px] text-on-surface-variant uppercase tracking-[0.15em] mb-1 font-bold">Quality</p>
+<div class="flex items-center gap-2 mt-2">
+<div class="flex-grow bg-surface-container-highest h-1 rounded-full overflow-hidden">
+<div class="bg-primary h-full w-[94%] shadow-[0_0_12px_rgba(156,255,147,0.6)]"></div>
+</div>
+<span class="text-[11px] font-headline font-bold text-primary">94%</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Signal Item: Pending -->
+<div class="steel-panel rounded-lg p-5 relative overflow-hidden border-primary/30 shadow-[0_0_30px_rgba(156,255,147,0.05)] border-l-4 border-l-secondary">
+<div class="absolute top-0 right-0 p-2">
+<span class="flex h-2 w-2 rounded-full bg-secondary animate-ping absolute opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-secondary"></span>
+</div>
+<div class="flex justify-between items-start mb-4">
+<div>
+<div class="flex items-center gap-2 mb-1">
+<span class="font-headline font-bold text-xl tracking-tight">SOLUSDT</span>
+<span class="text-[10px] font-mono text-secondary bg-secondary/10 px-2 py-0.5 rounded border border-secondary/30">14:15:33</span>
+</div>
+<p class="text-xs text-secondary font-semibold uppercase tracking-widest">Orderflow Imbalance</p>
+</div>
+<div class="bg-secondary/20 text-secondary border border-secondary/30 px-3 py-1 rounded-sm text-[10px] font-bold tracking-widest uppercase">
+                        PENDING
+                    </div>
+</div>
+<div class="grid grid-cols-3 gap-6">
+<div>
+<p class="text-[9px] text-on-surface-variant uppercase tracking-[0.15em] mb-1 font-bold">Entry</p>
+<p class="font-headline font-medium text-base">144.12</p>
+</div>
+<div>
+<p class="text-[9px] text-on-surface-variant uppercase tracking-[0.15em] mb-1 font-bold">Trend</p>
+<p class="font-headline font-medium text-sm text-secondary flex items-center mt-1">
+                            BULLISH <span class="material-symbols-outlined text-sm ml-1" data-icon="trending_up">trending_up</span>
+</p>
+</div>
+<div>
+<p class="text-[9px] text-on-surface-variant uppercase tracking-[0.15em] mb-1 font-bold">Quality</p>
+<div class="flex items-center gap-2 mt-2">
+<div class="flex-grow bg-surface-container-highest h-1 rounded-full overflow-hidden">
+<div class="bg-secondary h-full w-[78%] shadow-[0_0_12px_rgba(102,157,255,0.4)]"></div>
+</div>
+<span class="text-[11px] font-headline font-bold text-secondary">78%</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Signal Item: Rejected -->
+<div class="steel-panel rounded-lg p-5 relative overflow-hidden opacity-75 grayscale-[0.3]">
+<div class="flex justify-between items-start mb-4">
+<div>
+<div class="flex items-center gap-2 mb-1">
+<span class="font-headline font-bold text-xl tracking-tight">MNQ1!</span>
+<span class="text-[10px] font-mono text-on-surface-variant bg-surface-container-highest px-2 py-0.5 rounded">13:58:45</span>
+</div>
+<p class="text-xs text-tertiary font-semibold uppercase tracking-widest">VWAP Mean Reversion</p>
+</div>
+<div class="bg-surface-container-highest text-on-surface-variant/70 border border-outline-variant/30 px-3 py-1 rounded-sm text-[10px] font-bold tracking-widest uppercase">
+                        REJECTED
+                    </div>
+</div>
+<div class="grid grid-cols-3 gap-6 mb-4">
+<div>
+<p class="text-[9px] text-on-surface-variant uppercase tracking-[0.15em] mb-1 font-bold">Entry</p>
+<p class="font-headline font-medium text-base text-on-surface-variant/50 line-through">18,442.25</p>
+</div>
+<div>
+<p class="text-[9px] text-on-surface-variant uppercase tracking-[0.15em] mb-1 font-bold">Risk</p>
+<p class="font-headline font-medium text-sm text-on-surface-variant">LVL 4 VOL</p>
+</div>
+<div>
+<p class="text-[9px] text-on-surface-variant uppercase tracking-[0.15em] mb-1 font-bold">Quality</p>
+<div class="flex items-center gap-2 mt-2">
+<div class="flex-grow bg-surface-container-highest h-1 rounded-full overflow-hidden">
+<div class="bg-tertiary/40 h-full w-[42%]"></div>
+</div>
+<span class="text-[11px] font-headline font-bold text-tertiary/60">42%</span>
+</div>
+</div>
+</div>
+<div class="pt-3 border-t border-outline-variant/10">
+<p class="text-[10px] text-tertiary font-medium flex items-center gap-2 uppercase tracking-wider">
+<span class="material-symbols-outlined text-xs" data-icon="block">block</span>
+                        Insufficient liquidity at bid
+                    </p>
+</div>
+</div>
+<!-- Signal Item: Expired -->
+<div class="steel-panel rounded-lg p-5 relative overflow-hidden opacity-50">
+<div class="flex justify-between items-start mb-4">
+<div>
+<div class="flex items-center gap-2 mb-1">
+<span class="font-headline font-bold text-xl tracking-tight">ETHUSDT</span>
+<span class="text-[10px] font-mono text-on-surface-variant bg-surface-container-highest px-2 py-0.5 rounded">13:45:00</span>
+</div>
+<p class="text-xs text-on-surface-variant font-semibold uppercase tracking-widest">Delta Divergence</p>
+</div>
+<div class="bg-surface-container-highest/50 text-on-surface-variant/30 border border-outline-variant/10 px-3 py-1 rounded-sm text-[10px] font-bold tracking-widest uppercase">
+                        EXPIRED
+                    </div>
+</div>
+<div class="grid grid-cols-3 gap-6">
+<div>
+<p class="text-[9px] text-on-surface-variant uppercase tracking-[0.15em] mb-1 font-bold">Entry</p>
+<p class="font-headline font-medium text-base">3,450.15</p>
+</div>
+<div class="col-span-2">
+<p class="text-[9px] text-on-surface-variant uppercase tracking-[0.15em] mb-1 font-bold">Timeout</p>
+<p class="text-[10px] font-body text-on-surface-variant/60 italic leading-relaxed">Execution window closed after 15m delay in confirmation signal.</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Engine Status Footer Note -->
+<div class="mt-10 mb-6 p-5 steel-panel rounded-lg flex items-start gap-4 border-l-4 border-l-outline">
+<div class="mt-1 flex-shrink-0">
+<span class="material-symbols-outlined text-outline text-xl" data-icon="terminal">terminal</span>
+</div>
+<div>
+<p class="text-[11px] font-headline uppercase tracking-[0.2em] text-on-surface-variant font-bold mb-2">ENGINE STATUS // V2.4.0</p>
+<p class="text-xs text-on-surface/80 leading-relaxed font-body">Neural pipeline is currently scanning 48 asset pairs. Increased volatility detected in NASDAQ futures. Expect higher signal frequency and liquidity filtering. All systems nominal.</p>
+</div>
+</div>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center px-4 pb-6 pt-3 bg-[#131314]/95 backdrop-blur-2xl z-50 border-t border-[#484849]/30 shadow-[0_-8px_30px_rgba(0,0,0,0.5)]">
+<a class="flex flex-col items-center justify-center text-outline hover:text-primary transition-all active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="dashboard">dashboard</span>
+<span class="font-['Inter'] text-[10px] font-bold tracking-widest uppercase">Control</span>
+</a>
+<a class="flex flex-col items-center justify-center text-outline hover:text-primary transition-all active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="account_tree">account_tree</span>
+<span class="font-['Inter'] text-[10px] font-bold tracking-widest uppercase">Pipeline</span>
+</a>
+<a class="flex flex-col items-center justify-center text-primary bg-primary/5 rounded-xl px-4 py-1 active:scale-95 duration-200 border border-primary/10 shadow-[0_0_15px_rgba(156,255,147,0.1)]" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="Settings_Input_Antenna">settings_input_antenna</span>
+<span class="font-['Inter'] text-[10px] font-bold tracking-widest uppercase">Signals</span>
+</a>
+<a class="flex flex-col items-center justify-center text-outline hover:text-primary transition-all active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="query_stats">query_stats</span>
+<span class="font-['Inter'] text-[10px] font-bold tracking-widest uppercase">Analysis</span>
+</a>
+<a class="flex flex-col items-center justify-center text-outline hover:text-primary transition-all active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="auto_stories">auto_stories</span>
+<span class="font-['Inter'] text-[10px] font-bold tracking-widest uppercase">Journal</span>
+</a>
+</nav>
+</body></html>

@@ -1,4 +1,7 @@
 import { randomUUID } from "node:crypto";
+import path from "node:path";
+import fs from "node:fs";
+import { fileURLToPath } from "node:url";
 import express, {
   type ErrorRequestHandler,
   type Express,
@@ -16,6 +19,12 @@ import {
   httpRequestDuration,
   httpRequestsInFlight,
 } from "./lib/metrics";
+
+// ── ESM __dirname shim (compatible with both tsx source-run and esbuild dist) ─
+const __dirname: string =
+  typeof globalThis.__dirname === "string"
+    ? globalThis.__dirname
+    : path.dirname(fileURLToPath(import.meta.url));
 
 const app: Express = express();
 const allowedCorsOrigins = runtimeConfig.corsOrigins;
@@ -101,13 +110,12 @@ app.use("/api", router);
 app.use(router);
 
 // ── Static file serving for Replit / single-process deployment ──────────────
-import path from "node:path";
-import fs from "node:fs";
 const publicDir = path.resolve(__dirname, "../public");
 if (fs.existsSync(publicDir)) {
   app.use(express.static(publicDir));
   // SPA fallback — serve index.html for non-API routes
-  app.get("*", (_req: Request, res: Response) => {
+  // Express 5 requires a named wildcard: use /{*path} instead of bare *
+  app.get("/{*path}", (_req: Request, res: Response) => {
     const indexPath = path.join(publicDir, "index.html");
     if (fs.existsSync(indexPath)) {
       res.sendFile(indexPath);

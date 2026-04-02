@@ -42,9 +42,14 @@ export default defineConfig({
     dedupe: ["react", "react-dom"],
   },
   root: path.resolve(import.meta.dirname),
+  css: {
+    // Use esbuild transformer as fallback when lightningcss native binary is unavailable
+    // (e.g. aarch64 sandbox). Docker build (linux/amd64) uses lightningcss natively.
+    transformer: "postcss",
+  },
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
-    emptyOutDir: true,
+    emptyOutDir: false,
     chunkSizeWarningLimit: 600,
     rollupOptions: {
       output: {

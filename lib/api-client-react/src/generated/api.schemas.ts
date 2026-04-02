@@ -223,6 +223,16 @@ export const SystemStatusOverall = {
   offline: "offline",
 } as const;
 
+export interface SchedulerStats {
+  running: boolean;
+  isRetraining: boolean;
+  highWaterMark: number;
+  lastTrainedAt: string | null;
+  totalRetrains: number;
+  pollIntervalMs: number;
+  newDataThreshold: number;
+}
+
 export interface SystemStatus {
   overall: SystemStatusOverall;
   layers: LayerStatus[];
@@ -231,6 +241,7 @@ export interface SystemStatus {
   active_session?: string;
   signals_today: number;
   trades_today: number;
+  ml_scheduler?: SchedulerStats;
 }
 
 export type GetSignalsParams = {

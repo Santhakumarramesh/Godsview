@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type Regime = "BALANCED" | "VOLATILE" | "TRENDING" | "EXTREME" | "REVERSAL";
@@ -455,21 +456,54 @@ export default function SetupExplorerPage() {
   const [filter, setFilter] = useState<"all" | "live" | "waiting">("all");
   const [search, setSearch] = useState("");
 
+  // Real strict-setup data from backend
+  const { data: strictSetupData } = useQuery({
+    queryKey: ["strict-setup-matrix"],
+    queryFn: () => fetch("/api/market/strict-setup/matrix").then(r => r.ok ? r.json() : null),
+    refetchInterval: 60_000,
+    retry: 1,
+  });
+
+  const { data: strictSetupReport } = useQuery({
+    queryKey: ["strict-setup-report"],
+    queryFn: () => fetch("/api/market/strict-setup/report").then(r => r.ok ? r.json() : null),
+    refetchInterval: 60_000,
+    retry: 1,
+  });
+
+  // Merge real data into SETUPS (real data augments the mock catalog with live metrics)
+  const setups: TradingSetup[] = useMemo(() => {
+    if (!strictSetupReport?.setups) return SETUPS;
+    return SETUPS.map(s => {
+      const real = strictSetupReport.setups?.find((rs: any) => rs.id === s.id || rs.name === s.name);
+      if (!real) return s;
+      return {
+        ...s,
+        successRate: Number((real.win_rate ?? s.successRate / 100) * 100),
+        avgWinR: real.avg_win_r ?? s.avgWinR,
+        tradeFreq: real.trade_freq ?? s.tradeFreq,
+        status: real.active ? "Live" : "Waiting" as SetupStatus,
+        recentTrades: real.total_trades ?? s.recentTrades,
+        lastTriggered: real.last_triggered ? new Date(real.last_triggered).getTime() : s.lastTriggered,
+      };
+    });
+  }, [strictSetupReport]);
+
   const filtered = useMemo(() => {
-    return SETUPS.filter((s) => {
+    return setups.filter((s) => {
       if (filter === "live" && s.status !== "Live") return false;
       if (filter === "waiting" && s.status !== "Waiting") return false;
       if (search && !s.name.toLowerCase().includes(search.toLowerCase())) return false;
       return true;
     });
-  }, [filter, search]);
+  }, [setups, filter, search]);
 
-  const selected = SETUPS.find((s) => s.id === selectedId) || SETUPS[0];
-  const liveCount = SETUPS.filter((s) => s.status === "Live").length;
+  const selected = setups.find((s) => s.id === selectedId) || setups[0];
+  const liveCount = setups.filter((s) => s.status === "Live").length;
 
   return (
     <div style={{ minHeight: "100vh", background: "#131314", color: "#e6e1e5" }}>
-      <ExplorerHeader total={SETUPS.length} live={liveCount} />
+      <ExplorerHeader total={setups.length} live={liveCount} />
 
       {/* Toolbar */}
       <div style={{ padding: "16px 24px 0", display: "flex", gap: 12, alignItems: "center" }}>

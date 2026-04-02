@@ -1,0 +1,39 @@
+{
+  "dry_run": true,
+  "execution": {
+    "status": "blocked_by_filter"
+  },
+  "filter": {
+    "approved": false,
+    "final_action": "skip",
+    "reasons": [
+      "neutral_model_probability: 0.5239"
+    ]
+  },
+  "generated_at": "2026-04-02T05:38:19.559810+00:00",
+  "risk": null,
+  "signal": {
+    "action": "skip",
+    "close_price": 112.81981558125712,
+    "confidence": 0.047778,
+    "generated_at": "2026-04-02T05:38:19.557594+00:00",
+    "model_meta": {
+      "accuracy": 0.6263736263736264,
+      "error": null,
+      "generated_at": "2026-04-02T05:35:59.550393+00:00",
+      "mode": "trained_model",
+      "roc_auc": 0.6235294117647058,
+      "symbol": "BTCUSD",
+      "test_rows": 91,
+      "timeframe": "1D",
+      "train_rows": 360
+    },
+    "prob_up": 0.523889,
+    "symbol": "BTCUSD",
+    "threshold_buy": 0.6,
+    "threshold_sell": 0.4,
+    "timeframe": "1D"
+  },
+  "symbol": "BTCUSD",
+  "timeframe": "1D"
+}

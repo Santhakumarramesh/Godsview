@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>GodsView: Massive Brain Board (Master v8)</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;400;600;800&amp;family=Inter:wght@300;400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "error-container": "#93000a",
+              "surface-container-highest": "#353436",
+              "on-primary-fixed-variant": "#004883",
+              "on-error": "#690005",
+              "on-tertiary-fixed": "#00210c",
+              "on-surface": "#e5e2e3",
+              "primary-fixed": "#d4e3ff",
+              "surface-bright": "#3a393a",
+              "surface-dim": "#131314",
+              "surface": "#131314",
+              "on-primary-container": "#002a51",
+              "on-primary-fixed": "#001c39",
+              "on-background": "#e5e2e3",
+              "on-error-container": "#ffdad6",
+              "on-surface-variant": "#c1c7d3",
+              "secondary": "#afcbd8",
+              "surface-container-high": "#2a2a2b",
+              "on-secondary-fixed-variant": "#304a55",
+              "surface-container-low": "#1c1b1c",
+              "surface-container": "#201f20",
+              "secondary-fixed": "#cbe7f5",
+              "on-secondary-container": "#a1bdca",
+              "inverse-primary": "#0060ac",
+              "surface-container-lowest": "#0e0e0f",
+              "on-secondary-fixed": "#021f29",
+              "on-secondary": "#19343e",
+              "error": "#ffb4ab",
+              "background": "#131314",
+              "tertiary-fixed-dim": "#61de8a",
+              "surface-variant": "#353436",
+              "on-primary": "#00315d",
+              "secondary-fixed-dim": "#afcbd8",
+              "primary": "#a4c9ff",
+              "inverse-on-surface": "#313031",
+              "primary-container": "#4d93e5",
+              "outline": "#8b919d",
+              "inverse-surface": "#e5e2e3",
+              "secondary-container": "#334d58",
+              "primary-fixed-dim": "#a4c9ff",
+              "on-tertiary-fixed-variant": "#005228",
+              "tertiary": "#61de8a",
+              "on-tertiary": "#00391a",
+              "surface-tint": "#a4c9ff",
+              "tertiary-fixed": "#7efba4",
+              "tertiary-container": "#18a659",
+              "outline-variant": "#414751",
+              "on-tertiary-container": "#003115"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+      .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      }
+      .glass-panel {
+        background: rgba(28, 27, 28, 0.6);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+      }
+      .tabular-nums { font-variant-numeric: tabular-nums; }
+      .market-brain-gradient {
+        background: radial-gradient(circle at center, rgba(164, 201, 255, 0.15) 0%, transparent 70%);
+      }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface font-body selection:bg-primary/30">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-[#131314] dark:bg-[#131314] flex items-center justify-between px-6 h-16 w-full shadow-none">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[#A4C9FF]" style="font-variation-settings: 'FILL' 1;">hub</span>
+<h1 class="text-lg font-bold tracking-tighter text-[#A4C9FF] font-headline">Neural Core Status</h1>
+</div>
+<nav class="hidden md:flex gap-8 items-center">
+<span class="font-['Manrope'] tracking-wider uppercase text-xs font-bold text-[#A4C9FF] hover:opacity-80 transition-opacity cursor-pointer active:scale-95 duration-200">System</span>
+<span class="font-['Manrope'] tracking-wider uppercase text-xs font-bold text-slate-500 hover:opacity-80 transition-opacity cursor-pointer active:scale-95 duration-200">Diagnostics</span>
+<span class="font-['Manrope'] tracking-wider uppercase text-xs font-bold text-slate-500 hover:opacity-80 transition-opacity cursor-pointer active:scale-95 duration-200">Logs</span>
+</nav>
+<div class="flex items-center gap-4">
+<div class="flex flex-col items-end">
+<span class="text-[10px] text-slate-500 font-bold tracking-widest uppercase">Connectivity</span>
+<span class="text-xs text-tertiary font-mono">STABLE_0.8ms</span>
+</div>
+<span class="material-symbols-outlined text-[#A4C9FF] hover:opacity-80 transition-opacity cursor-pointer active:scale-95 duration-200">sensors</span>
+</div>
+</header>
+<main class="pt-20 pb-24 min-h-screen px-6 max-w-[1600px] mx-auto grid grid-cols-12 gap-6">
+<!-- Left Analysis Column -->
+<aside class="col-span-12 lg:col-span-3 flex flex-col gap-6">
+<!-- Market DNA -->
+<section class="bg-surface-container-low p-6 rounded relative overflow-hidden">
+<div class="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-primary to-primary-container"></div>
+<h3 class="font-headline text-xs font-bold uppercase tracking-widest text-slate-400 mb-6">Market DNA</h3>
+<div class="space-y-4">
+<div class="flex justify-between items-end border-b border-outline-variant/10 pb-3">
+<div>
+<p class="text-[10px] uppercase tracking-tighter text-slate-500 mb-1">Trend Persistence</p>
+<p class="font-headline text-xl font-bold text-on-surface">Alpha High</p>
+</div>
+<span class="material-symbols-outlined text-tertiary" style="font-variation-settings: 'FILL' 1;">insights</span>
+</div>
+<div class="flex justify-between items-end border-b border-outline-variant/10 pb-3">
+<div>
+<p class="text-[10px] uppercase tracking-tighter text-slate-500 mb-1">Breakout Cleanliness</p>
+<p class="font-headline text-xl font-bold text-on-surface">Precision+</p>
+</div>
+<span class="material-symbols-outlined text-secondary" style="font-variation-settings: 'FILL' 1;">architecture</span>
+</div>
+<div class="flex justify-between items-end border-b border-outline-variant/10 pb-3">
+<div>
+<p class="text-[10px] uppercase tracking-tighter text-slate-500 mb-1">Volatility Density</p>
+<p class="font-headline text-xl font-bold text-on-surface">Compressed</p>
+</div>
+<span class="material-symbols-outlined text-error" style="font-variation-settings: 'FILL' 1;">waves</span>
+</div>
+</div>
+</section>
+<!-- Attention Allocation -->
+<section class="bg-surface-container-low p-6 rounded">
+<h3 class="font-headline text-xs font-bold uppercase tracking-widest text-slate-400 mb-6">Attention Allocation</h3>
+<div class="space-y-6">
+<div class="space-y-2">
+<div class="flex justify-between text-[10px] uppercase font-bold tracking-widest">
+<span class="text-on-surface">NVDA</span>
+<span class="text-tertiary">94.2% Intensity</span>
+</div>
+<div class="h-1 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full w-[94%] bg-gradient-to-r from-tertiary to-tertiary-container shadow-[0_0_12px_rgba(97,222,138,0.3)]"></div>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between text-[10px] uppercase font-bold tracking-widest">
+<span class="text-on-surface">AAPL</span>
+<span class="text-primary">68.5% Intensity</span>
+</div>
+<div class="h-1 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full w-[68%] bg-gradient-to-r from-primary to-primary-container"></div>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between text-[10px] uppercase font-bold tracking-widest">
+<span class="text-on-surface">BTC</span>
+<span class="text-secondary">42.1% Intensity</span>
+</div>
+<div class="h-1 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full w-[42%] bg-gradient-to-r from-secondary to-secondary-container"></div>
+</div>
+</div>
+</div>
+</section>
+</aside>
+<!-- Center 3D Market Brain -->
+<main class="col-span-12 lg:col-span-6 flex flex-col items-center justify-center relative min-h-[600px] bg-surface-container-lowest/30 rounded-xl overflow-hidden">
+<div class="absolute inset-0 market-brain-gradient opacity-40"></div>
+<!-- The Massive Brain Core -->
+<div class="relative w-full h-full flex items-center justify-center group">
+<div class="absolute w-[450px] h-[450px] opacity-80 mix-blend-screen transition-transform duration-1000 group-hover:scale-105">
+<img alt="Market Brain Neural Network" class="w-full h-full object-contain filter hue-rotate-[180deg]" data-alt="Intricate 3D visualization of a human brain made of glowing blue neural fibers and pulsing light currents against a deep black background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDB954cbhaPqxtc6DMtdFEeuNC7cGgDrBtQ4-Sz1tZZHLWjcJ0ZkPB91RfhSJiSQdj4ZOTh-Bj6QWy8aGit73igB54x1u8YpoA88KN0uIE2idxtTqUtDJ9zUUwuBKHm40SM5VmCaSojAsHDNjDfdb0Q7UKpyBRn-kNQBkFToJndZUk0_H8woBvx9oIwluDSdphl-S0hJ7rj0RgNVYg6kbTiW_0stywAUv4AXVxEilgbAlEM0sExYlEV5rLjSmELZfj6LvyvGPaejuE"/>
+</div>
+<!-- Floating Nodes -->
+<!-- NVDA - Largest -->
+<div class="absolute top-1/4 left-1/4 -translate-x-1/2 -translate-y-1/2 z-20">
+<div class="p-4 glass-panel border border-tertiary/20 rounded shadow-[0_0_40px_rgba(97,222,138,0.15)] flex flex-col items-center gap-1 min-w-[120px]">
+<span class="text-[10px] font-bold text-tertiary uppercase tracking-widest">NVDA</span>
+<span class="text-2xl font-headline font-extrabold text-on-surface tabular-nums">942.30</span>
+<div class="flex items-center gap-1 text-tertiary">
+<span class="material-symbols-outlined text-sm">trending_up</span>
+<span class="text-xs font-bold tabular-nums">+4.2%</span>
+</div>
+</div>
+</div>
+<!-- AAPL -->
+<div class="absolute bottom-1/4 right-1/4 translate-x-1/2 translate-y-1/2 z-20">
+<div class="p-3 glass-panel border border-primary/20 rounded flex flex-col items-center gap-1 min-w-[100px]">
+<span class="text-[10px] font-bold text-primary uppercase tracking-widest">AAPL</span>
+<span class="text-xl font-headline font-bold text-on-surface tabular-nums">192.15</span>
+<div class="flex items-center gap-1 text-primary">
+<span class="material-symbols-outlined text-sm">trending_up</span>
+<span class="text-xs font-bold tabular-nums">+1.8%</span>
+</div>
+</div>
+</div>
+<!-- TSLA -->
+<div class="absolute top-1/2 right-10 -translate-y-1/2 z-20">
+<div class="p-3 glass-panel border border-error/20 rounded flex flex-col items-center gap-1 min-w-[100px]">
+<span class="text-[10px] font-bold text-error uppercase tracking-widest">TSLA</span>
+<span class="text-xl font-headline font-bold text-on-surface tabular-nums">178.40</span>
+<div class="flex items-center gap-1 text-error">
+<span class="material-symbols-outlined text-sm">trending_down</span>
+<span class="text-xs font-bold tabular-nums">-2.1%</span>
+</div>
+</div>
+</div>
+<!-- BTC -->
+<div class="absolute bottom-10 left-1/3 z-20">
+<div class="p-3 glass-panel border border-secondary/20 rounded flex flex-col items-center gap-1 min-w-[100px]">
+<span class="text-[10px] font-bold text-secondary uppercase tracking-widest">BTC</span>
+<span class="text-xl font-headline font-bold text-on-surface tabular-nums">64,281</span>
+<div class="flex items-center gap-1 text-tertiary">
+<span class="material-symbols-outlined text-sm">trending_up</span>
+<span class="text-xs font-bold tabular-nums">+0.4%</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Dashboard Status Bar -->
+<div class="absolute bottom-0 w-full p-6 glass-panel border-t border-outline-variant/10 flex justify-between items-center">
+<div class="flex gap-8">
+<div>
+<p class="text-[10px] uppercase font-bold text-slate-500 tracking-widest mb-1">Global Sentiment</p>
+<p class="font-headline font-bold text-tertiary">EXTREME BULLISH</p>
+</div>
+<div>
+<p class="text-[10px] uppercase font-bold text-slate-500 tracking-widest mb-1">Compute Load</p>
+<p class="font-headline font-bold text-on-surface">1.2 TFLOP/S</p>
+</div>
+</div>
+<button class="bg-gradient-to-br from-primary to-primary-container text-on-primary-container px-6 py-2 rounded-sm font-headline font-bold text-sm tracking-tight hover:opacity-90 active:scale-95 transition-all">
+                    EXECUTE_POSITION
+                </button>
+</div>
+</main>
+<!-- Right Analysis Column -->
+<aside class="col-span-12 lg:col-span-3 flex flex-col gap-6">
+<!-- Claude Reasoning -->
+<section class="bg-surface-container-low rounded-xl overflow-hidden border border-outline-variant/5">
+<div class="bg-surface-container-high p-4 flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-lg">psychology</span>
+<h3 class="font-headline text-xs font-bold uppercase tracking-widest text-on-surface">Claude Reasoning</h3>
+</div>
+<span class="w-2 h-2 rounded-full bg-tertiary animate-pulse shadow-[0_0_8px_#61de8a]"></span>
+</div>
+<div class="p-6 space-y-4">
+<div class="bg-surface-container-lowest p-4 rounded-lg border-l-2 border-primary">
+<p class="text-[10px] uppercase font-bold text-primary mb-2">Primary Inference</p>
+<p class="text-xs leading-relaxed text-on-surface-variant italic">
+                            "Current consolidation in semiconductor space is highly atypical of distributive phases. Volatility compression suggests a violent 8-12% expansion vector within 48h."
+                        </p>
+</div>
+<div class="space-y-3 pt-2">
+<div class="flex gap-3 items-start">
+<span class="material-symbols-outlined text-tertiary text-sm mt-0.5">check_circle</span>
+<p class="text-xs text-on-surface-variant">Order flow depth confirms institutional absorption at $890 support.</p>
+</div>
+<div class="flex gap-3 items-start">
+<span class="material-symbols-outlined text-tertiary text-sm mt-0.5">check_circle</span>
+<p class="text-xs text-on-surface-variant">Correlation matrix decoupled from macro yields, indicating pure tech-driven momentum.</p>
+</div>
+</div>
+</div>
+</section>
+<!-- Risk Matrix (Contextual) -->
+<section class="bg-surface-container-low p-6 rounded">
+<h3 class="font-headline text-xs font-bold uppercase tracking-widest text-slate-400 mb-6">Neural Confidence</h3>
+<div class="flex items-center justify-center py-4">
+<div class="relative w-32 h-32">
+<svg class="w-full h-full -rotate-90" viewbox="0 0 36 36">
+<path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#2A2A2B" stroke-width="2"></path>
+<path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#A4C9FF" stroke-dasharray="92, 100" stroke-width="2"></path>
+</svg>
+<div class="absolute inset-0 flex flex-col items-center justify-center">
+<span class="text-2xl font-headline font-bold text-on-surface">92%</span>
+<span class="text-[8px] uppercase tracking-widest text-slate-500">Sigma Scale</span>
+</div>
+</div>
+</div>
+<div class="mt-4 grid grid-cols-2 gap-4">
+<div class="bg-surface-container-lowest p-3 rounded text-center">
+<p class="text-[10px] text-slate-500 uppercase font-bold mb-1">Tail Risk</p>
+<p class="font-headline font-bold text-error">0.12%</p>
+</div>
+<div class="bg-surface-container-lowest p-3 rounded text-center">
+<p class="text-[10px] text-slate-500 uppercase font-bold mb-1">Sharpe</p>
+<p class="font-headline font-bold text-tertiary">4.82</p>
+</div>
+</div>
+</section>
+</aside>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full bg-[#131314]/80 backdrop-blur-xl dark:bg-[#131314]/80 flex justify-around items-center px-4 pb-6 pt-2 z-50 border-t border-[#414751]/15 shadow-[0px_-12px_32px_rgba(164,201,255,0.06)]">
+<button class="flex flex-col items-center justify-center text-[#A4C9FF] bg-[#A4C9FF]/10 rounded-sm py-1 w-full hover:text-[#A4C9FF] transition-colors active:scale-90 duration-300">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">psychology</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-widest uppercase">Brain</span>
+</button>
+<button class="flex flex-col items-center justify-center text-slate-500 py-1 w-full hover:text-[#A4C9FF] transition-colors active:scale-90 duration-300">
+<span class="material-symbols-outlined">genetics</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-widest uppercase">DNA</span>
+</button>
+<button class="flex flex-col items-center justify-center text-slate-500 py-1 w-full hover:text-[#A4C9FF] transition-colors active:scale-90 duration-300">
+<span class="material-symbols-outlined">insights</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-widest uppercase">Reasoning</span>
+</button>
+<button class="flex flex-col items-center justify-center text-slate-500 py-1 w-full hover:text-[#A4C9FF] transition-colors active:scale-90 duration-300">
+<span class="material-symbols-outlined">hub</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-widest uppercase">Nodes</span>
+</button>
+<button class="flex flex-col items-center justify-center text-slate-500 py-1 w-full hover:text-[#A4C9FF] transition-colors active:scale-90 duration-300">
+<span class="material-symbols-outlined">terminal</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-widest uppercase">Terminal</span>
+</button>
+</nav>
+</body></html>

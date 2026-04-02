@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type GateStatus = "ALLOW" | "WATCH" | "REDUCE" | "BLOCK";
@@ -53,48 +54,178 @@ interface DrawdownState {
   streakWins: number;
 }
 
-// ─── Mock Data ───────────────────────────────────────────────────────────────
-const GATE: RiskGate = {
+// ─── API Hooks ────────────────────────────────────────────────────────────────
+function useRiskStatus() {
+  return useQuery({
+    queryKey: ["risk-status"],
+    queryFn: () => fetch("/api/alpaca/risk/status").then(r => r.ok ? r.json() : null),
+    refetchInterval: 10_000,
+    retry: 1,
+  });
+}
+
+function useSystemRisk() {
+  return useQuery({
+    queryKey: ["system-risk"],
+    queryFn: () => fetch("/api/system/risk").then(r => r.ok ? r.json() : null),
+    refetchInterval: 10_000,
+    retry: 1,
+  });
+}
+
+function useLivePositions() {
+  return useQuery({
+    queryKey: ["live-positions"],
+    queryFn: () => fetch("/api/alpaca/positions/live").then(r => r.ok ? r.json() : []),
+    refetchInterval: 15_000,
+    retry: 1,
+  });
+}
+
+// ─── Mock Fallback Data ───────────────────────────────────────────────────────
+const GATE_DEFAULT: RiskGate = {
   status: "ALLOW",
   reason: "All safety rails nominal — full trading capacity",
   lastChange: Date.now() - 3600000,
 };
 
-const RAILS: SafetyRail[] = [
-  { id: "kill_switch", name: "Kill Switch", icon: "power_settings_new", status: "OK", current: "OFF", limit: "Manual", pct: 0, detail: "Emergency halt — disables all new entries instantly" },
-  { id: "daily_loss", name: "Daily Loss Limit", icon: "trending_down", status: "WARNING", current: "$212", limit: "$250", pct: 84.8, detail: "Realized losses today: $212 of $250 max" },  { id: "max_exposure", name: "Max Exposure", icon: "pie_chart", status: "OK", current: "28%", limit: "60%", pct: 46.7, detail: "Current portfolio exposure as % of equity" },
-  { id: "max_positions", name: "Max Positions", icon: "stacked_bar_chart", status: "OK", current: "1", limit: "3", pct: 33.3, detail: "Active concurrent positions vs maximum" },
-  { id: "trades_per_session", name: "Trades / Session", icon: "tag", status: "OK", current: "4", limit: "10", pct: 40, detail: "Trades executed this session vs cap" },
-  { id: "cooldown", name: "Loss Cooldown", icon: "timer", status: "OK", current: "0 min", limit: "30 min", pct: 0, detail: "30-min cooldown activates after 3 consecutive losses" },
-  { id: "degraded_data", name: "Data Quality", icon: "signal_cellular_alt", status: "OK", current: "GOOD", limit: "MIN", pct: 15, detail: "All data feeds nominal — no degraded sources" },
-  { id: "session_filter", name: "Session Filter", icon: "schedule", status: "OK", current: "NY Morning", limit: "Allowed", pct: 0, detail: "Current session is in the allowed trading window" },
-  { id: "news_lockout", name: "News Lockout", icon: "newspaper", status: "OK", current: "Clear", limit: "Active", pct: 0, detail: "No high-impact events in the next 30 minutes" },
-];
+// ─── Data Mappers ────────────────────────────────────────────────────────────
+function buildRailsFromAPI(riskStatus: any, systemRisk: any): SafetyRail[] {
+  const risk = riskStatus?.risk ?? {};
+  const cfg = systemRisk?.config ?? {};
+  const runtime = systemRisk?.runtime ?? {};
+  const gateReasons: string[] = riskStatus?.gate_reasons ?? [];
 
-const POSITIONS: PositionRisk[] = [
-  {
-    symbol: "BTC/USD", direction: "LONG", entryPrice: 87420, currentPrice: 87890,
-    size: 0.15, unrealizedPnl: 70.50, riskR: 1.4, stopLoss: 86920, takeProfit: 88920,
-    riskPct: 12, timeHeld: "1h 24m",
-  },
-];
+  const dailyLossUsd = Math.abs(risk.realizedPnlTodayUsd ?? 0);
+  const dailyLimitUsd = cfg.maxDailyLossUsd ?? 250;
+  const dailyPct = dailyLimitUsd > 0 ? (dailyLossUsd / dailyLimitUsd) * 100 : 0;
 
-const DRAWDOWN: DrawdownState = {
-  dailyRealized: -212, dailyUnrealized: 70.50, dailyLimit: -250,
-  weeklyRealized: 847, weeklyLimit: -750,
-  maxDrawdown: -380, maxDrawdownLimit: -1000,
-  streakLosses: 0, streakWins: 2,
-};
-const EVENTS: RiskEvent[] = [
-  { timestamp: Date.now() - 180000, type: "position_alert", severity: "info", message: "BTC/USD LONG approaching 1.5R target — monitoring for exit signal" },
-  { timestamp: Date.now() - 900000, type: "rail_trigger", severity: "warning", message: "Daily loss at 84.8% of limit ($212/$250) — position sizing reduced 50%" },
-  { timestamp: Date.now() - 2700000, type: "gate_change", severity: "info", message: "Risk gate: WATCH → ALLOW after 30-min cooldown expired" },
-  { timestamp: Date.now() - 3600000, type: "cooldown", severity: "warning", message: "Cooldown activated: 3 consecutive losses in 45 minutes" },
-  { timestamp: Date.now() - 5400000, type: "rail_trigger", severity: "critical", message: "Daily loss limit breached momentarily — auto-reduced exposure to 20%" },
-  { timestamp: Date.now() - 7200000, type: "gate_change", severity: "critical", message: "Risk gate: ALLOW → WATCH — approaching daily loss limit" },
-  { timestamp: Date.now() - 10800000, type: "position_alert", severity: "info", message: "NVDA SHORT closed at +2.1R — risk budget refreshed" },
-  { timestamp: Date.now() - 14400000, type: "gate_change", severity: "info", message: "Session started: NY Morning — risk gate ALLOW" },
-];
+  const exposurePct = (risk.openExposurePct ?? 0) * 100;
+  const maxExposurePct = (cfg.maxOpenExposurePct ?? 0.6) * 100;
+
+  const openPositions = risk.openPositions ?? 0;
+  const maxPositions = cfg.maxConcurrentPositions ?? 3;
+
+  const closedToday = risk.closedTradesToday ?? 0;
+  const maxTrades = cfg.maxTradesPerSession ?? 10;
+
+  const cooldownActive = risk.cooldownActive ?? false;
+  const cooldownMinutes = cfg.cooldownMinutes ?? 30;
+
+  return [
+    {
+      id: "kill_switch", name: "Kill Switch", icon: "power_settings_new",
+      status: runtime.killSwitchActive ? "TRIGGERED" : "OK",
+      current: runtime.killSwitchActive ? "ACTIVE" : "OFF", limit: "Manual", pct: 0,
+      detail: "Emergency halt — disables all new entries instantly",
+    },
+    {
+      id: "daily_loss", name: "Daily Loss Limit", icon: "trending_down",
+      status: gateReasons.includes("daily_loss_limit_reached") ? "TRIGGERED" : dailyPct > 80 ? "WARNING" : "OK",
+      current: `$${dailyLossUsd.toFixed(0)}`, limit: `$${dailyLimitUsd.toFixed(0)}`,
+      pct: Math.min(dailyPct, 100), detail: `Realized losses today: $${dailyLossUsd.toFixed(0)} of $${dailyLimitUsd.toFixed(0)} max`,
+    },
+    {
+      id: "max_exposure", name: "Max Exposure", icon: "pie_chart",
+      status: gateReasons.includes("max_open_exposure_exceeded") ? "TRIGGERED" : exposurePct > maxExposurePct * 0.8 ? "WARNING" : "OK",
+      current: `${exposurePct.toFixed(1)}%`, limit: `${maxExposurePct.toFixed(0)}%`,
+      pct: maxExposurePct > 0 ? (exposurePct / maxExposurePct) * 100 : 0,
+      detail: "Current portfolio exposure as % of equity",
+    },
+    {
+      id: "max_positions", name: "Max Positions", icon: "stacked_bar_chart",
+      status: gateReasons.includes("max_concurrent_positions_reached") ? "TRIGGERED" : openPositions >= maxPositions ? "WARNING" : "OK",
+      current: String(openPositions), limit: String(maxPositions),
+      pct: maxPositions > 0 ? (openPositions / maxPositions) * 100 : 0,
+      detail: "Active concurrent positions vs maximum",
+    },
+    {
+      id: "trades_per_session", name: "Trades / Session", icon: "tag",
+      status: gateReasons.includes("max_trades_per_session_reached") ? "TRIGGERED" : closedToday >= maxTrades * 0.8 ? "WARNING" : "OK",
+      current: String(closedToday), limit: String(maxTrades),
+      pct: maxTrades > 0 ? (closedToday / maxTrades) * 100 : 0,
+      detail: "Trades executed this session vs cap",
+    },
+    {
+      id: "cooldown", name: "Loss Cooldown", icon: "timer",
+      status: cooldownActive ? "TRIGGERED" : "OK",
+      current: cooldownActive ? `${cooldownMinutes} min` : "0 min",
+      limit: `${cooldownMinutes} min`, pct: cooldownActive ? 100 : 0,
+      detail: `${cooldownMinutes}-min cooldown activates after ${cfg.cooldownAfterLosses ?? 3} consecutive losses`,
+    },
+    {
+      id: "degraded_data", name: "Data Quality", icon: "signal_cellular_alt",
+      status: riskStatus?.data_health?.healthy === false ? "WARNING" : "OK",
+      current: riskStatus?.data_health?.healthy === false ? "DEGRADED" : "GOOD",
+      limit: "MIN", pct: 15,
+      detail: riskStatus?.data_health?.healthy === false ? riskStatus?.data_health?.reasons?.join(", ") ?? "Data degraded" : "All data feeds nominal",
+    },
+    {
+      id: "session_filter", name: "Session Filter", icon: "schedule",
+      status: gateReasons.includes("session_not_allowed") ? "TRIGGERED" : "OK",
+      current: riskStatus?.active_session ?? "Unknown",
+      limit: "Allowed", pct: 0,
+      detail: gateReasons.includes("session_not_allowed") ? "Current session is NOT in the allowed trading window" : "Current session is in the allowed trading window",
+    },
+    {
+      id: "news_lockout", name: "News Lockout", icon: "newspaper",
+      status: gateReasons.includes("news_lockout_active") || cfg.newsLockoutActive ? "TRIGGERED" : "OK",
+      current: cfg.newsLockoutActive ? "ACTIVE" : "Clear",
+      limit: "Active", pct: 0,
+      detail: cfg.newsLockoutActive ? "News lockout is manually active" : "No high-impact news lockout active",
+    },
+  ];
+}
+
+function buildDrawdownFromAPI(riskStatus: any, systemRisk: any): DrawdownState {
+  const risk = riskStatus?.risk ?? {};
+  const cfg = systemRisk?.config ?? {};
+  return {
+    dailyRealized: risk.realizedPnlTodayUsd ?? 0,
+    dailyUnrealized: risk.unrealizedPnlUsd ?? 0,
+    dailyLimit: -(cfg.maxDailyLossUsd ?? 250),
+    weeklyRealized: risk.realizedPnlWeekUsd ?? 0,
+    weeklyLimit: -(cfg.maxDailyLossUsd ?? 250) * 3,
+    maxDrawdown: risk.maxDrawdownUsd ?? 0,
+    maxDrawdownLimit: -(cfg.maxDailyLossUsd ?? 250) * 5,
+    streakLosses: risk.consecutiveLosses ?? 0,
+    streakWins: risk.consecutiveWins ?? 0,
+  };
+}
+
+function buildGateFromAPI(riskStatus: any, systemRisk: any): RiskGate {
+  if (!riskStatus) return GATE_DEFAULT;
+  const gateReasons: string[] = riskStatus.gate_reasons ?? [];
+  const killSwitch = systemRisk?.runtime?.killSwitchActive ?? false;
+  let status: GateStatus = "ALLOW";
+  if (killSwitch || gateReasons.includes("daily_loss_limit_reached")) status = "BLOCK";
+  else if (gateReasons.length >= 2) status = "REDUCE";
+  else if (gateReasons.length === 1) status = "WATCH";
+  const reason = gateReasons.length === 0
+    ? "All safety rails nominal — full trading capacity"
+    : gateReasons.map(r => r.replace(/_/g, " ")).join("; ");
+  return { status, reason, lastChange: Date.now() };
+}
+
+function buildPositionsFromAPI(positions: any[]): PositionRisk[] {
+  if (!Array.isArray(positions)) return [];
+  return positions.map((p: any) => ({
+    symbol: p.symbol ?? "Unknown",
+    direction: (p.side === "long" || p.qty > 0) ? "LONG" : "SHORT",
+    entryPrice: Number(p.avg_entry_price ?? p.entry_price ?? 0),
+    currentPrice: Number(p.current_price ?? 0),
+    size: Math.abs(Number(p.qty ?? 0)),
+    unrealizedPnl: Number(p.unrealized_pl ?? 0),
+    riskR: Number(p.riskR ?? 0),
+    stopLoss: Number(p.stop_loss ?? 0),
+    takeProfit: Number(p.take_profit ?? 0),
+    riskPct: Math.abs(Number(p.unrealized_plpc ?? 0)) * 100,
+    timeHeld: "—",
+  }));
+}
+
+// ─── Static Risk Events (non-persisted in current backend) ───────────────────
+const EVENTS: RiskEvent[] = [];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const gateColor: Record<GateStatus, string> = { ALLOW: "#9cff93", WATCH: "#ffd166", REDUCE: "#ff9a5c", BLOCK: "#ff4444" };
@@ -400,7 +531,25 @@ function RiskEventLog({ events }: { events: RiskEvent[] }) {
   );
 }
 function KillSwitchPanel() {
+  const queryClient = useQueryClient();
+  const { data: systemRisk } = useSystemRisk();
+  const isActive = systemRisk?.runtime?.killSwitchActive ?? false;
   const [armed, setArmed] = useState(false);
+  const operatorToken = (document.cookie.match(/operator_token=([^;]+)/) ?? [])[1] ?? "";
+
+  const toggleKillSwitch = useCallback(async () => {
+    if (!armed) { setArmed(true); return; }
+    try {
+      await fetch("/api/system/kill-switch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Operator-Token": operatorToken },
+        body: JSON.stringify({ active: !isActive }),
+      });
+      await queryClient.invalidateQueries({ queryKey: ["system-risk"] });
+      await queryClient.invalidateQueries({ queryKey: ["risk-status"] });
+    } catch { /* ignore */ }
+    setArmed(false);
+  }, [armed, isActive, operatorToken, queryClient]);
 
   return (
     <div style={{
@@ -424,7 +573,7 @@ function KillSwitchPanel() {
           </div>
         </div>
         <button
-          onClick={() => setArmed(!armed)}
+          onClick={toggleKillSwitch}
           style={{
             background: armed ? "#ff4444" : "rgba(72,72,73,0.15)",
             border: `1px solid ${armed ? "#ff4444" : "rgba(72,72,73,0.3)"}`,
@@ -436,7 +585,7 @@ function KillSwitchPanel() {
             transition: "all 0.2s ease",
           }}
         >
-          {armed ? "KILL SWITCH ARMED" : "ARM"}
+          {isActive ? "KILL SWITCH ACTIVE" : armed ? "CONFIRM KILL" : "ARM"}
         </button>
       </div>
       {armed && (
@@ -454,18 +603,14 @@ function KillSwitchPanel() {
 }
 // ─── Main Page ───────────────────────────────────────────────────────────────
 export default function RiskPage() {
-  const [gate, setGate] = useState<RiskGate>(GATE);
+  const { data: riskStatus } = useRiskStatus();
+  const { data: systemRisk } = useSystemRisk();
+  const { data: rawPositions } = useLivePositions();
 
-  // Simulate gate fluctuations
-  useEffect(() => {
-    const iv = setInterval(() => {
-      setGate(prev => ({
-        ...prev,
-        lastChange: Date.now(),
-      }));
-    }, 5000);
-    return () => clearInterval(iv);
-  }, []);
+  const gate = buildGateFromAPI(riskStatus, systemRisk);
+  const RAILS = buildRailsFromAPI(riskStatus, systemRisk);
+  const POSITIONS = buildPositionsFromAPI(rawPositions);
+  const DRAWDOWN = buildDrawdownFromAPI(riskStatus, systemRisk);
 
   return (
     <div style={{ minHeight: "100vh", background: "#131314", color: "#e6e1e5" }}>

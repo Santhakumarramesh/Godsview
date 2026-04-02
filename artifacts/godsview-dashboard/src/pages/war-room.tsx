@@ -34,7 +34,7 @@ export default function WarRoom() {
 
     setIsAnalyzing(true);
     try {
-      const res = await fetch(`/api/war-room/analyze/${symbol.toUpperCase()}`);
+      const res = await fetch(`/api/war-room/analyze/${symbol.toUpperCase()}`, { method: "POST" });
       if (res.ok) {
         const data = (await res.json()) as WarRoomAnalysis;
         setAnalyzed(data);

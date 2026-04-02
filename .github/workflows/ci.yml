@@ -1,4 +1,4 @@
-name: GodsView CI
+name: GodsView CI/CD
 
 on:
   push:
@@ -11,81 +11,217 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ── 1. TypeCheck + Test ───────────────────────────────────────────
   typecheck-and-test:
     name: TypeCheck + Test
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: latest
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: TypeCheck libs
+        run: pnpm run typecheck:libs
+
       - name: TypeCheck API Server
         run: pnpm --filter @workspace/api-server typecheck
 
       - name: TypeCheck Dashboard
-        run: cd artifacts/godsview-dashboard && npx tsc --noEmit
+        run: pnpm --filter @workspace/godsview-dashboard typecheck
 
       - name: Run Unit Tests
-        run: cd artifacts/api-server && npx vitest run --reporter=verbose
+        run: pnpm --filter @workspace/api-server test
+        env:
+          PORT: "3000"
+          GODSVIEW_SYSTEM_MODE: paper
+          NODE_ENV: test
 
+  # ── 2. Python v2 Microservices ────────────────────────────────────
+  python-v2:
+    name: Python v2 Services (lint + test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r services/requirements.txt
+          pip install ruff pytest pytest-asyncio
+
+      - name: Ruff lint
+        run: ruff check services/ --select=E,W,F,I --ignore=E501,F401 --exit-zero
+
+      - name: Ruff format check
+        run: ruff format --check services/ --exit-zero
+
+      - name: Run pytest (all 130+ tests)
+        env:
+          APP_ENV: development
+          ALPACA_KEY_ID: ""
+          ALPACA_SECRET_KEY: ""
+          SECRET_KEY: test-secret
+          INTERNAL_API_KEY: internal-dev-key
+        run: |
+          cd ${{ github.workspace }}
+          python -m pytest services/tests/ -q --tb=short --no-header
+
+  # ── 3. Docker build Python services (main only) ───────────────────
+  docker-python:
+    name: Docker Build (Python services)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [python-v2]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Python services image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./services
+          dockerfile: ./services/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}-python:latest
+            ghcr.io/${{ github.repository }}-python:sha-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── 4. Build ──────────────────────────────────────────────────────
   build:
     name: Build
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    needs: typecheck-and-test
+    timeout-minutes: 15
+    needs: [typecheck-and-test, python-v2]
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: latest
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Build API Server
-        run: cd artifacts/api-server && pnpm run build
+        run: pnpm --filter @workspace/api-server build
 
       - name: Build Dashboard
-        run: cd artifacts/godsview-dashboard && pnpm run build
+        run: pnpm --filter @workspace/godsview-dashboard build
 
-      - name: Upload Dashboard Artifacts
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: dashboard-dist
-          path: artifacts/godsview-dashboard/dist/
+          name: build-dist
+          path: |
+            artifacts/api-server/dist/
+            artifacts/godsview-dashboard/dist/
           retention-days: 7
 
+  # ── 3. Docker Build + Push (main only) ───────────────────────────
   docker:
-    name: Docker Build
+    name: Docker Build & Push
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     needs: build
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build API Docker image
-        run: docker build -f artifacts/api-server/Dockerfile -t godsview-api:${{ github.sha }} .
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Build Dashboard Docker image
-        run: docker build -f artifacts/godsview-dashboard/Dockerfile -t godsview-dashboard:${{ github.sha }} .
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=sha,prefix=sha-
+            type=raw,value=latest
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          dockerfile: Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── 4. Deploy (main only, after Docker push) ─────────────────────
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: docker
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: production
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd /opt/godsview
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            docker compose pull
+            docker compose up -d --remove-orphans
+            docker image prune -f
+            echo "Deploy complete — $(docker compose ps --format 'table {{.Name}}\t{{.Status}}')"

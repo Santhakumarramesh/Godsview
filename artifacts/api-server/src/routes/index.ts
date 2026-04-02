@@ -16,6 +16,9 @@ import checklistRouter from "./checklist";
 import warRoomRouter from "./war_room";
 import proofRouter from "./proof";
 import macroRouter from "./macro";
+import journalRouter from "./journal";
+import watchlistRouter from "./watchlist";
+import analyticsRouter from "./analytics";
 import portfolioRouter from "./portfolio";
 import opsRouter from "./ops";
 import featuresRouter from "./features";
@@ -23,6 +26,8 @@ import engineHealthRouter from "./engine_health";
 import executionRouter from "./execution";
 import sessionsRouter from "./sessions";
 import streamingRouter from "./streaming";
+import leaderboardRouter from "./leaderboard";
+import pythonV2Router from "./python_v2";
 
 const router: IRouter = Router();
 
@@ -43,12 +48,19 @@ router.use("/api/checklist", checklistRouter);
 router.use("/api/war-room", warRoomRouter);
 router.use("/api/proof", proofRouter);
 router.use("/api/macro", macroRouter);
+router.use("/api/journal", journalRouter);
+router.use("/api", watchlistRouter);
+router.use("/api", analyticsRouter);
 router.use("/api/portfolio", portfolioRouter);
-router.use(opsRouter);
+router.use("/api/ops", opsRouter);
 router.use("/api/features", featuresRouter);
 router.use(engineHealthRouter);
 router.use("/api/execution", executionRouter);
 router.use("/api", sessionsRouter);
+router.use("/api", leaderboardRouter);
 router.use(streamingRouter);
+
+// Python v2 microservices proxy — shadow routes at /v2/*
+router.use(pythonV2Router);
 
 export default router;
