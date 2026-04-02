@@ -2,6 +2,8 @@ import type { AlpacaBar } from "./alpaca";
 import { predictWinProbability } from "./ml_model";
 import { DEFAULT_SETUPS, SETUP_CATALOG, computeFinalQualityScore } from "@workspace/strategy-core";
 import type { SetupType } from "@workspace/strategy-core";
+import type { MacroBiasResult } from "./macro_bias_engine";
+import type { SentimentResult } from "./sentiment_engine";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -102,6 +104,8 @@ export type NoTradeReason =
   | "sk_zone_miss"
   | "sk_bias_conflict"
   | "cvd_not_ready"
+  | "macro_bias_block"
+  | "sentiment_crowding_block"
   | "none";
 
 export type SetupCooldowns = Record<string, number>;
@@ -627,6 +631,10 @@ export type NoTradeFilterOptions = {
   replayMode?: boolean;
   sessionAllowed?: boolean;
   newsLockoutActive?: boolean;
+  /** Optional macro-bias context — enables macro_bias_block gate */
+  macroBias?: MacroBiasResult;
+  /** Optional sentiment context — enables sentiment_crowding_block gate */
+  sentiment?: SentimentResult;
 };
 
 export function applyNoTradeFilters(
@@ -640,14 +648,37 @@ export function applyNoTradeFilters(
   let replayMode = false;
   let sessionAllowed = true;
   let newsLockoutActive = false;
-  if ("replayMode" in optionsOrCooldowns || "cooldowns" in optionsOrCooldowns) {
+  let macroBias: MacroBiasResult | undefined;
+  let sentiment: SentimentResult | undefined;
+  if ("replayMode" in optionsOrCooldowns || "cooldowns" in optionsOrCooldowns
+      || "macroBias" in optionsOrCooldowns || "sentiment" in optionsOrCooldowns) {
     const opts = optionsOrCooldowns as NoTradeFilterOptions;
     cooldowns = opts.cooldowns ?? {};
     replayMode = opts.replayMode ?? false;
     sessionAllowed = opts.sessionAllowed ?? true;
     newsLockoutActive = opts.newsLockoutActive ?? false;
+    macroBias = opts.macroBias;
+    sentiment = opts.sentiment;
   } else {
     cooldowns = optionsOrCooldowns as SetupCooldowns;
+  }
+
+  // Macro bias gate: only in live mode — block when high-conviction bias opposes direction
+  if (!replayMode && macroBias?.conviction === "high") {
+    const setupDir: "long" | "short" = recall.trend_slope_5m >= 0 ? "long" : "short";
+    if (macroBias.blockedDirections.includes(setupDir)) {
+      return { blocked: true, reason: "macro_bias_block" };
+    }
+  }
+
+  // Sentiment crowding gate: only in live mode — block when crowd is extreme and setup is crowd-aligned
+  if (!replayMode && sentiment?.crowdingLevel === "extreme") {
+    const setupDir: "long" | "short" = recall.trend_slope_5m >= 0 ? "long" : "short";
+    const edgeFadesLong  = sentiment.institutionalEdge === "fade_long"  && setupDir === "long";
+    const edgeFadesShort = sentiment.institutionalEdge === "fade_short" && setupDir === "short";
+    if (edgeFadesLong || edgeFadesShort) {
+      return { blocked: true, reason: "sentiment_crowding_block" };
+    }
   }
 
   // Chop gate: always active — no edge in either mode

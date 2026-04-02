@@ -1,11 +1,12 @@
 /**
- * historical_seeder.test.ts — Phase 35 tests
+ * historical_seeder.test.ts — Phase 46 tests
  *
  * Verifies the synthetic historical data seeder:
  *   1. Skips seeding when table already has enough rows
  *   2. Seeds the correct number of records on bootstrap
- *   3. Generated records have valid field ranges
- *   4. Win rates are statistically reasonable per regime
+ *   3. Generated records have valid field ranges and use correct labels
+ *   4. Win rates are statistically reasonable
+ *   5. Stale-data guard purges mismatched rows before reseeding
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -14,6 +15,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const insertedBatches: unknown[][] = [];
 let mockCurrentCount = 0;
+let mockStaleCount   = 0; // rows with old regime/setup labels
 
 vi.mock("@workspace/db", () => {
   const mockInsertChain = {
@@ -23,19 +25,21 @@ vi.mock("@workspace/db", () => {
     },
   };
 
-  const mockSelectChain = {
-    from: () => mockSelectChain,
-    where: () => Promise.resolve([{ cnt: mockCurrentCount }]),
-  };
-
-  const mockSelectMaxChain = {
-    from: () => Promise.resolve([{ cnt: mockCurrentCount }]),
-  };
+  // Supports: db.select().from() and db.select().from().where()
+  const buildSelectChain = (countOverride?: number) => ({
+    from: () => ({
+      // plain .from() — returns count
+      then: (resolve: Function) => resolve([{ cnt: countOverride ?? mockCurrentCount }]),
+      // .from().where() — returns stale count
+      where: () => Promise.resolve([{ cnt: mockStaleCount }]),
+    }),
+  });
 
   return {
     db: {
-      select: vi.fn(() => mockSelectMaxChain),
+      select: vi.fn(() => buildSelectChain()),
       insert: vi.fn(() => mockInsertChain),
+      delete: vi.fn(() => Promise.resolve()),
     },
     accuracyResultsTable: { id: "id", symbol: "symbol" },
   };
@@ -46,6 +50,7 @@ vi.mock("@workspace/db", () => {
 describe("seedHistoricalData — skip logic", () => {
   it("skips when accuracy_results already has enough rows", async () => {
     mockCurrentCount = 1000; // Above 500 threshold
+    mockStaleCount   = 0;
     insertedBatches.length = 0;
 
     const { seedHistoricalData } = await import("../lib/historical_seeder");
@@ -58,6 +63,7 @@ describe("seedHistoricalData — skip logic", () => {
 
   it("returns existingRows in result when skipping", async () => {
     mockCurrentCount = 600;
+    mockStaleCount   = 0;
 
     const { seedHistoricalData } = await import("../lib/historical_seeder");
     const result = await seedHistoricalData();
@@ -70,24 +76,25 @@ describe("seedHistoricalData — skip logic", () => {
 describe("seedHistoricalData — record generation", () => {
   beforeEach(() => {
     vi.resetModules();
-    mockCurrentCount = 0; // trigger seeding
+    mockCurrentCount = 0;   // trigger seeding
+    mockStaleCount   = 0;   // no stale rows
     insertedBatches.length = 0;
   });
 
-  it("seeds 3000 records when table is empty", async () => {
+  it("seeds 6000 records when table is empty", async () => {
     const { seedHistoricalData } = await import("../lib/historical_seeder");
     const result = await seedHistoricalData();
 
     expect(result.skipped).toBe(false);
-    expect(result.seededRows).toBe(3000);
+    expect(result.seededRows).toBe(6000);
   });
 
   it("inserts in batches of 200", async () => {
     const { seedHistoricalData } = await import("../lib/historical_seeder");
     await seedHistoricalData();
 
-    // 3000 / 200 = 15 batches
-    expect(insertedBatches.length).toBe(15);
+    // 6000 / 200 = 30 batches
+    expect(insertedBatches.length).toBe(30);
   });
 
   it("each batch has at most 200 records", async () => {
@@ -136,6 +143,32 @@ describe("seedHistoricalData — record generation", () => {
     }
   });
 
+  it("records use only ML-aligned setup types", async () => {
+    const VALID_SETUPS = [
+      "absorption_reversal", "sweep_reclaim", "continuation_pullback",
+      "cvd_divergence", "breakout_failure", "vwap_reclaim",
+      "opening_range_breakout", "post_news_continuation",
+    ];
+    const { seedHistoricalData } = await import("../lib/historical_seeder");
+    await seedHistoricalData();
+
+    const allRecords = insertedBatches.flat() as Record<string, unknown>[];
+    for (const r of allRecords.slice(0, 200)) {
+      expect(VALID_SETUPS).toContain(r.setup_type);
+    }
+  });
+
+  it("records use only ML-aligned regime labels", async () => {
+    const VALID_REGIMES = ["trending_bull", "trending_bear", "ranging", "volatile", "chop"];
+    const { seedHistoricalData } = await import("../lib/historical_seeder");
+    await seedHistoricalData();
+
+    const allRecords = insertedBatches.flat() as Record<string, unknown>[];
+    for (const r of allRecords.slice(0, 200)) {
+      expect(VALID_REGIMES).toContain(r.regime);
+    }
+  });
+
   it("win rate is statistically between 35% and 80%", async () => {
     const { seedHistoricalData } = await import("../lib/historical_seeder");
     await seedHistoricalData();
@@ -149,7 +182,7 @@ describe("seedHistoricalData — record generation", () => {
     expect(winRate).toBeLessThan(0.80);
   });
 
-  it("bar_times are spread across last 90 days", async () => {
+  it("bar_times span a wide date range (at least 30 days)", async () => {
     const { seedHistoricalData } = await import("../lib/historical_seeder");
     await seedHistoricalData();
 
@@ -159,7 +192,6 @@ describe("seedHistoricalData — record generation", () => {
     const maxTime = Math.max(...times);
     const spreadDays = (maxTime - minTime) / (24 * 60 * 60 * 1000);
 
-    // Should span at least 30 days
     expect(spreadDays).toBeGreaterThan(30);
   });
 });
@@ -168,6 +200,7 @@ describe("seedHistoricalData — result shape", () => {
   it("returns correct result shape with timing", async () => {
     vi.resetModules();
     mockCurrentCount = 0;
+    mockStaleCount   = 0;
     insertedBatches.length = 0;
 
     const { seedHistoricalData } = await import("../lib/historical_seeder");

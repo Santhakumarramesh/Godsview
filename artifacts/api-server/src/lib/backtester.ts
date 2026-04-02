@@ -313,7 +313,7 @@ export async function runBacktest(config: BacktestConfig): Promise<BacktestResul
 
 // ── Metrics Computation ────────────────────────────────────────────────────
 
-function computeMetrics(trades: TradeResult[], initialEquity: number): BacktestMetrics {
+export function computeMetrics(trades: TradeResult[], initialEquity: number): BacktestMetrics {
   if (trades.length === 0) return emptyMetrics();
 
   const wins = trades.filter(t => t.outcome === "win");
@@ -371,7 +371,7 @@ function computeMetrics(trades: TradeResult[], initialEquity: number): BacktestM
   };
 }
 
-function emptyMetrics(): BacktestMetrics {
+export function emptyMetrics(): BacktestMetrics {
   return {
     total_signals: 0, trades_taken: 0, wins: 0, losses: 0, win_rate: 0,
     profit_factor: 0, total_pnl_pct: 0, avg_win_pct: 0, avg_loss_pct: 0,
@@ -380,7 +380,7 @@ function emptyMetrics(): BacktestMetrics {
   };
 }
 
-function buildEquityCurve(
+export function buildEquityCurve(
   trades: TradeResult[],
   initialEquity: number,
 ): Array<{ idx: number; equity: number }> {
@@ -395,7 +395,7 @@ function buildEquityCurve(
 
 // ── Statistical Significance (Two-Proportion Z-Test) ───────────────────────
 
-function computeSignificance(
+export function computeSignificance(
   wins1: number, n1: number,
   wins2: number, n2: number,
 ): { z_score: number; p_value: number; is_significant: boolean; confidence_level: string } {
@@ -431,7 +431,7 @@ function computeSignificance(
 }
 
 // Rational approximation of normal CDF (Abramowitz & Stegun)
-function approxNormalCDF(x: number): number {
+export function approxNormalCDF(x: number): number {
   if (x < -8) return 0;
   if (x > 8) return 1;
   const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741;
@@ -447,7 +447,7 @@ function approxNormalCDF(x: number): number {
  * REPLAY LOGIC: Walks through bars to find TP/SL hit
  * Handles slippage by checking if bar opens beyond the level
  */
-function replaySignal(
+export function replaySignal(
   bars: AlpacaBar[],
   direction: "long" | "short",
   entryPrice: number,
