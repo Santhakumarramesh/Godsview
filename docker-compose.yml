@@ -36,6 +36,8 @@ services:
 
   # ── API Server ─────────────────────────────────────────────────
   api:
+    # Use pre-built image from GHCR (pushed by CI) or build locally as fallback
+    image: ${GODSVIEW_IMAGE:-ghcr.io/santhakumarramesh/godsview:latest}
     build:
       context: .
       dockerfile: Dockerfile
