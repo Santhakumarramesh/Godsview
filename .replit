@@ -1,32 +1,28 @@
-run = "corepack pnpm run dev"
-entrypoint = "artifacts/api-server/src/index.ts"
+run = "bash replit-start.sh"
+entrypoint = "artifacts/api-server/dist/index.mjs"
 
 [nix]
 channel = "stable-24_05"
 
 [env]
-NODE_ENV = "development"
 PORT = "3000"
-CORS_ORIGIN = "http://localhost:5173,https://*.repl.co,https://*.replit.app,https://*.replit.dev"
+NODE_ENV = "production"
 GODSVIEW_SYSTEM_MODE = "paper"
 GODSVIEW_TRUST_PROXY = "1"
-# SECRETS: Set these in the Replit Secrets panel (not here):
-#   DATABASE_URL       — Neon/Supabase/Railway Postgres connection string
-#   ALPACA_API_KEY     — Alpaca paper/live API key
-#   ALPACA_SECRET_KEY  — Alpaca paper/live secret key
-#   ALPACA_BASE_URL    — https://paper-api.alpaca.markets (default)
-#   ANTHROPIC_API_KEY  — Claude API key for veto layer
-#   GODSVIEW_OPERATOR_TOKEN — Operator admin token (required for system mutations)
+CORS_ORIGIN = "https://$REPL_SLUG.$REPL_OWNER.repl.co,https://$REPL_SLUG.$REPL_OWNER.replit.app,https://$REPL_SLUG.$REPL_OWNER.replit.dev,http://localhost:3000"
+# SECRETS — set in Replit Secrets panel (Tools → Secrets):
+#   ANTHROPIC_API_KEY      — Claude API key (required for Super Intelligence)
+#   TIINGO_API_KEY         — Market data
+#   FRED_API_KEY           — Macro data
+#   ALPHA_VANTAGE_API_KEY  — Indicators
+#   FINNHUB_API_KEY        — Alt-data
+#   ALPACA_API_KEY         — Live/paper trading (optional)
+#   ALPACA_SECRET_KEY      — Live/paper trading (optional)
 
 [deployment]
-run = ["sh", "-c", "corepack pnpm --filter @workspace/api-server run start"]
-build = ["sh", "-c", "corepack enable && corepack pnpm install --frozen-lockfile && corepack pnpm run build"]
+run = ["sh", "-c", "bash replit-start.sh"]
 deploymentTarget = "cloudrun"
 
 [[ports]]
 localPort = 3000
 externalPort = 80
-
-[[ports]]
-localPort = 5173
-externalPort = 3001
