@@ -1,5 +1,12 @@
 import { Router, type IRouter } from "express";
-import { runBacktest, type BacktestConfig } from "../lib/backtester";
+import {
+  runBacktest,
+  startContinuousBacktest,
+  stopContinuousBacktest,
+  getContinuousBacktestStatus,
+  getStrategyLeaderboard,
+  type BacktestConfig,
+} from "../lib/backtester";
 
 const router: IRouter = Router();
 
@@ -83,6 +90,53 @@ router.get("/backtest/quick", async (_req, res): Promise<void> => {
     });
   } catch (err) {
     res.status(500).json({ error: "quick_backtest_failed", message: String(err) });
+  }
+});
+
+// ── POST /backtest/continuous/start ─────────────────────────────────────────
+// Start continuous backtesting over expanding time horizons (30/60/90/180/365 days)
+router.post("/backtest/continuous/start", async (_req, res): Promise<void> => {
+  try {
+    const result = await startContinuousBacktest();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: "continuous_start_failed", message: String(err) });
+  }
+});
+
+// ── POST /backtest/continuous/stop ──────────────────────────────────────────
+// Stop continuous backtesting
+router.post("/backtest/continuous/stop", async (_req, res): Promise<void> => {
+  try {
+    const result = stopContinuousBacktest();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: "continuous_stop_failed", message: String(err) });
+  }
+});
+
+// ── GET /backtest/continuous/status ─────────────────────────────────────────
+// Get continuous backtest status and statistics
+router.get("/backtest/continuous/status", async (_req, res): Promise<void> => {
+  try {
+    const status = getContinuousBacktestStatus();
+    res.json(status);
+  } catch (err) {
+    res.status(500).json({ error: "internal_error", message: "Failed to get continuous backtest status" });
+  }
+});
+
+// ── GET /backtest/strategy-leaderboard ──────────────────────────────────────
+// Get strategy leaderboard with star ratings and consistency scores
+router.get("/backtest/strategy-leaderboard", async (_req, res): Promise<void> => {
+  try {
+    const leaderboard = getStrategyLeaderboard();
+    res.json({
+      count: leaderboard.length,
+      strategies: leaderboard,
+    });
+  } catch (err) {
+    res.status(500).json({ error: "internal_error", message: "Failed to get strategy leaderboard" });
   }
 });
 

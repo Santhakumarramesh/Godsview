@@ -483,3 +483,249 @@ function replaySignal(
 
   return { outcome: "unresolved", pnl_pct: 0 };
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CONTINUOUS BACKTESTING: Auto-runs backtests over expanding time horizons
+// ══════════════════════════════════════════════════════════════════════════════
+
+export interface StrategyLeaderboardEntry {
+  strategy_name: string;
+  setup_type: string;
+  regime: string;
+  stars: number; // 1-5 star rating based on accuracy
+  win_rate: number;
+  profit_factor: number;
+  sharpe_ratio: number;
+  total_tests: number;
+  consistency_score: number; // How stable across time horizons
+  last_tested: string;
+}
+
+let _continuousBacktestRunning = false;
+let _continuousBacktestInterval: NodeJS.Timer | null = null;
+let _strategyLeaderboard: Map<string, StrategyLeaderboardEntry> = new Map();
+let _lastBacktestResult: { result: BacktestResult; timestamp: string } | null = null;
+
+/**
+ * Start continuous backtesting: runs backtests over 30d, 60d, 90d, 180d, 365d
+ * Updates strategy leaderboard in real-time
+ */
+export async function startContinuousBacktest(): Promise<{ success: boolean; message: string }> {
+  if (_continuousBacktestRunning) {
+    return { success: false, message: "Continuous backtest already running" };
+  }
+
+  _continuousBacktestRunning = true;
+  console.log("[backtest] Continuous backtesting started — will test every 5 minutes");
+
+  // Perform initial backtest immediately
+  await runContinuousBacktestCycle();
+
+  // Schedule recurring backtests every 5 minutes
+  _continuousBacktestInterval = setInterval(async () => {
+    try {
+      await runContinuousBacktestCycle();
+    } catch (err) {
+      console.error("[backtest] Continuous cycle error:", err);
+    }
+  }, 5 * 60_000);
+
+  return { success: true, message: "Continuous backtesting activated — testing every 5 minutes" };
+}
+
+/**
+ * Stop continuous backtesting
+ */
+export function stopContinuousBacktest(): { success: boolean; message: string } {
+  if (!_continuousBacktestRunning) {
+    return { success: false, message: "Continuous backtest not running" };
+  }
+
+  if (_continuousBacktestInterval) {
+    clearInterval(_continuousBacktestInterval);
+    _continuousBacktestInterval = null;
+  }
+
+  _continuousBacktestRunning = false;
+  console.log("[backtest] Continuous backtesting stopped");
+  return { success: true, message: "Continuous backtesting deactivated" };
+}
+
+/**
+ * Internal: perform one continuous backtest cycle across all time horizons
+ */
+async function runContinuousBacktestCycle(): Promise<void> {
+  try {
+    console.log("[backtest] [continuous] Starting backtest cycle...");
+
+    const timeHorizons = [30, 60, 90, 180, 365];
+    const results: BacktestResult[] = [];
+
+    // Run backtest for each time horizon
+    for (const days of timeHorizons) {
+      try {
+        console.log(`[backtest] [continuous] Running ${days}-day backtest...`);
+        const result = await runBacktest({
+          lookback_days: days,
+          initial_equity: 10_000,
+          mode: "comparison",
+          min_signals: 20,
+        });
+        results.push(result);
+      } catch (err) {
+        console.error(`[backtest] [continuous] ${days}-day backtest failed:`, err);
+      }
+    }
+
+    if (results.length === 0) {
+      console.log("[backtest] [continuous] No valid results from cycle");
+      return;
+    }
+
+    // Store most recent result
+    _lastBacktestResult = {
+      result: results[results.length - 1],
+      timestamp: new Date().toISOString(),
+    };
+
+    // Update strategy leaderboard based on results
+    updateStrategyLeaderboard(results);
+
+    console.log(`[backtest] [continuous] Cycle complete: ${results.length} time horizons tested`);
+  } catch (err) {
+    console.error("[backtest] [continuous] Backtest cycle failed:", err);
+  }
+}
+
+/**
+ * Update strategy leaderboard based on backtest results across all time horizons
+ */
+function updateStrategyLeaderboard(results: BacktestResult[]): void {
+  try {
+    // Aggregate strategy performance across time horizons
+    const strategyStats = new Map<string, {
+      win_rates: number[];
+      profit_factors: number[];
+      sharpes: number[];
+      test_count: number;
+    }>();
+
+    for (const result of results) {
+      // Process baseline strategies (by_setup breakdown)
+      for (const [setupType, breakdown] of Object.entries(result.by_setup || {})) {
+        const regime = "baseline"; // Aggregate across regimes for base strategy
+        const key = `${setupType}::${regime}`;
+
+        if (!strategyStats.has(key)) {
+          strategyStats.set(key, {
+            win_rates: [],
+            profit_factors: [],
+            sharpes: [],
+            test_count: 0,
+          });
+        }
+
+        const stats = strategyStats.get(key)!;
+        stats.win_rates.push(breakdown.baseline.win_rate);
+        stats.profit_factors.push(breakdown.baseline.profit_factor);
+        stats.sharpes.push(breakdown.baseline.sharpe_ratio);
+        stats.test_count++;
+      }
+
+      // Process SI-enhanced strategies
+      for (const [setupType, breakdown] of Object.entries(result.by_setup || {})) {
+        const siKey = `${setupType}::si`;
+
+        if (!strategyStats.has(siKey)) {
+          strategyStats.set(siKey, {
+            win_rates: [],
+            profit_factors: [],
+            sharpes: [],
+            test_count: 0,
+          });
+        }
+
+        const stats = strategyStats.get(siKey)!;
+        stats.win_rates.push(breakdown.si.win_rate);
+        stats.profit_factors.push(breakdown.si.profit_factor);
+        stats.sharpes.push(breakdown.si.sharpe_ratio);
+        stats.test_count++;
+      }
+    }
+
+    // Convert to leaderboard entries
+    for (const [key, stats] of strategyStats) {
+      const [setupType, regimeLabel] = key.split("::");
+      const isSI = regimeLabel === "si";
+
+      // Calculate averages
+      const avgWinRate = stats.win_rates.length > 0
+        ? stats.win_rates.reduce((a, b) => a + b, 0) / stats.win_rates.length : 0;
+      const avgPF = stats.profit_factors.length > 0
+        ? stats.profit_factors.reduce((a, b) => a + b, 0) / stats.profit_factors.length : 1;
+      const avgSharpe = stats.sharpes.length > 0
+        ? stats.sharpes.reduce((a, b) => a + b, 0) / stats.sharpes.length : 0;
+
+      // Calculate consistency (standard deviation of win rates across horizons)
+      const variance = stats.win_rates.length > 0
+        ? stats.win_rates.reduce((s, v) => s + (v - avgWinRate) ** 2, 0) / stats.win_rates.length : 0;
+      const consistency = Math.max(0, 1 - Math.sqrt(variance)); // Higher = more consistent
+
+      // Star rating based on accuracy (win rate)
+      let stars = 1;
+      if (avgWinRate > 0.55) stars = 2;
+      if (avgWinRate > 0.60) stars = 3;
+      if (avgWinRate > 0.65) stars = 4;
+      if (avgWinRate > 0.70) stars = 5;
+
+      const entry: StrategyLeaderboardEntry = {
+        strategy_name: `${setupType}${isSI ? " [SI]" : ""}`,
+        setup_type: setupType,
+        regime: isSI ? "super_intelligence" : "baseline",
+        stars,
+        win_rate: avgWinRate,
+        profit_factor: avgPF,
+        sharpe_ratio: avgSharpe,
+        total_tests: stats.test_count,
+        consistency_score: consistency,
+        last_tested: new Date().toISOString(),
+      };
+
+      _strategyLeaderboard.set(key, entry);
+    }
+
+    console.log(`[backtest] Updated leaderboard: ${_strategyLeaderboard.size} strategies`);
+  } catch (err) {
+    console.error("[backtest] [continuous] Strategy leaderboard update failed:", err);
+  }
+}
+
+/**
+ * Get continuous backtest status
+ */
+export function getContinuousBacktestStatus(): {
+  running: boolean;
+  message: string;
+  last_result_timestamp?: string;
+  strategies_tested: number;
+} {
+  return {
+    running: _continuousBacktestRunning,
+    message: _continuousBacktestRunning ? "Continuous backtesting active" : "Continuous backtesting inactive",
+    last_result_timestamp: _lastBacktestResult?.timestamp,
+    strategies_tested: _strategyLeaderboard.size,
+  };
+}
+
+/**
+ * Get strategy leaderboard sorted by star rating and consistency
+ */
+export function getStrategyLeaderboard(): StrategyLeaderboardEntry[] {
+  const strategies = Array.from(_strategyLeaderboard.values());
+  return strategies.sort((a, b) => {
+    // Sort by stars descending, then by win_rate descending, then by consistency
+    if (b.stars !== a.stars) return b.stars - a.stars;
+    if (Math.abs(b.win_rate - a.win_rate) > 0.001) return b.win_rate - a.win_rate;
+    return b.consistency_score - a.consistency_score;
+  });
+}

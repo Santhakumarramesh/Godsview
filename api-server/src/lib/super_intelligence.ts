@@ -121,6 +121,393 @@ function getRegimeWeights(regime: string): RegimeWeights {
   return REGIME_WEIGHTS[regime] ?? REGIME_WEIGHTS.ranging;
 }
 
+// ── 1.5 Trading Strategies: Professional Trading Setups ──────────────────────
+// Well-known strategies from professional traders and institutions.
+// Each strategy includes entry rules, exit rules, optimal regimes, and accuracy ratings.
+
+export interface TradingStrategy {
+  name: string;
+  description: string;
+  type: "scalp" | "swing" | "position" | "day";
+  timeframes: string[];
+  indicators: string[];
+  entry_rules: string[];
+  exit_rules: string[];
+  risk_reward_min: number;
+  best_regimes: string[];
+  youtube_reference?: string;
+  accuracy_rating: number; // 1-5 stars
+}
+
+export const TRADING_STRATEGIES: TradingStrategy[] = [
+  {
+    name: "SMC - Order Blocks",
+    description: "Smart Money Concepts using order blocks and fair value gaps for institutional entry points",
+    type: "swing",
+    timeframes: ["15m", "1h", "4h"],
+    indicators: ["Volume Profile", "Order Block", "Fair Value Gap", "Liquidity Levels"],
+    entry_rules: [
+      "Identify order block from previous strong move (2-4 candles)",
+      "Wait for pullback and retest of order block",
+      "Enter on break of order block boundary with volume confirmation",
+      "Risk at break of fair value gap"
+    ],
+    exit_rules: [
+      "Take profit at next liquidity level or resistance",
+      "Trail stop above order block as price progresses",
+      "Exit on break of entry candle low (swing low invalidation)"
+    ],
+    risk_reward_min: 1.5,
+    best_regimes: ["trending_bull", "trending_bear"],
+    accuracy_rating: 4.5,
+  },
+  {
+    name: "ICT - Optimal Trade Entry",
+    description: "Inner Circle Trader method: kill zones, daily bias, and optimal entries at market structure breaks",
+    type: "scalp",
+    timeframes: ["5m", "15m"],
+    indicators: ["Daily Bias", "Displacement", "Kill Zone (NY Open, London Close)", "Breaker Blocks"],
+    entry_rules: [
+      "Trade during NY/London kill zone (10 minutes after open)",
+      "Only trade in direction of daily bias (HTF trend)",
+      "Enter on break of overnight high/low with acceleration",
+      "Scalp from mid-candle moves within kill zone"
+    ],
+    exit_rules: [
+      "Exit on first liquidity grab (countertrend spike)",
+      "Trail profit at each new high/low (scalp style)",
+      "Cut losses at 3-5 pips if breaker block fails"
+    ],
+    risk_reward_min: 1.0,
+    best_regimes: ["volatile", "ranging"],
+    accuracy_rating: 4.0,
+  },
+  {
+    name: "Wyckoff Method - Accumulation Phase",
+    description: "Accumulation and distribution phases detecting smart money positioning and spring setups",
+    type: "position",
+    timeframes: ["1h", "4h", "1d"],
+    indicators: ["Volume Analysis", "Price Action Structure", "Spring/Upthrust", "Effort vs Result"],
+    entry_rules: [
+      "Identify accumulation phase: declining volume on down moves",
+      "Spot spring: break of support, immediate recovery above",
+      "Wait for test and rejection of accumulation high",
+      "Enter on break of accumulation range with volume"
+    ],
+    exit_rules: [
+      "Exit when distribution phase begins (volume increases on up moves)",
+      "Trail stop at each support level breakthrough",
+      "Take profit at logical resistance or ATR target"
+    ],
+    risk_reward_min: 2.0,
+    best_regimes: ["trending_bull", "trending_bear"],
+    accuracy_rating: 4.2,
+  },
+  {
+    name: "Supply & Demand Zones",
+    description: "Trading fresh and tested supply/demand zones with flip zone confirmation",
+    type: "swing",
+    timeframes: ["15m", "1h", "4h"],
+    indicators: ["Supply Level", "Demand Level", "Zone Confluence", "Rejection Candles"],
+    entry_rules: [
+      "Mark supply/demand zones from clean 2-candle reversals",
+      "Differentiate: fresh zone (not touched), tested zone (1-2 tests), flip zone (broken and reclaimed)",
+      "Enter fresh zone on approach with volume confirmation",
+      "Flip zones offer lower-risk entries after confirmation"
+    ],
+    exit_rules: [
+      "Exit at next opposite zone (supply below, demand above)",
+      "Trail stop at previous zone once price clears it",
+      "Hard stop at break of zone candle for tight risk"
+    ],
+    risk_reward_min: 1.5,
+    best_regimes: ["ranging", "trending_bull", "trending_bear"],
+    accuracy_rating: 4.1,
+  },
+  {
+    name: "Break & Retest Strategy",
+    description: "Breakout confirmation with pullback retest entries for high-probability setups",
+    type: "swing",
+    timeframes: ["1h", "4h"],
+    indicators: ["Support/Resistance", "Volume Breakout", "Retracement Levels", "Structure Break"],
+    entry_rules: [
+      "Identify strong support/resistance (3+ tests or clean reversal)",
+      "Wait for strong breakout (close beyond level with volume)",
+      "Pullback should retest broken level or 50% retracement",
+      "Enter on reversal from retest with momentum divergence"
+    ],
+    exit_rules: [
+      "Exit at next logical resistance/support",
+      "Trail stop above entry level after initial profit",
+      "Cut loss at break of retest candle (entry bar low)"
+    ],
+    risk_reward_min: 2.0,
+    best_regimes: ["trending_bull", "trending_bear", "volatile"],
+    accuracy_rating: 4.3,
+  },
+  {
+    name: "Fibonacci Retracement Trades",
+    description: "Golden ratio entries at 0.618 and 0.786 retracements with structure confluence",
+    type: "swing",
+    timeframes: ["1h", "4h", "1d"],
+    indicators: ["Fibonacci Retracement", "Swing Highs/Lows", "Volume Profile", "Structure"],
+    entry_rules: [
+      "Draw fib from latest swing high to swing low (or vice versa)",
+      "Key levels: 0.618 (golden ratio), 0.786 (natural support)",
+      "Enter at 0.618 if price shows rejection (doji, pin bar)",
+      "0.786 is more aggressive but higher probability"
+    ],
+    exit_rules: [
+      "Exit at 0 (swing origin) or next swing structure",
+      "Trail stop at 0.5 level once price clears above 0.618",
+      "Hard stop at 0.886 level (break of entry structure)"
+    ],
+    risk_reward_min: 2.5,
+    best_regimes: ["trending_bull", "trending_bear"],
+    accuracy_rating: 3.8,
+  },
+  {
+    name: "VWAP Trading",
+    description: "Volume-Weighted Average Price bounces and trend-following with multi-timeframe confluence",
+    type: "day",
+    timeframes: ["5m", "15m", "1h"],
+    indicators: ["VWAP", "Volume", "RSI", "MACD"],
+    entry_rules: [
+      "VWAP bounce: price touches VWAP from above/below, quick reversal",
+      "Trend trade: price above VWAP (bull) on volume increase",
+      "Enter on breakeven retest of VWAP after touch",
+      "Confirm with volume profile support at VWAP"
+    ],
+    exit_rules: [
+      "Exit on VWAP break in opposite direction",
+      "Trail profit: move stop to VWAP as price advances",
+      "Tighten stop on lower timeframe pullbacks"
+    ],
+    risk_reward_min: 1.5,
+    best_regimes: ["trending_bull", "trending_bear"],
+    accuracy_rating: 4.0,
+  },
+  {
+    name: "Moving Average Crossover",
+    description: "EMA 9/21/50/200 crossovers with confluence for trend confirmation and reversals",
+    type: "swing",
+    timeframes: ["1h", "4h"],
+    indicators: ["EMA 9", "EMA 21", "EMA 50", "EMA 200"],
+    entry_rules: [
+      "Bullish: EMA 9 crosses above EMA 21 (fast above slow)",
+      "Confluence: Price above EMA 50 and EMA 200 for trend",
+      "Enter on crossover candle close or retest of 9-EMA",
+      "Stronger setup: all four EMAs in proper order (9>21>50>200)"
+    ],
+    exit_rules: [
+      "Exit on reverse crossover (9 crosses below 21)",
+      "Trail stop below 21-EMA once 50-EMA is cleared",
+      "Hard stop at break of 9-EMA for tight exits"
+    ],
+    risk_reward_min: 1.5,
+    best_regimes: ["trending_bull", "trending_bear"],
+    accuracy_rating: 3.7,
+  },
+  {
+    name: "RSI Divergence",
+    description: "Bullish and bearish divergences at RSI extremes (>70 or <30) for reversal entries",
+    type: "swing",
+    timeframes: ["1h", "4h"],
+    indicators: ["RSI (14)", "Price Structure", "Volume"],
+    entry_rules: [
+      "Bearish divergence: price makes higher high but RSI makes lower high (at >70)",
+      "Bullish divergence: price makes lower low but RSI makes higher low (at <30)",
+      "Enter on candlestick rejection after divergence confirmation",
+      "Volume confirmation on divergence bar"
+    ],
+    exit_rules: [
+      "Exit at opposite extreme or structure support/resistance",
+      "Trail stop below entry bar low (divergence bar)",
+      "Hard stop at break of divergence structure"
+    ],
+    risk_reward_min: 2.0,
+    best_regimes: ["ranging", "volatile"],
+    accuracy_rating: 3.9,
+  },
+  {
+    name: "Bollinger Band Squeeze",
+    description: "Volatility compression breakouts using Bollinger Band squeeze detection",
+    type: "day",
+    timeframes: ["5m", "15m"],
+    indicators: ["Bollinger Bands (20,2)", "Keltner Channel", "ATR", "Volume"],
+    entry_rules: [
+      "Squeeze: Bollinger Bands inside Keltner Channel (volatility contraction)",
+      "Monitor for squeeze release: price break with volume spike",
+      "Enter breakout in direction of squeeze breakout (usually strong)",
+      "Confirm with volume increase and ATR expansion"
+    ],
+    exit_rules: [
+      "Exit at upper/lower Bollinger Band on opposite side",
+      "Trail profit: move stop to near-term swing point",
+      "Take partial at 1.5R and trail full position"
+    ],
+    risk_reward_min: 2.0,
+    best_regimes: ["volatile", "ranging"],
+    accuracy_rating: 4.1,
+  },
+  {
+    name: "Orderflow Absorption",
+    description: "Large block detection, delta divergence, and aggressive orders at key levels",
+    type: "scalp",
+    timeframes: ["5m", "15m"],
+    indicators: ["Delta Cumulative", "Large Orders", "Time & Sales", "Bid/Ask Imbalance"],
+    entry_rules: [
+      "Detect large buy blocks at support or sell blocks at resistance",
+      "Delta divergence: price down but delta stays positive (buyers in control)",
+      "Enter on absorption recovery: price reverses after large block absorption",
+      "Confirm with bid/ask imbalance flipping"
+    ],
+    exit_rules: [
+      "Exit when absorption exhausts (next large opposite order)",
+      "Trail profit at each new momentum extreme",
+      "Hard stop at break of absorption bar low"
+    ],
+    risk_reward_min: 1.2,
+    best_regimes: ["ranging", "volatile"],
+    accuracy_rating: 4.2,
+  },
+  {
+    name: "Sweep & Reclaim",
+    description: "Liquidity grab and liquidation hunting followed by reversal into protected traders",
+    type: "swing",
+    timeframes: ["15m", "1h"],
+    indicators: ["Liquidity Levels", "Stop Hunts", "Volume Spikes", "Price Action"],
+    entry_rules: [
+      "Identify protected liquidity below support (stops, limit orders)",
+      "Sweep: price breaks level, stops hit, volume spike",
+      "Reclaim: price reverses and reclaims the broken level",
+      "Enter on reclaim candle close or pullback to swept level"
+    ],
+    exit_rules: [
+      "Exit at next liquidity level (previous resistance)",
+      "Trail stop below sweep point (invalidation)",
+      "Tighten on pullbacks within reclaim move"
+    ],
+    risk_reward_min: 1.8,
+    best_regimes: ["trending_bull", "trending_bear"],
+    accuracy_rating: 4.3,
+  },
+  {
+    name: "Gap Fill Strategy",
+    description: "Opening gap analysis and mean-reversion fills on forex and futures markets",
+    type: "day",
+    timeframes: ["1h", "4h"],
+    indicators: ["Opening Gap", "Volume", "Resistance/Support", "ATR"],
+    entry_rules: [
+      "Identify opening gap (difference between previous close and current open)",
+      "Up-gap: usually filled (price pulls back) during day",
+      "Enter on reversal from gap top (mean reversion) or gap bottom (trend follow)",
+      "Larger gaps (2+ ATR) more likely to fill than small gaps"
+    ],
+    exit_rules: [
+      "Exit at gap fill point (previous close level)",
+      "Trail stop above gap top if trading gap continuation",
+      "Cut loss at break of entry bar (tight stops)"
+    ],
+    risk_reward_min: 1.5,
+    best_regimes: ["ranging", "volatile"],
+    accuracy_rating: 3.9,
+  },
+  {
+    name: "Momentum Ignition",
+    description: "Volume burst detection at key levels signaling acceleration and breakout direction",
+    type: "day",
+    timeframes: ["5m", "15m"],
+    indicators: ["Volume", "Volume MA", "Price Velocity", "Momentum Oscillators"],
+    entry_rules: [
+      "Detect volume spike 2x above 20-candle average at support/resistance",
+      "Momentum ignition: sharp price move with bursting volume",
+      "Enter in direction of volume surge (imbalance)",
+      "Confirm with price acceleration (higher highs or lower lows)"
+    ],
+    exit_rules: [
+      "Exit on volume exhaustion (volume spike reversal)",
+      "Trail profit at each new extreme",
+      "Hard stop at momentum invalidation bar"
+    ],
+    risk_reward_min: 1.3,
+    best_regimes: ["volatile", "trending_bull", "trending_bear"],
+    accuracy_rating: 4.0,
+  },
+  {
+    name: "Mean Reversion - Overextension",
+    description: "Overextended price snapback to moving average or structural mean using extremes",
+    type: "day",
+    timeframes: ["15m", "1h"],
+    indicators: ["EMA 20", "RSI Extremes", "Bollinger Bands", "ATR"],
+    entry_rules: [
+      "Detect overextension: RSI >90 or <10 with price far from EMA 20",
+      "Price above upper Bollinger Band by 1+ ATR",
+      "Enter on reversal candle or momentum divergence",
+      "Confirm exhaustion with volume decline"
+    ],
+    exit_rules: [
+      "Exit at EMA 20 or midband (Bollinger mean)",
+      "Trail stop at recent swing high/low",
+      "Take partial at 0.5R and trail for larger moves"
+    ],
+    risk_reward_min: 1.5,
+    best_regimes: ["ranging", "volatile"],
+    accuracy_rating: 4.0,
+  },
+  {
+    name: "Multi-Timeframe Confluence",
+    description: "Combining signals from 1h/4h/1d for high-probability structural setups",
+    type: "position",
+    timeframes: ["1h", "4h", "1d"],
+    indicators: ["Structure Alignment", "Support/Resistance", "Trend Direction", "Volume"],
+    entry_rules: [
+      "Identify trend: all three timeframes showing same direction",
+      "Entry: lower timeframe pullback to 4h/1d support/resistance",
+      "Require 2+ of: break & retest, supply/demand zone, moving average confluence",
+      "Volume confirmation on entry candle"
+    ],
+    exit_rules: [
+      "Exit at next 4h/1d structure (higher timeframe target)",
+      "Trail stop at HTF support/resistance",
+      "Hard stop at LTF structure break"
+    ],
+    risk_reward_min: 2.5,
+    best_regimes: ["trending_bull", "trending_bear"],
+    accuracy_rating: 4.4,
+  },
+];
+
+export function getStrategyForSetup(setupType: string, regime: string): TradingStrategy[] {
+  // Filter strategies by best regimes and setup type compatibility
+  const regimeWeights = getRegimeWeights(regime);
+
+  // Map setup types to compatible strategies
+  const setupMap: Record<string, string[]> = {
+    "breakout": ["Break & Retest Strategy", "Bollinger Band Squeeze", "Momentum Ignition"],
+    "retracement": ["Fibonacci Retracement Trades", "Supply & Demand Zones", "Mean Reversion - Overextension"],
+    "reversal": ["RSI Divergence", "Sweep & Reclaim", "SMC - Order Blocks"],
+    "trend": ["Moving Average Crossover", "VWAP Trading", "Multi-Timeframe Confluence"],
+    "scalp": ["ICT - Optimal Trade Entry", "Orderflow Absorption", "Momentum Ignition"],
+    "swing": ["Wyckoff Method - Accumulation Phase", "Supply & Demand Zones", "Break & Retest Strategy"],
+    "position": ["Multi-Timeframe Confluence", "Wyckoff Method - Accumulation Phase"],
+    "gap": ["Gap Fill Strategy"],
+    "smarts_money": ["SMC - Order Blocks", "Sweep & Reclaim", "ICT - Optimal Trade Entry"],
+  };
+
+  const compatibleNames = setupMap[setupType] || [];
+
+  return TRADING_STRATEGIES.filter((strategy) => {
+    // Include if in compatible setup types
+    if (compatibleNames.includes(strategy.name)) return true;
+
+    // Include if strategy is optimal for this regime
+    if (strategy.best_regimes.includes(regime)) return true;
+
+    return false;
+  }).sort((a, b) => b.accuracy_rating - a.accuracy_rating);
+}
+
 // ── 2. Ensemble ML: Gradient Boosted Decision Stumps + Logistic Regression ──
 // The existing logistic regression is Layer 1. We add a gradient-boosted
 // ensemble of shallow decision stumps (depth=1) as Layer 2, then vote.
@@ -656,4 +1043,247 @@ export function getSuperIntelligenceStatus(): {
     ensemble: null,
     message: "Super Intelligence inactive — using heuristic pipeline scoring",
   };
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// AUTONOMOUS MODE: Auto-scans symbols, evaluates strategies, logs decisions
+// ══════════════════════════════════════════════════════════════════════════════
+
+export interface StrategyRating {
+  name: string;
+  setup_type: string;
+  regime: string;
+  win_rate: number;
+  profit_factor: number;
+  sharpe_ratio: number;
+  edge_score: number;
+  total_trades: number;
+  stars: number; // 1-5 star rating
+  last_updated: string;
+}
+
+let _autonomousMode = false;
+let _autonomousLoopInterval: NodeJS.Timer | null = null;
+let _strategyRatings: Map<string, StrategyRating> = new Map();
+
+/**
+ * Start autonomous mode: runs every 60 seconds, scans all watched symbols,
+ * evaluates strategies, and logs decisions to database
+ */
+export async function startAutonomousMode(): Promise<{ success: boolean; message: string }> {
+  if (_autonomousMode) {
+    return { success: false, message: "Autonomous mode already running" };
+  }
+
+  _autonomousMode = true;
+  console.log("[super] Autonomous mode started — will scan every 60 seconds");
+
+  // Initial scan immediately
+  await autonomousScan();
+
+  // Set up recurring scan every 60 seconds
+  _autonomousLoopInterval = setInterval(async () => {
+    try {
+      await autonomousScan();
+    } catch (err) {
+      console.error("[super] Autonomous scan error:", err);
+    }
+  }, 60_000);
+
+  return { success: true, message: "Autonomous mode activated — scanning every 60s" };
+}
+
+/**
+ * Stop autonomous mode
+ */
+export function stopAutonomousMode(): { success: boolean; message: string } {
+  if (!_autonomousMode) {
+    return { success: false, message: "Autonomous mode not running" };
+  }
+
+  if (_autonomousLoopInterval) {
+    clearInterval(_autonomousLoopInterval);
+    _autonomousLoopInterval = null;
+  }
+
+  _autonomousMode = false;
+  console.log("[super] Autonomous mode stopped");
+  return { success: true, message: "Autonomous mode deactivated" };
+}
+
+/**
+ * Internal: perform one autonomous scan cycle
+ */
+async function autonomousScan(): Promise<void> {
+  try {
+    console.log("[super] [autonomy] Starting scan cycle...");
+    const { db, accuracyResultsTable } = await import("@workspace/db");
+    const { eq, isNotNull } = await import("drizzle-orm");
+
+    // Fetch recent signals (last 24 hours) grouped by symbol/setup/regime
+    const now = new Date();
+    const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+    const recentSignals = await db
+      .select({
+        id: accuracyResultsTable.id,
+        symbol: accuracyResultsTable.symbol,
+        setup_type: accuracyResultsTable.setup_type,
+        regime: accuracyResultsTable.regime,
+        direction: accuracyResultsTable.direction,
+        structure_score: accuracyResultsTable.structure_score,
+        order_flow_score: accuracyResultsTable.order_flow_score,
+        recall_score: accuracyResultsTable.recall_score,
+        final_quality: accuracyResultsTable.final_quality,
+        outcome: accuracyResultsTable.outcome,
+        entry_price: accuracyResultsTable.entry_price,
+        stop_loss: accuracyResultsTable.stop_loss,
+        take_profit: accuracyResultsTable.take_profit,
+        atr: accuracyResultsTable.atr,
+        created_at: accuracyResultsTable.created_at,
+      })
+      .from(accuracyResultsTable)
+      .where(isNotNull(accuracyResultsTable.structure_score))
+      .limit(200);
+
+    console.log(`[super] [autonomy] Scanned ${recentSignals.length} recent signals`);
+
+    // Process each signal through SI pipeline
+    let siApprovedCount = 0;
+    for (const signal of recentSignals) {
+      const r = signal as any;
+      const structure = parseFloat(String(r.structure_score ?? "0"));
+      const orderFlow = parseFloat(String(r.order_flow_score ?? "0"));
+      const recall = parseFloat(String(r.recall_score ?? "0"));
+
+      const result = await processSuperSignal(r.id ?? 0, r.symbol ?? "UNKNOWN", {
+        structure_score: structure,
+        order_flow_score: orderFlow,
+        recall_score: recall,
+        setup_type: r.setup_type ?? "absorption_reversal",
+        regime: r.regime ?? "ranging",
+        direction: (r.direction ?? "long") as "long" | "short",
+        entry_price: r.entry_price ?? 100,
+        stop_loss: r.stop_loss ?? 99,
+        take_profit: r.take_profit ?? 105,
+        atr: r.atr ?? 1.0,
+        equity: 10_000,
+      });
+
+      if (result.approved) {
+        siApprovedCount++;
+        console.log(`[super] [autonomy] Signal ${r.id} approved: ${r.setup_type}/${r.regime}, WP=${(result.win_probability * 100).toFixed(0)}%`);
+      }
+    }
+
+    // Update strategy ratings
+    await updateStrategyRatings(recentSignals);
+
+    console.log(`[super] [autonomy] Cycle complete: ${siApprovedCount}/${recentSignals.length} approved`);
+  } catch (err) {
+    console.error("[super] [autonomy] Scan cycle failed:", err);
+  }
+}
+
+/**
+ * Update strategy ratings based on historical performance
+ */
+async function updateStrategyRatings(signals: any[]): Promise<void> {
+  try {
+    const { db, accuracyResultsTable } = await import("@workspace/db");
+    const { and, eq, isNotNull } = await import("drizzle-orm");
+
+    // Group by setup_type + regime combo
+    const combos = new Map<string, typeof signals>();
+    for (const sig of signals) {
+      const key = `${sig.setup_type ?? "absorption_reversal"}::${sig.regime ?? "ranging"}`;
+      if (!combos.has(key)) combos.set(key, []);
+      combos.get(key)!.push(sig);
+    }
+
+    // For each combo, calculate metrics
+    for (const [key, combo] of combos) {
+      const [setupType, regime] = key.split("::");
+
+      // Query historical performance
+      const history = await db
+        .select({
+          outcome: accuracyResultsTable.outcome,
+          edge_score: accuracyResultsTable.edge_score,
+        })
+        .from(accuracyResultsTable)
+        .where(
+          and(
+            eq(accuracyResultsTable.setup_type, setupType),
+            eq(accuracyResultsTable.regime, regime),
+            isNotNull(accuracyResultsTable.outcome)
+          )
+        )
+        .limit(1000);
+
+      if (history.length === 0) continue;
+
+      const wins = history.filter(h => h.outcome === "win").length;
+      const total = history.length;
+      const winRate = total > 0 ? wins / total : 0;
+
+      // Simplified profit factor (assume avg win 2%, avg loss 1.5%)
+      const profitFactor = winRate > 0 ? (winRate * 2) / ((1 - winRate) * 1.5) : 1;
+
+      // Simplified Sharpe (use win_rate as proxy)
+      const sharpe = winRate > 0.5 ? (winRate - 0.5) * 2 : 0;
+
+      // Calculate star rating (1-5)
+      let stars = 1;
+      if (winRate > 0.55) stars = 2;
+      if (winRate > 0.60) stars = 3;
+      if (winRate > 0.65) stars = 4;
+      if (winRate > 0.70) stars = 5;
+
+      const rating: StrategyRating = {
+        name: `${setupType} in ${regime}`,
+        setup_type: setupType,
+        regime,
+        win_rate: winRate,
+        profit_factor: profitFactor,
+        sharpe_ratio: sharpe,
+        edge_score: winRate * profitFactor - (1 - winRate),
+        total_trades: total,
+        stars,
+        last_updated: new Date().toISOString(),
+      };
+
+      _strategyRatings.set(key, rating);
+      console.log(`[super] Updated rating for ${key}: ${stars}★ WR=${(winRate * 100).toFixed(0)}%`);
+    }
+  } catch (err) {
+    console.error("[super] [autonomy] Strategy rating update failed:", err);
+  }
+}
+
+/**
+ * Get current autonomous mode status
+ */
+export function getAutonomousModeStatus(): {
+  enabled: boolean;
+  message: string;
+  strategy_count: number;
+} {
+  return {
+    enabled: _autonomousMode,
+    message: _autonomousMode ? "Autonomous scanning active" : "Autonomous mode inactive",
+    strategy_count: _strategyRatings.size,
+  };
+}
+
+/**
+ * Get strategy leaderboard (sorted by star rating and win rate)
+ */
+export function getStrategyLeaderboard(): StrategyRating[] {
+  const strategies = Array.from(_strategyRatings.values());
+  return strategies.sort((a, b) => {
+    // Sort by stars descending, then by win_rate descending
+    if (b.stars !== a.stars) return b.stars - a.stars;
+    return b.win_rate - a.win_rate;
+  });
 }

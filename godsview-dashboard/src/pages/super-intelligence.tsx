@@ -88,6 +88,31 @@ type SIStatus = {
     lr_accuracy: number; samples: number; trained_at: string;
   } | null;
   message: string;
+  current_regime?: string;
+};
+
+type AutonomousStatus = {
+  enabled: boolean;
+  scans_completed: number;
+  strategies_rated: number;
+  last_scan_time: string;
+  current_regime?: string;
+};
+
+type StrategyLeaderboardItem = {
+  rank: number;
+  strategy: string;
+  win_rate: number;
+  profit_factor: number;
+  sharpe: number;
+  trades: number;
+  stars: number;
+};
+
+type SystemMetrics = {
+  win_rate: number;
+  profit_factor: number;
+  governance_metrics?: Record<string, any>;
 };
 
 // ── SSE Hook ───────────────────────────────────────────────────────────────
@@ -123,7 +148,8 @@ export default function SuperIntelligencePage() {
   const [backtestDays, setBacktestDays] = useState(30);
   const [isRunning, setIsRunning] = useState(false);
   const [backtestResult, setBacktestResult] = useState<BacktestResult | null>(null);
-  const [activeTab, setActiveTab] = useState<"overview" | "equity" | "regimes" | "setups" | "feed">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "equity" | "regimes" | "setups" | "feed" | "leaderboard">("overview");
+  const [autonomousMode, setAutonomousMode] = useState(false);
 
   // Real-time SSE feed
   const { events: siEvents, connected: sseConnected } = useSSEStream("/api/super-intelligence/stream");
@@ -145,6 +171,28 @@ export default function SuperIntelligencePage() {
     refetchInterval: 30_000,
   });
 
+  // Autonomous mode status
+  const { data: autonomousStatus } = useQuery<AutonomousStatus>({
+    queryKey: ["autonomous-status"],
+    queryFn: () => fetch("/api/super-intelligence/autonomous/status").then(r => r.json()),
+    refetchInterval: 10_000,
+    enabled: autonomousMode,
+  });
+
+  // Strategy leaderboard
+  const { data: leaderboard } = useQuery<StrategyLeaderboardItem[]>({
+    queryKey: ["strategy-leaderboard"],
+    queryFn: () => fetch("/api/super-intelligence/strategy-leaderboard").then(r => r.json()),
+    refetchInterval: 60_000,
+  });
+
+  // System metrics (for market readiness)
+  const { data: systemMetrics } = useQuery<SystemMetrics>({
+    queryKey: ["system-metrics"],
+    queryFn: () => fetch("/api/system").then(r => r.json()),
+    refetchInterval: 30_000,
+  });
+
   const runBacktest = useCallback(async () => {
     setIsRunning(true);
     try {
@@ -161,6 +209,16 @@ export default function SuperIntelligencePage() {
       setIsRunning(false);
     }
   }, [backtestDays]);
+
+  const toggleAutonomousMode = useCallback(async () => {
+    try {
+      const endpoint = autonomousMode ? "/api/super-intelligence/autonomous/stop" : "/api/super-intelligence/autonomous/start";
+      await fetch(endpoint, { method: "POST" });
+      setAutonomousMode(!autonomousMode);
+    } catch (err) {
+      console.error("Failed to toggle autonomous mode:", err);
+    }
+  }, [autonomousMode]);
 
   // Auto-run backtest on mount
   useEffect(() => { runBacktest(); }, []);
@@ -236,6 +294,119 @@ export default function SuperIntelligencePage() {
         </div>
       </div>
 
+      {/* ── A. Autonomous Mode Controls ── */}
+      <div className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+        <div className="flex items-center justify-between mb-4">
+          <MicroLabel>Autonomous Mode</MicroLabel>
+          <button onClick={toggleAutonomousMode}
+            className="px-3 py-1.5 rounded text-xs transition-colors"
+            style={{
+              backgroundColor: autonomousMode ? "rgba(156,255,147,0.15)" : "rgba(255,113,98,0.15)",
+              color: autonomousMode ? C.primary : C.tertiary,
+              border: `1px solid ${autonomousMode ? "rgba(156,255,147,0.3)" : "rgba(255,113,98,0.3)"}`,
+              fontFamily: "Space Grotesk", fontWeight: 600,
+            }}>
+            {autonomousMode ? "Stop" : "Start"}
+          </button>
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div>
+            <div style={{ fontSize: "8px", color: C.outline, fontFamily: "Space Grotesk", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: "8px" }}>
+              Status
+            </div>
+            <div style={{
+              fontSize: "14px", fontWeight: 600, color: autonomousMode ? C.primary : C.tertiary,
+              fontFamily: "JetBrains Mono, monospace",
+            }}>
+              {autonomousMode ? "ACTIVE" : "INACTIVE"}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: "8px", color: C.outline, fontFamily: "Space Grotesk", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: "8px" }}>
+              Scans Completed
+            </div>
+            <div style={{
+              fontSize: "14px", fontWeight: 600, color: C.secondary,
+              fontFamily: "JetBrains Mono, monospace",
+            }}>
+              {autonomousStatus?.scans_completed ?? 0}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: "8px", color: C.outline, fontFamily: "Space Grotesk", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: "8px" }}>
+              Strategies Rated
+            </div>
+            <div style={{
+              fontSize: "14px", fontWeight: 600, color: C.secondary,
+              fontFamily: "JetBrains Mono, monospace",
+            }}>
+              {autonomousStatus?.strategies_rated ?? 0}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: "8px", color: C.outline, fontFamily: "Space Grotesk", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: "8px" }}>
+              Last Scan
+            </div>
+            <div style={{
+              fontSize: "12px", color: C.muted,
+              fontFamily: "JetBrains Mono, monospace",
+            }}>
+              {autonomousStatus?.last_scan_time ? new Date(autonomousStatus.last_scan_time).toLocaleTimeString() : "—"}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── C. Market Readiness Indicator ── */}
+      {systemMetrics && (
+        <div className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+          <div className="flex items-center gap-6">
+            <div className="flex flex-col items-center">
+              <MicroLabel style={{ marginBottom: "12px" }}>Market Readiness</MicroLabel>
+              <div className="flex items-center justify-center" style={{ width: "80px", height: "80px" }}>
+                <div style={{
+                  width: "100%", height: "100%", borderRadius: "50%",
+                  backgroundColor: (systemMetrics.win_rate > 0.55 && systemMetrics.profit_factor > 1.2) ? C.primary :
+                    (systemMetrics.win_rate > 0.45 && systemMetrics.profit_factor > 0.9) ? C.gold : C.tertiary,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  opacity: 0.3,
+                }} />
+                <div style={{
+                  position: "absolute", fontSize: "12px", fontWeight: 600,
+                  color: (systemMetrics.win_rate > 0.55 && systemMetrics.profit_factor > 1.2) ? C.primary :
+                    (systemMetrics.win_rate > 0.45 && systemMetrics.profit_factor > 0.9) ? C.gold : C.tertiary,
+                  fontFamily: "Space Grotesk", letterSpacing: "0.05em",
+                  textAlign: "center",
+                }}>
+                  {(systemMetrics.win_rate > 0.55 && systemMetrics.profit_factor > 1.2) ? "MARKET\nREADY" :
+                    (systemMetrics.win_rate > 0.45 && systemMetrics.profit_factor > 0.9) ? "CAUTION" : "STAND\nDOWN"}
+                </div>
+              </div>
+            </div>
+            <div className="flex-1 space-y-2">
+              <div className="flex justify-between" style={{ fontSize: "11px" }}>
+                <span style={{ color: C.outline }}>Win Rate</span>
+                <span style={{ color: C.secondary, fontFamily: "JetBrains Mono, monospace", fontWeight: 600 }}>
+                  {(systemMetrics.win_rate * 100).toFixed(1)}%
+                </span>
+              </div>
+              <div className="flex justify-between" style={{ fontSize: "11px" }}>
+                <span style={{ color: C.outline }}>Profit Factor</span>
+                <span style={{ color: C.secondary, fontFamily: "JetBrains Mono, monospace", fontWeight: 600 }}>
+                  {systemMetrics.profit_factor.toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between" style={{ fontSize: "11px" }}>
+                <span style={{ color: C.outline }}>Current Regime</span>
+                <span style={{ color: C.muted, fontFamily: "JetBrains Mono, monospace" }}>
+                  {autonomousStatus?.current_regime?.replace(/_/g, " ") ?? siStatus?.current_regime?.replace(/_/g, " ") ?? "—"}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Top Metrics Row ── */}
       <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
         <StatCard label="Ensemble Accuracy"
@@ -266,7 +437,7 @@ export default function SuperIntelligencePage() {
 
       {/* ── Tab Navigation ── */}
       <div className="flex gap-1 p-1 rounded" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
-        {(["overview", "equity", "regimes", "setups", "feed"] as const).map(tab => (
+        {(["overview", "equity", "regimes", "setups", "leaderboard", "feed"] as const).map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
             className="px-3 py-1.5 rounded text-xs transition-colors"
             style={{
@@ -521,6 +692,62 @@ export default function SuperIntelligencePage() {
                 <Legend wrapperStyle={{ fontSize: "10px" }} />
               </BarChart>
             </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {/* LEADERBOARD TAB */}
+      {activeTab === "leaderboard" && leaderboard && leaderboard.length > 0 && (
+        <div className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+          <div className="flex items-center justify-between mb-4">
+            <MicroLabel>Strategy Leaderboard</MicroLabel>
+            <span style={{ fontSize: "10px", color: C.outline }}>
+              Top {leaderboard.length} strategies by performance
+            </span>
+          </div>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", fontSize: "11px", fontFamily: "JetBrains Mono, monospace" }}>
+              <thead>
+                <tr style={{ borderBottom: `1px solid ${C.outlineVar}` }}>
+                  <th style={{ padding: "8px", textAlign: "left", color: C.outline, fontWeight: 600 }}>Rank</th>
+                  <th style={{ padding: "8px", textAlign: "left", color: C.outline, fontWeight: 600 }}>Strategy</th>
+                  <th style={{ padding: "8px", textAlign: "right", color: C.outline, fontWeight: 600 }}>Win Rate</th>
+                  <th style={{ padding: "8px", textAlign: "right", color: C.outline, fontWeight: 600 }}>Profit Factor</th>
+                  <th style={{ padding: "8px", textAlign: "right", color: C.outline, fontWeight: 600 }}>Sharpe</th>
+                  <th style={{ padding: "8px", textAlign: "right", color: C.outline, fontWeight: 600 }}>Trades</th>
+                  <th style={{ padding: "8px", textAlign: "center", color: C.outline, fontWeight: 600 }}>Rating</th>
+                </tr>
+              </thead>
+              <tbody>
+                {leaderboard.map((item) => (
+                  <tr key={item.rank} style={{ borderBottom: `1px solid ${C.outlineVar}` }}>
+                    <td style={{ padding: "8px", color: C.secondary }}>{item.rank}</td>
+                    <td style={{ padding: "8px", color: C.muted }}>{item.strategy}</td>
+                    <td style={{
+                      padding: "8px", textAlign: "right",
+                      color: item.win_rate > 0.6 ? C.primary : item.win_rate > 0.5 ? C.gold : C.tertiary,
+                    }}>
+                      {(item.win_rate * 100).toFixed(1)}%
+                    </td>
+                    <td style={{
+                      padding: "8px", textAlign: "right",
+                      color: item.profit_factor > 1.2 ? C.primary : item.profit_factor > 0.9 ? C.gold : C.tertiary,
+                    }}>
+                      {item.profit_factor.toFixed(2)}
+                    </td>
+                    <td style={{ padding: "8px", textAlign: "right", color: C.secondary }}>
+                      {item.sharpe.toFixed(2)}
+                    </td>
+                    <td style={{ padding: "8px", textAlign: "right", color: C.muted }}>
+                      {item.trades}
+                    </td>
+                    <td style={{ padding: "8px", textAlign: "center", color: C.gold }}>
+                      {Array(item.stars).fill("★").join("")}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

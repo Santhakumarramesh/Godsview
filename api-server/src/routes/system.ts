@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, accuracyResultsTable, auditEventsTable, signalsTable, tradesTable } from "@workspace/db";
+import { db, accuracyResultsTable, auditEventsTable, signalsTable, tradesTable, siDecisionsTable } from "@workspace/db";
 import { and, desc, eq, gte, isNotNull, or, sql } from "drizzle-orm";
 import { readFile } from "node:fs/promises";
 import * as path from "node:path";
@@ -1507,6 +1507,197 @@ router.get("/system/consciousness/latest", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to build consciousness board snapshot");
     res.status(500).json({ error: "consciousness_snapshot_failed", message: "Failed to fetch consciousness snapshot" });
+  }
+});
+
+router.get("/market-readiness", async (req, res) => {
+  try {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const approvedTrades = await db
+      .select({
+        outcome: siDecisionsTable.outcome,
+        realized_pnl: siDecisionsTable.realized_pnl,
+        final_quality: siDecisionsTable.final_quality,
+        created_at: siDecisionsTable.created_at,
+        regime: siDecisionsTable.regime,
+        enhanced_quality: siDecisionsTable.enhanced_quality,
+        edge_score: siDecisionsTable.edge_score,
+        win_probability: siDecisionsTable.win_probability,
+      })
+      .from(siDecisionsTable)
+      .where(
+        and(
+          eq(siDecisionsTable.approved, true),
+          gte(siDecisionsTable.created_at, thirtyDaysAgo)
+        )
+      );
+
+    if (!approvedTrades.length) {
+      return res.json({
+        status: "CAUTION",
+        color: "yellow",
+        regime: "no_data",
+        metrics: {
+          win_rate: 0,
+          profit_factor: 0,
+          sharpe_ratio: 0,
+          max_drawdown_pct: 0,
+          active_positions: 0,
+          daily_trades: 0,
+          max_daily_trades: 20,
+        },
+        conditions: [
+          {
+            name: "Minimum Trade History",
+            met: false,
+            description: "No approved trades in the last 30 days",
+          },
+        ],
+        recommended_position_size: 0.5,
+        reasoning: "Insufficient trade history. Run backtest or live trades to establish metrics.",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    let wins = 0;
+    let losses = 0;
+    let totalPnl = 0;
+    let totalPnlPct = 0;
+    let maxDrawdownPct = 0;
+    let dailyTrades = 0;
+
+    const regimeMap = new Map<string, number>();
+    let mostCommonRegime = "neutral";
+
+    for (const trade of approvedTrades) {
+      const outcome = String(trade.outcome ?? "").toLowerCase();
+      if (outcome === "win") {
+        wins += 1;
+      } else if (outcome === "loss") {
+        losses += 1;
+      }
+
+      const pnl = parseNum(trade.realized_pnl);
+      totalPnl += pnl;
+      totalPnlPct += pnl > 0 ? 1 : -1;
+
+      const regime = String(trade.regime ?? "neutral");
+      regimeMap.set(regime, (regimeMap.get(regime) ?? 0) + 1);
+
+      const quality = parseNum(trade.final_quality);
+      if (quality < 30) {
+        maxDrawdownPct = Math.max(maxDrawdownPct, Math.abs(quality - 50));
+      }
+    }
+
+    const closedTrades = wins + losses;
+    const winRate = closedTrades > 0 ? wins / closedTrades : 0;
+    const profitFactor = losses > 0 ? (totalPnl > 0 ? Math.abs(totalPnl) / losses : 0) : totalPnl > 0 ? 999 : 0;
+    const sharpeRatio = closedTrades > 0 ? (totalPnl / Math.sqrt(Math.abs(totalPnl) || 1)) * Math.sqrt(252) : 0;
+
+    if (regimeMap.size > 0) {
+      mostCommonRegime = Array.from(regimeMap.entries()).sort((a, b) => b[1] - a[1])[0][0];
+    }
+
+    const { positions } = await getCachedAlpacaData();
+    const activePositions = positions.length;
+    dailyTrades = approvedTrades.filter((t) => {
+      const tradeDate = new Date(t.created_at);
+      const today = new Date();
+      return (
+        tradeDate.getFullYear() === today.getFullYear() &&
+        tradeDate.getMonth() === today.getMonth() &&
+        tradeDate.getDate() === today.getDate()
+      );
+    }).length;
+
+    const conditions: Array<{
+      name: string;
+      met: boolean;
+      description: string;
+    }> = [
+      {
+        name: "Win Rate Threshold",
+        met: winRate > 0.45,
+        description: `Win rate: ${(winRate * 100).toFixed(1)}% (requirement: > 45%)`,
+      },
+      {
+        name: "Profit Factor",
+        met: profitFactor > 0.9,
+        description: `Profit factor: ${profitFactor.toFixed(2)} (requirement: > 0.9)`,
+      },
+      {
+        name: "Max Drawdown",
+        met: maxDrawdownPct < 15,
+        description: `Max drawdown: ${maxDrawdownPct.toFixed(1)}% (requirement: < 15%)`,
+      },
+      {
+        name: "Active Positions",
+        met: activePositions > 0,
+        description: `${activePositions} position(s) currently open`,
+      },
+      {
+        name: "Daily Trade Limit",
+        met: dailyTrades < 20,
+        description: `${dailyTrades} trades today (max: 20)`,
+      },
+    ];
+
+    let status: "READY" | "CAUTION" | "STAND_DOWN" = "STAND_DOWN";
+    let color: "green" | "yellow" | "red" = "red";
+
+    const readyConditions = winRate > 0.55 && profitFactor > 1.2 && maxDrawdownPct < 10;
+    const cautionConditions = winRate > 0.45 && profitFactor > 0.9;
+
+    if (readyConditions) {
+      status = "READY";
+      color = "green";
+    } else if (cautionConditions) {
+      status = "CAUTION";
+      color = "yellow";
+    }
+
+    const basePositionSize = 1.0;
+    let positionSizeAdjustment = 0.5;
+
+    if (status === "READY") {
+      positionSizeAdjustment = 2.0;
+    } else if (status === "CAUTION") {
+      positionSizeAdjustment = 1.0;
+    }
+
+    const recommendedPositionSize = Math.min(5.0, basePositionSize * positionSizeAdjustment);
+
+    const reasoning =
+      status === "READY"
+        ? `Excellent conditions: ${(winRate * 100).toFixed(1)}% win rate, ${profitFactor.toFixed(2)} profit factor, ${maxDrawdownPct.toFixed(1)}% drawdown. Recommend normal to elevated position sizes.`
+        : status === "CAUTION"
+        ? `Fair conditions: ${(winRate * 100).toFixed(1)}% win rate, ${profitFactor.toFixed(2)} profit factor. Recommend reduced position sizes until metrics improve.`
+        : `Poor conditions: Win rate ${(winRate * 100).toFixed(1)}%, profit factor ${profitFactor.toFixed(2)}%. Recommend stand-down or minimal position sizes.`;
+
+    res.json({
+      status,
+      color,
+      regime: mostCommonRegime,
+      metrics: {
+        win_rate: parseFloat(winRate.toFixed(4)),
+        profit_factor: parseFloat(profitFactor.toFixed(2)),
+        sharpe_ratio: parseFloat(sharpeRatio.toFixed(2)),
+        max_drawdown_pct: parseFloat(maxDrawdownPct.toFixed(2)),
+        active_positions: activePositions,
+        daily_trades: dailyTrades,
+        max_daily_trades: 20,
+      },
+      conditions,
+      recommended_position_size: parseFloat(recommendedPositionSize.toFixed(2)),
+      reasoning,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to calculate market readiness");
+    res.status(500).json({ error: "market_readiness_failed", message: "Failed to calculate market readiness assessment" });
   }
 });
 

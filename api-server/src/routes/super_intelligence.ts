@@ -3,6 +3,10 @@ import {
   processSuperSignal,
   getSuperIntelligenceStatus,
   trainEnsemble,
+  startAutonomousMode,
+  stopAutonomousMode,
+  getAutonomousModeStatus,
+  getStrategyLeaderboard,
   type SuperIntelligenceInput,
 } from "../lib/super_intelligence";
 import { evaluateForProduction, getProductionGateStats } from "../lib/production_gate";
@@ -147,6 +151,53 @@ router.get("/super-intelligence/production-stats", async (_req, res) => {
     res.json(getProductionGateStats());
   } catch (err) {
     res.status(500).json({ error: "internal_error", message: "Failed to get production stats" });
+  }
+});
+
+// ── POST /super-intelligence/autonomous/start ──────────────────────────────
+// Start autonomous mode: auto-scans symbols every 60 seconds
+router.post("/super-intelligence/autonomous/start", async (_req, res) => {
+  try {
+    const result = await startAutonomousMode();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: "autonomous_start_failed", message: String(err) });
+  }
+});
+
+// ── POST /super-intelligence/autonomous/stop ───────────────────────────────
+// Stop autonomous mode
+router.post("/super-intelligence/autonomous/stop", async (_req, res) => {
+  try {
+    const result = stopAutonomousMode();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: "autonomous_stop_failed", message: String(err) });
+  }
+});
+
+// ── GET /super-intelligence/autonomous/status ──────────────────────────────
+// Get autonomous mode status and statistics
+router.get("/super-intelligence/autonomous/status", async (_req, res) => {
+  try {
+    const status = getAutonomousModeStatus();
+    res.json(status);
+  } catch (err) {
+    res.status(500).json({ error: "internal_error", message: "Failed to get autonomous status" });
+  }
+});
+
+// ── GET /super-intelligence/strategy-leaderboard ────────────────────────────
+// Get strategy rankings by win rate, profit factor, and Sharpe ratio
+router.get("/super-intelligence/strategy-leaderboard", async (_req, res) => {
+  try {
+    const leaderboard = getStrategyLeaderboard();
+    res.json({
+      count: leaderboard.length,
+      strategies: leaderboard,
+    });
+  } catch (err) {
+    res.status(500).json({ error: "internal_error", message: "Failed to get strategy leaderboard" });
   }
 });
 
