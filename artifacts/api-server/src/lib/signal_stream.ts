@@ -17,6 +17,7 @@ import type { Response } from "express";
 
 export type StreamEventType =
   | "signal"
+  | "si_decision"
   | "candle"
   | "alert"
   | "trade"
@@ -171,9 +172,13 @@ export function getSSEClientCount(): number {
   return signalStreamHub.status().clientCount;
 }
 
-/** Emit an SI decision event (alpaca.ts) */
+/**
+ * Emit an SI decision as a dedicated "si_decision" SSE event.
+ * The dashboard's /super-intelligence page listens for this exact event type.
+ * Also aliased into the "signal" stream for backward compatibility.
+ */
 export function emitSIDecision(data: unknown): void {
-  publishEvent("signal", data);
+  publishEvent("si_decision", data);
 }
 
 /**
@@ -182,7 +187,7 @@ export function emitSIDecision(data: unknown): void {
  */
 export function broadcast(msg: { type: string; data: unknown }): void {
   const typeMap: Record<string, StreamEventType> = {
-    si_decision: "signal",
+    si_decision: "si_decision",
     alert: "alert",
     trade: "trade",
     breaker: "breaker",

@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { trainModel } from "./lib/ml_model";
+import { trainEnsemble } from "./lib/super_intelligence";
 import { validateEnv } from "./lib/env";
 import { setupGracefulShutdown, onShutdown } from "./lib/shutdown";
 import { closePool, checkDbHealth } from "@workspace/db";
@@ -75,6 +76,13 @@ const server = app.listen(port, (err) => {
         logger.info("ML model trained from accuracy_results");
       } catch (err) {
         logger.error({ err }, "ML model training failed");
+      }
+      // ── Super Intelligence: train GBM ensemble after LR model is ready ────
+      try {
+        await trainEnsemble();
+        logger.info("Super Intelligence ensemble trained");
+      } catch (err) {
+        logger.error({ err }, "Super Intelligence ensemble training failed");
       }
       // ── Phase 36: Start auto-retrain scheduler ────────────────────────────
       startRetrainScheduler().catch((err) => logger.error({ err }, "Retrain scheduler failed to start"));

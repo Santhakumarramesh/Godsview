@@ -28,6 +28,7 @@ import {
   isSessionAllowed,
   getCurrentTradingSession,
 } from "./risk_engine";
+import { emitSIDecision } from "./signal_stream";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -183,7 +184,7 @@ function buildDecision(
   input: SuperIntelligenceInput & { symbol: string },
 ): ProductionDecision {
   const riskSnap = getRiskEngineSnapshot();
-  return {
+  const decision: ProductionDecision = {
     action,
     signal,
     quantity,
@@ -199,6 +200,29 @@ function buildDecision(
       timestamp: new Date().toISOString(),
     },
   };
+
+  // Broadcast every production decision to the SI live feed (SSE)
+  emitSIDecision({
+    symbol: input.symbol,
+    action,
+    direction: input.direction,
+    setup_type: input.setup_type,
+    regime: input.regime,
+    win_probability: signal.win_probability,
+    edge_score: signal.edge_score,
+    kelly_pct: decision.meta.kelly_pct,
+    confluence: signal.confluence_score,
+    aligned_timeframes: signal.aligned_timeframes,
+    enhanced_quality: signal.enhanced_quality,
+    approved: signal.approved,
+    rejection_reason: signal.rejection_reason,
+    block_reasons: blockReasons,
+    kelly_fraction: signal.kelly_fraction,
+    suggested_qty: quantity,
+    timestamp: decision.meta.timestamp,
+  });
+
+  return decision;
 }
 
 /** Get production gate stats for dashboard */
