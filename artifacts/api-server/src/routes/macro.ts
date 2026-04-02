@@ -1,5 +1,19 @@
 /**
  * macro.ts — Macro/News Intelligence Routes
+ *
+ * Mounts at /api/macro (see routes/index.ts).
+ *
+ * Endpoints:
+ *   GET  /context          — macro context (news/events)
+ *   POST /events           — ingest macro event
+ *   GET  /lockout/:symbol  — news lockout check
+ *   GET  /events           — all stored events
+ *   GET  /stats            — cache stats
+ *   DELETE /clear          — clear events
+ *   POST /bias             — compute MacroBiasResult from provided inputs
+ *   POST /sentiment        — compute SentimentResult from provided inputs
+ *   GET  /live             — fetch live macro snapshot (from market data)
+ *   POST /live/refresh     — force-refresh live macro snapshot
  */
 
 import { Router, Request, Response } from "express";
@@ -12,6 +26,11 @@ import {
   getMacroCacheStats,
   type MacroEvent,
 } from "../lib/macro_engine";
+import { computeMacroBias } from "../lib/macro_bias_engine";
+import type { MacroBiasInput } from "../lib/macro_bias_engine";
+import { computeSentiment } from "../lib/sentiment_engine";
+import type { SentimentInput } from "../lib/sentiment_engine";
+import { fetchLiveMacroSnapshot } from "../lib/macro_feed";
 
 const router = Router();
 
@@ -112,6 +131,94 @@ router.delete("/clear", (req: Request, res: Response) => {
   } catch (error) {
     logger.error(`Error clearing macro events: ${String(error)}`);
     res.status(500).json({ error: "Failed to clear macro events" });
+  }
+});
+
+/**
+ * POST /macro/bias
+ * Accepts MacroBiasInput, returns { bias: MacroBiasResult }
+ */
+router.post("/bias", (req: Request, res: Response) => {
+  try {
+    const input = req.body as MacroBiasInput;
+    if (!input.assetClass || !input.intendedDirection) {
+      res.status(400).json({ error: "assetClass and intendedDirection are required" });
+      return;
+    }
+    const bias = computeMacroBias(input);
+    res.json({ bias });
+  } catch (error) {
+    logger.error(`[macro] /bias error: ${String(error)}`);
+    res.status(500).json({ error: "Failed to compute macro bias" });
+  }
+});
+
+/**
+ * POST /macro/sentiment
+ * Accepts SentimentInput, returns { sentiment: SentimentResult }
+ */
+router.post("/sentiment", (req: Request, res: Response) => {
+  try {
+    const input = req.body as SentimentInput;
+    if (input.retailLongRatio === undefined) {
+      res.status(400).json({ error: "retailLongRatio is required" });
+      return;
+    }
+    const sentiment = computeSentiment(input);
+    res.json({ sentiment });
+  } catch (error) {
+    logger.error(`[macro] /sentiment error: ${String(error)}`);
+    res.status(500).json({ error: "Failed to compute sentiment" });
+  }
+});
+
+// Simple in-memory cache for the live snapshot (refreshed on demand or every 5 min)
+let _liveSnapshotCache: { snapshot: Awaited<ReturnType<typeof fetchLiveMacroSnapshot>>; cachedAt: number } | null = null;
+const LIVE_CACHE_TTL_MS = 5 * 60 * 1000;
+
+async function getOrRefreshLiveSnapshot(force = false) {
+  const now = Date.now();
+  if (!force && _liveSnapshotCache && now - _liveSnapshotCache.cachedAt < LIVE_CACHE_TTL_MS) {
+    return _liveSnapshotCache.snapshot;
+  }
+  const snapshot = await fetchLiveMacroSnapshot();
+  _liveSnapshotCache = { snapshot, cachedAt: now };
+  return snapshot;
+}
+
+/**
+ * GET /macro/live
+ * Returns the latest live macro snapshot (VIX, DXY, CVD, funding, etc.)
+ * Cached for 5 minutes; serves stale on fetch failure.
+ */
+router.get("/live", async (_req: Request, res: Response) => {
+  try {
+    const snapshot = await getOrRefreshLiveSnapshot();
+    res.json({ context: snapshot });
+  } catch (error) {
+    logger.error(`[macro] /live error: ${String(error)}`);
+    // Return stale cache if available
+    if (_liveSnapshotCache) {
+      logger.warn("[macro] /live serving stale cached snapshot due to fetch error");
+      res.json({ context: _liveSnapshotCache.snapshot, stale: true });
+    } else {
+      res.status(503).json({ error: "Live macro snapshot unavailable — no cached data" });
+    }
+  }
+});
+
+/**
+ * POST /macro/live/refresh
+ * Force-refreshes the live macro snapshot (bypasses cache TTL).
+ */
+router.post("/live/refresh", async (_req: Request, res: Response) => {
+  try {
+    const snapshot = await getOrRefreshLiveSnapshot(true);
+    logger.info("[macro] Live macro snapshot force-refreshed");
+    res.json({ context: snapshot });
+  } catch (error) {
+    logger.error(`[macro] /live/refresh error: ${String(error)}`);
+    res.status(503).json({ error: "Failed to refresh live macro snapshot" });
   }
 });
 

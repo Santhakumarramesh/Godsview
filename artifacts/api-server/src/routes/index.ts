@@ -51,7 +51,7 @@ router.use("/api/journal", journalRouter);
 router.use("/api", watchlistRouter);
 router.use("/api", analyticsRouter);
 router.use("/api/portfolio", portfolioRouter);
-router.use(opsRouter);
+router.use("/api/ops", opsRouter);
 router.use("/api/features", featuresRouter);
 router.use(engineHealthRouter);
 router.use("/api/execution", executionRouter);
