@@ -14,6 +14,7 @@
 
 import { predictWinProbability, getModelStatus } from "./ml_model";
 import { reasonTradeDecision } from "./reasoning_engine";
+import { logger } from "./logger";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -379,7 +380,7 @@ function featurize(row: {
  */
 export async function trainEnsemble(): Promise<void> {
   try {
-    console.log("[super] Training gradient-boosted ensemble...");
+    logger.info("[super] Training gradient-boosted ensemble...");
 
     // Dynamic import to avoid circular deps
     const { db, accuracyResultsTable } = await import("@workspace/db");
@@ -407,7 +408,7 @@ export async function trainEnsemble(): Promise<void> {
       .limit(200_000);
 
     if (rows.length < 100) {
-      console.log(`[super] Only ${rows.length} samples — need ≥100 for ensemble.`);
+      logger.info(`[super] Only ${rows.length} samples — need ≥100 for ensemble.`);
       _ensembleStatus = "untrained";
       return;
     }
@@ -466,13 +467,13 @@ export async function trainEnsemble(): Promise<void> {
       trained_at: new Date().toISOString(),
     };
 
-    console.log(`[super] Ensemble trained successfully:`);
-    console.log(`[super]   GBM accuracy: ${(gbm.accuracy * 100).toFixed(1)}%`);
-    console.log(`[super]   LR accuracy:  ${(lrAccuracy * 100).toFixed(1)}%`);
-    console.log(`[super]   Ensemble:     ${(_ensembleMeta.ensemble_accuracy * 100).toFixed(1)}%`);
-    console.log(`[super]   Samples:      ${X.length}`);
+    logger.info(`[super] Ensemble trained successfully:`);
+    logger.info(`[super]   GBM accuracy: ${(gbm.accuracy * 100).toFixed(1)}%`);
+    logger.info(`[super]   LR accuracy:  ${(lrAccuracy * 100).toFixed(1)}%`);
+    logger.info(`[super]   Ensemble:     ${(_ensembleMeta.ensemble_accuracy * 100).toFixed(1)}%`);
+    logger.info(`[super]   Samples:      ${X.length}`);
   } catch (err) {
-    console.error("[super] Ensemble training failed:", err);
+    logger.error({ err }, "[super] Ensemble training failed");
     _ensembleStatus = "error";
   }
 }

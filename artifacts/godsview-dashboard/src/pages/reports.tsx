@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface SessionReport {
@@ -159,10 +160,10 @@ function formatPnl(v: number): string {
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
-function ReportsHeader() {
-  const totalPnl = REPORTS.reduce((s, r) => s + r.netPnl, 0);
-  const totalTrades = REPORTS.reduce((s, r) => s + r.totalTrades, 0);
-  const totalWins = REPORTS.reduce((s, r) => s + r.winners, 0);
+function ReportsHeader({ reports }: { reports: SessionReport[] }) {
+  const totalPnl = reports.reduce((s: number, r: SessionReport) => s + r.netPnl, 0);
+  const totalTrades = reports.reduce((s: number, r: SessionReport) => s + r.totalTrades, 0);
+  const totalWins = reports.reduce((s: number, r: SessionReport) => s + r.winners, 0);
 
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "20px 24px", borderBottom: "1px solid rgba(72,72,73,0.12)" }}>
@@ -181,7 +182,7 @@ function ReportsHeader() {
         {[
           { label: "Period P&L", value: formatPnl(totalPnl), color: totalPnl >= 0 ? "#9cff93" : "#ff7162" },
           { label: "Win Rate", value: `${((totalWins / totalTrades) * 100).toFixed(0)}%`, color: "#669dff" },
-          { label: "Total R", value: `${REPORTS.reduce((s, r) => s + r.rRealized, 0).toFixed(1)}R`, color: "#e6e1e5" },
+          { label: "Total R", value: `${reports.reduce((s: number, r: SessionReport) => s + r.rRealized, 0).toFixed(1)}R`, color: "#e6e1e5" },
         ].map((stat) => (
           <div key={stat.label} style={{ textAlign: "right" }}>
             <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: "#8c909f", letterSpacing: "0.08em", textTransform: "uppercase" }}>
@@ -428,20 +429,56 @@ function ReportDetail({ report }: { report: SessionReport }) {
 }
 // ─── Main Page ───────────────────────────────────────────────────────────────
 export default function ReportsPage() {
-  const [selectedId, setSelectedId] = useState<string>(REPORTS[0].id);
-  const selected = REPORTS.find((r) => r.id === selectedId) || REPORTS[0];
+  // Fetch real sessions from backend
+  const { data: sessionsData } = useQuery({
+    queryKey: ["sessions-list"],
+    queryFn: () => fetch("/api/sessions?limit=20").then(r => r.ok ? r.json() : null),
+    refetchInterval: 60_000,
+    retry: 1,
+  });
+
+  // Map real sessions to SessionReport format; fall back to REPORTS
+  const reports: SessionReport[] = useMemo(() => {
+    const raw: any[] = Array.isArray(sessionsData) ? sessionsData : sessionsData?.sessions ?? [];
+    if (!raw.length) return REPORTS;
+    return raw.map((s: any): SessionReport => ({
+      id: s.id ?? s.session_id ?? String(s.started_at),
+      date: s.started_at ? new Date(s.started_at).toISOString().split("T")[0] : "—",
+      session: (s.session_type ?? "NY Morning") as SessionReport["session"],
+      duration: s.duration_minutes ? `${Math.floor(s.duration_minutes / 60)}h ${s.duration_minutes % 60}m` : "—",
+      totalTrades: s.total_trades ?? 0,
+      winners: s.winners ?? 0,
+      losers: s.losers ?? 0,
+      breakeven: s.breakeven ?? 0,
+      grossPnl: s.gross_pnl ?? 0,
+      netPnl: s.net_pnl ?? 0,
+      rRealized: s.r_realized ?? 0,
+      maxDrawdown: s.max_drawdown ?? 0,
+      bestTrade: s.best_trade ?? { symbol: "—", pnl: 0, r: 0 },
+      worstTrade: s.worst_trade ?? { symbol: "—", pnl: 0, r: 0 },
+      setupBreakdown: s.setup_breakdown ?? [],
+      pipelineHealth: s.pipeline_health ?? [],
+      brainInsight: s.brain_insight ?? "No insight available.",
+      emotionalState: s.emotional_state ?? "Patient",
+      riskCompliance: s.risk_compliance ?? 100,
+    }));
+  }, [sessionsData]);
+
+  const defaultId = reports[0]?.id ?? REPORTS[0].id;
+  const [selectedId, setSelectedId] = useState<string>(defaultId);
+  const selected = reports.find((r) => r.id === selectedId) || reports[0];
 
   return (
     <div style={{ minHeight: "100vh", background: "#131314", color: "#e6e1e5" }}>
-      <ReportsHeader />
+      <ReportsHeader reports={reports} />
 
       <div style={{ padding: 24, display: "grid", gridTemplateColumns: "340px 1fr", gap: 24, alignItems: "start" }}>
         {/* Report list */}
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: "#8c909f", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 4 }}>
-            Recent Sessions ({REPORTS.length})
+            Recent Sessions ({reports.length})
           </div>
-          {REPORTS.map((report) => (
+          {reports.map((report) => (
             <ReportCard
               key={report.id}
               report={report}
