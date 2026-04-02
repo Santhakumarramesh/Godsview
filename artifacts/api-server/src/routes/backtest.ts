@@ -1,11 +1,16 @@
 import { Router, type IRouter } from "express";
 import { runBacktest, type BacktestConfig } from "../lib/backtester";
+import { runMarketBacktest, type MarketBacktestConfig, SUPPORTED_TIMEFRAMES } from "../lib/market_backtester";
 
 const router: IRouter = Router();
 
 // Cache last backtest result to avoid re-running expensive queries
 let cachedResult: { config: BacktestConfig; result: any; ts: number } | null = null;
 const CACHE_TTL_MS = 5 * 60_000; // 5 minutes
+
+// Per-symbol market backtest cache
+const marketCache = new Map<string, { result: any; ts: number }>();
+const MARKET_CACHE_TTL_MS = 10 * 60_000; // 10 minutes
 
 // ── POST /backtest/run ──────────────────────────────────────────────────────
 // Run a full backtest comparison: baseline vs Super Intelligence
@@ -83,6 +88,42 @@ router.get("/backtest/quick", async (_req, res): Promise<void> => {
     });
   } catch (err) {
     res.status(500).json({ error: "quick_backtest_failed", message: String(err) });
+  }
+});
+
+// ── GET /backtest/timeframes ────────────────────────────────────────────────
+// List of supported timeframes for market backtesting
+router.get("/backtest/timeframes", (_req, res) => {
+  res.json({ timeframes: SUPPORTED_TIMEFRAMES });
+});
+
+// ── POST /backtest/market ───────────────────────────────────────────────────
+// Multi-timeframe market backtest using live Alpaca bar data.
+// Applies SK setup detection + Super Intelligence on every bar.
+router.post("/backtest/market", async (req, res): Promise<void> => {
+  try {
+    const config: MarketBacktestConfig = {
+      symbol: (req.body.symbol ?? "BTCUSD").toUpperCase(),
+      timeframe: req.body.timeframe ?? "1Hour",
+      lookback_days: Math.min(req.body.lookback_days ?? 30, 365),
+      initial_equity: req.body.initial_equity ?? 10_000,
+      risk_per_trade_pct: req.body.risk_per_trade_pct ?? 0.01,
+      use_si_filter: req.body.use_si_filter !== false,
+    };
+
+    const cacheKey = `${config.symbol}:${config.timeframe}:${config.lookback_days}`;
+    const cached = marketCache.get(cacheKey);
+    if (cached && Date.now() - cached.ts < MARKET_CACHE_TTL_MS) {
+      res.json({ ...cached.result, cached: true });
+      return;
+    }
+
+    const result = await runMarketBacktest(config);
+    marketCache.set(cacheKey, { result, ts: Date.now() });
+    res.json({ ...result, cached: false });
+  } catch (err) {
+    req.log.error({ err }, "Market backtest failed");
+    res.status(500).json({ error: "market_backtest_failed", message: String(err) });
   }
 });
 

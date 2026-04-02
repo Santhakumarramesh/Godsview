@@ -123,7 +123,7 @@ export default function SuperIntelligencePage() {
   const [backtestDays, setBacktestDays] = useState(30);
   const [isRunning, setIsRunning] = useState(false);
   const [backtestResult, setBacktestResult] = useState<BacktestResult | null>(null);
-  const [activeTab, setActiveTab] = useState<"overview" | "equity" | "regimes" | "setups" | "feed">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "equity" | "regimes" | "setups" | "feed" | "openbb">("overview");
 
   // Real-time SSE feed
   const { events: siEvents, connected: sseConnected } = useSSEStream("/api/super-intelligence/stream");
@@ -143,6 +143,14 @@ export default function SuperIntelligencePage() {
     queryKey: ["prod-stats"],
     queryFn: () => fetch("/api/super-intelligence/production-stats").then(r => r.json()),
     refetchInterval: 30_000,
+  });
+
+  // OpenBB Python pipeline decision + backtest
+  const { data: openbbDecision, dataUpdatedAt: openbbTs } = useQuery<any>({
+    queryKey: ["openbb-latest"],
+    queryFn: () => fetch("/api/system/openbb/latest").then(r => r.ok ? r.json() : null),
+    refetchInterval: 30_000,
+    retry: 1,
   });
 
   const runBacktest = useCallback(async () => {
@@ -266,7 +274,7 @@ export default function SuperIntelligencePage() {
 
       {/* ── Tab Navigation ── */}
       <div className="flex gap-1 p-1 rounded" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
-        {(["overview", "equity", "regimes", "setups", "feed"] as const).map(tab => (
+        {(["overview", "equity", "regimes", "setups", "feed", "openbb"] as const).map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
             className="px-3 py-1.5 rounded text-xs transition-colors"
             style={{
@@ -275,7 +283,7 @@ export default function SuperIntelligencePage() {
               border: activeTab === tab ? `1px solid rgba(156,255,147,0.2)` : "1px solid transparent",
               fontFamily: "Space Grotesk", textTransform: "uppercase", letterSpacing: "0.1em",
             }}>
-            {tab === "feed" ? `Feed (${siEvents.length})` : tab}
+            {tab === "feed" ? `Feed (${siEvents.length})` : tab === "openbb" ? "OpenBB Pipeline" : tab}
           </button>
         ))}
         <div className="flex-1" />
@@ -587,6 +595,184 @@ export default function SuperIntelligencePage() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── OpenBB Pipeline Tab ── */}
+      {activeTab === "openbb" && (
+        <div className="space-y-4">
+          {/* Header */}
+          <div className="rounded p-4" style={{ background: C.card, border: `1px solid ${C.border}` }}>
+            <div className="flex items-center gap-3 mb-2">
+              <span style={{ fontSize: "18px" }}>🧠</span>
+              <div>
+                <div style={{ fontFamily: "Bebas Neue", fontSize: "18px", color: "#fff", letterSpacing: "0.06em" }}>
+                  OPENBB DECISION PIPELINE
+                </div>
+                <div style={{ fontSize: "10px", color: C.muted, marginTop: 1 }}>
+                  Python ML pipeline → SK signal detection → confidence filter → execution gate
+                </div>
+              </div>
+              {openbbTs > 0 && (
+                <div className="ml-auto" style={{ fontSize: "9px", color: C.outline }}>
+                  Last fetch: {new Date(openbbTs).toLocaleTimeString()}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {!openbbDecision?.has_data ? (
+            <div className="rounded p-8 flex flex-col items-center gap-3"
+              style={{ background: C.card, border: `1px solid ${C.border}`, color: C.outline }}>
+              <span style={{ fontSize: 32 }}>🔬</span>
+              <div style={{ fontSize: 13, color: C.muted }}>No OpenBB decision data yet.</div>
+              <div style={{ fontSize: 11, textAlign: "center" }}>
+                Run <code style={{ color: C.secondary, fontFamily: "JetBrains Mono" }}>python -m app.main</code> inside{" "}
+                <code style={{ color: C.secondary }}>godsview-openbb/</code> to generate a decision.
+              </div>
+            </div>
+          ) : (() => {
+            const d = openbbDecision?.decision ?? {};
+            const bt = openbbDecision?.backtest ?? null;
+            const actionColor = d.action === "buy" ? C.primary : d.action === "sell" ? C.tertiary : C.gold;
+            const filterOk = d.filter_approved;
+
+            // Build pipeline stages from the decision structure
+            const pipelineStages = [
+              { name: "Data Ingestion", status: "pass", detail: `${d.symbol} ${d.timeframe} · ${d.train_rows + d.test_rows} rows loaded` },
+              { name: "Feature Engineering", status: "pass", detail: `Train: ${d.train_rows} rows · Test: ${d.test_rows} rows` },
+              { name: "ML Training", status: d.model_accuracy > 0 ? "pass" : "fail", detail: `Accuracy ${(d.model_accuracy * 100).toFixed(1)}% · ROC-AUC ${(d.roc_auc * 100).toFixed(1)}%`, value: d.model_accuracy },
+              { name: "Signal Generation", status: d.action !== "error" ? "pass" : "fail", detail: `Action: ${d.action} · Prob↑ ${(d.prob_up * 100).toFixed(1)}% · Threshold buy ${(d.threshold_buy * 100).toFixed(0)}%`, value: d.confidence },
+              { name: "Confidence Filter", status: filterOk ? "pass" : "blocked", detail: d.filter_reasons.length > 0 ? d.filter_reasons.join("; ") : "All checks passed" },
+              { name: "Execution Gate", status: d.execution_status === "blocked_by_filter" ? "blocked" : d.execution_status === "executed" ? "pass" : "unknown", detail: d.execution_status.replace(/_/g, " ").toUpperCase() },
+            ];
+
+            return (
+              <div className="space-y-4">
+                {/* Decision banner */}
+                <div className="rounded p-5" style={{ background: C.card, border: `1px solid ${C.border}`, borderLeft: `4px solid ${actionColor}` }}>
+                  <div className="flex items-center gap-6 flex-wrap">
+                    <div>
+                      <div style={{ fontSize: "9px", color: C.outline, letterSpacing: "0.1em", textTransform: "uppercase" }}>Final Action</div>
+                      <div style={{ fontFamily: "JetBrains Mono", fontSize: 32, fontWeight: 700, color: actionColor, lineHeight: 1 }}>
+                        {d.action.toUpperCase()}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: "9px", color: C.outline, letterSpacing: "0.1em", textTransform: "uppercase" }}>Symbol · TF</div>
+                      <div style={{ fontFamily: "JetBrains Mono", fontSize: 18, color: "#fff" }}>{d.symbol} {d.timeframe}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: "9px", color: C.outline, letterSpacing: "0.1em", textTransform: "uppercase" }}>Confidence</div>
+                      <div style={{ fontFamily: "JetBrains Mono", fontSize: 22, color: C.secondary }}>
+                        {(d.confidence * 100).toFixed(2)}%
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: "9px", color: C.outline, letterSpacing: "0.1em", textTransform: "uppercase" }}>Prob Up</div>
+                      <div style={{ fontFamily: "JetBrains Mono", fontSize: 22, color: d.prob_up >= 0.6 ? C.primary : d.prob_up <= 0.4 ? C.tertiary : C.gold }}>
+                        {(d.prob_up * 100).toFixed(2)}%
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: "9px", color: C.outline, letterSpacing: "0.1em", textTransform: "uppercase" }}>Close Price</div>
+                      <div style={{ fontFamily: "JetBrains Mono", fontSize: 18, color: C.muted }}>${d.close_price.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: "9px", color: C.outline, letterSpacing: "0.1em", textTransform: "uppercase" }}>Mode</div>
+                      <div style={{ fontFamily: "JetBrains Mono", fontSize: 13, color: d.dry_run ? C.gold : C.tertiary }}>
+                        {d.dry_run ? "DRY RUN" : "LIVE"}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ marginTop: 12, fontSize: "9px", color: C.outline }}>
+                    Generated {new Date(d.generated_at).toLocaleString()}
+                  </div>
+                </div>
+
+                {/* Pipeline stages */}
+                <div className="rounded p-4" style={{ background: C.card, border: `1px solid ${C.border}` }}>
+                  <div style={{ fontFamily: "Bebas Neue", fontSize: "14px", color: "#fff", letterSpacing: "0.06em", marginBottom: 12 }}>
+                    OPENBB PIPELINE — 6 STAGES
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {pipelineStages.map((stage, i) => {
+                      const ok = stage.status === "pass";
+                      const blocked = stage.status === "blocked";
+                      const color = ok ? C.primary : blocked ? C.tertiary : C.gold;
+                      return (
+                        <div key={i} className="flex items-center gap-3 rounded p-3"
+                          style={{ background: C.cardHigh, border: `1px solid ${C.outlineVar}33` }}>
+                          <div style={{ width: 20, height: 20, borderRadius: "50%", background: `${color}22`,
+                            border: `1px solid ${color}`, display: "flex", alignItems: "center", justifyContent: "center",
+                            fontSize: 10, color, fontFamily: "JetBrains Mono", fontWeight: 700, flexShrink: 0 }}>
+                            {i + 1}
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <div className="flex items-center gap-2">
+                              <span style={{ fontSize: "12px", color: "#fff", fontWeight: 600 }}>{stage.name}</span>
+                              <span style={{ fontSize: "8px", color, background: `${color}15`, padding: "1px 6px",
+                                borderRadius: 3, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                                {stage.status}
+                              </span>
+                            </div>
+                            {stage.detail && (
+                              <div style={{ fontSize: "10px", color: C.muted, marginTop: 2 }}>{stage.detail}</div>
+                            )}
+                          </div>
+                          {stage.value !== undefined && (
+                            <div style={{ fontFamily: "JetBrains Mono", fontSize: "14px", color, flexShrink: 0 }}>
+                              {typeof stage.value === "number" ? `${(stage.value * 100).toFixed(1)}%` : String(stage.value)}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* ML Model stats */}
+                <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
+                  {[
+                    { label: "Model Accuracy", value: `${(d.model_accuracy * 100).toFixed(1)}%`, color: d.model_accuracy >= 0.6 ? C.primary : C.gold },
+                    { label: "ROC AUC", value: `${(d.roc_auc * 100).toFixed(1)}%`, color: d.roc_auc >= 0.6 ? C.primary : C.gold },
+                    { label: "Train Rows", value: d.train_rows.toLocaleString(), color: C.purple },
+                    { label: "Test Rows", value: d.test_rows.toLocaleString(), color: C.secondary },
+                  ].map(m => (
+                    <div key={m.label} className="rounded p-4" style={{ background: C.cardHigh, border: `1px solid ${C.border}` }}>
+                      <div style={{ fontSize: "9px", color: C.outline, letterSpacing: "0.1em", textTransform: "uppercase" }}>{m.label}</div>
+                      <div style={{ fontFamily: "JetBrains Mono", fontSize: 20, color: m.color, marginTop: 4 }}>{m.value}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* OpenBB Backtest summary */}
+                {bt && (
+                  <div className="rounded p-4" style={{ background: C.card, border: `1px solid ${C.border}` }}>
+                    <div style={{ fontFamily: "Bebas Neue", fontSize: "14px", color: "#fff", letterSpacing: "0.06em", marginBottom: 12 }}>
+                      OPENBB BACKTEST SUMMARY — {bt.symbol} {bt.timeframe}
+                    </div>
+                    <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
+                      {[
+                        { label: "Total Bars", value: bt.total_bars.toLocaleString(), color: C.muted },
+                        { label: "Signaled Bars", value: bt.signaled_bars.toLocaleString(), color: C.secondary },
+                        { label: "Hit Rate", value: `${(bt.hit_rate * 100).toFixed(1)}%`, color: bt.hit_rate >= 0.7 ? C.primary : C.gold },
+                        { label: "Signal Rate", value: `${(bt.signal_rate * 100).toFixed(1)}%`, color: C.purple },
+                      ].map(m => (
+                        <div key={m.label} className="rounded p-3" style={{ background: C.cardHigh, border: `1px solid ${C.border}` }}>
+                          <div style={{ fontSize: "9px", color: C.outline, letterSpacing: "0.1em", textTransform: "uppercase" }}>{m.label}</div>
+                          <div style={{ fontFamily: "JetBrains Mono", fontSize: 20, color: m.color, marginTop: 3 }}>{m.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ marginTop: 8, fontSize: "9px", color: C.outline }}>
+                      Generated {new Date(bt.generated_at).toLocaleString()}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
 

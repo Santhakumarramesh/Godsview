@@ -27,6 +27,8 @@ const RiskPage           = React.lazy(() => import("@/pages/risk"));
 const SettingsPage       = React.lazy(() => import("@/pages/settings"));
 const SuperIntelligencePage = React.lazy(() => import("@/pages/super-intelligence"));
 const InstitutionalIntelligencePage = React.lazy(() => import("@/pages/institutional-intelligence"));
+const BacktesterPage        = React.lazy(() => import("@/pages/backtester"));
+const IntelligenceCenterPage = React.lazy(() => import("@/pages/intelligence-center"));
 const TradeJournalPage               = React.lazy(() => import("@/pages/trade-journal"));
 const WatchlistPage                  = React.lazy(() => import("@/pages/watchlist"));
 const AnalyticsPage                  = React.lazy(() => import("@/pages/analytics"));
@@ -153,6 +155,8 @@ function Router() {
         <RoutedPage path="/risk"              component={RiskPage}              scope="page:risk" />
         <RoutedPage path="/super-intelligence"       component={SuperIntelligencePage}            scope="page:super-intelligence" />
         <RoutedPage path="/institutional-intelligence" component={InstitutionalIntelligencePage} scope="page:institutional-intelligence" />
+        <RoutedPage path="/backtester"            component={BacktesterPage}        scope="page:backtester" />
+        <RoutedPage path="/intelligence-center"   component={IntelligenceCenterPage} scope="page:intelligence-center" />
         <RoutedPage path="/trade-journal"     component={TradeJournalPage}      scope="page:trade-journal" />
         <RoutedPage path="/watchlist"         component={WatchlistPage}         scope="page:watchlist" />
         <RoutedPage path="/analytics"         component={AnalyticsPage}         scope="page:analytics" />

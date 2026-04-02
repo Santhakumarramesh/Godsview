@@ -7,6 +7,8 @@ import { StockBrainStateSchema, type StockBrainState } from "@workspace/common-t
 import { getTypedPositions, getAccount, hasValidTradingKey, isBrokerKey } from "../lib/alpaca";
 import { getModelDiagnostics, getModelStatus, retrainModel } from "../lib/ml_model";
 import { getSchedulerStats } from "../lib/retrain_scheduler";
+import { getSuperIntelligenceStatus } from "../lib/super_intelligence";
+import { getSSEClientCount } from "../lib/signal_stream";
 import { requireOperator } from "../lib/auth_guard";
 import { resolveSystemMode, canWriteOrders, isLiveMode } from "@workspace/strategy-core";
 import { getCurrentTradingSession, getRiskEngineSnapshot, isKillSwitchActive, isSessionAllowed, resetRiskEngineRuntime, setKillSwitchActive, updateRiskConfig } from "../lib/risk_engine";
@@ -1512,5 +1514,221 @@ router.get("/system/consciousness/latest", async (req, res) => {
     res.status(500).json({ error: "consciousness_snapshot_failed", message: "Failed to fetch consciousness snapshot" });
   }
 });
+
+// ── GET /system/openbb/latest ────────────────────────────────────────────────
+// Latest OpenBB Python pipeline decision + backtest summary.
+// Reads latest_decision.json and backtest_summary.json from godsview-openbb/data/processed/.
+router.get("/system/openbb/latest", async (_req, res) => {
+  try {
+    const [decisionArtifact, backtestArtifact] = await Promise.all([
+      readJsonArtifact("latest_decision.json"),
+      readJsonArtifact("backtest_summary.json"),
+    ]);
+
+    const d = decisionArtifact.data;
+    const b = backtestArtifact.data;
+    const signal = asRecord(d?.signal) ?? {};
+    const filter = asRecord(d?.filter) ?? {};
+    const modelMeta = asRecord(signal?.model_meta) ?? {};
+    const execution = asRecord(d?.execution) ?? {};
+
+    res.json({
+      has_data: decisionArtifact.exists,
+      decision: {
+        symbol: String(d?.symbol ?? ""),
+        timeframe: String(d?.timeframe ?? ""),
+        dry_run: Boolean(d?.dry_run ?? true),
+        generated_at: String(d?.generated_at ?? ""),
+        // Signal layer
+        action: String(signal.action ?? "skip"),
+        confidence: parseNum(signal.confidence, 0),
+        prob_up: parseNum(signal.prob_up, 0),
+        close_price: parseNum(signal.close_price, 0),
+        threshold_buy: parseNum(signal.threshold_buy, 0.6),
+        threshold_sell: parseNum(signal.threshold_sell, 0.4),
+        // ML model meta
+        model_accuracy: parseNum(modelMeta.accuracy, 0),
+        roc_auc: parseNum(modelMeta.roc_auc, 0),
+        train_rows: parseIntSafe(modelMeta.train_rows, 0),
+        test_rows: parseIntSafe(modelMeta.test_rows, 0),
+        model_mode: String(modelMeta.mode ?? ""),
+        // Filter layer
+        filter_approved: Boolean(filter.approved ?? false),
+        filter_final_action: String(filter.final_action ?? "skip"),
+        filter_reasons: Array.isArray(filter.reasons) ? filter.reasons : [],
+        // Execution
+        execution_status: String(execution.status ?? "unknown"),
+      },
+      backtest: backtestArtifact.exists ? {
+        symbol: String(b?.symbol ?? ""),
+        timeframe: String(b?.timeframe ?? ""),
+        total_bars: parseIntSafe(b?.total_bars, 0),
+        signaled_bars: parseIntSafe(b?.signaled_bars, 0),
+        hit_rate: parseNum(b?.hit_rate, 0),
+        signal_rate: parseNum(b?.signal_rate, 0),
+        generated_at: String(b?.generated_at ?? ""),
+      } : null,
+      sources: {
+        decision: { exists: decisionArtifact.exists, path: decisionArtifact.path },
+        backtest: { exists: backtestArtifact.exists, path: backtestArtifact.path },
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: "openbb_fetch_failed", message: String(err) });
+  }
+});
+
+// ── GET /system/intelligence-center ─────────────────────────────────────────
+// Unified snapshot of every system component: status, uptime, key metrics.
+// Powers the Intelligence Control Center dashboard page.
+const SERVER_STARTED_AT = Date.now();
+
+router.get("/system/intelligence-center", async (req, res) => {
+  const now = Date.now();
+  const uptimeSec = Math.floor((now - SERVER_STARTED_AT) / 1000);
+
+  // --- DB health check ---
+  let dbStatus: "online" | "degraded" | "offline" = "offline";
+  let dbLatencyMs = 0;
+  try {
+    const t0 = Date.now();
+    await db.execute(sql`SELECT 1`);
+    dbLatencyMs = Date.now() - t0;
+    dbStatus = dbLatencyMs < 500 ? "online" : "degraded";
+  } catch { dbStatus = "offline"; }
+
+  // --- ML Model ---
+  const mlStatus = getModelStatus();
+  const mlDiag = getModelDiagnostics();
+
+  // --- Super Intelligence ---
+  const siStatus = getSuperIntelligenceStatus();
+
+  // --- Risk Engine ---
+  const riskSnap = getRiskEngineSnapshot();
+  const killSwitch = isKillSwitchActive();
+  const tradingSession = getCurrentTradingSession();
+
+  // --- Alpaca ---
+  const alpacaConnected = hasValidTradingKey;  // boolean const, not a function
+  let alpacaAccountValue: number | null = null;
+  try {
+    if (alpacaConnected) {
+      const acct = await getAccount() as any;
+      alpacaAccountValue = acct ? parseFloat(String(acct?.portfolio_value ?? acct?.equity ?? "0")) : null;
+    }
+  } catch { /* ignore */ }
+
+  // --- Scheduler ---
+  const schedulerStats = getSchedulerStats();
+
+  // --- Signal Stream ---
+  const sseClients = getSSEClientCount();
+
+  // --- Brain: count entities from DB ---
+  let brainEntities = 0;
+  try {
+    const [{ cnt }] = await db.execute(
+      sql`SELECT COUNT(*)::int AS cnt FROM knowledge_graph_nodes LIMIT 1`
+    ) as any[];
+    brainEntities = cnt ?? 0;
+  } catch { /* table may not exist */ }
+
+  // --- Signal count from last 24h ---
+  let signalsLast24h = 0;
+  try {
+    const cutoff = new Date(now - 24 * 60 * 60 * 1000);
+    const cutoffIso = cutoff.toISOString();
+    const [{ cnt }] = await db.execute(
+      sql`SELECT COUNT(*)::int AS cnt FROM signals WHERE created_at >= ${cutoffIso}`
+    ) as any[];
+    signalsLast24h = cnt ?? 0;
+  } catch { /* ignore */ }
+
+  // --- Trades today ---
+  let tradesToday = 0;
+  try {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const todayIso = today.toISOString();
+    const [{ cnt }] = await db.execute(
+      sql`SELECT COUNT(*)::int AS cnt FROM trades WHERE created_at >= ${todayIso}`
+    ) as any[];
+    tradesToday = cnt ?? 0;
+  } catch { /* ignore */ }
+
+  res.json({
+    generated_at: new Date().toISOString(),
+    server: {
+      status: "online" as const,
+      uptime_seconds: uptimeSec,
+      uptime_human: formatUptime(uptimeSec),
+      started_at: new Date(SERVER_STARTED_AT).toISOString(),
+      system_mode: SYSTEM_MODE,
+      node_version: process.version,
+    },
+    database: {
+      status: dbStatus,
+      latency_ms: dbLatencyMs,
+    },
+    ml_model: {
+      status: mlStatus.status,
+      message: mlStatus.message,
+      accuracy: typeof mlDiag === "object" && mlDiag ? (mlDiag as any).accuracy ?? null : null,
+      sample_count: typeof mlDiag === "object" && mlDiag ? (mlDiag as any).sample_count ?? 0 : 0,
+      last_trained_at: typeof mlDiag === "object" && mlDiag ? (mlDiag as any).last_trained_at ?? null : null,
+    },
+    super_intelligence: {
+      status: siStatus.status,
+      message: siStatus.message,
+      ensemble_accuracy: (siStatus as any).ensemble?.accuracy ?? null,
+      ensemble_size: (siStatus as any).ensemble?.models ?? 0,
+      total_processed: (siStatus as any).total_processed ?? 0,
+    },
+    risk_engine: {
+      status: killSwitch ? "kill_switch_active" : "active",
+      kill_switch_active: killSwitch,
+      session: tradingSession,
+      daily_pnl_pct: (riskSnap as any)?.daily_pnl_pct ?? null,
+      open_positions: (riskSnap as any)?.open_positions ?? 0,
+      max_drawdown_pct: (riskSnap as any)?.max_drawdown_pct ?? null,
+    },
+    alpaca: {
+      status: alpacaConnected ? "connected" : "disconnected",
+      is_live_mode: isLiveMode(SYSTEM_MODE),
+      can_write_orders: canWriteOrders(SYSTEM_MODE),
+      account_value: alpacaAccountValue,
+    },
+    scheduler: {
+      status: (schedulerStats as any)?.running ? "running" : "idle",
+      retrain_interval_h: (schedulerStats as any)?.retrain_interval_h ?? null,
+      last_retrain_at: (schedulerStats as any)?.last_retrain_at ?? null,
+      next_retrain_at: (schedulerStats as any)?.next_retrain_at ?? null,
+      retrain_count: (schedulerStats as any)?.retrain_count ?? 0,
+    },
+    signal_stream: {
+      status: "active" as const,
+      connected_clients: sseClients,
+      signals_last_24h: signalsLast24h,
+    },
+    brain: {
+      status: brainEntities > 0 ? "active" : "idle",
+      entity_count: brainEntities,
+    },
+    trading: {
+      trades_today: tradesToday,
+    },
+  });
+});
+
+function formatUptime(sec: number): string {
+  const d = Math.floor(sec / 86400);
+  const h = Math.floor((sec % 86400) / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  if (d > 0) return `${d}d ${h}h ${m}m`;
+  if (h > 0) return `${h}h ${m}m ${s}s`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
 
 export default router;

@@ -328,6 +328,8 @@ const navItems = [
   { href: "/risk", label: "Risk Command", icon: "shield", sub: "Safety Rails" },
   { href: "/super-intelligence", label: "Super Intelligence", icon: "auto_awesome", sub: "AI Engine" },
   { href: "/institutional-intelligence", label: "Inst. Intelligence", icon: "trending_up", sub: "Macro · Sentiment" },
+  { href: "/backtester", label: "Backtester", icon: "bar_chart_4_bars", sub: "Multi-TF Replay" },
+  { href: "/intelligence-center", label: "Control Center", icon: "monitor_heart", sub: "System Status" },
   { href: "/trade-journal", label: "Trade Journal", icon: "book", sub: "PnL Attribution" },
   { href: "/watchlist", label: "Watchlist Scanner", icon: "radar", sub: "Auto-Scan" },
   { href: "/analytics", label: "Equity Analytics", icon: "show_chart", sub: "Equity · Circuit Breaker" },
