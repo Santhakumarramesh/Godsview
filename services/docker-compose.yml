@@ -193,6 +193,34 @@ services:
       timeout: 10s
       retries: 3
 
+  # ── Scheduler Service ────────────────────────────────────────────────────
+  scheduler:
+    <<: *svc-defaults
+    command: uvicorn services.scheduler_service.main:app --host 0.0.0.0 --port 8008
+    ports:
+      - "8008:8008"
+    environment:
+      SCHEDULER_PORT: "8008"
+      SCAN_INTERVAL_SECONDS: "300"
+      RETRAIN_HOUR_UTC: "21"
+      API_GATEWAY_PORT: "8000"
+      MARKET_DATA_PORT: "8001"
+      FEATURE_PORT: "8002"
+      ML_PORT: "8004"
+      EXECUTION_PORT: "8005"
+      RISK_PORT: "8006"
+      MEMORY_PORT: "8007"
+    depends_on:
+      - api-gateway
+      - market-data
+      - feature
+      - ml
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8008/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   # ── MLflow Tracking Server ────────────────────────────────────────────────
   mlflow:
     image: ghcr.io/mlflow/mlflow:v2.13.0

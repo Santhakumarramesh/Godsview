@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     execution_port: int = Field(default=8005, alias="EXECUTION_PORT")
     risk_port: int = Field(default=8006, alias="RISK_PORT")
     memory_port: int = Field(default=8007, alias="MEMORY_PORT")
+    scheduler_port: int = Field(default=8008, alias="SCHEDULER_PORT")
 
     # ── Inter-service URLs ─────────────────────────────────────────────────────
     market_data_url: str = Field(
@@ -45,6 +46,7 @@ class Settings(BaseSettings):
     )
     risk_url: str = Field(default="http://risk:8006", alias="RISK_URL")
     memory_url: str = Field(default="http://memory:8007", alias="MEMORY_URL")
+    scheduler_url: str = Field(default="http://scheduler:8008", alias="SCHEDULER_URL")
 
     # ── Alpaca ─────────────────────────────────────────────────────────────────
     alpaca_key_id: str = Field(default="", alias="ALPACA_KEY_ID")
@@ -97,6 +99,19 @@ class Settings(BaseSettings):
     auto_retrain_enabled: bool = Field(
         default=True, alias="AUTO_RETRAIN_ENABLED"
     )
+
+    # ── Scheduler ─────────────────────────────────────────────────────────────
+    scan_interval_seconds: int = Field(default=300, alias="SCAN_INTERVAL_SECONDS")
+    retrain_hour_utc: int = Field(default=21, alias="RETRAIN_HOUR_UTC")
+
+    # ── Auth / Rate limiting ───────────────────────────────────────────────────
+    api_key_header: str = Field(default="X-API-Key", alias="API_KEY_HEADER")
+    internal_api_key: str = Field(default="internal-dev-key", alias="INTERNAL_API_KEY")
+    rate_limit_per_minute: int = Field(default=60, alias="RATE_LIMIT_PER_MINUTE")
+
+    # ── Circuit breaker ───────────────────────────────────────────────────────
+    cb_failure_threshold: int = Field(default=5, alias="CB_FAILURE_THRESHOLD")
+    cb_recovery_timeout: int = Field(default=30, alias="CB_RECOVERY_TIMEOUT")
 
     @field_validator("log_level")
     @classmethod
