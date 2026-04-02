@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "on-tertiary-fixed": "#3a0001",
+                        "on-surface-variant": "#adaaab",
+                        "surface-container": "#1a191b",
+                        "secondary-fixed": "#bed2ff",
+                        "outline": "#767576",
+                        "on-error-container": "#ffd2c8",
+                        "surface-container-highest": "#262627",
+                        "on-background": "#ffffff",
+                        "tertiary-container": "#f9362c",
+                        "on-primary-container": "#005a10",
+                        "inverse-surface": "#fcf8f9",
+                        "secondary-dim": "#0070ea",
+                        "surface-bright": "#2c2c2d",
+                        "on-primary": "#006413",
+                        "surface": "#0e0e0f",
+                        "on-secondary-fixed": "#00326f",
+                        "surface-container-lowest": "#000000",
+                        "tertiary-dim": "#e2241f",
+                        "outline-variant": "#484849",
+                        "on-tertiary-fixed-variant": "#7a0004",
+                        "on-error": "#450900",
+                        "error": "#ff7351",
+                        "error-dim": "#d53d18",
+                        "primary-fixed-dim": "#00ec3b",
+                        "on-tertiary-container": "#000000",
+                        "secondary": "#669dff",
+                        "on-secondary": "#001f49",
+                        "surface-tint": "#9cff93",
+                        "tertiary-fixed": "#ff9385",
+                        "surface-container-low": "#131314",
+                        "on-tertiary": "#4a0001",
+                        "tertiary": "#ff7162",
+                        "primary": "#9cff93",
+                        "on-secondary-container": "#f7f7ff",
+                        "primary-fixed": "#00fc40",
+                        "primary-container": "#00fc40",
+                        "tertiary-fixed-dim": "#ff7c6c",
+                        "secondary-fixed-dim": "#a8c4ff",
+                        "surface-container-high": "#201f21",
+                        "inverse-primary": "#006f16",
+                        "error-container": "#b92902",
+                        "on-primary-fixed": "#00440a",
+                        "primary-dim": "#00ec3b",
+                        "on-secondary-fixed-variant": "#004ea5",
+                        "on-primary-fixed-variant": "#006513",
+                        "surface-dim": "#0e0e0f",
+                        "secondary-container": "#005bc0",
+                        "on-surface": "#ffffff",
+                        "inverse-on-surface": "#565556",
+                        "surface-variant": "#262627",
+                        "background": "#0e0e0f"
+                    },
+                    fontFamily: {
+                        "headline": ["Space Grotesk"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; background-color: #0e0e0f; color: #ffffff; }
+        .font-space-grotesk { font-family: 'Space Grotesk', sans-serif; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: #0e0e0f; }
+        ::-webkit-scrollbar-thumb { background: #2c2c2d; border-radius: 10px; }
+    </style>
+</head>
+<body class="bg-surface text-on-surface select-none">
+<!-- TopAppBar (From Shared JSON) -->
+<header class="fixed top-0 w-full z-50 bg-[#0e0e0f]/80 backdrop-blur-xl flex justify-between items-center px-6 h-16 w-full shadow-[0_4px_20px_rgba(156,255,147,0.05)]">
+<div class="flex items-center gap-4">
+<span class="text-xl font-bold text-[#9cff93] tracking-widest uppercase font-space-grotesk">Godsview</span>
+<div class="hidden md:flex h-6 w-[1px] bg-[#2c2c2d]/40 mx-2"></div>
+<div class="hidden md:flex items-center gap-6">
+<span class="text-xs font-space-grotesk uppercase tracking-tighter text-[#9cff93] font-bold cursor-pointer active:scale-95 transition-colors">Overview</span>
+<span class="text-xs font-space-grotesk uppercase tracking-tighter text-[#484849] hover:text-[#9cff93] transition-colors cursor-pointer active:scale-95">Intelligence</span>
+<span class="text-xs font-space-grotesk uppercase tracking-tighter text-[#484849] hover:text-[#9cff93] transition-colors cursor-pointer active:scale-95">Risk</span>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="relative hidden lg:block">
+<span class="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-outline text-sm">search</span>
+<input class="bg-surface-container-lowest border-b border-outline-variant/30 text-[10px] font-space-grotesk pl-9 pr-4 py-1.5 focus:border-primary focus:ring-0 w-64 transition-all" placeholder="QUERY SYSTEM..." type="text"/>
+</div>
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-[#484849] hover:text-[#9cff93] cursor-pointer text-xl transition-colors">sensors</span>
+<span class="material-symbols-outlined text-[#484849] hover:text-[#9cff93] cursor-pointer text-xl transition-colors">settings</span>
+<span class="material-symbols-outlined text-[#484849] hover:text-[#9cff93] cursor-pointer text-xl transition-colors">account_circle</span>
+</div>
+</div>
+</header>
+<!-- SideNavBar (From Shared JSON) -->
+<aside class="fixed left-0 top-0 h-full w-64 z-40 bg-[#0e0e0f] flex flex-col h-full py-8 border-r border-[#1a191b]">
+<div class="px-8 mb-12 mt-16">
+<h2 class="text-[#9cff93] font-black text-2xl font-space-grotesk tracking-tighter">GODSVIEW</h2>
+<p class="text-[10px] text-[#484849] font-space-grotesk tracking-widest uppercase opacity-70">Elite Terminal v4.0.2</p>
+</div>
+<nav class="flex-1 space-y-1">
+<div class="bg-[#1a191b] text-[#9cff93] border-l-4 border-[#9cff93] flex items-center gap-4 px-8 py-4 transition-all duration-300 ease-in-out cursor-pointer">
+<span class="material-symbols-outlined text-lg">dashboard</span>
+<span class="font-space-grotesk uppercase tracking-tighter text-xs">Overview</span>
+</div>
+<div class="text-[#484849] opacity-70 hover:bg-[#131314] hover:text-[#669dff] flex items-center gap-4 px-8 py-4 transition-all duration-300 ease-in-out cursor-pointer">
+<span class="material-symbols-outlined text-lg">psychology</span>
+<span class="font-space-grotesk uppercase tracking-tighter text-xs">Live Intelligence</span>
+</div>
+<div class="text-[#484849] opacity-70 hover:bg-[#131314] hover:text-[#669dff] flex items-center gap-4 px-8 py-4 transition-all duration-300 ease-in-out cursor-pointer">
+<span class="material-symbols-outlined text-lg">security</span>
+<span class="font-space-grotesk uppercase tracking-tighter text-xs">Risk</span>
+</div>
+<div class="text-[#484849] opacity-70 hover:bg-[#131314] hover:text-[#669dff] flex items-center gap-4 px-8 py-4 transition-all duration-300 ease-in-out cursor-pointer">
+<span class="material-symbols-outlined text-lg">analytics</span>
+<span class="font-space-grotesk uppercase tracking-tighter text-xs">Analytics</span>
+</div>
+</nav>
+<div class="px-6 mb-8">
+<button class="w-full py-3 bg-secondary-dim hover:bg-secondary text-white font-space-grotesk text-[10px] font-bold tracking-widest uppercase rounded-sm transition-all active:scale-95 shadow-[0_0_15px_rgba(0,112,234,0.3)]">
+                Execute Trade
+            </button>
+</div>
+<div class="mt-auto space-y-1">
+<div class="text-[#484849] opacity-70 hover:bg-[#131314] hover:text-[#669dff] flex items-center gap-4 px-8 py-3 transition-all duration-300 ease-in-out cursor-pointer">
+<span class="material-symbols-outlined text-sm">help_outline</span>
+<span class="font-space-grotesk uppercase tracking-tighter text-[10px]">Support</span>
+</div>
+<div class="text-[#484849] opacity-70 hover:bg-[#131314] hover:text-[#ff7162] flex items-center gap-4 px-8 py-3 transition-all duration-300 ease-in-out cursor-pointer">
+<span class="material-symbols-outlined text-sm">logout</span>
+<span class="font-space-grotesk uppercase tracking-tighter text-[10px]">Logout</span>
+</div>
+</div>
+</aside>
+<!-- Main Content Canvas -->
+<main class="ml-64 mt-16 p-6 min-h-screen bg-surface">
+<!-- Top Summary Bar (Bento style row) -->
+<div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+<div class="bg-surface-container p-4 rounded-lg border-l border-primary/20">
+<p class="text-[10px] text-outline uppercase font-space-grotesk tracking-widest mb-1">Net Equity</p>
+<h3 class="text-2xl font-space-grotesk font-bold text-on-surface">$1,482,903.42</h3>
+<div class="flex items-center gap-2 mt-1">
+<span class="text-[10px] text-primary bg-primary/10 px-1.5 py-0.5 rounded-sm font-bold">+2.4%</span>
+<span class="text-[10px] text-outline font-body">VS PREV SESSION</span>
+</div>
+</div>
+<div class="bg-surface-container p-4 rounded-lg border-l border-secondary/20">
+<p class="text-[10px] text-outline uppercase font-space-grotesk tracking-widest mb-1">24h P&amp;L</p>
+<h3 class="text-2xl font-space-grotesk font-bold text-secondary">+$14,290.00</h3>
+<p class="text-[10px] text-outline mt-1 font-body">14 TRANSACTIONS</p>
+</div>
+<div class="bg-surface-container p-4 rounded-lg">
+<p class="text-[10px] text-outline uppercase font-space-grotesk tracking-widest mb-1">Session Win Rate</p>
+<div class="flex items-end justify-between">
+<h3 class="text-2xl font-space-grotesk font-bold text-on-surface">68.2%</h3>
+<div class="w-16 bg-surface-container-low h-1 rounded-full mb-2">
+<div class="bg-primary h-full w-[68%] rounded-full shadow-[0_0_5px_rgba(156,255,147,0.5)]"></div>
+</div>
+</div>
+</div>
+<div class="bg-surface-container p-4 rounded-lg">
+<p class="text-[10px] text-outline uppercase font-space-grotesk tracking-widest mb-1">Profit Factor</p>
+<h3 class="text-2xl font-space-grotesk font-bold text-on-surface">2.41</h3>
+<p class="text-[10px] text-primary mt-1 font-body">OPTIMAL RANGE</p>
+</div>
+<div class="bg-surface-container p-4 rounded-lg">
+<p class="text-[10px] text-outline uppercase font-space-grotesk tracking-widest mb-1">Sharpe Ratio</p>
+<h3 class="text-2xl font-space-grotesk font-bold text-on-surface">3.85</h3>
+<p class="text-[10px] text-outline mt-1 font-body">ADJUSTED DAILY</p>
+</div>
+</div>
+<!-- Dashboard Grid -->
+<div class="grid grid-cols-12 gap-6">
+<!-- Left Column: Regime & Pipeline -->
+<div class="col-span-12 lg:col-span-4 space-y-6">
+<!-- Market Regime Panel -->
+<section class="bg-surface-container-high p-6 rounded-lg relative overflow-hidden">
+<div class="absolute top-0 right-0 p-4 opacity-10">
+<span class="material-symbols-outlined text-8xl">storm</span>
+</div>
+<p class="text-[10px] text-outline uppercase font-space-grotesk tracking-widest mb-4">Market Regime Panel</p>
+<div class="flex flex-col gap-2">
+<h2 class="text-3xl font-space-grotesk font-black text-primary leading-tight">EXPANSIONARY VOLATILITY</h2>
+<p class="text-xs text-on-surface-variant font-body max-w-xs">High conviction directional movement detected in US Equities. Pipeline favoring breakout logic.</p>
+</div>
+<div class="mt-8 grid grid-cols-2 gap-4">
+<div class="bg-surface-container p-3 rounded-sm border border-outline-variant/20">
+<p class="text-[10px] text-outline mb-1 uppercase font-space-grotesk">VIX Level</p>
+<span class="text-lg font-space-grotesk font-bold text-tertiary">18.42</span>
+</div>
+<div class="bg-surface-container p-3 rounded-sm border border-outline-variant/20">
+<p class="text-[10px] text-outline mb-1 uppercase font-space-grotesk">Correlation</p>
+<span class="text-lg font-space-grotesk font-bold text-secondary">0.91</span>
+</div>
+</div>
+</section>
+<!-- Pipeline Health Status -->
+<section class="bg-surface-container p-6 rounded-lg">
+<div class="flex justify-between items-center mb-6">
+<p class="text-[10px] text-outline uppercase font-space-grotesk tracking-widest">6-Layer Pipeline Engine</p>
+<span class="flex items-center gap-1.5 text-[10px] text-primary font-bold">
+<span class="w-1.5 h-1.5 bg-primary rounded-full shadow-[0_0_8px_#9cff93]"></span>
+                            LIVE
+                        </span>
+</div>
+<div class="grid grid-cols-3 gap-3">
+<div class="flex flex-col items-center justify-center p-3 bg-surface-container-low rounded-sm border-t-2 border-primary">
+<span class="material-symbols-outlined text-primary text-lg mb-2">database</span>
+<span class="text-[9px] font-space-grotesk uppercase text-on-surface-variant tracking-tighter text-center">Data Ing.</span>
+</div>
+<div class="flex flex-col items-center justify-center p-3 bg-surface-container-low rounded-sm border-t-2 border-primary">
+<span class="material-symbols-outlined text-primary text-lg mb-2">calculate</span>
+<span class="text-[9px] font-space-grotesk uppercase text-on-surface-variant tracking-tighter text-center">Feat Eng.</span>
+</div>
+<div class="flex flex-col items-center justify-center p-3 bg-surface-container-low rounded-sm border-t-2 border-primary">
+<span class="material-symbols-outlined text-primary text-lg mb-2">hub</span>
+<span class="text-[9px] font-space-grotesk uppercase text-on-surface-variant tracking-tighter text-center">Inference</span>
+</div>
+<div class="flex flex-col items-center justify-center p-3 bg-surface-container-low rounded-sm border-t-2 border-secondary">
+<span class="material-symbols-outlined text-secondary text-lg mb-2">robot</span>
+<span class="text-[9px] font-space-grotesk uppercase text-on-surface-variant tracking-tighter text-center">Algo Lgc</span>
+</div>
+<div class="flex flex-col items-center justify-center p-3 bg-surface-container-low rounded-sm border-t-2 border-primary">
+<span class="material-symbols-outlined text-primary text-lg mb-2">shield</span>
+<span class="text-[9px] font-space-grotesk uppercase text-on-surface-variant tracking-tighter text-center">Risk Fltr</span>
+</div>
+<div class="flex flex-col items-center justify-center p-3 bg-surface-container-low rounded-sm border-t-2 border-outline-variant">
+<span class="material-symbols-outlined text-outline text-lg mb-2">bolt</span>
+<span class="text-[9px] font-space-grotesk uppercase text-on-surface-variant tracking-tighter text-center">Exec. Sys</span>
+</div>
+</div>
+</section>
+<!-- Risk Quick-Glance -->
+<section class="bg-surface-container p-6 rounded-lg">
+<p class="text-[10px] text-outline uppercase font-space-grotesk tracking-widest mb-4">Risk Constraints</p>
+<div class="space-y-4">
+<div>
+<div class="flex justify-between text-[10px] mb-1">
+<span class="text-outline uppercase">Daily Loss Limit ($50k)</span>
+<span class="text-on-surface font-bold">$12,402 / $50,000</span>
+</div>
+<div class="w-full bg-surface-container-low h-1.5 rounded-full overflow-hidden">
+<div class="bg-tertiary h-full w-[24.8%] shadow-[0_0_8px_#ff7162]"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between text-[10px] mb-1">
+<span class="text-outline uppercase">Max Active Trades</span>
+<span class="text-on-surface font-bold">4 / 10</span>
+</div>
+<div class="w-full bg-surface-container-low h-1.5 rounded-full overflow-hidden">
+<div class="bg-secondary h-full w-[40%]"></div>
+</div>
+</div>
+</div>
+</section>
+</div>
+<!-- Middle Column: Active Session & Decisions -->
+<div class="col-span-12 lg:col-span-5 space-y-6">
+<!-- Active Session Window -->
+<section class="bg-surface-container p-6 rounded-lg relative overflow-hidden">
+<div class="flex justify-between items-start mb-6">
+<div>
+<p class="text-[10px] text-outline uppercase font-space-grotesk tracking-widest">Active Trading Session</p>
+<h4 class="text-lg font-space-grotesk font-bold">New York Morning (NYM)</h4>
+</div>
+<div class="text-right">
+<p class="text-[10px] text-outline uppercase font-space-grotesk">Session Closes In</p>
+<h4 class="text-2xl font-space-grotesk font-bold text-primary">02:41:15</h4>
+</div>
+</div>
+<div class="bg-surface-container-low rounded-sm p-4 border-l-2 border-tertiary">
+<p class="text-[10px] text-tertiary uppercase font-space-grotesk font-bold tracking-widest mb-2">Critical News Events</p>
+<div class="space-y-3">
+<div class="flex justify-between items-center text-xs">
+<span class="text-on-surface font-medium font-body">FOMC Member Waller Speaks</span>
+<span class="text-outline-variant font-space-grotesk">IN 14M</span>
+</div>
+<div class="flex justify-between items-center text-xs">
+<span class="text-on-surface-variant font-body">US Crude Oil Inventories</span>
+<span class="text-outline-variant font-space-grotesk">IN 1H 24M</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Recent Decisions Feed -->
+<section class="bg-surface-container p-6 rounded-lg h-full max-h-[500px] flex flex-col">
+<div class="flex justify-between items-center mb-4">
+<p class="text-[10px] text-outline uppercase font-space-grotesk tracking-widest">Recent Intelligence Decisions</p>
+<span class="material-symbols-outlined text-outline cursor-pointer hover:text-on-surface">more_vert</span>
+</div>
+<div class="space-y-4 overflow-y-auto flex-1 pr-2">
+<!-- Decision Item -->
+<div class="p-3 bg-surface-container-high rounded-sm border-l-2 border-primary-container">
+<div class="flex justify-between items-start mb-1">
+<span class="text-[10px] text-primary font-space-grotesk font-bold uppercase tracking-widest">Signal Approved</span>
+<span class="text-[10px] text-outline font-space-grotesk">12:04:12</span>
+</div>
+<div class="flex justify-between items-center">
+<h5 class="text-sm font-bold font-body">NQ1! / LONG / 18,241.50</h5>
+<span class="text-xs font-space-grotesk text-on-surface bg-surface-container-highest px-2 py-0.5 rounded-full">Score: 94</span>
+</div>
+</div>
+<!-- Decision Item -->
+<div class="p-3 bg-surface-container-high/40 rounded-sm border-l-2 border-tertiary">
+<div class="flex justify-between items-start mb-1">
+<span class="text-[10px] text-tertiary font-space-grotesk font-bold uppercase tracking-widest">Signal Vetoed</span>
+<span class="text-[10px] text-outline font-space-grotesk">11:58:04</span>
+</div>
+<div class="flex justify-between items-center">
+<h5 class="text-sm font-bold font-body">ES1! / SHORT / 5,214.25</h5>
+<span class="text-xs font-space-grotesk text-on-surface bg-surface-container-highest px-2 py-0.5 rounded-full">Risk Limit Exceeded</span>
+</div>
+</div>
+<!-- Decision Item -->
+<div class="p-3 bg-surface-container-high rounded-sm border-l-2 border-primary-container">
+<div class="flex justify-between items-start mb-1">
+<span class="text-[10px] text-primary font-space-grotesk font-bold uppercase tracking-widest">Signal Approved</span>
+<span class="text-[10px] text-outline font-space-grotesk">11:45:32</span>
+</div>
+<div class="flex justify-between items-center">
+<h5 class="text-sm font-bold font-body">MES1! / LONG / 5,211.75</h5>
+<span class="text-xs font-space-grotesk text-on-surface bg-surface-container-highest px-2 py-0.5 rounded-full">Score: 88</span>
+</div>
+</div>
+<!-- Decision Item -->
+<div class="p-3 bg-surface-container-high/40 rounded-sm border-l-2 border-outline">
+<div class="flex justify-between items-start mb-1">
+<span class="text-[10px] text-outline font-space-grotesk font-bold uppercase tracking-widest">Rejected</span>
+<span class="text-[10px] text-outline font-space-grotesk">11:32:15</span>
+</div>
+<div class="flex justify-between items-center">
+<h5 class="text-sm font-bold font-body">MNQ1! / LONG / 18,190.25</h5>
+<span class="text-xs font-space-grotesk text-on-surface bg-surface-container-highest px-2 py-0.5 rounded-full">Low Alpha Constr</span>
+</div>
+</div>
+</div>
+</section>
+</div>
+<!-- Right Column: Instruments & Queue -->
+<div class="col-span-12 lg:col-span-3 space-y-6">
+<!-- Live Instrument Panel -->
+<section class="bg-surface-container p-6 rounded-lg">
+<p class="text-[10px] text-outline uppercase font-space-grotesk tracking-widest mb-4">Core Futures</p>
+<div class="space-y-4">
+<div class="flex items-center justify-between">
+<div class="flex flex-col">
+<span class="text-sm font-bold font-space-grotesk">ES1!</span>
+<span class="text-[10px] text-outline-variant font-body">S&amp;P 500 E-mini</span>
+</div>
+<div class="text-right">
+<span class="text-sm font-bold text-primary">5,218.25</span>
+<div class="text-[9px] text-primary font-bold">+0.12%</div>
+</div>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex flex-col">
+<span class="text-sm font-bold font-space-grotesk">NQ1!</span>
+<span class="text-[10px] text-outline-variant font-body">Nasdaq 100</span>
+</div>
+<div class="text-right">
+<span class="text-sm font-bold text-primary">18,245.75</span>
+<div class="text-[9px] text-primary font-bold">+0.45%</div>
+</div>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex flex-col">
+<span class="text-sm font-bold font-space-grotesk">MES1!</span>
+<span class="text-[10px] text-outline-variant font-body">Micro S&amp;P 500</span>
+</div>
+<div class="text-right">
+<span class="text-sm font-bold text-primary">5,217.75</span>
+<div class="text-[9px] text-primary font-bold">+0.11%</div>
+</div>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex flex-col">
+<span class="text-sm font-bold font-space-grotesk">MNQ1!</span>
+<span class="text-[10px] text-outline-variant font-body">Micro Nasdaq 100</span>
+</div>
+<div class="text-right">
+<span class="text-sm font-bold text-on-surface">18,245.25</span>
+<div class="text-[9px] text-on-surface-variant font-bold">0.00%</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Setup Opportunities Queue -->
+<section class="bg-surface-container-low p-6 rounded-lg border border-outline-variant/10">
+<p class="text-[10px] text-outline uppercase font-space-grotesk tracking-widest mb-4">Opportunities Queue</p>
+<div class="space-y-3">
+<!-- Opp Item -->
+<div class="group flex items-center justify-between p-2 hover:bg-surface-container-high rounded-sm transition-colors cursor-pointer">
+<div class="flex flex-col">
+<span class="text-xs font-bold text-on-surface font-body">Vol Breakout</span>
+<span class="text-[9px] text-secondary font-bold font-space-grotesk uppercase">Detected</span>
+</div>
+<div class="flex flex-col items-end">
+<span class="text-[9px] text-outline font-space-grotesk">CONF: 72%</span>
+<span class="material-symbols-outlined text-outline group-hover:text-primary text-sm">rocket_launch</span>
+</div>
+</div>
+<!-- Opp Item -->
+<div class="group flex items-center justify-between p-2 hover:bg-surface-container-high rounded-sm transition-colors cursor-pointer">
+<div class="flex flex-col">
+<span class="text-xs font-bold text-on-surface font-body">Mean Reversion</span>
+<span class="text-[9px] text-secondary font-bold font-space-grotesk uppercase">Detected</span>
+</div>
+<div class="flex flex-col items-end">
+<span class="text-[9px] text-outline font-space-grotesk">CONF: 64%</span>
+<span class="material-symbols-outlined text-outline group-hover:text-primary text-sm">monitoring</span>
+</div>
+</div>
+<!-- Opp Item -->
+<div class="group flex items-center justify-between p-2 hover:bg-surface-container-high rounded-sm transition-colors cursor-pointer">
+<div class="flex flex-col">
+<span class="text-xs font-bold text-on-surface font-body">Liquidity Gap</span>
+<span class="text-[9px] text-secondary font-bold font-space-grotesk uppercase">Detected</span>
+</div>
+<div class="flex flex-col items-end">
+<span class="text-[9px] text-outline font-space-grotesk">CONF: 58%</span>
+<span class="material-symbols-outlined text-outline group-hover:text-primary text-sm">water_drop</span>
+</div>
+</div>
+</div>
+<button class="w-full mt-6 py-2 border border-outline-variant text-[9px] text-outline uppercase font-space-grotesk tracking-widest hover:text-on-surface hover:border-outline transition-all">
+                        View All (12)
+                    </button>
+</section>
+</div>
+</div>
+<!-- Global Status Footer Area -->
+<div class="mt-8 pt-6 border-t border-outline-variant/20 flex flex-wrap justify-between items-center gap-4">
+<div class="flex items-center gap-8">
+<div class="flex flex-col">
+<span class="text-[9px] text-outline font-space-grotesk uppercase tracking-widest">Global Engine Status</span>
+<span class="text-[10px] text-primary font-bold">NOMINAL - ALL SYSTEMS SYNCED</span>
+</div>
+<div class="flex flex-col">
+<span class="text-[9px] text-outline font-space-grotesk uppercase tracking-widest">Data Latency</span>
+<span class="text-[10px] text-on-surface font-bold">1.2ms (NY4 Data Center)</span>
+</div>
+</div>
+<div class="flex gap-4">
+<img alt="abstract visualization of frequency waves and data points in neon green on dark background" class="h-8 w-32 object-cover rounded-sm opacity-50 grayscale hover:grayscale-0 transition-all cursor-crosshair" data-alt="abstract visualization of frequency waves and data points in neon green on dark background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB3OX8nl_b4kaAzJ5VuXKZPrxoQSdxOT2IjtmCx5SMTpln2HDfrca2thLHUsEOiQvK-StOVFcBjJydEd8BZ9eipQnI2x972Dvf8R3C6QybaGbQQmq5gRaqv0LtZhFdgD0mGLezzV99n8oklaPjKoPaindZ4ziM83lrfuDluEfYWc92UKReIDnsPIN2zs9MBgki5b8TA4S5v1LyrLTPVPtd4HmRXbzd1BmPos0CpbyUpHPifVSwhr2_yMWOpLZb6v2Ykp6JkRlUloH8"/>
+<div class="flex flex-col justify-center">
+<span class="text-[9px] text-outline font-space-grotesk uppercase tracking-widest">System Hash</span>
+<span class="text-[9px] text-outline-variant font-mono">0x742d...492b</span>
+</div>
+</div>
+</div>
+</main>
+<!-- Floating Global Alert (Subtle Toast Style) -->
+<div class="fixed bottom-6 right-6 z-50 bg-surface-container-high border border-outline-variant p-4 rounded-lg shadow-2xl flex items-center gap-4 max-w-sm">
+<div class="w-2 h-2 bg-primary rounded-full animate-pulse shadow-[0_0_8px_#9cff93]"></div>
+<div class="flex-1">
+<p class="text-[10px] font-space-grotesk uppercase tracking-tighter text-on-surface-variant">System Notification</p>
+<p class="text-xs font-body text-on-surface">Auto-balancing risk profiles for US Open volatility spike.</p>
+</div>
+<span class="material-symbols-outlined text-outline-variant cursor-pointer text-lg hover:text-on-surface transition-colors">close</span>
+</div>
+</body></html>

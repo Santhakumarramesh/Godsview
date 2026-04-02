@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Godsview | Performance Analytics</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "surface": "#0e0e0f",
+              "on-tertiary": "#4a0001",
+              "outline-variant": "#484849",
+              "on-secondary-fixed": "#00326f",
+              "primary-fixed-dim": "#00ec3b",
+              "error-dim": "#d53d18",
+              "inverse-surface": "#fcf8f9",
+              "on-tertiary-fixed-variant": "#7a0004",
+              "on-secondary-container": "#f7f7ff",
+              "primary-fixed": "#00fc40",
+              "primary-dim": "#00ec3b",
+              "tertiary-fixed-dim": "#ff7c6c",
+              "secondary-container": "#005bc0",
+              "surface-container-low": "#131314",
+              "surface-container-highest": "#262627",
+              "on-primary-fixed-variant": "#006513",
+              "tertiary-container": "#f9362c",
+              "on-error": "#450900",
+              "tertiary-fixed": "#ff9385",
+              "tertiary-dim": "#e2241f",
+              "surface-container-high": "#201f21",
+              "error-container": "#b92902",
+              "surface-variant": "#262627",
+              "on-background": "#ffffff",
+              "tertiary": "#ff7162",
+              "on-primary": "#006413",
+              "secondary": "#669dff",
+              "on-primary-fixed": "#00440a",
+              "secondary-fixed-dim": "#a8c4ff",
+              "on-surface-variant": "#adaaab",
+              "inverse-primary": "#006f16",
+              "surface-container-lowest": "#000000",
+              "on-tertiary-container": "#000000",
+              "on-primary-container": "#005a10",
+              "inverse-on-surface": "#565556",
+              "on-secondary": "#001f49",
+              "on-error-container": "#ffd2c8",
+              "primary": "#9cff93",
+              "surface-container": "#1a191b",
+              "secondary-fixed": "#bed2ff",
+              "surface-dim": "#0e0e0f",
+              "secondary-dim": "#0070ea",
+              "primary-container": "#00fc40",
+              "surface-tint": "#9cff93",
+              "on-secondary-fixed-variant": "#004ea5",
+              "on-tertiary-fixed": "#3a0001",
+              "error": "#ff7351",
+              "outline": "#767576",
+              "background": "#0e0e0f",
+              "on-surface": "#ffffff",
+              "surface-bright": "#2c2c2d"
+            },
+            fontFamily: {
+              "headline": ["Space Grotesk"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        .glass-panel {
+            background: rgba(44, 44, 45, 0.4);
+            backdrop-filter: blur(20px);
+        }
+        .matrix-gradient {
+            background: linear-gradient(180deg, rgba(26, 25, 27, 1) 0%, rgba(14, 14, 15, 1) 100%);
+        }
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface font-body selection:bg-primary selection:text-on-primary">
+<!-- TopAppBar Shell -->
+<nav class="fixed top-0 w-full z-50 bg-[#0e0e0f]/80 backdrop-blur-xl border-b border-[#484849]/15 flex justify-between items-center px-6 h-16">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[#9cff93]">terminal</span>
+<span class="font-['Space_Grotesk'] uppercase tracking-widest text-sm text-[#9cff93] font-bold tracking-tighter text-xl">OBSIDIAN ELITE</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="h-2 w-2 rounded-full bg-primary animate-pulse"></div>
+<span class="font-['Space_Grotesk'] uppercase tracking-widest text-[10px] text-primary">System Status Online</span>
+</div>
+</nav>
+<main class="pt-20 pb-28 px-4 max-w-md mx-auto space-y-6">
+<!-- Header Section: Portfolio Stats -->
+<section class="grid grid-cols-2 gap-px bg-outline-variant/15 rounded-lg overflow-hidden border border-outline-variant/10">
+<div class="bg-surface-container p-4 space-y-1">
+<p class="text-[10px] font-headline uppercase tracking-[0.2em] text-on-surface-variant">Portfolio Equity</p>
+<h1 class="text-2xl font-headline font-bold text-on-surface tracking-tight">$2.48M</h1>
+<div class="flex items-center gap-1 text-[10px] text-primary">
+<span class="material-symbols-outlined text-xs">trending_up</span>
+<span>+12.4% YTD</span>
+</div>
+</div>
+<div class="bg-surface-container p-4 space-y-1">
+<p class="text-[10px] font-headline uppercase tracking-[0.2em] text-on-surface-variant">Max Drawdown</p>
+<h2 class="text-2xl font-headline font-bold text-tertiary tracking-tight">4.12%</h2>
+<div class="flex items-center gap-1 text-[10px] text-on-surface-variant">
+<span class="material-symbols-outlined text-xs">verified_user</span>
+<span>Safety Margin: 88%</span>
+</div>
+</div>
+</section>
+<!-- Performance Chart: Equity Curve -->
+<section class="bg-surface-container rounded-lg p-5 border border-outline-variant/10">
+<div class="flex justify-between items-end mb-6">
+<div>
+<h3 class="text-xs font-headline uppercase tracking-widest text-on-surface-variant mb-1">Equity Curve</h3>
+<p class="text-[10px] text-outline">90D Time-Weighted Window</p>
+</div>
+<div class="text-right">
+<span class="text-primary font-headline text-lg font-bold">Time Frame: 90D</span>
+</div>
+</div>
+<!-- Custom Data Viz (Simulation of High-Performance Chart) -->
+<div class="relative h-40 w-full flex items-end gap-1">
+<div class="absolute inset-0 grid grid-rows-4 pointer-events-none">
+<div class="border-t border-outline-variant/10 w-full"></div>
+<div class="border-t border-outline-variant/10 w-full"></div>
+<div class="border-t border-outline-variant/10 w-full"></div>
+<div class="border-t border-outline-variant/10 w-full"></div>
+</div>
+<div class="flex-1 bg-primary/10 h-[40%] rounded-t-sm"></div>
+<div class="flex-1 bg-primary/10 h-[45%] rounded-t-sm"></div>
+<div class="flex-1 bg-primary/20 h-[55%] rounded-t-sm"></div>
+<div class="flex-1 bg-primary/15 h-[50%] rounded-t-sm"></div>
+<div class="flex-1 bg-primary/30 h-[65%] rounded-t-sm"></div>
+<div class="flex-1 bg-primary/40 h-[75%] rounded-t-sm"></div>
+<div class="flex-1 bg-primary/35 h-[70%] rounded-t-sm border-t-2 border-primary shadow-[0_-4px_10px_rgba(156,255,147,0.2)]"></div>
+<div class="flex-1 bg-primary/50 h-[85%] rounded-t-sm border-t-2 border-primary shadow-[0_-4px_10px_rgba(156,255,147,0.3)]"></div>
+<div class="flex-1 bg-primary/45 h-[80%] rounded-t-sm"></div>
+<div class="flex-1 bg-primary/60 h-[95%] rounded-t-sm border-t-2 border-primary shadow-[0_-4px_10px_rgba(156,255,147,0.4)]"></div>
+<div class="flex-1 bg-primary/55 h-[90%] rounded-t-sm border-t-2 border-primary shadow-[0_-4px_10px_rgba(156,255,147,0.3)]"></div>
+<div class="flex-1 bg-primary/70 h-[100%] rounded-t-sm border-t-2 border-primary shadow-[0_-4px_15px_rgba(156,255,147,0.5)]"></div>
+</div>
+</section>
+<!-- Signature Component: Layer Pass-Through Efficiency -->
+<section class="bg-surface-container rounded-lg p-5 space-y-4 border border-outline-variant/10">
+<h3 class="text-xs font-headline uppercase tracking-widest text-on-surface-variant">Layer Pass-Through Efficiency</h3>
+<div class="space-y-4 pt-2">
+<!-- Funnel Row 1 -->
+<div class="relative">
+<div class="flex justify-between items-center mb-1">
+<span class="text-[10px] text-on-surface font-medium">Total Signals</span>
+<span class="text-[10px] font-headline text-on-surface-variant">14,208</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full w-full bg-secondary-dim"></div>
+</div>
+</div>
+<!-- Funnel Row 2 -->
+<div class="relative pl-6">
+<div class="flex justify-between items-center mb-1">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[10px] text-secondary">subdirectory_arrow_right</span>
+<span class="text-[10px] text-on-surface font-medium">Risk Engine Approved</span>
+</div>
+<span class="text-[10px] font-headline text-on-surface-variant">2,145 (15.1%)</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full w-[15.1%] bg-secondary"></div>
+</div>
+</div>
+<!-- Funnel Row 3 -->
+<div class="relative pl-12">
+<div class="flex justify-between items-center mb-1">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[10px] text-primary">subdirectory_arrow_right</span>
+<span class="text-[10px] text-on-surface font-medium">Executed Positions</span>
+</div>
+<span class="text-[10px] font-headline text-on-surface-variant">892 (6.3%)</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full w-[6.3%] bg-primary"></div>
+</div>
+</div>
+</div>
+</section>
+<!-- Strategy Matrix -->
+<section class="bg-surface-container rounded-lg overflow-hidden border border-outline-variant/10">
+<div class="px-5 py-3 bg-surface-container-high border-b border-outline-variant/15">
+<h3 class="text-xs font-headline uppercase tracking-widest text-on-surface-variant">Strategy Matrix</h3>
+</div>
+<table class="w-full text-left">
+<thead>
+<tr class="text-[9px] uppercase tracking-tighter text-outline-variant border-b border-outline-variant/10">
+<th class="px-5 py-3 font-medium">Setup Type</th>
+<th class="px-5 py-3 font-medium text-right">Win Rate</th>
+<th class="px-5 py-3 font-medium text-right">Profit Factor</th>
+</tr>
+</thead>
+<tbody class="text-[11px] divide-y divide-outline-variant/5">
+<tr>
+<td class="px-5 py-4 font-headline text-on-surface">Mean Reversion</td>
+<td class="px-5 py-4 text-right text-primary">64.2%</td>
+<td class="px-5 py-4 text-right text-on-surface-variant">1.82</td>
+</tr>
+<tr class="bg-surface-container-low/30">
+<td class="px-5 py-4 font-headline text-on-surface">Breakout Momentum</td>
+<td class="px-5 py-4 text-right text-primary">52.8%</td>
+<td class="px-5 py-4 text-right text-on-surface-variant">2.14</td>
+</tr>
+<tr>
+<td class="px-5 py-4 font-headline text-on-surface">Order Block</td>
+<td class="px-5 py-4 text-right text-primary">71.5%</td>
+<td class="px-5 py-4 text-right text-on-surface-variant">3.45</td>
+</tr>
+</tbody>
+</table>
+</section>
+<!-- Session Alpha & AI Inference Stats -->
+<div class="grid grid-cols-2 gap-4">
+<!-- AI Inference Stats -->
+<section class="bg-surface-container rounded-lg p-4 space-y-3 border border-outline-variant/10">
+<div class="flex justify-between items-start">
+<p class="text-[9px] font-headline uppercase tracking-widest text-on-surface-variant">AI Inference</p>
+<span class="material-symbols-outlined text-xs text-secondary">memory</span>
+</div>
+<div>
+<p class="text-xl font-headline font-bold text-on-surface">72.4%</p>
+<p class="text-[9px] text-outline uppercase tracking-tighter">Claude Veto Rate</p>
+</div>
+<!-- Subtle Waveform -->
+<div class="flex items-center gap-[1px] h-6">
+<div class="flex-1 bg-secondary/30 h-1/2"></div>
+<div class="flex-1 bg-secondary/30 h-3/4"></div>
+<div class="flex-1 bg-secondary/50 h-1/2"></div>
+<div class="flex-1 bg-secondary/50 h-1/4"></div>
+<div class="flex-1 bg-secondary/30 h-1/2"></div>
+<div class="flex-1 bg-secondary/70 h-full"></div>
+<div class="flex-1 bg-secondary/30 h-2/3"></div>
+<div class="flex-1 bg-secondary/50 h-1/2"></div>
+<div class="flex-1 bg-secondary/30 h-1/4"></div>
+<div class="flex-1 bg-secondary/30 h-3/4"></div>
+</div>
+</section>
+<!-- Risk Profile -->
+<section class="bg-surface-container rounded-lg p-4 space-y-3 border border-outline-variant/10">
+<div class="flex justify-between items-start">
+<p class="text-[9px] font-headline uppercase tracking-widest text-on-surface-variant">Stability</p>
+<span class="material-symbols-outlined text-xs text-primary">shield</span>
+</div>
+<div class="flex items-center gap-3">
+<div class="relative h-12 w-12 flex items-center justify-center">
+<svg class="w-full h-full -rotate-90">
+<circle class="text-surface-container-highest" cx="24" cy="24" fill="transparent" r="20" stroke="currentColor" stroke-width="3"></circle>
+<circle class="text-primary" cx="24" cy="24" fill="transparent" r="20" stroke="currentColor" stroke-dasharray="125.6" stroke-dashoffset="31.4" stroke-width="3"></circle>
+</svg>
+<span class="absolute text-[10px] font-headline font-bold">75%</span>
+</div>
+<div class="space-y-1">
+<p class="text-[9px] text-outline">VaR (95%): <span class="text-on-surface">1.2%</span></p>
+<p class="text-[9px] text-outline">Sharpe: <span class="text-primary">2.41</span></p>
+</div>
+</div>
+</section>
+</div>
+<!-- Session Alpha Comparison -->
+<section class="bg-surface-container rounded-lg p-5 border border-outline-variant/10">
+<h3 class="text-xs font-headline uppercase tracking-widest text-on-surface-variant mb-4">Session Alpha Density</h3>
+<div class="grid grid-cols-3 gap-3">
+<div class="space-y-2">
+<p class="text-[9px] text-outline-variant uppercase font-medium">London</p>
+<div class="h-20 bg-surface-container-highest rounded-sm relative flex items-end">
+<div class="w-full bg-primary/40 h-[85%] rounded-sm"></div>
+<span class="absolute top-1 left-1 text-[8px] text-primary">Peak</span>
+</div>
+</div>
+<div class="space-y-2">
+<p class="text-[9px] text-outline-variant uppercase font-medium">New York</p>
+<div class="h-20 bg-surface-container-highest rounded-sm relative flex items-end">
+<div class="w-full bg-primary/60 h-[95%] rounded-sm"></div>
+</div>
+</div>
+<div class="space-y-2">
+<p class="text-[9px] text-outline-variant uppercase font-medium">Asian</p>
+<div class="h-20 bg-surface-container-highest rounded-sm relative flex items-end">
+<div class="w-full bg-primary/20 h-[40%] rounded-sm"></div>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar Shell -->
+<nav class="fixed bottom-0 w-full z-50 bg-[#0e0e0f]/90 backdrop-blur-2xl border-t border-[#484849]/15 shadow-[0_-4px_20px_rgba(156,255,147,0.05)] flex justify-around items-center h-20 pb-safe px-4">
+<a class="flex flex-col items-center justify-center text-[#2c2c2d] px-3 py-1 hover:bg-[#1a191b] hover:text-[#9cff93] transition-all active:scale-90" href="#">
+<span class="material-symbols-outlined mb-1">monitoring</span>
+<span class="font-['Inter'] font-medium text-[10px] tracking-tight">Monitor</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#2c2c2d] px-3 py-1 hover:bg-[#1a191b] hover:text-[#9cff93] transition-all active:scale-90" href="#">
+<span class="material-symbols-outlined mb-1">settings_input_component</span>
+<span class="font-['Inter'] font-medium text-[10px] tracking-tight">Engine</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#2c2c2d] px-3 py-1 hover:bg-[#1a191b] hover:text-[#9cff93] transition-all active:scale-90" href="#">
+<span class="material-symbols-outlined mb-1">gpp_maybe</span>
+<span class="font-['Inter'] font-medium text-[10px] tracking-tight">Risk</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#9cff93] bg-[#1a191b] rounded-md px-3 py-1 shadow-[0_0_10px_rgba(156,255,147,0.2)] transition-all active:scale-90" href="#">
+<span class="material-symbols-outlined mb-1">analytics</span>
+<span class="font-['Inter'] font-medium text-[10px] tracking-tight">Analytics</span>
+</a>
+</nav>
+</body></html>

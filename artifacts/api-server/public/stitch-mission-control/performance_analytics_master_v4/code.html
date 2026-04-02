@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Godsview | Performance Analytics v4</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "inverse-surface": "#fcf8f9",
+                        "tertiary-container": "#f9362c",
+                        "surface": "#0e0e0f",
+                        "surface-container-high": "#201f21",
+                        "surface-container": "#1a191b",
+                        "outline-variant": "#484849",
+                        "inverse-primary": "#006f16",
+                        "primary-container": "#00fc40",
+                        "secondary-container": "#005bc0",
+                        "on-tertiary-fixed-variant": "#7a0004",
+                        "inverse-on-surface": "#565556",
+                        "outline": "#767576",
+                        "on-surface": "#ffffff",
+                        "secondary-dim": "#0070ea",
+                        "surface-container-highest": "#262627",
+                        "primary": "#9cff93",
+                        "surface-variant": "#262627",
+                        "on-error": "#450900",
+                        "tertiary-fixed": "#ff9385",
+                        "tertiary-fixed-dim": "#ff7c6c",
+                        "surface-tint": "#9cff93",
+                        "on-tertiary-fixed": "#3a0001",
+                        "on-secondary-fixed": "#00326f",
+                        "surface-container-low": "#131314",
+                        "on-secondary-fixed-variant": "#004ea5",
+                        "on-error-container": "#ffd2c8",
+                        "error-dim": "#d53d18",
+                        "error": "#ff7351",
+                        "surface-bright": "#2c2c2d",
+                        "on-primary-container": "#005a10",
+                        "primary-fixed": "#00fc40",
+                        "on-primary-fixed-variant": "#006513",
+                        "on-primary-fixed": "#00440a",
+                        "background": "#0e0e0f",
+                        "on-surface-variant": "#adaaab",
+                        "tertiary-dim": "#e2241f",
+                        "secondary-fixed-dim": "#a8c4ff",
+                        "on-secondary-container": "#f7f7ff",
+                        "primary-fixed-dim": "#00ec3b",
+                        "secondary-fixed": "#bed2ff",
+                        "error-container": "#b92902",
+                        "on-primary": "#006413",
+                        "on-tertiary-container": "#000000",
+                        "on-secondary": "#001f49",
+                        "surface-container-lowest": "#000000",
+                        "tertiary": "#ff7162",
+                        "surface-dim": "#0e0e0f",
+                        "secondary": "#669dff",
+                        "primary-dim": "#00ec3b",
+                        "on-tertiary": "#4a0001",
+                        "on-background": "#ffffff"
+                    },
+                    fontFamily: {
+                        "headline": ["Space Grotesk"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" },
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .funnel-step {
+            clip-path: polygon(0% 0%, 100% 0%, 95% 100%, 5% 100%);
+        }
+        .glass-panel {
+            background: rgba(44, 44, 45, 0.4);
+            backdrop-filter: blur(20px);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface font-body selection:bg-primary selection:text-on-primary">
+<!-- TopAppBar -->
+<nav class="fixed top-0 w-full z-50 bg-[#0e0e0f]/80 backdrop-blur-xl flex justify-between items-center px-6 py-4 w-full">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full overflow-hidden border border-outline-variant/30">
+<img alt="User Profile Avatar" data-alt="close-up portrait of a high-tech digital human avatar with faint green data overlays and glowing eyes" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDrRcVCWyS6VZAwzBFU3WIPyYngSg7D3htvn9prphMD9GX_MW1y4fjVV-WQ9DfFh1dpernBb3Wo_JxYBqa6rP1JnvOyuXJpoQ6wFPUi59XMhZeNiocukya2hQ5O6w9bIUaIXqCkXMtlHsa4SGIL87QK1rpz0Xhxu7-jJWqhv8LTOcj170LW7cD2D6SAaYhZYxMRIjJ4Y4rW4Jx1f7tLZf53BaLNbuAMsuvxsy1MERGBIUxkTpKTMf5VHH1BB5hUjPqHoXM7_rt1i3E"/>
+</div>
+<span class="font-headline uppercase tracking-widest text-sm text-[#9cff93] font-bold tracking-tighter text-xl">GODSVIEW</span>
+</div>
+<div class="flex items-center gap-6">
+<div class="hidden md:flex flex-col items-end">
+<span class="text-[10px] font-headline tracking-widest text-on-surface-variant uppercase">System Health</span>
+<span class="text-[10px] font-bold text-primary flex items-center gap-1">
+<span class="w-1 h-1 rounded-full bg-primary animate-pulse"></span>
+                    NOMINAL
+                </span>
+</div>
+<div class="flex flex-col items-end border-l border-outline-variant/20 pl-4">
+<span class="text-[10px] font-headline tracking-widest text-on-surface-variant uppercase">Latency</span>
+<span class="text-[10px] font-bold text-primary">9ms</span>
+</div>
+<span class="material-symbols-outlined text-[#9cff93]">sensors</span>
+</div>
+</nav>
+<!-- Main Content Canvas -->
+<main class="pt-24 pb-32 px-4 max-w-4xl mx-auto space-y-6">
+<!-- Section 1: Equity Growth & Drawdown -->
+<section class="space-y-4">
+<div class="flex justify-between items-end">
+<div>
+<h2 class="font-headline text-on-surface-variant text-[10px] tracking-[0.2em] uppercase">Performance Metrics</h2>
+<p class="font-headline text-2xl font-bold text-on-surface tracking-tighter">Equity Growth</p>
+</div>
+<div class="text-right">
+<span class="text-primary font-headline text-xl font-bold">+24.8%</span>
+<p class="text-[10px] text-on-surface-variant uppercase tracking-tighter">Total Return</p>
+</div>
+</div>
+<div class="bg-surface-container-low rounded p-4 h-64 relative overflow-hidden group">
+<!-- Mock Line Chart -->
+<svg class="w-full h-full" preserveaspectratio="none" viewbox="0 0 400 200">
+<defs>
+<lineargradient id="chartGradient" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#9cff93" stop-opacity="0.2"></stop>
+<stop offset="100%" stop-color="#9cff93" stop-opacity="0"></stop>
+</lineargradient>
+</defs>
+<path d="M0,180 L40,170 L80,175 L120,150 L160,155 L200,120 L240,130 L280,100 L320,110 L360,80 L400,60 L400,200 L0,200 Z" fill="url(#chartGradient)"></path>
+<path d="M0,180 L40,170 L80,175 L120,150 L160,155 L200,120 L240,130 L280,100 L320,110 L360,80 L400,60" fill="none" stroke="#9cff93" stroke-width="2" vector-effect="non-scaling-stroke"></path>
+<!-- Grid Lines -->
+<line stroke="#484849" stroke-dasharray="4" stroke-width="0.5" x1="0" x2="400" y1="40" y2="40"></line>
+<line stroke="#484849" stroke-dasharray="4" stroke-width="0.5" x1="0" x2="400" y1="80" y2="80"></line>
+<line stroke="#484849" stroke-dasharray="4" stroke-width="0.5" x1="0" x2="400" y1="120" y2="120"></line>
+<line stroke="#484849" stroke-dasharray="4" stroke-width="0.5" x1="0" x2="400" y1="160" y2="160"></line>
+</svg>
+<div class="absolute top-4 right-4 flex gap-2">
+<span class="px-2 py-0.5 bg-primary/10 text-primary text-[9px] font-bold rounded">LIVE ENGINE</span>
+</div>
+</div>
+<!-- Drawdown Chart (Small/High Contrast) -->
+<div class="bg-surface-container-low rounded p-3 flex items-center gap-4 border-l-2 border-tertiary/40">
+<div class="flex-1">
+<p class="text-[9px] text-on-surface-variant uppercase tracking-widest font-bold">Relative Drawdown</p>
+<div class="h-8 w-full mt-2 flex items-end gap-1">
+<div class="bg-tertiary/20 w-full h-[10%]"></div>
+<div class="bg-tertiary/20 w-full h-[15%]"></div>
+<div class="bg-tertiary/20 w-full h-[12%]"></div>
+<div class="bg-tertiary/60 w-full h-[45%]"></div>
+<div class="bg-tertiary/20 w-full h-[20%]"></div>
+<div class="bg-tertiary/20 w-full h-[10%]"></div>
+<div class="bg-tertiary/20 w-full h-[5%]"></div>
+</div>
+</div>
+<div class="text-right">
+<span class="text-tertiary font-headline text-lg font-bold">-4.2%</span>
+<p class="text-[9px] text-on-surface-variant uppercase">Max Peak-To-Valley</p>
+</div>
+</div>
+</section>
+<!-- Section 2: Core Performance Matrix -->
+<section class="grid grid-cols-2 md:grid-cols-4 gap-3">
+<div class="bg-surface-container p-4 rounded border border-outline-variant/10">
+<span class="text-[10px] text-on-surface-variant uppercase tracking-widest block mb-1">Win Rate</span>
+<span class="text-2xl font-headline font-bold text-on-surface">68.4%</span>
+<div class="w-full bg-outline-variant/20 h-1 mt-2 rounded-full overflow-hidden">
+<div class="bg-primary h-full w-[68.4%]"></div>
+</div>
+</div>
+<div class="bg-surface-container p-4 rounded border border-outline-variant/10">
+<span class="text-[10px] text-on-surface-variant uppercase tracking-widest block mb-1">Profit Factor</span>
+<span class="text-2xl font-headline font-bold text-on-surface">2.41</span>
+<span class="text-[9px] text-primary block mt-2">+0.12 WoW</span>
+</div>
+<div class="bg-surface-container p-4 rounded border border-outline-variant/10">
+<span class="text-[10px] text-on-surface-variant uppercase tracking-widest block mb-1">Sharpe Ratio</span>
+<span class="text-2xl font-headline font-bold text-secondary">1.88</span>
+<span class="text-[9px] text-on-surface-variant block mt-2 uppercase">Institutional Grade</span>
+</div>
+<div class="bg-surface-container p-4 rounded border border-outline-variant/10">
+<span class="text-[10px] text-on-surface-variant uppercase tracking-widest block mb-1">Avg. R:R</span>
+<span class="text-2xl font-headline font-bold text-on-surface">2.2</span>
+<span class="text-[9px] text-on-surface-variant block mt-2 uppercase">Risk Adjusted</span>
+</div>
+</section>
+<!-- Section 3: Setup Efficiency Funnel -->
+<section class="bg-surface-container-high rounded-xl p-6 relative overflow-hidden">
+<div class="flex justify-between items-start mb-8">
+<div>
+<h3 class="font-headline text-sm font-bold tracking-widest text-primary uppercase">Setup Efficiency Funnel</h3>
+<p class="text-[11px] text-on-surface-variant mt-1">Multi-layer decision architecture leakage report</p>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant/40">filter_alt</span>
+</div>
+<div class="space-y-2 relative">
+<!-- Funnel Visual -->
+<div class="flex items-center group">
+<div class="w-24 text-[10px] text-on-surface-variant uppercase font-bold pr-4 text-right">Raw Setups</div>
+<div class="flex-1 bg-surface-container-highest h-8 flex items-center justify-center relative border border-outline-variant/20">
+<span class="text-[11px] font-bold z-10">140</span>
+<div class="absolute inset-0 bg-primary/5 w-full"></div>
+</div>
+</div>
+<div class="flex items-center group">
+<div class="w-24 text-[10px] text-on-surface-variant uppercase font-bold pr-4 text-right">OF Filtered</div>
+<div class="flex-1 flex justify-center">
+<div class="w-[80%] bg-surface-container-highest h-8 flex items-center justify-center relative border border-outline-variant/20 funnel-step">
+<span class="text-[11px] font-bold z-10">112</span>
+<div class="absolute inset-0 bg-primary/10 w-full"></div>
+</div>
+</div>
+</div>
+<div class="flex items-center group">
+<div class="w-24 text-[10px] text-on-surface-variant uppercase font-bold pr-4 text-right">ML Filtered</div>
+<div class="flex-1 flex justify-center">
+<div class="w-[60%] bg-surface-container-highest h-8 flex items-center justify-center relative border border-outline-variant/20 funnel-step">
+<span class="text-[11px] font-bold z-10">84</span>
+<div class="absolute inset-0 bg-primary/15 w-full"></div>
+</div>
+</div>
+</div>
+<div class="flex items-center group">
+<div class="w-24 text-[10px] text-on-surface-variant uppercase font-bold pr-4 text-right">Claude Veto</div>
+<div class="flex-1 flex justify-center">
+<div class="w-[40%] bg-surface-container-highest h-8 flex items-center justify-center relative border border-outline-variant/20 funnel-step">
+<span class="text-[11px] font-bold z-10 text-secondary">52</span>
+<div class="absolute inset-0 bg-secondary/10 w-full"></div>
+</div>
+</div>
+</div>
+<div class="flex items-center group">
+<div class="w-24 text-[10px] text-on-surface-variant uppercase font-bold pr-4 text-right">Risk Reject</div>
+<div class="flex-1 flex justify-center">
+<div class="w-[25%] bg-surface-container-highest h-8 flex items-center justify-center relative border border-outline-variant/20 funnel-step">
+<span class="text-[11px] font-bold z-10 text-tertiary">22</span>
+<div class="absolute inset-0 bg-tertiary/10 w-full"></div>
+</div>
+</div>
+</div>
+<div class="flex items-center group">
+<div class="w-24 text-[10px] text-primary uppercase font-black pr-4 text-right">Executed</div>
+<div class="flex-1 flex justify-center">
+<div class="w-[12%] bg-primary h-10 flex items-center justify-center relative shadow-[0_0_15px_rgba(156,255,147,0.3)]">
+<span class="text-[12px] font-black text-on-primary">14</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Section 4: Alpha Breakdown -->
+<section class="grid md:grid-cols-2 gap-6">
+<!-- Market Regime -->
+<div class="bg-surface-container-low p-5 rounded border border-outline-variant/10">
+<h4 class="font-headline text-[10px] text-on-surface-variant uppercase tracking-widest mb-6">Market Regime Alpha</h4>
+<div class="space-y-4">
+<div class="space-y-1">
+<div class="flex justify-between text-[11px] font-bold mb-1">
+<span>Expansionary</span>
+<span class="text-primary">+12.4%</span>
+</div>
+<div class="w-full bg-surface-container h-1.5 rounded-full overflow-hidden">
+<div class="bg-primary h-full w-[85%]"></div>
+</div>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between text-[11px] font-bold mb-1">
+<span>Rotational</span>
+<span class="text-secondary">+8.2%</span>
+</div>
+<div class="w-full bg-surface-container h-1.5 rounded-full overflow-hidden">
+<div class="bg-secondary h-full w-[60%]"></div>
+</div>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between text-[11px] font-bold mb-1">
+<span>Mean Reverting</span>
+<span class="text-on-surface-variant">+4.2%</span>
+</div>
+<div class="w-full bg-surface-container h-1.5 rounded-full overflow-hidden">
+<div class="bg-outline-variant h-full w-[35%]"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Session Alpha -->
+<div class="bg-surface-container-low p-5 rounded border border-outline-variant/10">
+<h4 class="font-headline text-[10px] text-on-surface-variant uppercase tracking-widest mb-6">Session Performance</h4>
+<div class="space-y-4">
+<div class="space-y-1">
+<div class="flex justify-between text-[11px] font-bold mb-1">
+<span>NY Open</span>
+<span class="text-primary">+15.2%</span>
+</div>
+<div class="w-full bg-surface-container h-1.5 rounded-full overflow-hidden">
+<div class="bg-primary h-full w-[90%]"></div>
+</div>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between text-[11px] font-bold mb-1">
+<span>London</span>
+<span class="text-secondary">+6.4%</span>
+</div>
+<div class="w-full bg-surface-container h-1.5 rounded-full overflow-hidden">
+<div class="bg-secondary h-full w-[45%]"></div>
+</div>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between text-[11px] font-bold mb-1">
+<span>Overnight</span>
+<span class="text-tertiary">-1.2%</span>
+</div>
+<div class="w-full bg-surface-container h-1.5 rounded-full overflow-hidden">
+<div class="bg-tertiary h-full w-[10%]"></div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Risk Warning Footnote -->
+<div class="p-4 rounded border border-tertiary/20 bg-tertiary/5 flex items-start gap-3">
+<span class="material-symbols-outlined text-tertiary text-lg" style="font-variation-settings: 'FILL' 1;">warning</span>
+<div class="text-[10px] text-on-surface-variant leading-relaxed">
+<span class="text-tertiary font-bold uppercase block mb-1">Liquidation Guard Active</span>
+                Current volatility index is exceeding 2.4 sigma. Performance reporting may be delayed due to high-frequency execution rebalancing.
+            </div>
+</div>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full bg-[#0e0e0f]/90 backdrop-blur-md border-t border-[#484849]/15 flex justify-around items-center px-4 pb-6 pt-3 z-50 shadow-[0_-4px_20px_rgba(156,255,147,0.05)]">
+<!-- Overview -->
+<div class="flex flex-col items-center justify-center text-[#484849] px-3 py-1 hover:bg-[#201f21] hover:text-[#9cff93] transition-colors group">
+<span class="material-symbols-outlined text-xl mb-1">dashboard</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-tight">Overview</span>
+</div>
+<!-- Intelligence -->
+<div class="flex flex-col items-center justify-center text-[#484849] px-3 py-1 hover:bg-[#201f21] hover:text-[#9cff93] transition-colors group">
+<span class="material-symbols-outlined text-xl mb-1">psychology</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-tight">Intelligence</span>
+</div>
+<!-- Pipeline -->
+<div class="flex flex-col items-center justify-center text-[#484849] px-3 py-1 hover:bg-[#201f21] hover:text-[#9cff93] transition-colors group">
+<span class="material-symbols-outlined text-xl mb-1">account_tree</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-tight">Pipeline</span>
+</div>
+<!-- Archive (ACTIVE: This represents the Analytics focus) -->
+<div class="flex flex-col items-center justify-center text-[#9cff93] bg-[#1a191b] rounded-md px-3 py-1 shadow-[0_0_8px_rgba(156,255,147,0.2)]">
+<span class="material-symbols-outlined text-xl mb-1" style="font-variation-settings: 'FILL' 1;">inventory_2</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-tight">Archive</span>
+</div>
+</nav>
+</body></html>

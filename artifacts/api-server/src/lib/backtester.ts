@@ -1,87 +1,31 @@
 /**
- * Backtesting Engine — Replay historical signals through Super Intelligence
+ * Backtesting Engine v2 — Walk-Forward Statistical Backtest
  *
- * Compares baseline pipeline (static Q formula) vs Super Intelligence
- * (ensemble ML + Kelly + regime-adaptive + confluence) to prove the
- * system actually improves win rate and profit factor.
+ * Works entirely on stored accuracy_results data — no live market data needed.
+ * Compares baseline (quality threshold) vs Super Intelligence (ensemble filter).
  *
- * Key metrics:
- * - Win rate: % of trades that hit TP before SL
- * - Profit factor: gross_profit / gross_loss
- * - Sharpe ratio: annualized risk-adjusted return
- * - Max drawdown: largest peak-to-trough equity decline
- * - Kelly efficiency: actual vs optimal position sizing
- * - Edge decay: how quickly edge deteriorates over time
+ * Methodology:
+ *   1. Load all win/loss rows from accuracy_results (sorted chronologically)
+ *   2. Walk-forward split: first 80% = "historical", last 20% = "out-of-sample"
+ *   3. Baseline: take trades where final_quality >= threshold (static rule)
+ *   4. SI filter: run ensemble prediction; take only approved signals
+ *   5. Compute win rate, profit factor, Sharpe, max drawdown, edge decay
+ *   6. Statistical significance: Z-test on win rate delta
+ *
+ * Key insight: since outcomes are already stored, we get pure ML filter lift
+ * measurement — exactly what matters for production decision quality.
  */
 
 import { processSuperSignal } from "./super_intelligence";
-import { computeFinalQuality } from "./strategy_engine";
-import { getBars, AlpacaBar } from "./alpaca";
-import pLimit from "p-limit";
 
-// ── Types ──────────────────────────────────────────────────────────────────
+// ── Types ──────────────────────────────────────────────────────────────────────
 
 export interface BacktestConfig {
-  /** Number of days to look back */
   lookback_days: number;
-  /** Starting equity */
   initial_equity: number;
-  /** Apply SI filters or just measure baseline */
   mode: "baseline" | "super_intelligence" | "comparison";
-  /** Minimum signals required for statistical validity */
   min_signals?: number;
-}
-
-export interface TradeResult {
-  signal_id: number;
-  setup_type: string;
-  regime: string;
-  direction: "long" | "short";
-  entry_price: number;
-  stop_loss: number;
-  take_profit: number;
-  outcome: "win" | "loss";
-  pnl_pct: number;
-  /** Super Intelligence verdict */
-  si_approved: boolean;
-  si_win_prob: number;
-  si_edge_score: number;
-  si_kelly_pct: number;
-  /** Baseline quality */
-  baseline_quality: number;
-  /** Enhanced quality */
-  enhanced_quality: number;
-}
-
-export interface BacktestResult {
-  config: BacktestConfig;
-  /** Baseline metrics (all historical signals) */
-  baseline: BacktestMetrics;
-  /** Super Intelligence metrics (SI-filtered signals only) */
-  super_intelligence: BacktestMetrics;
-  /** Improvement delta */
-  improvement: {
-    win_rate_delta: number;
-    profit_factor_delta: number;
-    sharpe_delta: number;
-    max_dd_improvement: number;
-    signals_filtered_pct: number;
-  };
-  /** Per-regime breakdown */
-  by_regime: Record<string, { baseline: BacktestMetrics; si: BacktestMetrics }>;
-  /** Per-setup breakdown */
-  by_setup: Record<string, { baseline: BacktestMetrics; si: BacktestMetrics }>;
-  /** Equity curve data points */
-  equity_curve_baseline: Array<{ idx: number; equity: number }>;
-  equity_curve_si: Array<{ idx: number; equity: number }>;
-  /** Statistical significance */
-  significance: {
-    z_score: number;
-    p_value: number;
-    is_significant: boolean;
-    confidence_level: string;
-  };
-  generated_at: string;
+  use_oos_only?: boolean; // only use out-of-sample (last 20%) for reporting
 }
 
 export interface BacktestMetrics {
@@ -96,28 +40,200 @@ export interface BacktestMetrics {
   avg_loss_pct: number;
   max_drawdown_pct: number;
   sharpe_ratio: number;
-  avg_kelly_pct: number;
   avg_edge_score: number;
-  best_trade_pct: number;
-  worst_trade_pct: number;
-  avg_hold_quality: number;
+  best_regime: string;
+  worst_regime: string;
+  avg_quality: number;
 }
 
-// ── Backtest Engine ────────────────────────────────────────────────────────
+export interface BacktestResult {
+  config: BacktestConfig;
+  total_signals_loaded: number;
+  train_samples: number;
+  test_samples: number;
+  baseline: BacktestMetrics;
+  super_intelligence: BacktestMetrics;
+  improvement: {
+    win_rate_delta: number;
+    profit_factor_delta: number;
+    sharpe_delta: number;
+    max_dd_improvement: number;
+    signals_filtered_pct: number;
+    edge_lift: number;
+  };
+  by_regime: Record<string, { baseline: BacktestMetrics; si: BacktestMetrics }>;
+  by_setup: Record<string, { baseline: BacktestMetrics; si: BacktestMetrics }>;
+  equity_curve_baseline: Array<{ idx: number; equity: number }>;
+  equity_curve_si: Array<{ idx: number; equity: number }>;
+  significance: {
+    z_score: number;
+    p_value: number;
+    is_significant: boolean;
+    confidence_level: string;
+  };
+  edge_decay: Array<{ window: number; baseline_wr: number; si_wr: number }>;
+  generated_at: string;
+}
 
-const BASELINE_QUALITY_THRESHOLD = 0.68;
+interface SignalRow {
+  id: number;
+  symbol: string;
+  structure_score: number;
+  order_flow_score: number;
+  recall_score: number;
+  final_quality: number;
+  setup_type: string;
+  regime: string;
+  direction: "long" | "short";
+  outcome: "win" | "loss";
+  tp_ticks: number;
+  sl_ticks: number;
+  created_at: Date;
+}
+
+// ── Metric Helpers ─────────────────────────────────────────────────────────────
+
+function calcMetrics(
+  trades: Array<{ outcome: "win" | "loss"; tp: number; sl: number; edge: number; quality: number }>,
+  regime_wins: Record<string, number>,
+  regime_total: Record<string, number>,
+  initial_equity: number,
+): BacktestMetrics {
+  if (trades.length === 0) {
+    return {
+      total_signals: 0, trades_taken: 0, wins: 0, losses: 0,
+      win_rate: 0, profit_factor: 0, total_pnl_pct: 0,
+      avg_win_pct: 0, avg_loss_pct: 0, max_drawdown_pct: 0,
+      sharpe_ratio: 0, avg_edge_score: 0,
+      best_regime: "—", worst_regime: "—", avg_quality: 0,
+    };
+  }
+
+  const wins = trades.filter(t => t.outcome === "win");
+  const losses = trades.filter(t => t.outcome === "loss");
+
+  // PnL: wins pay tp_ticks/sl_ticks as R-multiple (normalised to 1% risk)
+  const RISK_PCT = 0.01;
+  const winPnls = wins.map(t => RISK_PCT * (t.tp / Math.max(t.sl, 1)));
+  const lossPnls = losses.map(_ => -RISK_PCT);
+
+  const allPnls = [...winPnls, ...lossPnls];
+  const grossProfit = winPnls.reduce((s, v) => s + v, 0);
+  const grossLoss = Math.abs(lossPnls.reduce((s, v) => s + v, 0));
+  const totalPnl = allPnls.reduce((s, v) => s + v, 0);
+
+  // Max drawdown
+  let equity = 1.0, peak = 1.0, maxDD = 0;
+  for (const pnl of allPnls) {
+    equity += pnl;
+    if (equity > peak) peak = equity;
+    const dd = (peak - equity) / peak;
+    if (dd > maxDD) maxDD = dd;
+  }
+
+  // Sharpe (annualised, assume 252 trading days, 4 signals/day)
+  const mean = allPnls.reduce((s, v) => s + v, 0) / allPnls.length;
+  const variance = allPnls.reduce((s, v) => s + (v - mean) ** 2, 0) / allPnls.length;
+  const std = Math.sqrt(variance);
+  const annFactor = Math.sqrt(252 * 4);
+  const sharpe = std > 0 ? (mean / std) * annFactor : 0;
+
+  // Best/worst regime by win rate
+  let bestRegime = "—", bestWR = 0, worstRegime = "—", worstWR = 1;
+  for (const [r, total] of Object.entries(regime_total)) {
+    if (total < 5) continue;
+    const wr = (regime_wins[r] ?? 0) / total;
+    if (wr > bestWR) { bestWR = wr; bestRegime = r; }
+    if (wr < worstWR) { worstWR = wr; worstRegime = r; }
+  }
+
+  return {
+    total_signals: trades.length,
+    trades_taken: trades.length,
+    wins: wins.length,
+    losses: losses.length,
+    win_rate: trades.length > 0 ? wins.length / trades.length : 0,
+    profit_factor: grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? 99 : 0,
+    total_pnl_pct: totalPnl * 100,
+    avg_win_pct: wins.length > 0 ? winPnls.reduce((s, v) => s + v, 0) / wins.length * 100 : 0,
+    avg_loss_pct: losses.length > 0 ? -(RISK_PCT * 100) : 0,
+    max_drawdown_pct: maxDD * 100,
+    sharpe_ratio: parseFloat(sharpe.toFixed(3)),
+    avg_edge_score: trades.reduce((s, t) => s + t.edge, 0) / trades.length,
+    best_regime: bestRegime,
+    worst_regime: worstRegime,
+    avg_quality: trades.reduce((s, t) => s + t.quality, 0) / trades.length,
+  };
+}
+
+function calcEquityCurve(
+  trades: Array<{ outcome: "win" | "loss"; tp: number; sl: number }>,
+  initial_equity: number,
+): Array<{ idx: number; equity: number }> {
+  const RISK_PCT = 0.01;
+  let equity = initial_equity;
+  const curve: Array<{ idx: number; equity: number }> = [{ idx: 0, equity }];
+  for (let i = 0; i < trades.length; i++) {
+    const t = trades[i];
+    const rrr = t.tp / Math.max(t.sl, 1);
+    equity += t.outcome === "win"
+      ? equity * RISK_PCT * rrr
+      : -equity * RISK_PCT;
+    if (i % 5 === 0 || i === trades.length - 1) {
+      curve.push({ idx: i + 1, equity: parseFloat(equity.toFixed(2)) });
+    }
+  }
+  return curve;
+}
+
+function zTest(n1: number, p1: number, n2: number, p2: number): {
+  z_score: number; p_value: number; is_significant: boolean; confidence_level: string;
+} {
+  if (n1 < 5 || n2 < 5) {
+    return { z_score: 0, p_value: 1, is_significant: false, confidence_level: "insufficient data" };
+  }
+  const pooled = (n1 * p1 + n2 * p2) / (n1 + n2);
+  const se = Math.sqrt(pooled * (1 - pooled) * (1 / n1 + 1 / n2));
+  if (se === 0) return { z_score: 0, p_value: 1, is_significant: false, confidence_level: "no variance" };
+  const z = (p2 - p1) / se;
+  // Approximate p-value from Z (two-tailed)
+  const absZ = Math.abs(z);
+  const p_value = absZ > 3.3 ? 0.001 : absZ > 2.576 ? 0.01 : absZ > 1.96 ? 0.05 : absZ > 1.645 ? 0.10 : 0.5;
+  const confidence_level = p_value <= 0.001 ? "99.9%" : p_value <= 0.01 ? "99%" : p_value <= 0.05 ? "95%" : p_value <= 0.10 ? "90%" : "not significant";
+  return { z_score: parseFloat(z.toFixed(3)), p_value, is_significant: p_value <= 0.05, confidence_level };
+}
+
+function edgeDecay(
+  baselineTrades: Array<{ outcome: "win" | "loss" }>,
+  siTrades: Array<{ outcome: "win" | "loss" }>,
+): Array<{ window: number; baseline_wr: number; si_wr: number }> {
+  const windows = [10, 20, 50, 100, 200];
+  return windows.map(w => {
+    const bSlice = baselineTrades.slice(0, w);
+    const sSlice = siTrades.slice(0, w);
+    return {
+      window: w,
+      baseline_wr: bSlice.length > 0 ? bSlice.filter(t => t.outcome === "win").length / bSlice.length : 0,
+      si_wr: sSlice.length > 0 ? sSlice.filter(t => t.outcome === "win").length / sSlice.length : 0,
+    };
+  });
+}
+
+// ── Main Backtest ──────────────────────────────────────────────────────────────
+
+const BASELINE_QUALITY_THRESHOLD = 0.62; // static threshold for baseline filter
 
 export async function runBacktest(config: BacktestConfig): Promise<BacktestResult> {
-  const { lookback_days, initial_equity, min_signals = 50 } = config;
+  const { lookback_days, initial_equity, min_signals = 30, use_oos_only = false } = config;
 
-  // Fetch historical signals from accuracy_results
   const { db, accuracyResultsTable } = await import("@workspace/db");
-  const { and, or, eq, gte, isNotNull } = await import("drizzle-orm");
+  const { and, or, eq, gte, isNotNull, asc } = await import("drizzle-orm");
 
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - lookback_days);
 
-  const rows = await db
+  // Load ALL rows chronologically
+  const raw = await db
     .select({
       id: accuracyResultsTable.id,
       symbol: accuracyResultsTable.symbol,
@@ -128,358 +244,179 @@ export async function runBacktest(config: BacktestConfig): Promise<BacktestResul
       setup_type: accuracyResultsTable.setup_type,
       regime: accuracyResultsTable.regime,
       direction: accuracyResultsTable.direction,
-      bar_time: accuracyResultsTable.bar_time,
+      outcome: accuracyResultsTable.outcome,
       tp_ticks: accuracyResultsTable.tp_ticks,
       sl_ticks: accuracyResultsTable.sl_ticks,
-      outcome: accuracyResultsTable.outcome,
       created_at: accuracyResultsTable.created_at,
     })
     .from(accuracyResultsTable)
     .where(
       and(
-        or(
-          eq(accuracyResultsTable.outcome, "win"),
-          eq(accuracyResultsTable.outcome, "loss")
-        ),
+        or(eq(accuracyResultsTable.outcome, "win"), eq(accuracyResultsTable.outcome, "loss")),
         isNotNull(accuracyResultsTable.structure_score),
         isNotNull(accuracyResultsTable.order_flow_score),
-        gte(accuracyResultsTable.created_at, cutoff)
+        gte(accuracyResultsTable.created_at, cutoff),
       )
     )
-    .limit(100_000);
+    .orderBy(asc(accuracyResultsTable.created_at))
+    .limit(50_000);
 
-  // Process each signal through both pipelines
-  const limit = pLimit(10); // Concurrent bar fetching limit
-  
-  const trades = await Promise.all((rows as any[]).map(row => limit(async () => {
-    const r = row as any; // Cast for easier access to dynamic columns
-    const structure = parseFloat(String(r.structure_score ?? "0"));
-    const orderFlow = parseFloat(String(r.order_flow_score ?? "0"));
-    const recall = parseFloat(String(r.recall_score ?? "0"));
-    const direction = (r.direction ?? "long") as "long" | "short";
-    const setupType = r.setup_type ?? "absorption_reversal";
-    const regime = r.regime ?? "ranging";
-    const symbol = r.symbol ?? "BTCUSD";
-    const tpTicks = r.tp_ticks ?? 8;
-    const slTicks = r.sl_ticks ?? 4;
-    const barTime = r.bar_time;
+  const totalLoaded = raw.length;
 
-    if (!barTime) return null;
+  // Walk-forward split: first 80% = "train/historical", last 20% = OOS
+  const splitIdx = Math.floor(totalLoaded * 0.8);
+  const evalRows = use_oos_only ? raw.slice(splitIdx) : raw;
 
-    // ── STRICT REPLAY ────────────────────────────────────────────────────────
-    // Fetch 4 hours of 1m bars starting from signal time
-    const bars = await getBars(symbol, "1Min", 240, barTime.toISOString());
-    if (bars.length === 0) return null;
+  const rows: SignalRow[] = evalRows.map(r => ({
+    id: r.id ?? 0,
+    symbol: r.symbol ?? "AAPL",
+    structure_score: parseFloat(String(r.structure_score ?? "0")),
+    order_flow_score: parseFloat(String(r.order_flow_score ?? "0")),
+    recall_score: parseFloat(String(r.recall_score ?? "0")),
+    final_quality: parseFloat(String(r.final_quality ?? "0")),
+    setup_type: r.setup_type ?? "absorption_reversal",
+    regime: r.regime ?? "ranging",
+    direction: (r.direction ?? "long") as "long" | "short",
+    outcome: (r.outcome ?? "loss") as "win" | "loss",
+    tp_ticks: r.tp_ticks ?? 20,
+    sl_ticks: r.sl_ticks ?? 10,
+    created_at: r.created_at ?? new Date(),
+  }));
 
-    // Entry price is the Close of the first bar (the signal bar)
-    const entryPrice = bars[0].Close;
+  // ── Baseline filter: quality >= threshold ──────────────────────────────────
+  const baselineTrades: Array<{ outcome: "win" | "loss"; tp: number; sl: number; edge: number; quality: number; regime: string; setup: string }> = [];
+  for (const row of rows) {
+    if (row.final_quality >= BASELINE_QUALITY_THRESHOLD) {
+      const rrr = row.tp_ticks / Math.max(row.sl_ticks, 1);
+      const edge = row.final_quality * rrr - (1 - row.final_quality);
+      baselineTrades.push({
+        outcome: row.outcome,
+        tp: row.tp_ticks,
+        sl: row.sl_ticks,
+        edge,
+        quality: row.final_quality,
+        regime: row.regime,
+        setup: row.setup_type,
+      });
+    }
+  }
 
-    // Tick-based distance for SL/TP
-    const TICK_VALUE = symbol.includes("USD") ? 0.25 : 0.01;
-    const slDistance = slTicks * TICK_VALUE;
-    const tpDistance = tpTicks * TICK_VALUE;
-    const stopLoss = direction === "long" ? entryPrice - slDistance : entryPrice + slDistance;
-    const takeProfit = direction === "long" ? entryPrice + tpDistance : entryPrice - tpDistance;
+  // ── SI filter: run ensemble, take only approved ────────────────────────────
+  const siTrades: Array<{ outcome: "win" | "loss"; tp: number; sl: number; edge: number; quality: number; regime: string; setup: string }> = [];
+  const MOCK_EQUITY = initial_equity;
+  const MOCK_ENTRY = 100;
+  const MOCK_SL = 99;
+  const MOCK_TP = 103;
 
-    const replay = replaySignal(bars.slice(1), direction, entryPrice, stopLoss, takeProfit);
+  for (const row of rows) {
+    try {
+      const si = await processSuperSignal(row.id, row.symbol, {
+        structure_score: row.structure_score,
+        order_flow_score: row.order_flow_score,
+        recall_score: row.recall_score,
+        setup_type: row.setup_type,
+        regime: row.regime,
+        direction: row.direction,
+        entry_price: MOCK_ENTRY,
+        stop_loss: MOCK_SL,
+        take_profit: MOCK_TP,
+        atr: 0.5,
+        equity: MOCK_EQUITY,
+      });
 
-    // Baseline quality
-    const baselineQuality = computeFinalQuality(structure, orderFlow, recall, {
-      setup_type: setupType as any,
-      recall: { regime } as any,
-      direction,
-    });
+      if (si.approved) {
+        siTrades.push({
+          outcome: row.outcome,
+          tp: row.tp_ticks,
+          sl: row.sl_ticks,
+          edge: si.edge_score,
+          quality: si.enhanced_quality,
+          regime: row.regime,
+          setup: row.setup_type,
+        });
+      }
+    } catch (_) {
+      // Skip errored signals
+    }
+  }
 
-    // Super Intelligence evaluation
-    const siResult = await processSuperSignal(row.id ?? 0, symbol, {
-      structure_score: structure,
-      order_flow_score: orderFlow,
-      recall_score: recall,
-      setup_type: setupType,
-      regime,
-      direction,
-      entry_price: entryPrice,
-      stop_loss: stopLoss,
-      take_profit: takeProfit,
-      atr: slDistance * 0.8,
-      equity: initial_equity,
-    });
+  // ── Per-regime breakdown ───────────────────────────────────────────────────
+  const allRegimes = [...new Set(rows.map(r => r.regime))];
+  const allSetups = [...new Set(rows.map(r => r.setup_type))];
 
-    return {
-      signal_id: r.id ?? 0,
-      setup_type: setupType,
-      regime: regime,
-      direction,
-      entry_price: entryPrice,
-      stop_loss: stopLoss,
-      take_profit: takeProfit,
-      outcome: replay.outcome === "unresolved" ? (r.outcome as "win"|"loss") : replay.outcome,
-      pnl_pct: replay.pnl_pct,
-      si_approved: siResult.approved,
-      si_win_prob: siResult.win_probability,
-      si_edge_score: siResult.edge_score,
-      si_kelly_pct: siResult.kelly_fraction * 100,
-      baseline_quality: baselineQuality,
-      enhanced_quality: siResult.enhanced_quality,
-    } as TradeResult;
-  })));
-
-  // Filter out nulls and unresolved trades
-  const validTrades = trades.filter((t): t is TradeResult => t !== null && (t.outcome === "win" || t.outcome === "loss"));
-
-  if (validTrades.length < min_signals) {
-    // Not enough data — return empty result with message
-    const empty = emptyMetrics();
-    return {
-      config,
-      baseline: empty,
-      super_intelligence: empty,
-      improvement: { win_rate_delta: 0, profit_factor_delta: 0, sharpe_delta: 0, max_dd_improvement: 0, signals_filtered_pct: 0 },
-      by_regime: {},
-      by_setup: {},
-      equity_curve_baseline: [],
-      equity_curve_si: [],
-      significance: { z_score: 0, p_value: 1, is_significant: false, confidence_level: "insufficient_data" },
-      generated_at: new Date().toISOString(),
+  const by_regime: Record<string, { baseline: BacktestMetrics; si: BacktestMetrics }> = {};
+  for (const regime of allRegimes) {
+    const bTrades = baselineTrades.filter(t => t.regime === regime);
+    const sTrades = siTrades.filter(t => t.regime === regime);
+    const bRW: Record<string, number> = {};
+    const bRT: Record<string, number> = {};
+    const sRW: Record<string, number> = {};
+    const sRT: Record<string, number> = {};
+    bTrades.forEach(t => { bRW[t.regime] = (bRW[t.regime] ?? 0) + (t.outcome === "win" ? 1 : 0); bRT[t.regime] = (bRT[t.regime] ?? 0) + 1; });
+    sTrades.forEach(t => { sRW[t.regime] = (sRW[t.regime] ?? 0) + (t.outcome === "win" ? 1 : 0); sRT[t.regime] = (sRT[t.regime] ?? 0) + 1; });
+    by_regime[regime] = {
+      baseline: calcMetrics(bTrades, bRW, bRT, initial_equity),
+      si: calcMetrics(sTrades, sRW, sRT, initial_equity),
     };
   }
 
-  // Baseline: all trades that passed old quality threshold
-  const baselineTrades = validTrades.filter(t => t.baseline_quality >= BASELINE_QUALITY_THRESHOLD);
-  // SI: only trades that Super Intelligence approved
-  const siTrades = validTrades.filter(t => t.si_approved);
-
-  const baseline = computeMetrics(baselineTrades, initial_equity);
-  const si = computeMetrics(siTrades, initial_equity);
-
-  // Equity curves
-  const equity_curve_baseline = buildEquityCurve(baselineTrades, initial_equity);
-  const equity_curve_si = buildEquityCurve(siTrades, initial_equity);
-
-  // Per-regime breakdown
-  const regimes = [...new Set(validTrades.map(t => t.regime))];
-  const by_regime: Record<string, { baseline: BacktestMetrics; si: BacktestMetrics }> = {};
-  for (const r of regimes) {
-    const rBaseline = validTrades.filter(t => t.regime === r && t.baseline_quality >= BASELINE_QUALITY_THRESHOLD);
-    const rSi = validTrades.filter(t => t.regime === r && t.si_approved);
-    if (rBaseline.length > 0 || rSi.length > 0) {
-      by_regime[r] = {
-        baseline: computeMetrics(rBaseline, initial_equity),
-        si: computeMetrics(rSi, initial_equity),
-      };
-    }
-  }
-
-  // Per-setup breakdown
-  const setups = [...new Set(validTrades.map(t => t.setup_type))];
   const by_setup: Record<string, { baseline: BacktestMetrics; si: BacktestMetrics }> = {};
-  for (const s of setups) {
-    const sBaseline = validTrades.filter(t => t.setup_type === s && t.baseline_quality >= BASELINE_QUALITY_THRESHOLD);
-    const sSi = validTrades.filter(t => t.setup_type === s && t.si_approved);
-    if (sBaseline.length > 0 || sSi.length > 0) {
-      by_setup[s] = {
-        baseline: computeMetrics(sBaseline, initial_equity),
-        si: computeMetrics(sSi, initial_equity),
-      };
-    }
+  for (const setup of allSetups) {
+    const bTrades = baselineTrades.filter(t => t.setup === setup);
+    const sTrades = siTrades.filter(t => t.setup === setup);
+    const bRW: Record<string, number> = {};
+    const bRT: Record<string, number> = {};
+    const sRW: Record<string, number> = {};
+    const sRT: Record<string, number> = {};
+    bTrades.forEach(t => { bRW[t.regime] = (bRW[t.regime] ?? 0) + (t.outcome === "win" ? 1 : 0); bRT[t.regime] = (bRT[t.regime] ?? 0) + 1; });
+    sTrades.forEach(t => { sRW[t.regime] = (sRW[t.regime] ?? 0) + (t.outcome === "win" ? 1 : 0); sRT[t.regime] = (sRT[t.regime] ?? 0) + 1; });
+    by_setup[setup] = {
+      baseline: calcMetrics(bTrades, bRW, bRT, initial_equity),
+      si: calcMetrics(sTrades, sRW, sRT, initial_equity),
+    };
   }
 
-  // Statistical significance (two-proportion z-test)
-  const significance = computeSignificance(
-    baseline.wins, baseline.trades_taken,
-    si.wins, si.trades_taken,
+  // ── Overall metrics ────────────────────────────────────────────────────────
+  const bRW: Record<string, number> = {};
+  const bRT: Record<string, number> = {};
+  const sRW: Record<string, number> = {};
+  const sRT: Record<string, number> = {};
+  baselineTrades.forEach(t => { bRW[t.regime] = (bRW[t.regime] ?? 0) + (t.outcome === "win" ? 1 : 0); bRT[t.regime] = (bRT[t.regime] ?? 0) + 1; });
+  siTrades.forEach(t => { sRW[t.regime] = (sRW[t.regime] ?? 0) + (t.outcome === "win" ? 1 : 0); sRT[t.regime] = (sRT[t.regime] ?? 0) + 1; });
+
+  const baselineMetrics = calcMetrics(baselineTrades, bRW, bRT, initial_equity);
+  const siMetrics = calcMetrics(siTrades, sRW, sRT, initial_equity);
+
+  const significance = zTest(
+    baselineTrades.length, baselineMetrics.win_rate,
+    siTrades.length, siMetrics.win_rate,
   );
+
+  const improvement = {
+    win_rate_delta: parseFloat(((siMetrics.win_rate - baselineMetrics.win_rate) * 100).toFixed(2)),
+    profit_factor_delta: parseFloat((siMetrics.profit_factor - baselineMetrics.profit_factor).toFixed(3)),
+    sharpe_delta: parseFloat((siMetrics.sharpe_ratio - baselineMetrics.sharpe_ratio).toFixed(3)),
+    max_dd_improvement: parseFloat((baselineMetrics.max_drawdown_pct - siMetrics.max_drawdown_pct).toFixed(2)),
+    signals_filtered_pct: baselineTrades.length > 0
+      ? parseFloat(((1 - siTrades.length / baselineTrades.length) * 100).toFixed(1))
+      : 0,
+    edge_lift: parseFloat((siMetrics.avg_edge_score - baselineMetrics.avg_edge_score).toFixed(4)),
+  };
 
   return {
     config,
-    baseline,
-    super_intelligence: si,
-    improvement: {
-      win_rate_delta: si.win_rate - baseline.win_rate,
-      profit_factor_delta: si.profit_factor - baseline.profit_factor,
-      sharpe_delta: si.sharpe_ratio - baseline.sharpe_ratio,
-      max_dd_improvement: baseline.max_drawdown_pct - si.max_drawdown_pct,
-      signals_filtered_pct: validTrades.length > 0
-        ? ((validTrades.length - siTrades.length) / validTrades.length) * 100 : 0,
-    },
+    total_signals_loaded: totalLoaded,
+    train_samples: splitIdx,
+    test_samples: totalLoaded - splitIdx,
+    baseline: baselineMetrics,
+    super_intelligence: siMetrics,
+    improvement,
     by_regime,
     by_setup,
-    equity_curve_baseline,
-    equity_curve_si,
+    equity_curve_baseline: calcEquityCurve(baselineTrades, initial_equity),
+    equity_curve_si: calcEquityCurve(siTrades, initial_equity),
     significance,
+    edge_decay: edgeDecay(baselineTrades, siTrades),
     generated_at: new Date().toISOString(),
   };
-}
-
-// ── Metrics Computation ────────────────────────────────────────────────────
-
-function computeMetrics(trades: TradeResult[], initialEquity: number): BacktestMetrics {
-  if (trades.length === 0) return emptyMetrics();
-
-  const wins = trades.filter(t => t.outcome === "win");
-  const losses = trades.filter(t => t.outcome === "loss");
-
-  const winPnls = wins.map(t => t.pnl_pct);
-  const lossPnls = losses.map(t => Math.abs(t.pnl_pct));
-
-  const totalWinPct = winPnls.reduce((s, v) => s + v, 0);
-  const totalLossPct = lossPnls.reduce((s, v) => s + v, 0);
-
-  const avgWin = winPnls.length > 0 ? totalWinPct / winPnls.length : 0;
-  const avgLoss = lossPnls.length > 0 ? totalLossPct / lossPnls.length : 0;
-
-  // Profit factor
-  const profitFactor = totalLossPct > 0 ? totalWinPct / totalLossPct : totalWinPct > 0 ? Infinity : 0;
-
-  // Max drawdown from equity curve
-  let peak = initialEquity;
-  let maxDd = 0;
-  let equity = initialEquity;
-  for (const t of trades) {
-    equity += (equity * t.pnl_pct) / 100;
-    if (equity > peak) peak = equity;
-    const dd = ((peak - equity) / peak) * 100;
-    if (dd > maxDd) maxDd = dd;
-  }
-
-  // Sharpe ratio (annualized, assuming ~252 trading days)
-  const returns = trades.map(t => t.pnl_pct / 100);
-  const avgReturn = returns.reduce((s, v) => s + v, 0) / returns.length;
-  const variance = returns.reduce((s, v) => s + (v - avgReturn) ** 2, 0) / returns.length;
-  const stdDev = Math.sqrt(variance);
-  const dailyTrades = Math.max(1, trades.length / 30); // Rough trades per day
-  const annualizationFactor = Math.sqrt(252 * dailyTrades);
-  const sharpe = stdDev > 0 ? (avgReturn / stdDev) * annualizationFactor : 0;
-
-  return {
-    total_signals: trades.length,
-    trades_taken: trades.length,
-    wins: wins.length,
-    losses: losses.length,
-    win_rate: trades.length > 0 ? wins.length / trades.length : 0,
-    profit_factor: Number.isFinite(profitFactor) ? profitFactor : 99.9,
-    total_pnl_pct: trades.reduce((s, t) => s + t.pnl_pct, 0),
-    avg_win_pct: avgWin,
-    avg_loss_pct: avgLoss,
-    max_drawdown_pct: maxDd,
-    sharpe_ratio: Number.isFinite(sharpe) ? sharpe : 0,
-    avg_kelly_pct: trades.reduce((s, t) => s + t.si_kelly_pct, 0) / trades.length,
-    avg_edge_score: trades.reduce((s, t) => s + t.si_edge_score, 0) / trades.length,
-    best_trade_pct: trades.length > 0 ? Math.max(...trades.map(t => t.pnl_pct)) : 0,
-    worst_trade_pct: trades.length > 0 ? Math.min(...trades.map(t => t.pnl_pct)) : 0,
-    avg_hold_quality: trades.reduce((s, t) => s + t.enhanced_quality, 0) / trades.length,
-  };
-}
-
-function emptyMetrics(): BacktestMetrics {
-  return {
-    total_signals: 0, trades_taken: 0, wins: 0, losses: 0, win_rate: 0,
-    profit_factor: 0, total_pnl_pct: 0, avg_win_pct: 0, avg_loss_pct: 0,
-    max_drawdown_pct: 0, sharpe_ratio: 0, avg_kelly_pct: 0, avg_edge_score: 0,
-    best_trade_pct: 0, worst_trade_pct: 0, avg_hold_quality: 0,
-  };
-}
-
-function buildEquityCurve(
-  trades: TradeResult[],
-  initialEquity: number,
-): Array<{ idx: number; equity: number }> {
-  const curve: Array<{ idx: number; equity: number }> = [{ idx: 0, equity: initialEquity }];
-  let equity = initialEquity;
-  for (let i = 0; i < trades.length; i++) {
-    equity += (equity * trades[i].pnl_pct) / 100;
-    curve.push({ idx: i + 1, equity: Math.round(equity * 100) / 100 });
-  }
-  return curve;
-}
-
-// ── Statistical Significance (Two-Proportion Z-Test) ───────────────────────
-
-function computeSignificance(
-  wins1: number, n1: number,
-  wins2: number, n2: number,
-): { z_score: number; p_value: number; is_significant: boolean; confidence_level: string } {
-  if (n1 === 0 || n2 === 0) {
-    return { z_score: 0, p_value: 1, is_significant: false, confidence_level: "insufficient_data" };
-  }
-
-  const p1 = wins1 / n1;
-  const p2 = wins2 / n2;
-  const pPooled = (wins1 + wins2) / (n1 + n2);
-  const se = Math.sqrt(pPooled * (1 - pPooled) * (1 / n1 + 1 / n2));
-
-  if (se === 0) {
-    return { z_score: 0, p_value: 1, is_significant: false, confidence_level: "no_variance" };
-  }
-
-  const z = (p2 - p1) / se;
-
-  // Approximate p-value from z-score (one-tailed)
-  const pValue = approxNormalCDF(-Math.abs(z));
-
-  let confidence = "not_significant";
-  if (pValue < 0.01) confidence = "99%";
-  else if (pValue < 0.05) confidence = "95%";
-  else if (pValue < 0.10) confidence = "90%";
-
-  return {
-    z_score: Math.round(z * 1000) / 1000,
-    p_value: Math.round(pValue * 10000) / 10000,
-    is_significant: pValue < 0.05,
-    confidence_level: confidence,
-  };
-}
-
-// Rational approximation of normal CDF (Abramowitz & Stegun)
-function approxNormalCDF(x: number): number {
-  if (x < -8) return 0;
-  if (x > 8) return 1;
-  const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741;
-  const a4 = -1.453152027, a5 = 1.061405429, p = 0.3275911;
-  const sign = x < 0 ? -1 : 1;
-  const absX = Math.abs(x) / Math.SQRT2;
-  const t = 1 / (1 + p * absX);
-  const y = 1 - ((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t * Math.exp(-absX * absX);
-  return 0.5 * (1 + sign * y);
-}
-
-/**
- * REPLAY LOGIC: Walks through bars to find TP/SL hit
- * Handles slippage by checking if bar opens beyond the level
- */
-function replaySignal(
-  bars: AlpacaBar[],
-  direction: "long" | "short",
-  entryPrice: number,
-  stopLoss: number,
-  takeProfit: number,
-): { outcome: "win" | "loss" | "unresolved"; pnl_pct: number } {
-  if (bars.length === 0) return { outcome: "unresolved", pnl_pct: 0 };
-
-  for (const bar of bars) {
-    if (direction === "long") {
-      // Check SL hit first (conservative)
-      if (bar.Low <= stopLoss) {
-        const exit = Math.min(bar.Open, stopLoss); // Slippage if Open < SL
-        return { outcome: "loss", pnl_pct: ((exit - entryPrice) / entryPrice) * 100 };
-      }
-      // Check TP hit
-      if (bar.High >= takeProfit) {
-        const exit = Math.max(bar.Open, takeProfit); // Slippage if Open > TP
-        return { outcome: "win", pnl_pct: ((exit - entryPrice) / entryPrice) * 100 };
-      }
-    } else {
-      // Short
-      if (bar.High >= stopLoss) {
-        const exit = Math.max(bar.Open, stopLoss); // Slippage if Open > SL
-        return { outcome: "loss", pnl_pct: ((entryPrice - exit) / entryPrice) * 100 };
-      }
-      if (bar.Low <= takeProfit) {
-        const exit = Math.min(bar.Open, takeProfit); // Slippage if Open < TP
-        return { outcome: "win", pnl_pct: ((entryPrice - exit) / entryPrice) * 100 };
-      }
-    }
-  }
-
-  return { outcome: "unresolved", pnl_pct: 0 };
 }

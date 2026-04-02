@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Godsview | Risk Command Center</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "secondary-container": "#334d58",
+              "inverse-surface": "#e5e2e3",
+              "error-container": "#93000a",
+              "secondary-fixed-dim": "#afcbd8",
+              "surface-container": "#201f20",
+              "surface-container-low": "#1c1b1c",
+              "on-secondary-fixed": "#021f29",
+              "tertiary-fixed": "#7efba4",
+              "on-tertiary-fixed": "#00210c",
+              "error": "#ffb4ab",
+              "on-surface-variant": "#c1c7d3",
+              "background": "#131314",
+              "surface-bright": "#3a393a",
+              "secondary": "#afcbd8",
+              "surface-variant": "#353436",
+              "tertiary": "#61de8a",
+              "on-primary-container": "#002a51",
+              "on-error-container": "#ffdad6",
+              "surface-tint": "#a4c9ff",
+              "primary-fixed-dim": "#a4c9ff",
+              "surface-dim": "#131314",
+              "on-primary-fixed": "#001c39",
+              "on-tertiary-container": "#003115",
+              "on-primary": "#00315d",
+              "on-tertiary": "#00391a",
+              "on-secondary": "#19343e",
+              "surface-container-high": "#2a2a2b",
+              "surface": "#131314",
+              "primary-fixed": "#d4e3ff",
+              "surface-container-lowest": "#0e0e0f",
+              "on-background": "#e5e2e3",
+              "outline": "#8b919d",
+              "on-surface": "#e5e2e3",
+              "on-error": "#690005",
+              "on-primary-fixed-variant": "#004883",
+              "inverse-primary": "#0060ac",
+              "primary-container": "#4d93e5",
+              "secondary-fixed": "#cbe7f5",
+              "on-tertiary-fixed-variant": "#005228",
+              "on-secondary-container": "#a1bdca",
+              "inverse-on-surface": "#313031",
+              "surface-container-highest": "#353436",
+              "tertiary-container": "#18a659",
+              "on-secondary-fixed-variant": "#304a55",
+              "tertiary-fixed-dim": "#61de8a",
+              "primary": "#a4c9ff",
+              "outline-variant": "#414751"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+      .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      }
+      .tabular-nums { font-variant-numeric: tabular-nums; }
+      body { background-color: #131314; color: #e5e2e3; }
+      .glass-panel {
+        background: rgba(53, 52, 54, 0.6);
+        backdrop-filter: blur(12px);
+      }
+    </style>
+</head>
+<body class="font-body selection:bg-primary selection:text-on-primary">
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-0 h-full flex flex-col z-40 bg-[#1C1B1C] dark:bg-[#1C1B1C] h-screen w-20 hover:w-64 transition-all duration-300 border-r border-[#414751]/15 group">
+<div class="p-6 flex items-center space-x-4">
+<div class="w-8 h-8 rounded bg-gradient-to-br from-[#A4C9FF] to-[#4D93E2] flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-on-primary-container text-xl" style="font-variation-settings: 'FILL' 1;">security</span>
+</div>
+<div class="overflow-hidden opacity-0 group-hover:opacity-100 transition-opacity">
+<p class="font-['Manrope'] font-black text-xl tracking-tighter text-[#A4C9FF]">Godsview</p>
+<p class="font-['Manrope'] tracking-wider uppercase text-[10px] font-bold text-[#8E918F]">Institutional AI</p>
+</div>
+</div>
+<nav class="mt-8 flex-1">
+<div class="px-3 space-y-1">
+<a class="flex items-center h-12 px-3 rounded-sm text-[#8E918F] hover:bg-[#353436] hover:text-[#E2E2E2] transition-colors active:scale-95 duration-100" href="#">
+<span class="material-symbols-outlined shrink-0" data-icon="dashboard">dashboard</span>
+<span class="ml-4 font-['Manrope'] tracking-wider uppercase text-[10px] font-bold opacity-0 group-hover:opacity-100 whitespace-nowrap">Dashboard</span>
+</a>
+<a class="flex items-center h-12 px-3 rounded-sm text-[#8E918F] hover:bg-[#353436] hover:text-[#E2E2E2] transition-colors active:scale-95 duration-100" href="#">
+<span class="material-symbols-outlined shrink-0" data-icon="analytics">analytics</span>
+<span class="ml-4 font-['Manrope'] tracking-wider uppercase text-[10px] font-bold opacity-0 group-hover:opacity-100 whitespace-nowrap">Signals</span>
+</a>
+<a class="flex items-center h-12 px-3 rounded-sm text-[#8E918F] hover:bg-[#353436] hover:text-[#E2E2E2] transition-colors active:scale-95 duration-100" href="#">
+<span class="material-symbols-outlined shrink-0" data-icon="explore">explore</span>
+<span class="ml-4 font-['Manrope'] tracking-wider uppercase text-[10px] font-bold opacity-0 group-hover:opacity-100 whitespace-nowrap">Explorer</span>
+</a>
+<a class="flex items-center h-12 px-3 rounded-sm text-[#A4C9FF] border-l-2 border-[#A4C9FF] bg-gradient-to-r from-[#A4C9FF]/10 to-transparent active:scale-95 duration-100" href="#">
+<span class="material-symbols-outlined shrink-0" data-icon="security" style="font-variation-settings: 'FILL' 1;">security</span>
+<span class="ml-4 font-['Manrope'] tracking-wider uppercase text-[10px] font-bold opacity-0 group-hover:opacity-100 whitespace-nowrap">Risk</span>
+</a>
+<a class="flex items-center h-12 px-3 rounded-sm text-[#8E918F] hover:bg-[#353436] hover:text-[#E2E2E2] transition-colors active:scale-95 duration-100" href="#">
+<span class="material-symbols-outlined shrink-0" data-icon="query_stats">query_stats</span>
+<span class="ml-4 font-['Manrope'] tracking-wider uppercase text-[10px] font-bold opacity-0 group-hover:opacity-100 whitespace-nowrap">Analytics</span>
+</a>
+<a class="flex items-center h-12 px-3 rounded-sm text-[#8E918F] hover:bg-[#353436] hover:text-[#E2E2E2] transition-colors active:scale-95 duration-100" href="#">
+<span class="material-symbols-outlined shrink-0" data-icon="description">description</span>
+<span class="ml-4 font-['Manrope'] tracking-wider uppercase text-[10px] font-bold opacity-0 group-hover:opacity-100 whitespace-nowrap">Reports</span>
+</a>
+</div>
+</nav>
+<div class="mt-auto p-3 space-y-1">
+<a class="flex items-center h-12 px-3 rounded-sm text-[#8E918F] hover:bg-[#353436] hover:text-[#E2E2E2] transition-colors" href="#">
+<span class="material-symbols-outlined shrink-0" data-icon="settings">settings</span>
+<span class="ml-4 font-['Manrope'] tracking-wider uppercase text-[10px] font-bold opacity-0 group-hover:opacity-100">Settings</span>
+</a>
+<a class="flex items-center h-12 px-3 rounded-sm text-[#8E918F] hover:bg-[#353436] hover:text-[#E2E2E2] transition-colors" href="#">
+<span class="material-symbols-outlined shrink-0" data-icon="help_outline">help_outline</span>
+<span class="ml-4 font-['Manrope'] tracking-wider uppercase text-[10px] font-bold opacity-0 group-hover:opacity-100">Support</span>
+</a>
+</div>
+</aside>
+<!-- TopNavBar -->
+<header class="fixed top-0 right-0 left-20 h-16 flex items-center justify-between px-6 z-30 bg-[#131314]/80 backdrop-blur-xl border-b border-[#414751]/15 shadow-sm shadow-[#000000]/20">
+<div class="flex items-center space-x-8">
+<div class="flex items-center bg-surface-container-lowest px-4 py-1.5 rounded-sm">
+<span class="material-symbols-outlined text-outline text-sm mr-2" data-icon="search">search</span>
+<span class="text-xs text-outline font-['Inter'] font-medium">Search Risk Matrix...</span>
+</div>
+<nav class="hidden lg:flex items-center space-x-6">
+<span class="text-[#8E918F] font-['Inter'] font-medium text-xs uppercase tracking-widest">Hybrid AI Intelligence</span>
+<div class="h-4 w-px bg-outline-variant/30"></div>
+<span class="text-[#A4C9FF] font-['Inter'] font-bold text-xs uppercase tracking-widest">MARKET LIVE - OPTIMAL</span>
+</nav>
+</div>
+<div class="flex items-center space-x-6">
+<div class="flex items-center space-x-4">
+<div class="text-right">
+<p class="text-[10px] text-outline font-bold uppercase tracking-tighter">Equity</p>
+<p class="text-sm font-['Inter'] font-medium text-primary tabular-nums">$2.4M</p>
+</div>
+<div class="text-right">
+<p class="text-[10px] text-outline font-bold uppercase tracking-tighter">Session</p>
+<p class="text-sm font-['Inter'] font-medium text-tertiary tabular-nums">+1.24%</p>
+</div>
+</div>
+<div class="flex items-center space-x-2">
+<button class="p-2 text-[#8E918F] hover:text-[#A4C9FF] transition-all">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="p-2 text-[#8E918F] hover:text-[#A4C9FF] transition-all">
+<span class="material-symbols-outlined" data-icon="account_balance_wallet">account_balance_wallet</span>
+</button>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-outline-variant/30">
+<img alt="Chief Trader Profile" class="w-full h-full object-cover" data-alt="Close-up professional portrait of a serious male trader with glasses in a dark office setting with soft neon monitor glow" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAyi5u77_N2KlGVnwiQe2W-AdO3Uhk-cSJQtt7oDvEi51U0MxK_VRX0NrnFMvmtzq3702JamQ-EaZop9t7YfxUs2dMxY9ynw2EBxnUsJ7yXKE_VWYlnmDI6QOyWD3a08YqWPYSL9U0HmUKRJ9fJOjns5PkFPvv8BcgJ4D8ByP4dqUUOxzUmn6kM8WhhzBXEqoI4D-q6Z6fRvOukLgCXxrVYXvGiJ61tYZzvLAc_nfeXhNJ10iA3VkAUXQQ8126-eqJ-cxpjcUOs7p0"/>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="pl-20 pt-16 min-h-screen bg-surface">
+<div class="max-w-[1600px] mx-auto p-8">
+<!-- Header Section -->
+<div class="flex justify-between items-end mb-8">
+<div>
+<h1 class="font-headline font-extrabold text-4xl tracking-tight text-on-surface">Risk Command Center</h1>
+<p class="text-outline mt-1 font-medium">Sovereign Oversight Protocol • v2.8.4</p>
+</div>
+<button class="bg-error hover:bg-red-400 text-on-error px-8 py-3 rounded-sm font-headline font-black text-sm tracking-widest flex items-center space-x-3 shadow-lg shadow-error/10 active:scale-95 transition-all">
+<span class="material-symbols-outlined" data-icon="emergency_home" style="font-variation-settings: 'FILL' 1;">emergency_home</span>
+<span>EMERGENCY HALT</span>
+</button>
+</div>
+<!-- Bento Grid Layout -->
+<div class="grid grid-cols-12 gap-6">
+<!-- System Readiness (Top Left) -->
+<div class="col-span-12 lg:col-span-4 grid grid-cols-1 gap-6">
+<section class="bg-surface-container-low p-6 rounded-sm flex flex-col justify-between">
+<h2 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline mb-6">System Readiness</h2>
+<div class="space-y-4">
+<div class="flex items-center justify-between p-3 bg-surface-container-lowest rounded-sm">
+<div class="flex items-center space-x-3">
+<span class="w-2 h-2 rounded-full bg-tertiary shadow-[0_0_8px_rgba(97,222,138,0.5)]"></span>
+<span class="text-xs font-bold text-on-surface">AI Engine</span>
+</div>
+<span class="text-[10px] font-black text-tertiary uppercase tracking-widest">READY</span>
+</div>
+<div class="flex items-center justify-between p-3 bg-surface-container-lowest rounded-sm">
+<div class="flex items-center space-x-3">
+<span class="w-2 h-2 rounded-full bg-tertiary shadow-[0_0_8px_rgba(97,222,138,0.5)]"></span>
+<span class="text-xs font-bold text-on-surface">Risk Engine</span>
+</div>
+<span class="text-[10px] font-black text-tertiary uppercase tracking-widest">APPROVED</span>
+</div>
+<div class="flex items-center justify-between p-3 bg-surface-container-lowest rounded-sm">
+<div class="flex items-center space-x-3">
+<span class="w-2 h-2 rounded-full bg-tertiary shadow-[0_0_8px_rgba(97,222,138,0.5)]"></span>
+<span class="text-xs font-bold text-on-surface">Market Data</span>
+</div>
+<span class="text-[10px] font-black text-tertiary uppercase tracking-widest">STABLE</span>
+</div>
+</div>
+</section>
+</div>
+<!-- Daily Limits (Center Top) -->
+<div class="col-span-12 lg:col-span-8 bg-surface-container-low p-6 rounded-sm">
+<h2 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline mb-6">Daily Operational Limits</h2>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+<div>
+<div class="flex justify-between items-end mb-2">
+<span class="text-sm font-medium text-on-surface">Daily Loss Limit</span>
+<span class="text-xs tabular-nums text-outline"><span class="text-primary font-bold">$2k</span> / $10k max</span>
+</div>
+<div class="h-1.5 bg-surface-container-highest w-full rounded-full overflow-hidden">
+<div class="h-full bg-primary" style="width: 20%"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between items-end mb-2">
+<span class="text-sm font-medium text-on-surface">Max Daily Trades</span>
+<span class="text-xs tabular-nums text-outline"><span class="text-primary font-bold">8</span> / 20 used</span>
+</div>
+<div class="h-1.5 bg-surface-container-highest w-full rounded-full overflow-hidden">
+<div class="h-full bg-primary" style="width: 40%"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Active Exposure (Mid Left) -->
+<div class="col-span-12 lg:col-span-3 bg-surface-container-low p-6 rounded-sm">
+<h2 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline mb-6">Active Exposure</h2>
+<div class="space-y-8">
+<div class="text-center">
+<p class="text-4xl font-headline font-black text-on-surface tabular-nums">1</p>
+<p class="text-[10px] font-bold text-outline uppercase tracking-widest mt-1">Open Positions</p>
+</div>
+<div class="text-center border-t border-outline-variant/10 pt-6">
+<p class="text-4xl font-headline font-black text-tertiary tabular-nums">0</p>
+<p class="text-[10px] font-bold text-outline uppercase tracking-widest mt-1">Consecutive Loss Count</p>
+</div>
+</div>
+</div>
+<!-- Rule Matrix (Mid Center) -->
+<div class="col-span-12 lg:col-span-5 bg-surface-container-low p-6 rounded-sm">
+<h2 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline mb-6">Rule Matrix</h2>
+<div class="space-y-3">
+<div class="flex items-center justify-between p-4 bg-surface-container-lowest border-l-4 border-tertiary rounded-r-sm">
+<div>
+<p class="text-xs font-bold text-on-surface">Regime Gating</p>
+<p class="text-[10px] text-outline">Detected: <span class="text-tertiary">Trending</span></p>
+</div>
+<span class="px-3 py-1 bg-tertiary/10 text-tertiary text-[10px] font-black tracking-widest rounded-full">OK</span>
+</div>
+<div class="flex items-center justify-between p-4 bg-surface-container-lowest border-l-4 border-error rounded-r-sm">
+<div>
+<p class="text-xs font-bold text-on-surface">Regime Filter</p>
+<p class="text-[10px] text-outline">Filter: <span class="text-error">Ranging</span></p>
+</div>
+<span class="px-3 py-1 bg-error/10 text-error text-[10px] font-black tracking-widest rounded-full">REJECTED</span>
+</div>
+<div class="flex items-center justify-between p-4 bg-surface-container-lowest border-l-4 border-primary rounded-r-sm">
+<div>
+<p class="text-xs font-bold text-on-surface">News Lockout</p>
+<p class="text-[10px] text-outline">Major Event: US FOMC Minutes</p>
+</div>
+<div class="text-right">
+<span class="text-xs font-bold text-on-surface tabular-nums">T-45m</span>
+<p class="text-[10px] text-primary uppercase font-bold tracking-tighter">Active Soon</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Rejection Analysis (Mid Right) -->
+<div class="col-span-12 lg:col-span-4 bg-surface-container-low p-6 rounded-sm">
+<h2 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline mb-6">Rejection Analysis</h2>
+<div class="flex flex-col h-[200px] justify-end space-y-4">
+<div class="space-y-1">
+<div class="flex justify-between text-[10px] font-bold text-outline uppercase">
+<span>Low R:R Ratio</span>
+<span>42</span>
+</div>
+<div class="h-6 bg-surface-container-highest rounded-sm relative overflow-hidden group">
+<div class="absolute inset-0 bg-primary/20 w-[85%]"></div>
+</div>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between text-[10px] font-bold text-outline uppercase">
+<span>Volume Low</span>
+<span>28</span>
+</div>
+<div class="h-6 bg-surface-container-highest rounded-sm relative overflow-hidden group">
+<div class="absolute inset-0 bg-primary/20 w-[60%]"></div>
+</div>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between text-[10px] font-bold text-outline uppercase">
+<span>ATR Too High</span>
+<span>15</span>
+</div>
+<div class="h-6 bg-surface-container-highest rounded-sm relative overflow-hidden group">
+<div class="absolute inset-0 bg-primary/20 w-[35%]"></div>
+</div>
+</div>
+</div>
+<p class="text-[10px] text-outline mt-6 font-medium italic text-center">Data represents last 24h rejection cycle</p>
+</div>
+<!-- Recent Risk Events (Full Width) -->
+<div class="col-span-12 bg-surface-container-low rounded-sm overflow-hidden">
+<div class="p-6 border-b border-outline-variant/10 flex justify-between items-center">
+<h2 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline">Risk Event Log</h2>
+<button class="text-[10px] font-bold text-primary uppercase tracking-widest hover:underline">Export Log</button>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left">
+<thead class="bg-surface-container-lowest text-outline text-[10px] font-black uppercase tracking-widest">
+<tr>
+<th class="px-6 py-4">Timestamp</th>
+<th class="px-6 py-4">Asset</th>
+<th class="px-6 py-4">Event Type</th>
+<th class="px-6 py-4">Trigger</th>
+<th class="px-6 py-4 text-right">Action</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/5">
+<tr class="hover:bg-surface-container-high transition-colors">
+<td class="px-6 py-4 text-xs font-medium tabular-nums">14:02:11</td>
+<td class="px-6 py-4 text-xs font-bold text-on-surface">ES.U24</td>
+<td class="px-6 py-4"><span class="px-2 py-0.5 bg-error/10 text-error text-[10px] font-bold rounded-sm">REJECTION</span></td>
+<td class="px-6 py-4 text-xs text-outline">ATR Volatility Threshold (3.2x)</td>
+<td class="px-6 py-4 text-right text-xs text-on-surface">Auto-Reject</td>
+</tr>
+<tr class="hover:bg-surface-container-high transition-colors">
+<td class="px-6 py-4 text-xs font-medium tabular-nums">13:45:00</td>
+<td class="px-6 py-4 text-xs font-bold text-on-surface">NQ.U24</td>
+<td class="px-6 py-4"><span class="px-2 py-0.5 bg-primary/10 text-primary text-[10px] font-bold rounded-sm">MODIFICATION</span></td>
+<td class="px-6 py-4 text-xs text-outline">Trailing Stop Auto-Tighten</td>
+<td class="px-6 py-4 text-right text-xs text-on-surface">Adjusted to Break-Even</td>
+</tr>
+<tr class="hover:bg-surface-container-high transition-colors">
+<td class="px-6 py-4 text-xs font-medium tabular-nums">13:12:44</td>
+<td class="px-6 py-4 text-xs font-bold text-on-surface">GC.V24</td>
+<td class="px-6 py-4"><span class="px-2 py-0.5 bg-tertiary/10 text-tertiary text-[10px] font-bold rounded-sm">APPROVAL</span></td>
+<td class="px-6 py-4 text-xs text-outline">Regime Alignment (Bullish Trending)</td>
+<td class="px-6 py-4 text-right text-xs text-on-surface">Order Routed</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Visual Element: Background Subtle Pattern -->
+<div class="fixed inset-0 pointer-events-none -z-10 opacity-[0.03]">
+<svg height="100%" width="100%" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<pattern height="40" id="grid" patternunits="userSpaceOnUse" width="40">
+<path d="M 40 0 L 0 0 0 40" fill="none" stroke="white" stroke-width="1"></path>
+</pattern>
+</defs>
+<rect fill="url(#grid)" height="100%" width="100%"></rect>
+</svg>
+</div>
+</body></html>

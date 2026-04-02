@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>GodsView | Candle X-Ray</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "secondary": "#c8c6c8",
+                        "surface-container-highest": "#353436",
+                        "primary-fixed-dim": "#adc6ff",
+                        "on-secondary-fixed-variant": "#474649",
+                        "on-tertiary-fixed": "#00201a",
+                        "on-secondary-container": "#b6b4b7",
+                        "error": "#ffb4ab",
+                        "outline-variant": "#414754",
+                        "on-secondary": "#303032",
+                        "tertiary-fixed-dim": "#00dfc1",
+                        "secondary-fixed-dim": "#c8c6c8",
+                        "on-surface": "#e5e2e3",
+                        "inverse-surface": "#e5e2e3",
+                        "primary": "#adc6ff",
+                        "background": "#131314",
+                        "tertiary-container": "#00a38d",
+                        "on-secondary-fixed": "#1b1b1d",
+                        "primary-fixed": "#d8e2ff",
+                        "on-surface-variant": "#c2c6d6",
+                        "surface-container-low": "#1c1b1c",
+                        "on-primary-fixed": "#001a41",
+                        "on-error": "#690005",
+                        "surface-tint": "#adc6ff",
+                        "outline": "#8c909f",
+                        "surface-variant": "#353436",
+                        "on-tertiary-container": "#003028",
+                        "surface-container": "#201f20",
+                        "error-container": "#93000a",
+                        "tertiary": "#00dfc1",
+                        "on-tertiary": "#00382f",
+                        "on-error-container": "#ffdad6",
+                        "on-primary": "#002e69",
+                        "on-primary-fixed-variant": "#004494",
+                        "on-primary-container": "#00285d",
+                        "inverse-on-surface": "#313031",
+                        "secondary-fixed": "#e4e2e4",
+                        "secondary-container": "#474649",
+                        "on-tertiary-fixed-variant": "#005144",
+                        "surface": "#131314",
+                        "surface-bright": "#3a393a",
+                        "inverse-primary": "#005ac2",
+                        "tertiary-fixed": "#26fedc",
+                        "surface-container-lowest": "#0e0e0f",
+                        "surface-container-high": "#2a2a2b",
+                        "on-background": "#e5e2e3",
+                        "surface-dim": "#131314",
+                        "primary-container": "#4c8eff"
+                    },
+                    fontFamily: {
+                        "headline": ["Inter"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .tabular-nums { font-variant-numeric: tabular-nums; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface font-body selection:bg-primary/30">
+<!-- TopAppBar Shell -->
+<header class="fixed top-0 w-full z-50 bg-[#1c1b1c] shadow-[0_32px_64px_rgba(173,198,255,0.06)]">
+<div class="flex items-center justify-between px-6 h-16 w-full">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-sm bg-surface-container-highest flex items-center justify-center border border-outline-variant/20">
+<span class="material-symbols-outlined text-primary text-sm" style="font-variation-settings: 'FILL' 1;">analytics</span>
+</div>
+<h1 class="text-lg font-light tracking-[0.2em] text-[#adc6ff] uppercase">GodsView</h1>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex flex-col items-end">
+<span class="font-['Inter'] tabular-nums tracking-tight text-[10px] uppercase weight-300 text-on-surface-variant">Neural Core Status</span>
+<span class="text-[10px] text-tertiary flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-tertiary animate-pulse"></span> OPTIMIZED</span>
+</div>
+<span class="material-symbols-outlined text-[#adc6ff]">sensors</span>
+</div>
+</div>
+</header>
+<main class="pt-20 pb-24 px-4 space-y-4 max-w-lg mx-auto">
+<!-- Candle Summary Card -->
+<section class="bg-surface-container-low p-5 space-y-4 shadow-sm">
+<div class="flex justify-between items-start">
+<div>
+<div class="flex items-center gap-2">
+<span class="text-2xl font-light tracking-tight tabular-nums">NVDA</span>
+<span class="bg-surface-container-highest px-2 py-0.5 text-[10px] font-bold tracking-widest text-on-surface-variant uppercase">1M Interval</span>
+</div>
+<p class="text-[10px] uppercase tracking-widest text-on-surface-variant mt-1">NVIDIA CORP · NASDAQ</p>
+</div>
+<div class="text-right">
+<div class="text-tertiary text-xs font-bold tracking-tighter flex items-center justify-end gap-1">
+<span class="material-symbols-outlined text-sm">psychology</span>
+                        BRAIN VERDICT
+                    </div>
+<div class="text-sm font-medium text-on-surface uppercase tracking-tight">Bullish Sweep Reclaim</div>
+</div>
+</div>
+<div class="grid grid-cols-3 gap-4 pt-2 border-t border-outline-variant/10">
+<div>
+<span class="block text-[9px] text-on-surface-variant uppercase tracking-widest">Open</span>
+<span class="text-sm tabular-nums font-medium">894.22</span>
+</div>
+<div>
+<span class="block text-[9px] text-on-surface-variant uppercase tracking-widest">High</span>
+<span class="text-sm tabular-nums font-medium">896.40</span>
+</div>
+<div>
+<span class="block text-[9px] text-on-surface-variant uppercase tracking-widest">Low</span>
+<span class="text-sm tabular-nums font-medium">892.10</span>
+</div>
+<div>
+<span class="block text-[9px] text-on-surface-variant uppercase tracking-widest">Close</span>
+<span class="text-sm tabular-nums font-medium text-tertiary">895.85</span>
+</div>
+<div>
+<span class="block text-[9px] text-on-surface-variant uppercase tracking-widest">Volume</span>
+<span class="text-sm tabular-nums font-medium">1.24M</span>
+</div>
+<div>
+<span class="block text-[9px] text-on-surface-variant uppercase tracking-widest">Delta</span>
+<span class="text-sm tabular-nums font-medium text-tertiary">+42.8K</span>
+</div>
+</div>
+</section>
+<!-- Liquidity Heatmap -->
+<section class="bg-surface-container-low p-5 space-y-3 overflow-hidden">
+<div class="flex justify-between items-center">
+<h3 class="text-[10px] font-bold tracking-[0.15em] uppercase text-on-surface-variant">Microstructure Heatmap</h3>
+<span class="text-[9px] uppercase text-tertiary tracking-tighter">Live Intensity Map</span>
+</div>
+<div class="relative h-32 w-full bg-surface-container-lowest overflow-hidden group">
+<!-- Heatmap Visualization (CSS Gradients) -->
+<div class="absolute inset-0 flex flex-col justify-between">
+<div class="h-4 w-full bg-error-container/20 opacity-40"></div>
+<div class="h-4 w-full bg-error-container/40 opacity-60"></div>
+<div class="h-6 w-full bg-transparent"></div> <!-- Current Price Gap -->
+<div class="h-8 w-full bg-tertiary-container/60 opacity-80 border-y border-tertiary/20"></div> <!-- Major Cluster -->
+<div class="h-4 w-full bg-tertiary-container/20 opacity-30"></div>
+</div>
+<!-- Price Line -->
+<div class="absolute top-1/2 left-0 w-full h-[1px] bg-on-surface-variant/30 flex items-center px-2">
+<span class="text-[8px] bg-surface-container-high px-1 tabular-nums">895.85</span>
+</div>
+<!-- Price Action Path -->
+<svg class="absolute inset-0 w-full h-full opacity-60" preserveaspectratio="none" viewbox="0 0 400 120">
+<path d="M0,100 L50,110 L100,80 L150,95 L200,60 L250,70 L300,40 L350,55 L400,30" fill="none" stroke="#adc6ff" stroke-width="1.5"></path>
+</svg>
+</div>
+</section>
+<!-- Order Book Ladder & AI Synthesis (Asymmetric Grid) -->
+<div class="grid grid-cols-12 gap-4">
+<!-- Order Book (Ladders) -->
+<div class="col-span-5 bg-surface-container-low p-4">
+<h3 class="text-[9px] font-bold tracking-widest uppercase text-on-surface-variant mb-4">Depth Ladder</h3>
+<div class="space-y-[2px]">
+<!-- Asks -->
+<div class="flex items-center justify-between text-[10px] h-6 px-1 hover:bg-surface-container-high transition-colors">
+<span class="text-error tabular-nums">896.40</span>
+<div class="relative flex-1 mx-2 h-3 bg-surface-container-lowest overflow-hidden">
+<div class="absolute right-0 h-full bg-error/20 w-[85%]"></div>
+<span class="absolute inset-0 flex items-center justify-end px-1 text-[8px] tabular-nums">4.2K</span>
+</div>
+</div>
+<div class="flex items-center justify-between text-[10px] h-6 px-1 hover:bg-surface-container-high transition-colors">
+<span class="text-error tabular-nums">896.25</span>
+<div class="relative flex-1 mx-2 h-3 bg-surface-container-lowest overflow-hidden">
+<div class="absolute right-0 h-full bg-error/20 w-[30%]"></div>
+<span class="absolute inset-0 flex items-center justify-end px-1 text-[8px] tabular-nums">1.1K</span>
+</div>
+</div>
+<!-- Mid -->
+<div class="h-4 flex items-center justify-center border-y border-outline-variant/10 my-1">
+<span class="text-[8px] text-on-surface-variant/50 tabular-nums">896.02 SPREAD</span>
+</div>
+<!-- Bids -->
+<div class="flex items-center justify-between text-[10px] h-6 px-1 hover:bg-surface-container-high transition-colors">
+<span class="text-tertiary tabular-nums">895.85</span>
+<div class="relative flex-1 mx-2 h-3 bg-surface-container-lowest overflow-hidden">
+<div class="absolute left-0 h-full bg-tertiary/40 w-[95%]"></div>
+<span class="absolute inset-0 flex items-center justify-start px-1 text-[8px] tabular-nums">12.8K</span>
+</div>
+</div>
+<div class="flex items-center justify-between text-[10px] h-6 px-1 hover:bg-surface-container-high transition-colors">
+<span class="text-tertiary tabular-nums">895.70</span>
+<div class="relative flex-1 mx-2 h-3 bg-surface-container-lowest overflow-hidden">
+<div class="absolute left-0 h-full bg-tertiary/20 w-[60%]"></div>
+<span class="absolute inset-0 flex items-center justify-start px-1 text-[8px] tabular-nums">5.4K</span>
+</div>
+</div>
+</div>
+</div>
+<!-- AI Synthesis Panel -->
+<div class="col-span-7 bg-surface-container-high p-4 flex flex-col border-l-4 border-primary">
+<div class="flex items-center gap-2 mb-3">
+<span class="material-symbols-outlined text-primary text-sm animate-pulse">model_training</span>
+<h3 class="text-[10px] font-bold tracking-widest uppercase text-primary">Synthesis</h3>
+</div>
+<div class="flex-1 space-y-3">
+<p class="text-[11px] leading-relaxed text-on-surface font-light">
+<span class="text-tertiary font-medium">Absorption detected</span> below the VWAP support at 894.20. Order flow reveals high-conviction buy aggression on the tape. 
+                    </p>
+<div class="bg-surface-container-lowest p-2">
+<div class="text-[8px] text-on-surface-variant uppercase tracking-tighter mb-1">Sentiment Divergence</div>
+<div class="w-full h-1 bg-surface-container-highest">
+<div class="h-full bg-gradient-to-r from-tertiary to-primary w-[78%]"></div>
+</div>
+</div>
+<p class="text-[11px] leading-relaxed text-on-surface font-light">
+                        Liquidity clusters at <span class="tabular-nums">902.00</span> acting as immediate structural magnet.
+                    </p>
+</div>
+</div>
+</div>
+<!-- Trade Structure Panel -->
+<section class="bg-surface-container-low p-5">
+<h3 class="text-[10px] font-bold tracking-[0.15em] uppercase text-on-surface-variant mb-4">Execution Structure</h3>
+<div class="grid grid-cols-3 gap-2">
+<div class="bg-surface-container-lowest p-3 border-b-2 border-primary/40">
+<span class="block text-[8px] text-on-surface-variant uppercase tracking-widest mb-1">Entry</span>
+<span class="text-sm font-bold tabular-nums">895.90</span>
+</div>
+<div class="bg-surface-container-lowest p-3 border-b-2 border-error/40">
+<span class="block text-[8px] text-on-surface-variant uppercase tracking-widest mb-1">Stop Loss</span>
+<span class="text-sm font-bold tabular-nums">892.05</span>
+</div>
+<div class="bg-surface-container-lowest p-3 border-b-2 border-tertiary/40">
+<span class="block text-[8px] text-on-surface-variant uppercase tracking-widest mb-1">Take Profit</span>
+<span class="text-sm font-bold tabular-nums">914.50</span>
+</div>
+</div>
+<div class="mt-4 flex gap-2">
+<button class="flex-1 bg-primary text-on-primary py-3 text-[10px] font-bold uppercase tracking-widest active:scale-95 transition-transform">
+                    Execute Position
+                </button>
+<button class="w-12 bg-surface-container-highest flex items-center justify-center active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-on-surface">share</span>
+</button>
+</div>
+</section>
+</main>
+<!-- BottomNavBar Shell -->
+<nav class="fixed bottom-0 w-full z-50 bg-[#131314]/90 backdrop-blur-xl border-t border-[#adc6ff]/15">
+<div class="flex justify-around items-center w-full px-4 pb-safe">
+<a class="flex flex-col items-center justify-center text-[#353436] pt-2 pb-4 hover:text-[#adc6ff]/80 transition-all active:opacity-70" href="#">
+<span class="material-symbols-outlined text-lg">psychology</span>
+<span class="font-['Inter'] text-[10px] font-semibold uppercase tracking-widest mt-1">Brain</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#353436] pt-2 pb-4 hover:text-[#adc6ff]/80 transition-all active:opacity-70" href="#">
+<span class="material-symbols-outlined text-lg">genetics</span>
+<span class="font-['Inter'] text-[10px] font-semibold uppercase tracking-widest mt-1">DNA</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#adc6ff] border-t-2 border-[#adc6ff] pt-2 pb-4 active:opacity-70" href="#">
+<span class="material-symbols-outlined text-lg" style="font-variation-settings: 'FILL' 1;">query_stats</span>
+<span class="font-['Inter'] text-[10px] font-semibold uppercase tracking-widest mt-1">Reasoning</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#353436] pt-2 pb-4 hover:text-[#adc6ff]/80 transition-all active:opacity-70" href="#">
+<span class="material-symbols-outlined text-lg">hub</span>
+<span class="font-['Inter'] text-[10px] font-semibold uppercase tracking-widest mt-1">Nodes</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#353436] pt-2 pb-4 hover:text-[#adc6ff]/80 transition-all active:opacity-70" href="#">
+<span class="material-symbols-outlined text-lg">terminal</span>
+<span class="font-['Inter'] text-[10px] font-semibold uppercase tracking-widest mt-1">Terminal</span>
+</a>
+</div>
+</nav>
+</body></html>

@@ -1,49 +1,59 @@
 /**
- * Super Intelligence Module — Maximum Win Rate & Profit Engine
+ * Super Intelligence v2 — Maximum Win Rate & Profit Engine
  *
- * Upgrades the pipeline from basic scoring to an adaptive system that:
- * 1. Ensemble ML: Gradient-boosted trees + logistic regression voting
- * 2. Kelly Criterion: Mathematically optimal position sizing
- * 3. Regime-Adaptive Weights: Dynamic Q formula per market condition
- * 4. Multi-Timeframe Confluence: Requires alignment across 1m/5m/15m
- * 5. Trailing Stop Engine: Dynamic exits that lock in profit
+ * Architecture:
+ *   Layer 1: Logistic Regression (baseline, fast)
+ *   Layer 2: Gradient Boosted Stumps 300 rounds, 26-feature vector
+ *   Layer 3: Random Forest (50 bagged GBMs, variance reduction)
+ *   Layer 4: Platt-calibrated meta-ensemble with walk-forward validation
+ *   Layer 5: Regime-adaptive quality gating + Kelly sizing
+ *   Layer 6: Multi-timeframe confluence (1m/5m/15m)
+ *   Layer 7: Claude reasoning veto (optional)
  *
- * The goal: turn a 55-60% win rate into 65-75%+ while maximizing
- * profit per winning trade via optimal sizing and exits.
+ * Targets: 65-72% win rate, Sharpe > 1.5, profit factor > 2.0
  */
 
 import { predictWinProbability, getModelStatus } from "./ml_model";
 import { reasonTradeDecision } from "./reasoning_engine";
 
-// ── Types ──────────────────────────────────────────────────────────────────────
+// ── Canonical constants (must match accuracy_seeder and DB data) ──────────────
+
+export const SETUP_TYPES = [
+  "absorption_reversal",
+  "sweep_reclaim",
+  "continuation_pullback",
+  "cvd_divergence",
+  "breakout_failure",
+] as const;
+
+export const REGIMES = [
+  "trending_bull",
+  "trending_bear",
+  "ranging",
+  "volatile",
+  "chop",
+] as const;
+
+export type SetupType = typeof SETUP_TYPES[number];
+export type Regime = typeof REGIMES[number];
+
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface SuperSignal {
-  /** Original pipeline quality (0-1) */
   base_quality: number;
-  /** Enhanced quality after super intelligence (0-1) */
   enhanced_quality: number;
-  /** Win probability from ensemble model (0-1) */
   win_probability: number;
-  /** Confidence-weighted position size (fraction of equity) */
   kelly_fraction: number;
-  /** Suggested quantity (units) */
   suggested_qty: number;
-  /** Regime-adaptive pipeline weights used */
   regime_weights: RegimeWeights;
-  /** Multi-timeframe confluence score (0-1) */
   confluence_score: number;
-  /** Number of aligned timeframes (out of 3) */
   aligned_timeframes: number;
-  /** Trailing stop parameters */
   trailing_stop: TrailingStopConfig;
-  /** Partial profit targets */
   profit_targets: ProfitTarget[];
-  /** Whether signal passes super intelligence filter */
   approved: boolean;
-  /** Rejection reason if not approved */
   rejection_reason?: string;
-  /** Edge score: expected value per dollar risked */
   edge_score: number;
+  model_breakdown: { lr: number; gbm: number; rf: number; ensemble: number };
 }
 
 export interface RegimeWeights {
@@ -56,20 +66,14 @@ export interface RegimeWeights {
 }
 
 export interface TrailingStopConfig {
-  /** Initial stop distance as ATR multiple */
   initial_atr_multiple: number;
-  /** Trailing activation: move stop to breakeven after this ATR move */
   activation_atr: number;
-  /** Trail step: move stop by this fraction of favorable move */
   trail_step: number;
-  /** Time-based exit: close after N minutes if flat */
   max_hold_minutes: number;
 }
 
 export interface ProfitTarget {
-  /** Fraction of position to close */
   close_pct: number;
-  /** R-multiple target (e.g., 1.5 = 1.5× risk) */
   r_target: number;
 }
 
@@ -85,94 +89,128 @@ export interface SuperIntelligenceInput {
   take_profit: number;
   atr: number;
   equity: number;
-  /** Multi-timeframe signals: { "1m": score, "5m": score, "15m": score } */
   timeframe_scores?: Record<string, number>;
 }
 
-// ── 1. Regime-Adaptive Pipeline Weights ─────────────────────────────────────
-// Different market conditions demand different layer emphasis.
-// Trending: trust structure + ML. Ranging: trust order flow + recall.
-// Volatile: require ALL layers strong. Chop: don't trade.
+// ── 1. Enhanced Feature Engineering (18 → 26 features) ───────────────────────
+// Added: triple interaction, avg, variance, weakest link, quality tiers,
+//        regime-direction alignment flag.
 
-const REGIME_WEIGHTS: Record<string, RegimeWeights> = {
-  trending_bull: {
-    structure: 0.35, order_flow: 0.22, recall: 0.18, ml: 0.15, claude: 0.10,
-    label: "Trend-Following (Bull)",
-  },
-  trending_bear: {
-    structure: 0.35, order_flow: 0.22, recall: 0.18, ml: 0.15, claude: 0.10,
-    label: "Trend-Following (Bear)",
-  },
-  ranging: {
-    structure: 0.25, order_flow: 0.30, recall: 0.22, ml: 0.13, claude: 0.10,
-    label: "Mean-Reversion (Range)",
-  },
-  volatile: {
-    structure: 0.28, order_flow: 0.28, recall: 0.20, ml: 0.12, claude: 0.12,
-    label: "High-Conviction Only (Volatile)",
-  },
-  chop: {
-    structure: 0.20, order_flow: 0.20, recall: 0.20, ml: 0.20, claude: 0.20,
-    label: "All-Layer Consensus (Chop)",
-  },
-};
+function featurize(row: {
+  structure_score: number;
+  order_flow_score: number;
+  recall_score: number;
+  final_quality: number;
+  setup_type: string;
+  regime: string;
+  direction?: string;
+}): number[] {
+  const s = Math.max(0, Math.min(1, row.structure_score));
+  const o = Math.max(0, Math.min(1, row.order_flow_score));
+  const r = Math.max(0, Math.min(1, row.recall_score));
+  const q = Math.max(0, Math.min(1, row.final_quality));
+  const avg = (s + o + r) / 3;
+  const variance = Math.sqrt(((s - avg) ** 2 + (o - avg) ** 2 + (r - avg) ** 2) / 3);
+  const dir = row.direction === "long" ? 1 : 0;
 
-function getRegimeWeights(regime: string): RegimeWeights {
-  return REGIME_WEIGHTS[regime] ?? REGIME_WEIGHTS.ranging;
+  const aligned =
+    (row.regime === "trending_bull" && row.direction === "long") ||
+    (row.regime === "trending_bear" && row.direction === "short")
+      ? 1
+      : 0;
+
+  const base = [
+    s,                           // structure
+    o,                           // order_flow
+    r,                           // recall
+    q,                           // final_quality
+    s * o,                       // structure × order_flow
+    r * s,                       // recall × structure
+    o * r,                       // order_flow × recall (new)
+    s * o * r,                   // triple interaction (new)
+    Math.abs(s - o),             // disagreement
+    avg,                         // average score (new)
+    variance,                    // score spread (new)
+    Math.min(s, o, r),           // weakest signal (new)
+    q > 0.75 ? 1 : 0,            // high quality tier (new)
+    q > 0.55 && q <= 0.75 ? 1 : 0, // mid quality tier (new)
+    dir,                         // direction
+    aligned,                     // regime-direction alignment (new)
+  ];
+
+  const setupOH = SETUP_TYPES.map(st => st === row.setup_type ? 1 : 0);
+  const regimeOH = REGIMES.map(re => re === row.regime ? 1 : 0);
+
+  return [...base, ...setupOH, ...regimeOH]; // 16 + 5 + 5 = 26 features
 }
 
-// ── 2. Ensemble ML: Gradient Boosted Decision Stumps + Logistic Regression ──
-// The existing logistic regression is Layer 1. We add a gradient-boosted
-// ensemble of shallow decision stumps (depth=1) as Layer 2, then vote.
-// This catches non-linear interactions the LR misses.
+// ── 2. Gradient Boosted Stumps (enhanced) ─────────────────────────────────────
 
 class GradientBoostedStumps {
-  stumps: Array<{ featureIdx: number; threshold: number; leftVal: number; rightVal: number; weight: number }> = [];
+  stumps: Array<{
+    featureIdx: number;
+    threshold: number;
+    leftVal: number;
+    rightVal: number;
+  }> = [];
   trained = false;
   accuracy = 0;
+  private calibA = 1.0;
+  private calibB = 0.0;
 
-  train(X: number[][], y: number[], nStumps = 100, learningRate = 0.1): void {
+  train(
+    X: number[][],
+    y: number[],
+    nStumps = 300,
+    learningRate = 0.08,
+    colSampleRate = 0.8,
+  ): void {
     const n = X.length;
     if (n < 50) return;
     const dim = X[0].length;
 
-    // Initialize predictions to base rate (log-odds)
     const baseRate = y.reduce((s, v) => s + v, 0) / n;
-    const baseLogOdds = Math.log(baseRate / (1 - baseRate + 1e-10));
+    const baseLogOdds = Math.log((baseRate + 1e-7) / (1 - baseRate + 1e-7));
     const F = new Float64Array(n).fill(baseLogOdds);
 
     for (let round = 0; round < nStumps; round++) {
-      // Compute pseudo-residuals (gradient of log-loss)
+      // Gradient (pseudo-residuals)
       const residuals = new Float64Array(n);
       for (let i = 0; i < n; i++) {
         const p = 1 / (1 + Math.exp(-F[i]));
         residuals[i] = y[i] - p;
       }
 
-      // Find best stump (single split)
+      // Column subsampling (80% of features per round)
+      const nCols = Math.max(1, Math.floor(dim * colSampleRate));
+      const colIdx: number[] = [];
+      const allCols = Array.from({ length: dim }, (_, i) => i);
+      // Shuffle and take nCols
+      for (let i = allCols.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [allCols[i], allCols[j]] = [allCols[j], allCols[i]];
+      }
+      for (let i = 0; i < nCols; i++) colIdx.push(allCols[i]);
+
       let bestGain = -Infinity;
       let bestFeature = 0, bestThresh = 0, bestLeft = 0, bestRight = 0;
 
-      for (let f = 0; f < dim; f++) {
-        // Try 10 quantile thresholds per feature
+      for (const f of colIdx) {
         const vals = X.map(row => row[f]).sort((a, b) => a - b);
         for (let q = 1; q <= 9; q++) {
           const thresh = vals[Math.floor(n * q / 10)];
-          let leftSum = 0, leftCount = 0, rightSum = 0, rightCount = 0;
+          let lSum = 0, lN = 0, rSum = 0, rN = 0;
           for (let i = 0; i < n; i++) {
-            if (X[i][f] <= thresh) { leftSum += residuals[i]; leftCount++; }
-            else { rightSum += residuals[i]; rightCount++; }
+            if (X[i][f] <= thresh) { lSum += residuals[i]; lN++; }
+            else { rSum += residuals[i]; rN++; }
           }
-          if (leftCount === 0 || rightCount === 0) continue;
-          const leftMean = leftSum / leftCount;
-          const rightMean = rightSum / rightCount;
-          const gain = leftSum * leftMean + rightSum * rightMean;
+          if (lN < 3 || rN < 3) continue;
+          const lMean = lSum / lN;
+          const rMean = rSum / rN;
+          const gain = lSum * lMean + rSum * rMean;
           if (gain > bestGain) {
-            bestGain = gain;
-            bestFeature = f;
-            bestThresh = thresh;
-            bestLeft = leftMean;
-            bestRight = rightMean;
+            bestGain = gain; bestFeature = f;
+            bestThresh = thresh; bestLeft = lMean; bestRight = rMean;
           }
         }
       }
@@ -182,19 +220,91 @@ class GradientBoostedStumps {
         threshold: bestThresh,
         leftVal: bestLeft * learningRate,
         rightVal: bestRight * learningRate,
-        weight: learningRate,
       });
 
-      // Update predictions
       for (let i = 0; i < n; i++) {
-        if (X[i][bestFeature] <= bestThresh) F[i] += bestLeft * learningRate;
-        else F[i] += bestRight * learningRate;
+        F[i] += X[i][bestFeature] <= bestThresh
+          ? bestLeft * learningRate
+          : bestRight * learningRate;
       }
     }
 
     this.trained = true;
 
-    // Compute accuracy
+    // Platt calibration: fit sigmoid on training predictions
+    const rawScores = X.map((_, i) => F[i]);
+    this._calibrate(rawScores, y);
+
+    // Accuracy after calibration
+    let correct = 0;
+    for (let i = 0; i < n; i++) {
+      const p = this.predictRaw(X[i]);
+      if ((p >= 0.5 && y[i] === 1) || (p < 0.5 && y[i] === 0)) correct++;
+    }
+    this.accuracy = correct / n;
+  }
+
+  private _calibrate(rawF: number[], y: number[]): void {
+    // Simple isotonic-like calibration via logistic fit on raw scores
+    // a, b: minimize cross-entropy of sigmoid(a*F + b)
+    let a = 1.0, b = 0.0;
+    const lr = 0.01;
+    for (let iter = 0; iter < 100; iter++) {
+      let da = 0, db = 0;
+      for (let i = 0; i < rawF.length; i++) {
+        const p = 1 / (1 + Math.exp(-(a * rawF[i] + b)));
+        const err = y[i] - p;
+        da += err * rawF[i];
+        db += err;
+      }
+      a += lr * da / rawF.length;
+      b += lr * db / rawF.length;
+    }
+    this.calibA = a;
+    this.calibB = b;
+  }
+
+  private predictRaw(features: number[]): number {
+    if (!this.trained || this.stumps.length === 0) return 0.5;
+    let F = 0;
+    for (const s of this.stumps) {
+      F += (features[s.featureIdx] ?? 0) <= s.threshold ? s.leftVal : s.rightVal;
+    }
+    return 1 / (1 + Math.exp(-(this.calibA * F + this.calibB)));
+  }
+
+  predict(features: number[]): number {
+    return this.predictRaw(features);
+  }
+}
+
+// ── 3. Random Forest (bagging of GBMs for variance reduction) ────────────────
+
+class RandomForest {
+  trees: GradientBoostedStumps[] = [];
+  trained = false;
+  accuracy = 0;
+
+  train(X: number[][], y: number[], nTrees = 50): void {
+    const n = X.length;
+    if (n < 50) return;
+
+    for (let t = 0; t < nTrees; t++) {
+      // Bootstrap sample
+      const bootX: number[][] = [];
+      const bootY: number[] = [];
+      for (let i = 0; i < n; i++) {
+        const idx = Math.floor(Math.random() * n);
+        bootX.push(X[idx]);
+        bootY.push(y[idx]);
+      }
+      const tree = new GradientBoostedStumps();
+      tree.train(bootX, bootY, 60, 0.12, 0.7);
+      this.trees.push(tree);
+    }
+
+    this.trained = true;
+
     let correct = 0;
     for (let i = 0; i < n; i++) {
       const p = this.predict(X[i]);
@@ -204,24 +314,73 @@ class GradientBoostedStumps {
   }
 
   predict(features: number[]): number {
-    if (!this.trained || this.stumps.length === 0) return 0.5;
-    let F = 0;
-    for (const stump of this.stumps) {
-      F += (features[stump.featureIdx] ?? 0) <= stump.threshold
-        ? stump.leftVal : stump.rightVal;
-    }
-    return 1 / (1 + Math.exp(-F));
+    if (!this.trained || this.trees.length === 0) return 0.5;
+    return this.trees.reduce((sum, t) => sum + t.predict(features), 0) / this.trees.length;
   }
 }
 
-// ── 3. Kelly Criterion Position Sizing ──────────────────────────────────────
-// Full Kelly is too aggressive — we use fractional Kelly (25%) for safety.
-// Kelly fraction = (p × b - q) / b
-//   p = win probability, q = 1-p, b = avg_win / avg_loss (reward:risk ratio)
+// ── 4. Walk-Forward Validation ────────────────────────────────────────────────
 
-const KELLY_FRACTION = 0.25; // Quarter-Kelly for safety
-const MIN_POSITION_PCT = 0.005; // 0.5% minimum
-const MAX_POSITION_PCT = 0.03;  // 3% maximum per trade
+export interface WalkForwardResult {
+  train_accuracy: number;
+  test_accuracy: number;
+  train_samples: number;
+  test_samples: number;
+  overfit_gap: number;
+  is_robust: boolean;
+}
+
+function walkForwardValidate(X: number[][], y: number[]): WalkForwardResult {
+  const n = X.length;
+  const splitIdx = Math.floor(n * 0.8);
+
+  const trainX = X.slice(0, splitIdx);
+  const trainY = y.slice(0, splitIdx);
+  const testX = X.slice(splitIdx);
+  const testY = y.slice(splitIdx);
+
+  const gbm = new GradientBoostedStumps();
+  gbm.train(trainX, trainY, 200, 0.08);
+
+  let testCorrect = 0;
+  for (let i = 0; i < testX.length; i++) {
+    const p = gbm.predict(testX[i]);
+    if ((p >= 0.5 && testY[i] === 1) || (p < 0.5 && testY[i] === 0)) testCorrect++;
+  }
+
+  const trainAcc = gbm.accuracy;
+  const testAcc = testX.length > 0 ? testCorrect / testX.length : 0;
+  const gap = trainAcc - testAcc;
+
+  return {
+    train_accuracy: trainAcc,
+    test_accuracy: testAcc,
+    train_samples: trainX.length,
+    test_samples: testX.length,
+    overfit_gap: gap,
+    is_robust: gap < 0.10 && testAcc > 0.58,
+  };
+}
+
+// ── 5. Regime-Adaptive Weights ────────────────────────────────────────────────
+
+const REGIME_WEIGHTS: Record<string, RegimeWeights> = {
+  trending_bull: { structure: 0.35, order_flow: 0.22, recall: 0.18, ml: 0.15, claude: 0.10, label: "Trend-Following (Bull)" },
+  trending_bear: { structure: 0.35, order_flow: 0.22, recall: 0.18, ml: 0.15, claude: 0.10, label: "Trend-Following (Bear)" },
+  ranging:       { structure: 0.25, order_flow: 0.30, recall: 0.22, ml: 0.13, claude: 0.10, label: "Mean-Reversion (Range)" },
+  volatile:      { structure: 0.28, order_flow: 0.28, recall: 0.20, ml: 0.12, claude: 0.12, label: "High-Conviction Only (Volatile)" },
+  chop:          { structure: 0.20, order_flow: 0.20, recall: 0.20, ml: 0.20, claude: 0.20, label: "All-Layer Consensus (Chop)" },
+};
+
+function getRegimeWeights(regime: string): RegimeWeights {
+  return REGIME_WEIGHTS[regime] ?? REGIME_WEIGHTS.ranging;
+}
+
+// ── 6. Kelly Criterion ────────────────────────────────────────────────────────
+
+const KELLY_FRACTION = 0.25;
+const MIN_POSITION_PCT = 0.005;
+const MAX_POSITION_PCT = 0.03;
 
 function kellySize(
   winProb: number,
@@ -232,156 +391,79 @@ function kellySize(
   const p = Math.max(0.01, Math.min(0.99, winProb));
   const q = 1 - p;
   const b = Math.max(0.1, rewardRiskRatio);
-
-  // Full Kelly
   let fullKelly = (p * b - q) / b;
-
-  // Clamp: if negative edge, don't trade
   if (fullKelly <= 0) return { fraction: 0, qty: 0 };
-
-  // Apply fractional Kelly
-  let fraction = fullKelly * KELLY_FRACTION;
-  fraction = Math.max(MIN_POSITION_PCT, Math.min(MAX_POSITION_PCT, fraction));
-
-  // Convert to quantity
-  const dollarSize = equity * fraction;
-  const qty = Math.max(0, Math.floor(dollarSize / entryPrice * 1000) / 1000);
-
+  let fraction = Math.max(MIN_POSITION_PCT, Math.min(MAX_POSITION_PCT, fullKelly * KELLY_FRACTION));
+  const qty = Math.max(0, Math.floor(equity * fraction / entryPrice * 1000) / 1000);
   return { fraction, qty };
 }
 
-// ── 4. Multi-Timeframe Confluence ───────────────────────────────────────────
-// Require 2+ out of 3 timeframes to agree for signal approval.
-// Each timeframe contributes a directional bias score (0-1).
+// ── 7. Multi-Timeframe Confluence ─────────────────────────────────────────────
 
-const TIMEFRAMES = ["1m", "5m", "15m"] as const;
-const CONFLUENCE_THRESHOLD = 0.55; // Score above this = aligned
-const MIN_ALIGNED_TF = 2; // Need at least 2 timeframes agreeing
+const TIMEFRAMES_3 = ["1m", "5m", "15m"] as const;
+const CONFLUENCE_THRESHOLD = 0.55;
+const MIN_ALIGNED_TF = 2;
 
 function computeConfluence(
   tfScores: Record<string, number> | undefined,
   direction: "long" | "short",
 ): { score: number; aligned: number } {
-  if (!tfScores || Object.keys(tfScores).length === 0) {
-    return { score: 0.5, aligned: 0 }; // Neutral if no MTF data
-  }
-
-  let aligned = 0;
-  let totalScore = 0;
-  let count = 0;
-
-  for (const tf of TIMEFRAMES) {
+  if (!tfScores || Object.keys(tfScores).length === 0) return { score: 0.5, aligned: 0 };
+  let aligned = 0, total = 0, count = 0;
+  for (const tf of TIMEFRAMES_3) {
     const raw = tfScores[tf];
     if (raw == null) continue;
-    // For long: high score = aligned. For short: low score = aligned
-    const dirScore = direction === "long" ? raw : 1 - raw;
-    if (dirScore >= CONFLUENCE_THRESHOLD) aligned++;
-    totalScore += dirScore;
-    count++;
+    const ds = direction === "long" ? raw : 1 - raw;
+    if (ds >= CONFLUENCE_THRESHOLD) aligned++;
+    total += ds; count++;
   }
-
-  const avgScore = count > 0 ? totalScore / count : 0.5;
-  return { score: avgScore, aligned };
+  return { score: count > 0 ? total / count : 0.5, aligned };
 }
 
-// ── 5. Trailing Stop & Partial Profit Engine ────────────────────────────────
+// ── 8. Trailing Stop & Profit Targets ────────────────────────────────────────
 
-function buildTrailingStop(
-  regime: string,
-  atr: number,
-  winProb: number,
-): TrailingStopConfig {
-  // Trending: wider stops (let winners run). Ranging: tighter stops.
-  const isStrong = regime.includes("trending");
-  const isTrending = isStrong;
-
+function buildTrailingStop(regime: string, winProb: number): TrailingStopConfig {
+  const isTrending = regime.includes("trending");
   return {
     initial_atr_multiple: isTrending ? 2.5 : 1.8,
     activation_atr: isTrending ? 1.5 : 1.0,
-    trail_step: isTrending ? 0.4 : 0.6, // Trending: trail less aggressively
+    trail_step: isTrending ? 0.4 : 0.6,
     max_hold_minutes: isTrending ? 180 : 90,
   };
 }
 
-function buildProfitTargets(
-  regime: string,
-  winProb: number,
-  rewardRiskRatio: number,
-): ProfitTarget[] {
-  const isHighConf = winProb >= 0.65;
+function buildProfitTargets(regime: string, winProb: number): ProfitTarget[] {
   const isTrending = regime.includes("trending");
-
-  if (isTrending && isHighConf) {
-    // High confidence trending: scale out slowly, let runner ride
-    return [
-      { close_pct: 0.33, r_target: 1.5 },
-      { close_pct: 0.33, r_target: 3.0 },
-      { close_pct: 0.34, r_target: 5.0 },
-    ];
-  }
-
-  if (isTrending) {
-    // Trending normal: scale out in thirds
-    return [
-      { close_pct: 0.33, r_target: 1.0 },
-      { close_pct: 0.33, r_target: 2.0 },
-      { close_pct: 0.34, r_target: 3.5 },
-    ];
-  }
-
-  // Ranging / volatile: take profit faster
-  return [
-    { close_pct: 0.50, r_target: 1.0 },
-    { close_pct: 0.30, r_target: 1.5 },
-    { close_pct: 0.20, r_target: 2.5 },
-  ];
+  const isHighConf = winProb >= 0.65;
+  if (isTrending && isHighConf)
+    return [{ close_pct: 0.33, r_target: 1.5 }, { close_pct: 0.33, r_target: 3.0 }, { close_pct: 0.34, r_target: 5.0 }];
+  if (isTrending)
+    return [{ close_pct: 0.33, r_target: 1.0 }, { close_pct: 0.33, r_target: 2.0 }, { close_pct: 0.34, r_target: 3.5 }];
+  return [{ close_pct: 0.50, r_target: 1.0 }, { close_pct: 0.30, r_target: 1.5 }, { close_pct: 0.20, r_target: 2.5 }];
 }
 
-// ── 6. Global Ensemble Model Instance ───────────────────────────────────────
+// ── 9. Global Model State ─────────────────────────────────────────────────────
 
 let _gbm: GradientBoostedStumps | null = null;
+let _rf: RandomForest | null = null;
 let _ensembleStatus: "untrained" | "trained" | "error" = "untrained";
+let _walkForward: WalkForwardResult | null = null;
 let _ensembleMeta: {
   gbm_accuracy: number;
+  rf_accuracy: number;
   lr_accuracy: number;
   ensemble_accuracy: number;
   samples: number;
   trained_at: string;
+  walk_forward: WalkForwardResult | null;
 } | null = null;
 
-// ── Feature engineering (same as ml_model.ts for consistency) ──
+// ── 10. Train Ensemble ────────────────────────────────────────────────────────
 
-const SETUP_TYPES = ["absorption_reversal", "sweep_reclaim", "continuation_pullback", "cvd_divergence", "breakout_failure"] as const;
-const REGIMES = ["trending_bull", "trending_bear", "ranging", "volatile", "chop"] as const;
-
-function featurize(row: {
-  structure_score: number; order_flow_score: number; recall_score: number;
-  final_quality: number; setup_type: string; regime: string; direction?: string;
-}): number[] {
-  const base = [
-    row.structure_score,
-    row.order_flow_score,
-    row.recall_score,
-    row.final_quality,
-    row.structure_score * row.order_flow_score,
-    row.recall_score * row.structure_score,
-    Math.abs(row.structure_score - row.order_flow_score),
-    row.direction === "long" ? 1 : 0,
-  ];
-  const setupOH = SETUP_TYPES.map(s => s === row.setup_type ? 1 : 0);
-  const regimeOH = REGIMES.map(r => r === row.regime ? 1 : 0);
-  return [...base, ...setupOH, ...regimeOH];
-}
-
-/**
- * Train the ensemble model. Call after ml_model.trainModel().
- * Uses the same data source (accuracy_results).
- */
 export async function trainEnsemble(): Promise<void> {
   try {
-    console.log("[super] Training gradient-boosted ensemble...");
+    console.log("[SI-v2] Training ensemble (GBM-300 + RF-50 + LR)...");
 
-    // Dynamic import to avoid circular deps
     const { db, accuracyResultsTable } = await import("@workspace/db");
     const { and, or, eq, isNotNull } = await import("drizzle-orm");
 
@@ -401,17 +483,18 @@ export async function trainEnsemble(): Promise<void> {
         and(
           or(eq(accuracyResultsTable.outcome, "win"), eq(accuracyResultsTable.outcome, "loss")),
           isNotNull(accuracyResultsTable.structure_score),
-          isNotNull(accuracyResultsTable.order_flow_score)
+          isNotNull(accuracyResultsTable.order_flow_score),
         )
       )
       .limit(200_000);
 
     if (rows.length < 100) {
-      console.log(`[super] Only ${rows.length} samples — need ≥100 for ensemble.`);
+      console.log(`[SI-v2] Only ${rows.length} samples — need ≥100.`);
       _ensembleStatus = "untrained";
       return;
     }
 
+    // Build feature matrix
     const X: number[][] = [];
     const y: number[] = [];
     for (const row of rows) {
@@ -427,19 +510,29 @@ export async function trainEnsemble(): Promise<void> {
       y.push(row.outcome === "win" ? 1 : 0);
     }
 
-    // Train GBM
-    const gbm = new GradientBoostedStumps();
-    gbm.train(X, y, 150, 0.08);
+    // Walk-forward validation (out-of-sample test)
+    console.log("[SI-v2] Running walk-forward validation...");
+    _walkForward = walkForwardValidate(X, y);
+    console.log(`[SI-v2] Walk-forward: train=${(_walkForward.train_accuracy * 100).toFixed(1)}% test=${(_walkForward.test_accuracy * 100).toFixed(1)}% gap=${(_walkForward.overfit_gap * 100).toFixed(1)}% robust=${_walkForward.is_robust}`);
 
-    // Get LR accuracy from existing model
+    // Train GBM on full dataset
+    const gbm = new GradientBoostedStumps();
+    gbm.train(X, y, 300, 0.08, 0.8);
+
+    // Train Random Forest
+    const rf = new RandomForest();
+    rf.train(X, y, 50);
+
+    // LR accuracy
     const mlStatus = getModelStatus();
     const lrAccuracy = mlStatus.meta?.accuracy ?? 0;
 
-    // Compute ensemble accuracy (average of both predictions, majority vote)
+    // Ensemble accuracy (40% GBM + 30% RF + 30% LR)
     let ensembleCorrect = 0;
     for (let i = 0; i < X.length; i++) {
-      const gbmPred = gbm.predict(X[i]);
-      const lrPred = predictWinProbability({
+      const gbmP = gbm.predict(X[i]);
+      const rfP = rf.predict(X[i]);
+      const lrP = predictWinProbability({
         structure_score: parseFloat(String(rows[i].structure_score ?? "0")),
         order_flow_score: parseFloat(String(rows[i].order_flow_score ?? "0")),
         recall_score: parseFloat(String(rows[i].recall_score ?? "0")),
@@ -448,31 +541,32 @@ export async function trainEnsemble(): Promise<void> {
         regime: rows[i].regime ?? "ranging",
         direction: rows[i].direction ?? "long",
       }).probability;
-
-      // Ensemble: 60% GBM + 40% LR (GBM captures non-linear patterns better)
-      const ensemblePred = 0.60 * gbmPred + 0.40 * lrPred;
-      if ((ensemblePred >= 0.5 && y[i] === 1) || (ensemblePred < 0.5 && y[i] === 0)) {
-        ensembleCorrect++;
-      }
+      const ens = 0.40 * gbmP + 0.30 * rfP + 0.30 * lrP;
+      if ((ens >= 0.5 && y[i] === 1) || (ens < 0.5 && y[i] === 0)) ensembleCorrect++;
     }
 
     _gbm = gbm;
+    _rf = rf;
     _ensembleStatus = "trained";
     _ensembleMeta = {
       gbm_accuracy: gbm.accuracy,
+      rf_accuracy: rf.accuracy,
       lr_accuracy: lrAccuracy,
       ensemble_accuracy: ensembleCorrect / X.length,
       samples: X.length,
       trained_at: new Date().toISOString(),
+      walk_forward: _walkForward,
     };
 
-    console.log(`[super] Ensemble trained successfully:`);
-    console.log(`[super]   GBM accuracy: ${(gbm.accuracy * 100).toFixed(1)}%`);
-    console.log(`[super]   LR accuracy:  ${(lrAccuracy * 100).toFixed(1)}%`);
-    console.log(`[super]   Ensemble:     ${(_ensembleMeta.ensemble_accuracy * 100).toFixed(1)}%`);
-    console.log(`[super]   Samples:      ${X.length}`);
+    console.log(`[SI-v2] Ensemble trained:`);
+    console.log(`[SI-v2]   GBM(300):  ${(gbm.accuracy * 100).toFixed(1)}%`);
+    console.log(`[SI-v2]   RF(50):    ${(rf.accuracy * 100).toFixed(1)}%`);
+    console.log(`[SI-v2]   LR:        ${(lrAccuracy * 100).toFixed(1)}%`);
+    console.log(`[SI-v2]   Ensemble:  ${(_ensembleMeta.ensemble_accuracy * 100).toFixed(1)}%`);
+    console.log(`[SI-v2]   Samples:   ${X.length}`);
+
   } catch (err) {
-    console.error("[super] Ensemble training failed:", err);
+    console.error("[SI-v2] Ensemble training failed:", err);
     _ensembleStatus = "error";
   }
 }
@@ -480,114 +574,87 @@ export async function trainEnsemble(): Promise<void> {
 function ensemblePredict(input: {
   structure_score: number; order_flow_score: number; recall_score: number;
   final_quality: number; setup_type: string; regime: string; direction?: string;
-}): number {
+}): { probability: number; lr: number; gbm: number; rf: number } {
   const lrResult = predictWinProbability(input);
+  const lr = lrResult.probability;
+
+  if (_gbm?.trained && _rf?.trained) {
+    const features = featurize(input);
+    const gbm = _gbm.predict(features);
+    const rf = _rf.predict(features);
+    const probability = 0.40 * gbm + 0.30 * rf + 0.30 * lr;
+    return { probability, lr, gbm, rf };
+  }
 
   if (_gbm?.trained) {
     const features = featurize(input);
-    const gbmPred = _gbm.predict(features);
-    // Weighted ensemble: 60% GBM + 40% LR
-    return 0.60 * gbmPred + 0.40 * lrResult.probability;
+    const gbm = _gbm.predict(features);
+    const probability = 0.60 * gbm + 0.40 * lr;
+    return { probability, lr, gbm, rf: lr };
   }
 
-  // Fallback to LR only
-  return lrResult.probability;
+  return { probability: lr, lr, gbm: lr, rf: lr };
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// MAIN ENTRY POINT: Process a signal through Super Intelligence
-// ══════════════════════════════════════════════════════════════════════════════
+// ── 11. Main Entry Point ──────────────────────────────────────────────────────
 
 export async function processSuperSignal(
   signalId: number,
   symbol: string,
-  input: SuperIntelligenceInput
+  input: SuperIntelligenceInput,
 ): Promise<SuperSignal> {
-  const {
-    structure_score, order_flow_score, recall_score,
-    setup_type, regime, direction,
-    entry_price, stop_loss, take_profit,
-    atr, equity, timeframe_scores,
-  } = input;
+  const { structure_score, order_flow_score, recall_score,
+    setup_type, regime, direction, entry_price, stop_loss,
+    take_profit, atr, equity, timeframe_scores } = input;
 
-  // 1. Get regime-adaptive weights
   const weights = getRegimeWeights(regime);
 
-  // 2. Compute enhanced quality with adaptive weights
-  const ml_raw = ensemblePredict({
+  const { probability: win_probability, lr, gbm, rf } = ensemblePredict({
     structure_score, order_flow_score, recall_score,
-    final_quality: 0, // Will be computed
+    final_quality: structure_score * 0.35 + order_flow_score * 0.30 + recall_score * 0.20 + 0.05,
     setup_type, regime, direction,
   });
 
-  // Claude / Heuristic Reasoning layer: strict fallback policy
   const reasoning = await reasonTradeDecision(signalId, symbol, {
-    structure: structure_score,
-    order_flow: order_flow_score,
-    recall: recall_score,
-    setup_type,
-    regime,
-    direction,
+    structure: structure_score, order_flow: order_flow_score,
+    recall: recall_score, setup_type, regime, direction,
   });
-
   const claude_est = reasoning.winProbability;
 
   const enhanced_quality = Math.max(0, Math.min(1,
     weights.structure * structure_score +
     weights.order_flow * order_flow_score +
     weights.recall * recall_score +
-    weights.ml * ml_raw +
-    weights.claude * claude_est
+    weights.ml * win_probability +
+    weights.claude * claude_est,
   ));
 
-  // Base quality (original formula for comparison)
-  const base_quality = 0.32 * structure_score + 0.28 * order_flow_score +
-    0.20 * recall_score + 0.08 * (0.55 + recall_score * 0.25) +
-    0.12 * claude_est;
+  const base_quality =
+    0.32 * structure_score + 0.28 * order_flow_score +
+    0.20 * recall_score + 0.12 * claude_est +
+    0.08 * (0.55 + recall_score * 0.25);
 
-  // 3. Ensemble win probability
-  const win_probability = ensemblePredict({
-    structure_score, order_flow_score, recall_score,
-    final_quality: enhanced_quality,
-    setup_type, regime, direction,
-  });
-
-  // 4. Multi-timeframe confluence
   const { score: confluence_score, aligned: aligned_timeframes } =
     computeConfluence(timeframe_scores, direction);
 
-  // 5. Reward:risk ratio
   const risk = Math.abs(entry_price - stop_loss);
   const reward = Math.abs(take_profit - entry_price);
-  const rewardRiskRatio = risk > 0 ? reward / risk : 1;
+  const rrr = risk > 0 ? reward / risk : 1;
 
-  // 6. Kelly position sizing
   const { fraction: kelly_fraction, qty: suggested_qty } =
-    kellySize(win_probability, rewardRiskRatio, equity, entry_price);
+    kellySize(win_probability, rrr, equity, entry_price);
 
-  // 7. Trailing stop config
-  const trailing_stop = buildTrailingStop(regime, atr, win_probability);
+  const trailing_stop = buildTrailingStop(regime, win_probability);
+  const profit_targets = buildProfitTargets(regime, win_probability);
 
-  // 8. Profit targets
-  const profit_targets = buildProfitTargets(regime, win_probability, rewardRiskRatio);
+  const edge_score = win_probability * rrr - (1 - win_probability);
 
-  // 9. Edge score: expected value per dollar risked
-  // EV = (winProb × avgWin) - (lossProb × avgLoss)
-  const edge_score = win_probability * rewardRiskRatio - (1 - win_probability);
-
-  // 10. Super Intelligence Gate — must pass ALL:
-  //   a. Enhanced quality ≥ regime threshold
-  //   b. Win probability ≥ 55%
-  //   c. Multi-TF confluence ≥ 2 aligned (if MTF data available)
-  //   d. Edge score > 0 (positive expected value)
-  //   e. Kelly says to bet (fraction > 0)
-  //   f. Not in chop regime (unless quality > 0.85)
-
+  // Gate thresholds — tuned based on regime
   const regimeThresholds: Record<string, number> = {
     trending_bull: 0.58, trending_bear: 0.60,
-    ranging: 0.68, volatile: 0.75, chop: 0.85,
+    ranging: 0.65, volatile: 0.72, chop: 0.82,
   };
-  const qualityThreshold = regimeThresholds[regime] ?? 0.68;
+  const qualityThreshold = regimeThresholds[regime] ?? 0.65;
   const hasMTF = timeframe_scores && Object.keys(timeframe_scores).length > 0;
 
   let approved = true;
@@ -596,18 +663,18 @@ export async function processSuperSignal(
   if (enhanced_quality < qualityThreshold) {
     approved = false;
     rejection_reason = `Quality ${(enhanced_quality * 100).toFixed(1)}% below ${regime} threshold ${(qualityThreshold * 100).toFixed(0)}%`;
-  } else if (win_probability < 0.55) {
+  } else if (win_probability < 0.54) {
     approved = false;
-    rejection_reason = `Win probability ${(win_probability * 100).toFixed(1)}% below 55% minimum`;
+    rejection_reason = `Win probability ${(win_probability * 100).toFixed(1)}% below 54% minimum`;
   } else if (hasMTF && aligned_timeframes < MIN_ALIGNED_TF) {
     approved = false;
-    rejection_reason = `Only ${aligned_timeframes}/${TIMEFRAMES.length} timeframes aligned (need ${MIN_ALIGNED_TF})`;
+    rejection_reason = `Only ${aligned_timeframes}/${TIMEFRAMES_3.length} timeframes aligned (need ${MIN_ALIGNED_TF})`;
   } else if (edge_score <= 0) {
     approved = false;
-    rejection_reason = `Negative edge: EV = ${edge_score.toFixed(3)} (need > 0)`;
+    rejection_reason = `Negative edge: EV = ${edge_score.toFixed(3)}`;
   } else if (kelly_fraction <= 0) {
     approved = false;
-    rejection_reason = "Kelly criterion says no bet (negative expected value)";
+    rejection_reason = "Kelly says no bet";
   }
 
   return {
@@ -624,36 +691,33 @@ export async function processSuperSignal(
     approved,
     rejection_reason,
     edge_score,
+    model_breakdown: { lr, gbm, rf, ensemble: win_probability },
   };
 }
 
-// ── Status & Diagnostics ────────────────────────────────────────────────────
+// ── 12. Status & Diagnostics ──────────────────────────────────────────────────
 
 export function getSuperIntelligenceStatus(): {
   status: "active" | "partial" | "inactive";
   ensemble: typeof _ensembleMeta;
+  walk_forward: WalkForwardResult | null;
   message: string;
 } {
   if (_ensembleStatus === "trained" && _ensembleMeta) {
+    const wf = _ensembleMeta.walk_forward;
+    const wfStr = wf ? ` | WF test=${(wf.test_accuracy * 100).toFixed(1)}% robust=${wf.is_robust}` : "";
     return {
       status: "active",
       ensemble: _ensembleMeta,
-      message: `Ensemble active: ${(_ensembleMeta.ensemble_accuracy * 100).toFixed(1)}% accuracy (GBM ${(_ensembleMeta.gbm_accuracy * 100).toFixed(1)}% + LR ${(_ensembleMeta.lr_accuracy * 100).toFixed(1)}%) on ${_ensembleMeta.samples} samples`,
+      walk_forward: _walkForward,
+      message: `Ensemble v2 active: ${(_ensembleMeta.ensemble_accuracy * 100).toFixed(1)}% accuracy (GBM ${(_ensembleMeta.gbm_accuracy * 100).toFixed(1)}% | RF ${(_ensembleMeta.rf_accuracy * 100).toFixed(1)}% | LR ${(_ensembleMeta.lr_accuracy * 100).toFixed(1)}%) on ${_ensembleMeta.samples} samples${wfStr}`,
     };
   }
-
   const mlStatus = getModelStatus();
   if (mlStatus.status === "active") {
-    return {
-      status: "partial",
-      ensemble: null,
-      message: "LR model active, GBM training pending — running single-model mode",
-    };
+    return { status: "partial", ensemble: null, walk_forward: null, message: "LR active, GBM/RF training pending" };
   }
-
-  return {
-    status: "inactive",
-    ensemble: null,
-    message: "Super Intelligence inactive — using heuristic pipeline scoring",
-  };
+  return { status: "inactive", ensemble: null, walk_forward: null, message: "Super Intelligence inactive — heuristic pipeline only" };
 }
+
+export { featurize, ensemblePredict };

@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport"/>
+<title>GodsView | Live Signal Intelligence</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-primary-fixed": "#001c39",
+              "on-error-container": "#ffdad6",
+              "secondary-fixed": "#cbe7f5",
+              "on-secondary": "#19343e",
+              "inverse-on-surface": "#313031",
+              "tertiary-container": "#18a659",
+              "tertiary": "#61de8a",
+              "surface-container-lowest": "#0e0e0f",
+              "surface-container": "#201f20",
+              "surface-container-low": "#1c1b1c",
+              "on-tertiary-fixed-variant": "#005228",
+              "background": "#131314",
+              "primary-container": "#4d93e5",
+              "primary-fixed-dim": "#a4c9ff",
+              "outline-variant": "#414751",
+              "on-surface-variant": "#c1c7d3",
+              "on-primary-fixed-variant": "#004883",
+              "inverse-surface": "#e5e2e3",
+              "surface-tint": "#a4c9ff",
+              "on-primary": "#00315d",
+              "on-primary-container": "#002a51",
+              "on-surface": "#e5e2e3",
+              "on-error": "#690005",
+              "surface-container-highest": "#353436",
+              "secondary-fixed-dim": "#afcbd8",
+              "on-tertiary-fixed": "#00210c",
+              "tertiary-fixed-dim": "#61de8a",
+              "primary": "#a4c9ff",
+              "outline": "#8b919d",
+              "surface-bright": "#3a393a",
+              "error-container": "#93000a",
+              "on-secondary-container": "#a1bdca",
+              "on-background": "#e5e2e3",
+              "on-secondary-fixed": "#021f29",
+              "error": "#ffb4ab",
+              "surface-dim": "#131314",
+              "surface-variant": "#353436",
+              "secondary": "#afcbd8",
+              "surface-container-high": "#2a2a2b",
+              "primary-fixed": "#d4e3ff",
+              "on-tertiary-container": "#003115",
+              "secondary-container": "#334d58",
+              "tertiary-fixed": "#7efba4",
+              "on-tertiary": "#00391a",
+              "on-secondary-fixed-variant": "#304a55",
+              "inverse-primary": "#0060ac",
+              "surface": "#131314"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            display: inline-block;
+            line-height: 1;
+            text-transform: none;
+            letter-spacing: normal;
+            word-wrap: normal;
+            white-space: nowrap;
+            direction: ltr;
+        }
+        .tabular-nums { font-variant-numeric: tabular-nums; }
+        .glass-overlay {
+            background: rgba(28, 27, 28, 0.6);
+            backdrop-filter: blur(12px);
+        }
+        .thinking-glow {
+            box-shadow: 0 0 20px rgba(164, 201, 255, 0.1);
+        }
+        /* Custom scrollbar for institutional feel */
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #414751; border-radius: 2px; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface font-body selection:bg-primary/30 antialiased overflow-hidden h-screen flex flex-col">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-[#131314] flex justify-between items-center px-6 h-16">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[#A4C9FF]" style="font-variation-settings: 'FILL' 1;">psychology</span>
+<h1 class="text-xl font-black tracking-tighter bg-gradient-to-br from-[#A4C9FF] to-[#4D93E2] bg-clip-text text-transparent uppercase">GODSVIEW</h1>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex flex-col items-end">
+<span class="font-['Manrope'] font-bold tracking-[0.1em] uppercase text-[10px] text-[#A4C9FF]">LIVE FEED</span>
+<span class="text-[9px] font-mono text-tertiary">STABLE 12ms</span>
+</div>
+<span class="material-symbols-outlined text-[#A4C9FF]">sensors</span>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-1 mt-16 mb-20 overflow-y-auto bg-surface relative">
+<!-- Instrument & Market State Header -->
+<div class="px-6 py-4 flex justify-between items-end border-b border-outline-variant/5">
+<div>
+<div class="flex items-center gap-2 mb-1">
+<h2 class="font-headline font-extrabold text-2xl tracking-tight">BTC/USD</h2>
+<span class="bg-surface-container-high text-on-surface-variant text-[10px] px-2 py-0.5 font-bold tracking-widest uppercase">15M PERP</span>
+</div>
+<div class="flex items-center gap-3">
+<span class="text-tertiary font-mono font-bold text-lg tabular-nums">64,281.50</span>
+<span class="text-tertiary text-xs font-medium">+2.41%</span>
+</div>
+</div>
+<div class="text-right">
+<div class="text-[10px] text-outline uppercase tracking-widest mb-1">AI Bias</div>
+<div class="text-primary font-bold text-sm flex items-center gap-1 justify-end">
+                    STRONGLY BULLISH <span class="material-symbols-outlined text-xs">trending_up</span>
+</div>
+</div>
+</div>
+<!-- Central Thinking Chart (70% simulated height) -->
+<div class="relative w-full h-[530px] bg-surface-container-low overflow-hidden border-b border-outline-variant/10">
+<!-- Simplified Candlestick Visualization -->
+<div class="absolute inset-0 p-4 flex items-end gap-[2px]">
+<!-- Candle sticks (Mockup bars) -->
+<div class="flex-1 h-32 bg-error/20 relative rounded-t-[1px]"><div class="absolute -top-4 left-1/2 w-[1px] h-40 bg-error/40 -translate-x-1/2"></div></div>
+<div class="flex-1 h-40 bg-error/30 relative rounded-t-[1px]"><div class="absolute -top-6 left-1/2 w-[1px] h-48 bg-error/40 -translate-x-1/2"></div></div>
+<div class="flex-1 h-24 bg-tertiary/20 relative rounded-t-[1px]"><div class="absolute -top-8 left-1/2 w-[1px] h-32 bg-tertiary/40 -translate-x-1/2"></div></div>
+<div class="flex-1 h-36 bg-tertiary/40 relative rounded-t-[1px] border border-tertiary/30"><div class="absolute -top-4 left-1/2 w-[1px] h-40 bg-tertiary/50 -translate-x-1/2"></div></div>
+<div class="flex-1 h-48 bg-tertiary/50 relative rounded-t-[1px] border border-tertiary/40 shadow-[0_0_10px_rgba(97,222,138,0.2)]">
+<!-- Marker: SR L 0.78 -->
+<div class="absolute -top-10 left-1/2 -translate-x-1/2 whitespace-nowrap">
+<div class="bg-primary text-on-primary text-[8px] font-black px-1.5 py-0.5 rounded-sm">SR L 0.78</div>
+<div class="w-[1px] h-4 bg-primary mx-auto"></div>
+</div>
+<div class="absolute -top-12 left-1/2 w-4 h-4 bg-primary/20 rounded-full -translate-x-1/2 flex items-center justify-center">
+<div class="w-1 h-1 bg-primary rounded-full"></div>
+</div>
+</div>
+<div class="flex-1 h-52 bg-tertiary/60 relative rounded-t-[1px] border border-tertiary/50"></div>
+<div class="flex-1 h-44 bg-error/20 relative rounded-t-[1px]"></div>
+<!-- Active Candle with Trade Visuals -->
+<div class="flex-1 h-56 bg-surface-container-highest relative rounded-t-[1px] border-l border-r border-primary/40 animate-pulse">
+<div class="absolute -top-2 left-1/2 w-[1px] h-60 bg-on-surface/20 -translate-x-1/2"></div>
+</div>
+</div>
+<!-- Overlay: Supply/Demand Zones -->
+<div class="absolute top-1/4 left-0 w-1/3 h-12 bg-error/5 border-l-2 border-error/30 flex items-center px-4">
+<span class="text-error/60 text-[8px] font-bold uppercase tracking-widest">Supply Zone SK-S1</span>
+</div>
+<div class="absolute bottom-1/4 right-0 w-2/3 h-16 bg-tertiary/5 border-r-2 border-tertiary/30 flex items-center justify-end px-4">
+<span class="text-tertiary/60 text-[8px] font-bold uppercase tracking-widest">Demand Zone SK-D1</span>
+</div>
+<!-- Trade Visualization Overlays -->
+<div class="absolute top-[35%] w-full h-px border-t border-dashed border-tertiary/40 flex justify-end items-start pr-2">
+<span class="text-[9px] text-tertiary bg-surface px-1 -translate-y-1/2 font-mono uppercase">Take Profit (66,200)</span>
+</div>
+<div class="absolute top-[50%] w-full h-px bg-primary/60 flex justify-end items-start pr-2 shadow-[0_0_15px_rgba(164,201,255,0.4)]">
+<span class="text-[9px] text-on-primary bg-primary px-1 -translate-y-1/2 font-black uppercase">Entry (64,150)</span>
+</div>
+<div class="absolute top-[65%] w-full h-px border-t border-dashed border-error/40 flex justify-end items-start pr-2">
+<span class="text-[9px] text-error bg-surface px-1 -translate-y-1/2 font-mono uppercase">Stop Loss (63,400)</span>
+</div>
+<!-- Decision States Floating Labels -->
+<div class="absolute top-6 left-6 flex flex-col gap-2">
+<div class="flex items-center gap-2 bg-tertiary text-on-tertiary text-[10px] font-black px-2 py-1 rounded-sm tracking-tighter">
+<span class="material-symbols-outlined text-[12px]" style="font-variation-settings: 'FILL' 1;">check_circle</span> APPROVED
+                </div>
+<div class="flex items-center gap-2 bg-[#8B5CF6]/20 text-[#C4B5FD] border border-[#8B5CF6]/30 text-[10px] font-bold px-2 py-1 rounded-sm tracking-tighter opacity-60">
+<span class="material-symbols-outlined text-[12px]">block</span> VETOED (CLAUDE)
+                </div>
+</div>
+</div>
+<!-- Inline Decision Suite -->
+<div class="px-6 py-6 bg-surface-container-low">
+<h3 class="text-[10px] font-headline font-bold text-outline-variant uppercase tracking-[0.2em] mb-4">Pipeline Validation</h3>
+<!-- Horizontal 6-layer pipeline -->
+<div class="flex items-center justify-between gap-1 mb-8 overflow-x-auto pb-2">
+<div class="flex-1 flex flex-col items-center gap-2">
+<div class="w-full h-1 bg-tertiary rounded-full"></div>
+<div class="flex items-center gap-1 text-[10px] font-bold text-tertiary">SK <span class="material-symbols-outlined text-[12px]" style="font-variation-settings: 'FILL' 1;">check_circle</span></div>
+</div>
+<div class="flex-1 flex flex-col items-center gap-2">
+<div class="w-full h-1 bg-tertiary rounded-full"></div>
+<div class="flex items-center gap-1 text-[10px] font-bold text-tertiary">SETUP <span class="material-symbols-outlined text-[12px]" style="font-variation-settings: 'FILL' 1;">check_circle</span></div>
+</div>
+<div class="flex-1 flex flex-col items-center gap-2">
+<div class="w-full h-1 bg-tertiary rounded-full shadow-[0_0_8px_#61DE8A]"></div>
+<div class="flex items-center gap-1 text-[10px] font-bold text-tertiary">OF <span class="material-symbols-outlined text-[12px]" style="font-variation-settings: 'FILL' 1;">check_circle</span></div>
+</div>
+<div class="flex-1 flex flex-col items-center gap-2">
+<div class="w-full h-1 bg-tertiary rounded-full"></div>
+<div class="flex items-center gap-1 text-[10px] font-bold text-tertiary">ML <span class="material-symbols-outlined text-[12px]" style="font-variation-settings: 'FILL' 1;">check_circle</span></div>
+</div>
+<div class="flex-1 flex flex-col items-center gap-2">
+<div class="w-full h-1 bg-tertiary rounded-full"></div>
+<div class="flex items-center gap-1 text-[10px] font-bold text-tertiary">CLAUDE <span class="material-symbols-outlined text-[12px]" style="font-variation-settings: 'FILL' 1;">check_circle</span></div>
+</div>
+<div class="flex-1 flex flex-col items-center gap-2">
+<div class="w-full h-1 bg-tertiary rounded-full"></div>
+<div class="flex items-center gap-1 text-[10px] font-bold text-tertiary">RISK <span class="material-symbols-outlined text-[12px]" style="font-variation-settings: 'FILL' 1;">check_circle</span></div>
+</div>
+</div>
+<!-- Neural Reasoning Card -->
+<div class="bg-surface-container-highest/50 p-5 rounded-lg border-l-2 border-primary thinking-glow">
+<div class="flex items-center gap-2 mb-3">
+<span class="material-symbols-outlined text-primary text-sm">auto_awesome</span>
+<span class="font-headline font-bold text-xs text-primary uppercase tracking-widest">Neural Reasoning</span>
+</div>
+<p class="text-on-surface-variant text-sm leading-relaxed font-medium italic">
+                    "Long entry validated by 15m liquidity sweep into <span class="text-tertiary">SK-D1 Demand Zone</span>. Orderflow confirms aggressive bidding at 64,150. Delta divergence identifies absorption of sell-side pressure."
+                </p>
+<div class="mt-4 pt-4 border-t border-outline-variant/10 flex justify-between items-center">
+<div class="text-[10px] font-mono text-outline uppercase tracking-tighter">Confidence Index: 94.2%</div>
+<button class="bg-primary/10 text-primary text-[10px] font-black px-3 py-1 rounded-sm hover:bg-primary/20 transition-colors uppercase">Expand Logs</button>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 w-full z-50 bg-[#131314]/90 backdrop-blur-xl flex justify-around items-center h-20 px-4 pb-safe border-t border-[#414751]/10">
+<div class="flex flex-col items-center justify-center text-[#414751] hover:text-[#A4C9FF]/80 transition-all cursor-pointer">
+<span class="material-symbols-outlined">hub</span>
+<span class="font-['Inter'] text-[10px] font-medium uppercase tracking-[0.05em] mt-1">Brain</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#414751] hover:text-[#A4C9FF]/80 transition-all cursor-pointer">
+<span class="material-symbols-outlined">biotech</span>
+<span class="font-['Inter'] text-[10px] font-medium uppercase tracking-[0.05em] mt-1">DNA</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#A4C9FF] bg-gradient-to-br from-[#A4C9FF]/5 to-[#4D93E2]/10 rounded-sm px-4 py-1 transition-all cursor-pointer">
+<span class="material-symbols-outlined">query_stats</span>
+<span class="font-['Inter'] text-[10px] font-medium uppercase tracking-[0.05em] mt-1">Reasoning</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#414751] hover:text-[#A4C9FF]/80 transition-all cursor-pointer">
+<span class="material-symbols-outlined">lan</span>
+<span class="font-['Inter'] text-[10px] font-medium uppercase tracking-[0.05em] mt-1">Nodes</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#414751] hover:text-[#A4C9FF]/80 transition-all cursor-pointer">
+<span class="material-symbols-outlined">terminal</span>
+<span class="font-['Inter'] text-[10px] font-medium uppercase tracking-[0.05em] mt-1">Terminal</span>
+</div>
+</nav>
+<!-- FAB Overlay for focused action -->
+<button class="fixed bottom-24 right-6 w-14 h-14 bg-gradient-to-br from-primary to-primary-container text-on-primary rounded-sm shadow-2xl flex items-center justify-center z-40 active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-2xl" style="font-variation-settings: 'FILL' 1;">bolt</span>
+</button>
+</body></html>
