@@ -10,17 +10,28 @@ const anthropic = new Anthropic({
  * HEURISTIC REASONING (The "Safety Net")
  * Zero-latency, purely deterministic logic that follows strict ICT rules.
  */
+function safe(v: unknown, fallback = 0.5): number {
+  const n = Number(v);
+  return (Number.isFinite(n) && !Number.isNaN(n)) ? Math.max(0, Math.min(1, n)) : fallback;
+}
+
 export function getHeuristicReasoning(input: {
-  structure_score: number;
-  order_flow_score: number;
-  recall_score: number;
+  structure_score?: number;
+  order_flow_score?: number;
+  recall_score?: number;
+  structure?: number;
+  order_flow?: number;
+  recall?: number;
   direction: string;
   regime: string;
 }): Omit<DecisionContract, "signalId" | "symbol" | "suggestedQty"> {
-  const { structure_score: s, order_flow_score: o, recall_score: r, direction, regime } = input;
+  const s = safe((input as any).structure_score ?? (input as any).structure, 0.5);
+  const o = safe((input as any).order_flow_score ?? (input as any).order_flow, 0.5);
+  const r = safe((input as any).recall_score ?? (input as any).recall, 0.5);
+  const { direction, regime } = input;
 
   // Weights based on regime
-  const isTrending = regime.includes("trending");
+  const isTrending = (regime ?? "").includes("trending");
   const quality = isTrending
     ? (s * 0.5 + o * 0.3 + r * 0.2)
     : (s * 0.3 + o * 0.5 + r * 0.2);

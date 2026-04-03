@@ -864,6 +864,12 @@ export async function trainEnsemble(): Promise<void> {
   }
 }
 
+function safeNum(v: number, fallback = 0.5): number {
+  return (typeof v === "number" && !Number.isNaN(v) && Number.isFinite(v))
+    ? Math.max(0, Math.min(1, v))
+    : fallback;
+}
+
 function ensemblePredict(input: {
   structure_score: number; order_flow_score: number; recall_score: number;
   final_quality: number; setup_type: string; regime: string; direction?: string;
@@ -874,11 +880,12 @@ function ensemblePredict(input: {
     const features = featurize(input);
     const gbmPred = _gbm.predict(features);
     // Weighted ensemble: 60% GBM + 40% LR
-    return 0.60 * gbmPred + 0.40 * lrResult.probability;
+    const result = 0.60 * gbmPred + 0.40 * lrResult.probability;
+    return safeNum(result, lrResult.probability);
   }
 
   // Fallback to LR only
-  return lrResult.probability;
+  return safeNum(lrResult.probability);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -917,36 +924,38 @@ export async function processSuperSignal(
     direction,
   });
 
-  const claude_est = reasoning.winProbability;
+  const claude_est = safeNum(reasoning.winProbability);
 
-  const enhanced_quality = Math.max(0, Math.min(1,
-    weights.structure * structure_score +
-    weights.order_flow * order_flow_score +
-    weights.recall * recall_score +
-    weights.ml * ml_raw +
+  const enhanced_quality = safeNum(
+    weights.structure * safeNum(structure_score, 0) +
+    weights.order_flow * safeNum(order_flow_score, 0) +
+    weights.recall * safeNum(recall_score, 0) +
+    weights.ml * safeNum(ml_raw) +
     weights.claude * claude_est
-  ));
+  );
 
   // Base quality (original formula for comparison)
-  const base_quality = 0.32 * structure_score + 0.28 * order_flow_score +
-    0.20 * recall_score + 0.08 * (0.55 + recall_score * 0.25) +
-    0.12 * claude_est;
+  const base_quality = safeNum(
+    0.32 * safeNum(structure_score, 0) + 0.28 * safeNum(order_flow_score, 0) +
+    0.20 * safeNum(recall_score, 0) + 0.08 * (0.55 + safeNum(recall_score, 0) * 0.25) +
+    0.12 * claude_est
+  );
 
   // 3. Ensemble win probability
-  const win_probability = ensemblePredict({
+  const win_probability = safeNum(ensemblePredict({
     structure_score, order_flow_score, recall_score,
     final_quality: enhanced_quality,
     setup_type, regime, direction,
-  });
+  }));
 
   // 4. Multi-timeframe confluence
   const { score: confluence_score, aligned: aligned_timeframes } =
     computeConfluence(timeframe_scores, direction);
 
   // 5. Reward:risk ratio
-  const risk = Math.abs(entry_price - stop_loss);
-  const reward = Math.abs(take_profit - entry_price);
-  const rewardRiskRatio = risk > 0 ? reward / risk : 1;
+  const risk = Math.abs(entry_price - stop_loss) || 1;
+  const reward = Math.abs(take_profit - entry_price) || 1;
+  const rewardRiskRatio = safeNum(reward / risk, 1);
 
   // 6. Kelly position sizing
   const { fraction: kelly_fraction, qty: suggested_qty } =
