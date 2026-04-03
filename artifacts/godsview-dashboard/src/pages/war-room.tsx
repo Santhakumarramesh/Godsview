@@ -129,7 +129,7 @@ export default function WarRoom() {
             {/* Agent Scores */}
             <div className="space-y-6">
               <h2 className="text-xl font-semibold">Agent Consensus</h2>
-              {analyzed.agents.map((agent) => (
+              {(analyzed.agents ?? []).map((agent) => (
                 <div key={agent.name} className="space-y-2">
                   <div className="flex justify-between items-center">
                     <span className="font-medium text-gray-300">{agent.name}</span>

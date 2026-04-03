@@ -145,7 +145,7 @@ export default function Checklist() {
             <div>
               <h2 className="text-xl font-semibold mb-6">Checklist Items</h2>
               <div className="space-y-3">
-                {evaluated.checklist.map((item) => (
+                {(evaluated.checklist ?? []).map((item) => (
                   <div
                     key={item.name}
                     className={`border rounded-lg p-4 flex gap-4 items-start ${
@@ -171,11 +171,11 @@ export default function Checklist() {
             </div>
 
             {/* Blocked Reasons */}
-            {evaluated.blocked_reasons.length > 0 && (
+            {(evaluated.blocked_reasons ?? []).length > 0 && (
               <div>
                 <h2 className="text-xl font-semibold mb-4 text-red-300">Blocked Reasons</h2>
                 <div className="space-y-2">
-                  {evaluated.blocked_reasons.map((reason, idx) => (
+                  {(evaluated.blocked_reasons ?? []).map((reason, idx) => (
                     <div
                       key={idx}
                       className="bg-red-500/10 border border-red-400/40 rounded-lg p-4 text-red-200 flex gap-2"

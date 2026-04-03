@@ -287,7 +287,7 @@ function HeatmapPanel({ zones, candle }: { zones: HeatmapZone[]; candle: CandleD
 
 function OrderBookPanel({ asks, bids }: { asks: OrderBookLevel[]; bids: OrderBookLevel[] }) {
   const maxTotal = Math.max(asks[asks.length - 1]?.total || 0, bids[bids.length - 1]?.total || 0);
-  const spread = asks[asks.length - 1] ? (asks[asks.length - 1].price - bids[0].price) : 0;
+  const spread = asks[asks.length - 1] && bids.length > 0 ? (asks[asks.length - 1].price - bids[0].price) : 0;
 
   return (
     <div style={{ background: "#1a191b", border: "1px solid rgba(72,72,73,0.15)", borderRadius: 6, padding: "16px 20px" }}>

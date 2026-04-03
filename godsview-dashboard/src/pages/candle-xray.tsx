@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface CandleData {
@@ -286,7 +287,7 @@ function HeatmapPanel({ zones, candle }: { zones: HeatmapZone[]; candle: CandleD
 
 function OrderBookPanel({ asks, bids }: { asks: OrderBookLevel[]; bids: OrderBookLevel[] }) {
   const maxTotal = Math.max(asks[asks.length - 1]?.total || 0, bids[bids.length - 1]?.total || 0);
-  const spread = asks[asks.length - 1] ? (asks[asks.length - 1].price - bids[0].price) : 0;
+  const spread = asks[asks.length - 1] && bids.length > 0 ? (asks[asks.length - 1].price - bids[0].price) : 0;
 
   return (
     <div style={{ background: "#1a191b", border: "1px solid rgba(72,72,73,0.15)", borderRadius: 6, padding: "16px 20px" }}>
@@ -484,8 +485,30 @@ function SynthesisPanel({ synthesis }: { synthesis: AISynthesis }) {
 }
 // ─── Main Page ───────────────────────────────────────────────────────────────
 export default function CandleXRayPage() {
+  const [symbol, setSymbol] = useState("BTCUSD");
+  const [timeframe, setTimeframe] = useState("5Min");
   const [tape] = useState<TapeEntry[]>(generateTape);
   const [tab, setTab] = useState<"analysis" | "book" | "tape">("analysis");
+
+  // Fetch real candle intelligence
+  const { data: xrayData } = useQuery({
+    queryKey: ["candle-intelligence", symbol, timeframe],
+    queryFn: () => fetch(`/api/market/candle-intelligence?symbol=${encodeURIComponent(symbol)}&timeframe=${timeframe}&bars=1`).then(r => r.ok ? r.json() : null),
+    refetchInterval: 30_000,
+    retry: 1,
+  });
+
+  // Use real last bar if available, else mock
+  const latestBar = xrayData?.bars?.[xrayData.bars.length - 1] ?? null;
+  const candle: CandleData = latestBar ? {
+    open: latestBar.open,
+    high: latestBar.high,
+    low: latestBar.low,
+    close: latestBar.close,
+    volume: latestBar.volume,
+    delta: latestBar.delta ?? 0,
+    timestamp: (latestBar.time ?? 0) * 1000,
+  } : CANDLE;
 
   return (
     <div style={{ minHeight: "100vh", background: "#131314", color: "#e6e1e5" }}>
@@ -493,7 +516,7 @@ export default function CandleXRayPage() {
 
       {/* OHLCV Strip */}
       <div style={{ padding: "16px 24px 0" }}>
-        <OHLCVPanel candle={CANDLE} />
+        <OHLCVPanel candle={candle} />
       </div>
 
       {/* Tab toggle for mobile-friendly */}

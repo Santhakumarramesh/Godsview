@@ -207,7 +207,7 @@ const Ops: React.FC = () => {
       <div>
         <h2 className="text-xl font-semibold text-white mb-4">Services</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
-          {snapshot.services.map((service) => (
+          {(snapshot.services ?? []).map((service) => (
             <div
               key={service.name}
               className="rounded-lg bg-[#1a1a2e] border border-gray-700/30 p-4"
@@ -329,7 +329,7 @@ const Ops: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-700/30">
-              {Object.entries(snapshot.engine_status).map(([name, engine]) => (
+              {Object.entries(snapshot.engine_status ?? {}).map(([name, engine]) => (
                 <tr key={name} className="hover:bg-[#151527] transition-colors">
                   <td className="px-6 py-3 text-sm text-white font-medium">
                     {name}
@@ -370,7 +370,7 @@ const Ops: React.FC = () => {
             <div className="p-6 text-center text-gray-400">No alerts</div>
           ) : (
             <div className="divide-y divide-gray-700/30">
-              {snapshot.alerts.map((alert, idx) => (
+              {(snapshot.alerts ?? []).map((alert, idx) => (
                 <div key={idx} className="p-4 hover:bg-[#151527] transition-colors">
                   <div className="flex items-start gap-3">
                     <div

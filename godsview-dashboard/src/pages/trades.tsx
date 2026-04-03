@@ -157,7 +157,7 @@ function JournalTab() {
               </tr>
             </thead>
             <tbody>
-              {data?.trades.map((trade) => (
+              {(data?.trades ?? []).map((trade) => (
                 <tr key={trade.id} className="group hover:brightness-105 transition-all" style={{ borderBottom: "1px solid rgba(72,72,73,0.12)" }}>
                   <td className="px-4 py-2.5 whitespace-nowrap" style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: C.muted }}>{format(new Date(trade.created_at), "MM/dd HH:mm")}</td>
                   <td className="px-4 py-2.5 font-headline font-bold text-xs">{trade.instrument}</td>

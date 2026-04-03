@@ -182,7 +182,7 @@ export default function Signals() {
               </tr>
             </thead>
             <tbody>
-              {data?.signals.map((sig) => {
+              {(data?.signals ?? []).map((sig) => {
                 const q = toPct(Number(sig.final_quality));
                 const qColor = q > 75 ? C.primary : q > 50 ? "#fbbf24" : C.tertiary;
                 const statusValue = String(sig.status ?? "");
@@ -306,9 +306,9 @@ export default function Signals() {
                                 <div>Claude Reviewed: <span className="font-mono">{learn.summary.claude_reviewed_signals}</span></div>
                                 <div>Claude Approved: <span className="font-mono">{(learn.summary.claude_approved_rate * 100).toFixed(1)}%</span></div>
                               </div>
-                              {learn.recommendations.length > 0 && (
+                              {(learn.recommendations ?? []).length > 0 && (
                                 <div className="mt-3 space-y-1">
-                                  {learn.recommendations.map((item, idx) => (
+                                  {(learn.recommendations ?? []).map((item, idx) => (
                                     <div key={`${learn.signal_id}-rec-${idx}`} style={{ fontSize: "10px", color: C.muted }}>
                                       {idx + 1}. {item}
                                     </div>

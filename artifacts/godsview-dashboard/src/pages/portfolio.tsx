@@ -162,7 +162,7 @@ export default function PortfolioPage() {
             </div>
             <div style={{ padding: "16px", borderRadius: "8px", backgroundColor: "#1a191b", border: "1px solid rgba(72,72,73,0.15)", textAlign: "center" }}>
               <div style={{ fontSize: "9px", color: "#484849", fontFamily: "Space Grotesk", letterSpacing: "0.15em", marginBottom: "6px" }}>POSITIONS</div>
-              <div style={{ fontSize: "20px", fontWeight: 700, color: "#cc79a7", fontFamily: "JetBrains Mono, monospace" }}>{pf.positions.length}</div>
+              <div style={{ fontSize: "20px", fontWeight: 700, color: "#cc79a7", fontFamily: "JetBrains Mono, monospace" }}>{(pf.positions ?? []).length}</div>
             </div>
             <div style={{ padding: "16px", borderRadius: "8px", backgroundColor: "#1a191b", border: "1px solid rgba(72,72,73,0.15)", textAlign: "center" }}>
               <div style={{ fontSize: "9px", color: "#484849", fontFamily: "Space Grotesk", letterSpacing: "0.15em", marginBottom: "6px" }}>VOL TARGET</div>
@@ -189,7 +189,7 @@ export default function PortfolioPage() {
                 </tr>
               </thead>
               <tbody>
-                {pf.positions.map((p) => (
+                {(pf.positions ?? []).map((p) => (
                   <tr key={p.symbol} style={{ borderTop: "1px solid rgba(72,72,73,0.1)" }}>
                     <td style={{ padding: "8px 10px", color: "#adaaab", fontFamily: "JetBrains Mono, monospace", fontWeight: 600 }}>{p.symbol}</td>
                     <td style={{ padding: "8px 10px" }}>
