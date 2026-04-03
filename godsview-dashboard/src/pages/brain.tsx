@@ -16,9 +16,10 @@ import { useState, useRef, useMemo, useCallback, useEffect, Suspense } from "rea
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Float, Billboard, Text, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
-import { useBrainConsciousness, useBrainEntities, useBrainIntelligence, useBrainState, useSMCState, useRegimeState, useMarketStress } from "@/lib/api";
+import { useBrainConsciousness, useBrainEntities, useBrainIntelligence, useBrainState, useSMCState, useRegimeState, useMarketStress, useRunBacktest, useBacktestList, useBacktestResult, useSchedulerStatus, useStartScheduler, useStopScheduler, useAutonomousBrainStatus, useStartAutonomousBrain, useStopAutonomousBrain, useSetBrainMode, useJobQueue, useEnqueueJob, useStrategies, useStrategyRankings, useSuperIntelStatus, useRetrainSuperIntel, useExecutionBridgeStatus, useClosePosition, useBrainPnL, useStartPnLTracker, useStopPnLTracker, useJobHistory, useJobLatencyStats, useTradeOutcomes, useOutcomeStats, usePortfolioStats, useChartHistory, useStreamBridgeStatus, useStartStreamBridge, useCorrelationSummary, useBrainAlerts, useMarkAlertsRead, useWatchdogReport, useStartWatchdog, useBrainPerformance, usePortfolioEquityCurve, type BacktestResult, type RulebookEntry, type StrategyItem, type StrategyRanking, type SuperIntelStatus, type BrainPositionSnapshot, type BrainPnLSummary, type BridgeStatus, type TradeOutcomeItem, type JobHistoryItem, type OutcomeStats, type BrainAlertItem, type WatchdogReport, type CorrelationSummary, type BrainPerformanceReport, type EquityPoint } from "@/lib/api";
 import { useLivePrices } from "@/lib/market-store";
 import BrainFocusMode from "@/components/BrainFocusMode";
+import { BrainCycleProvider, useBrainCycleContext, type AgentLiveStatus } from "@/lib/brain_cycle_provider";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -140,19 +141,45 @@ function useSIStream(maxEvents = 30) {
   const [decisions, setDecisions] = useState<SIDecisionEvent[]>([]);
   const [connected, setConnected] = useState(false);
   const esRef = useRef<EventSource | null>(null);
+  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    const es = new EventSource("/api/super-intelligence/stream");
-    esRef.current = es;
-    es.onopen = () => setConnected(true);
-    es.onerror = () => setConnected(false);
-    es.addEventListener("si_decision", (e) => {
+    let cancelled = false;
+
+    function connect() {
+      if (cancelled) return;
       try {
-        const data = JSON.parse(e.data) as SIDecisionEvent;
-        setDecisions((prev) => [data, ...prev].slice(0, maxEvents));
-      } catch { /* ignore */ }
-    });
-    return () => { es.close(); esRef.current = null; };
+        const es = new EventSource("/api/super-intelligence/stream");
+        esRef.current = es;
+        es.onopen = () => { if (!cancelled) setConnected(true); };
+        es.onerror = () => {
+          if (cancelled) return;
+          setConnected(false);
+          es.close();
+          esRef.current = null;
+          // Reconnect after 5s
+          reconnectTimer.current = setTimeout(connect, 5000);
+        };
+        es.addEventListener("si_decision", (e) => {
+          try {
+            const data = JSON.parse(e.data) as SIDecisionEvent;
+            if (!cancelled) setDecisions((prev) => [data, ...prev].slice(0, maxEvents));
+          } catch { /* ignore parse errors */ }
+        });
+      } catch {
+        // EventSource constructor can throw if URL is invalid
+        if (!cancelled) reconnectTimer.current = setTimeout(connect, 5000);
+      }
+    }
+
+    connect();
+
+    return () => {
+      cancelled = true;
+      esRef.current?.close();
+      esRef.current = null;
+      if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+    };
   }, [maxEvents]);
 
   return { decisions, connected };
@@ -684,6 +711,784 @@ const labelStyle: React.CSSProperties = {
   fontWeight: 700,
   marginBottom: "10px",
 };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// L7 BACKTEST PANEL
+// ═══════════════════════════════════════════════════════════════════════════
+
+function BacktestPanel({ stocks }: { stocks: StockNodeData[] }) {
+  const [symbol, setSymbol] = useState(stocks[0]?.symbol ?? "BTCUSD");
+  const [expanded, setExpanded] = useState(false);
+  const [activeTab, setActiveTab] = useState<"metrics" | "rulebook" | "regimes">("metrics");
+
+  const runBacktest = useRunBacktest();
+  const { data: listData } = useBacktestList();
+  const { data: result, isLoading } = useBacktestResult(symbol, expanded);
+
+  const handleRun = () => {
+    runBacktest.mutate({ symbol, lookbackBars: 2000 });
+  };
+
+  const bt = result?.backtest ?? (result as any)?.backtestOutput;
+  const chart = result?.chart ?? {};
+
+  const pct = (n?: number) => n != null ? `${(n * 100).toFixed(1)}%` : "—";
+  const fix2 = (n?: number) => n != null ? n.toFixed(2) : "—";
+
+  return (
+    <div style={{ background: "#0f111a", borderRadius: "10px", border: "1px solid #1e2235", overflow: "hidden" }}>
+      {/* Header */}
+      <div
+        style={{ padding: "8px 10px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", background: "#12141f" }}
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <span style={{ fontSize: "9px", color: "#7c83fd", fontWeight: 700, letterSpacing: "0.15em" }}>L7 BACKTEST AGENT</span>
+          {listData?.count ? (
+            <span style={{ background: "#1a1d35", color: "#7c83fd", padding: "1px 5px", borderRadius: "3px", fontSize: "9px" }}>{listData.count} runs</span>
+          ) : null}
+        </div>
+        <span style={{ color: "#484849", fontSize: "10px" }}>{expanded ? "▲" : "▼"}</span>
+      </div>
+
+      {expanded && (
+        <div style={{ padding: "8px 10px" }}>
+          {/* Symbol picker + run button */}
+          <div style={{ display: "flex", gap: "5px", marginBottom: "8px" }}>
+            <select
+              value={symbol}
+              onChange={(e) => setSymbol(e.target.value)}
+              style={{ flex: 1, background: "#1a1d35", border: "1px solid #2a2d4a", color: "#e0e0e0", fontSize: "10px", borderRadius: "4px", padding: "3px 6px" }}
+            >
+              {stocks.map((s) => (
+                <option key={s.symbol} value={s.symbol}>{s.symbol}</option>
+              ))}
+            </select>
+            <button
+              onClick={handleRun}
+              disabled={runBacktest.isPending}
+              style={{
+                padding: "3px 10px", borderRadius: "4px", border: "none", cursor: "pointer",
+                background: runBacktest.isPending ? "#1a1d35" : "#7c83fd",
+                color: runBacktest.isPending ? "#666" : "#fff",
+                fontSize: "10px", fontWeight: 700,
+              }}
+            >
+              {runBacktest.isPending ? "Running…" : "Run Backtest"}
+            </button>
+          </div>
+
+          {/* Loading / no data state */}
+          {isLoading && <div style={{ color: "#484849", fontSize: "9px", textAlign: "center", padding: "8px 0" }}>Loading…</div>}
+          {runBacktest.isError && (
+            <div style={{ color: "#ff4444", fontSize: "9px", marginBottom: "6px" }}>
+              Error: {runBacktest.error instanceof Error ? runBacktest.error.message : "Backtest failed"}
+            </div>
+          )}
+
+          {/* Results */}
+          {bt && (
+            <>
+              {/* Tabs */}
+              <div style={{ display: "flex", gap: "4px", marginBottom: "8px" }}>
+                {(["metrics", "rulebook", "regimes"] as const).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setActiveTab(t)}
+                    style={{
+                      padding: "2px 8px", borderRadius: "3px", border: "none", cursor: "pointer",
+                      background: activeTab === t ? "#7c83fd" : "#1a1d35",
+                      color: activeTab === t ? "#fff" : "#666",
+                      fontSize: "9px", fontWeight: 700, textTransform: "uppercase",
+                    }}
+                  >{t}</button>
+                ))}
+              </div>
+
+              {activeTab === "metrics" && (
+                <div>
+                  {/* Key metrics grid */}
+                  {[
+                    ["Win Rate", pct(bt.winRate), bt.winRate > 0.55 ? "#00e676" : bt.winRate > 0.45 ? "#ffcc00" : "#ff4444"],
+                    ["Sharpe", fix2(bt.sharpeRatio), bt.sharpeRatio > 1.5 ? "#00e676" : bt.sharpeRatio > 0.8 ? "#ffcc00" : "#ff4444"],
+                    ["Sortino", fix2(bt.sortinoRatio), bt.sortinoRatio > 2 ? "#00e676" : bt.sortinoRatio > 1 ? "#ffcc00" : "#ff4444"],
+                    ["Calmar", fix2(bt.calmarRatio), bt.calmarRatio > 1 ? "#00e676" : "#ffcc00"],
+                    ["Prof. Factor", fix2(bt.profitFactor), bt.profitFactor > 1.5 ? "#00e676" : bt.profitFactor > 1 ? "#ffcc00" : "#ff4444"],
+                    ["Expectancy", fix2(bt.expectancy) + "R", bt.expectancy > 0.3 ? "#00e676" : "#ffcc00"],
+                    ["Max DD", fix2(bt.maxDrawdownR) + "R", bt.maxDrawdownR < 3 ? "#00e676" : bt.maxDrawdownR < 5 ? "#ffcc00" : "#ff4444"],
+                    ["Trades", String(bt.totalTrades ?? 0), "#e0e0e0"],
+                  ].map(([label, value, color]) => (
+                    <div key={label} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0", borderBottom: "1px solid #1a1d35" }}>
+                      <span style={{ color: "#666", fontSize: "9px" }}>{label}</span>
+                      <span style={{ color: color as string, fontSize: "9px", fontWeight: 700 }}>{value}</span>
+                    </div>
+                  ))}
+                  {/* MTF comparison */}
+                  <div style={{ marginTop: "6px", padding: "5px", background: "#12141f", borderRadius: "4px" }}>
+                    <div style={{ color: "#666", fontSize: "8px", marginBottom: "3px", letterSpacing: "0.1em" }}>MTF ALIGNMENT IMPACT</div>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <span style={{ color: "#00e676", fontSize: "9px" }}>✓ Aligned: {pct(bt.mtfAlignedWR)}</span>
+                      <span style={{ color: "#ff4444", fontSize: "9px" }}>✗ Divergent: {pct(bt.mtfDivergentWR)}</span>
+                    </div>
+                  </div>
+                  {/* Chart snapshots */}
+                  {chart.snapshotsGenerated > 0 && (
+                    <div style={{ marginTop: "5px", color: "#7c83fd", fontSize: "9px" }}>
+                      📸 {chart.snapshotsGenerated} chart snapshots — top score: {((chart.topConfirmationScore ?? 0) * 100).toFixed(0)}%
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {activeTab === "rulebook" && (
+                <div>
+                  <div style={{ color: "#666", fontSize: "8px", letterSpacing: "0.1em", marginBottom: "5px" }}>EMPIRICAL RULEBOOK</div>
+                  {(!bt.rulebook || bt.rulebook.length === 0) ? (
+                    <div style={{ color: "#484849", fontSize: "9px" }}>No rules yet — run with more bars</div>
+                  ) : bt.rulebook.map((rule: RulebookEntry, i: number) => (
+                    <div key={i} style={{ padding: "4px 0", borderBottom: "1px solid #1a1d35" }}>
+                      <div style={{ color: "#e0e0e0", fontSize: "9px" }}>{rule.rule}</div>
+                      <div style={{ display: "flex", gap: "8px", marginTop: "2px" }}>
+                        <span style={{ color: "#666", fontSize: "8px" }}>Evidence: {rule.evidence}</span>
+                        <span style={{ color: rule.impact > 0 ? "#00e676" : "#ff4444", fontSize: "8px" }}>Impact: {rule.impact > 0 ? "+" : ""}{fix2(rule.impact)}R</span>
+                        <span style={{ color: "#ffcc00", fontSize: "8px" }}>Rel: {pct(rule.reliability)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {activeTab === "regimes" && (
+                <div>
+                  <div style={{ color: "#666", fontSize: "8px", letterSpacing: "0.1em", marginBottom: "5px" }}>REGIME PERFORMANCE</div>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
+                    <span style={{ color: "#00e676", fontSize: "9px" }}>Best: {bt.bestRegime?.replace("_", " ") ?? "—"}</span>
+                    <span style={{ color: "#ff4444", fontSize: "9px" }}>Worst: {bt.worstRegime?.replace("_", " ") ?? "—"}</span>
+                  </div>
+                  <div style={{ color: "#484849", fontSize: "8px" }}>
+                    Trade in {bt.bestRegime?.replace("_", " ")} regime for highest win rate.
+                    Avoid or reduce size in {bt.worstRegime?.replace("_", " ")}.
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Recent backtest index */}
+          {!bt && listData?.results && listData.results.length > 0 && (
+            <div>
+              <div style={{ color: "#666", fontSize: "8px", letterSpacing: "0.1em", marginBottom: "4px" }}>RECENT BACKTESTS</div>
+              {listData.results.slice(0, 5).map((r) => (
+                <div
+                  key={r.symbol}
+                  style={{ display: "flex", justifyContent: "space-between", padding: "2px 0", cursor: "pointer", borderBottom: "1px solid #1a1d35" }}
+                  onClick={() => setSymbol(r.symbol)}
+                >
+                  <span style={{ color: "#e0e0e0", fontSize: "9px" }}>{r.symbol}</span>
+                  <span style={{ color: "#7c83fd", fontSize: "9px" }}>WR {((r.winRate ?? 0) * 100).toFixed(0)}% / Sh {(r.sharpeRatio ?? 0).toFixed(1)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// L8 CHART PLOT PANEL
+// ═══════════════════════════════════════════════════════════════════════════
+
+function ChartPlotPanel({ stocks }: { stocks: StockNodeData[] }) {
+  const [symbol, setSymbol] = useState(stocks[0]?.symbol ?? "BTCUSD");
+  const [expanded, setExpanded] = useState(false);
+  const [showSvg, setShowSvg] = useState(false);
+
+  const runBacktest = useRunBacktest();
+  const { data: result, isLoading } = useBacktestResult(symbol, expanded);
+
+  const handleGenerateCharts = () => {
+    runBacktest.mutate({ symbol, lookbackBars: 2000 });
+  };
+
+  const topSvg = (result as any)?.topSnapshotSvg ?? null;
+  const chart = result?.chart ?? {};
+
+  return (
+    <div style={{ background: "#0f111a", borderRadius: "10px", border: "1px solid #1e2235", overflow: "hidden" }}>
+      {/* Header */}
+      <div
+        style={{ padding: "8px 10px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", background: "#12141f" }}
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <span style={{ fontSize: "9px", color: "#ff9800", fontWeight: 700, letterSpacing: "0.15em" }}>L8 CHART AGENT</span>
+          {chart.snapshotsGenerated > 0 && (
+            <span style={{ background: "#1a1d35", color: "#ff9800", padding: "1px 5px", borderRadius: "3px", fontSize: "9px" }}>{chart.snapshotsGenerated} snapshots</span>
+          )}
+        </div>
+        <span style={{ color: "#484849", fontSize: "10px" }}>{expanded ? "▲" : "▼"}</span>
+      </div>
+
+      {expanded && (
+        <div style={{ padding: "8px 10px" }}>
+          <div style={{ color: "#484849", fontSize: "8px", letterSpacing: "0.1em", marginBottom: "6px" }}>
+            ANNOTATED SETUP SNAPSHOTS — captures exact confirmation bars with OBs, FVGs, BOS, orderflow
+          </div>
+
+          {/* Symbol + generate */}
+          <div style={{ display: "flex", gap: "5px", marginBottom: "8px" }}>
+            <select
+              value={symbol}
+              onChange={(e) => setSymbol(e.target.value)}
+              style={{ flex: 1, background: "#1a1d35", border: "1px solid #2a2d4a", color: "#e0e0e0", fontSize: "10px", borderRadius: "4px", padding: "3px 6px" }}
+            >
+              {stocks.map((s) => (<option key={s.symbol} value={s.symbol}>{s.symbol}</option>))}
+            </select>
+            <button
+              onClick={handleGenerateCharts}
+              disabled={runBacktest.isPending}
+              style={{
+                padding: "3px 10px", borderRadius: "4px", border: "none", cursor: "pointer",
+                background: runBacktest.isPending ? "#1a1d35" : "#ff9800",
+                color: runBacktest.isPending ? "#666" : "#000",
+                fontSize: "10px", fontWeight: 700,
+              }}
+            >
+              {runBacktest.isPending ? "Plotting…" : "📸 Plot Charts"}
+            </button>
+          </div>
+
+          {isLoading && <div style={{ color: "#484849", fontSize: "9px", textAlign: "center", padding: "8px" }}>Loading…</div>}
+
+          {/* Snapshot count + quality */}
+          {chart.snapshotsGenerated > 0 && (
+            <div style={{ marginBottom: "8px", padding: "6px", background: "#12141f", borderRadius: "4px" }}>
+              <div style={{ color: "#ff9800", fontSize: "10px", fontWeight: 700 }}>📸 {chart.snapshotsGenerated} snapshots generated</div>
+              <div style={{ color: "#666", fontSize: "9px", marginTop: "2px" }}>
+                Top setup score: {((chart.topConfirmationScore ?? 0) * 100).toFixed(0)}%
+              </div>
+              {chart.allSnapshotIds?.length > 0 && (
+                <div style={{ color: "#484849", fontSize: "8px", marginTop: "2px" }}>
+                  IDs: {chart.allSnapshotIds.slice(0, 3).map((id: string) => id.slice(0, 8)).join(", ")}
+                  {chart.allSnapshotIds.length > 3 ? ` +${chart.allSnapshotIds.length - 3} more` : ""}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* SVG preview toggle */}
+          {topSvg && (
+            <div>
+              <button
+                onClick={() => setShowSvg(!showSvg)}
+                style={{
+                  padding: "3px 8px", borderRadius: "4px", border: "1px solid #ff9800",
+                  background: "transparent", color: "#ff9800",
+                  fontSize: "9px", cursor: "pointer", marginBottom: "6px",
+                }}
+              >
+                {showSvg ? "Hide" : "Preview"} Top Setup Chart
+              </button>
+
+              {showSvg && (
+                <div style={{
+                  width: "100%", overflowX: "auto", borderRadius: "4px",
+                  border: "1px solid #2a2d4a", background: "#0d0d14",
+                }}>
+                  {/* Inline SVG from the agent */}
+                  <div
+                    style={{ transform: "scale(0.35)", transformOrigin: "top left", width: "1200px", height: "700px" }}
+                    dangerouslySetInnerHTML={{ __html: topSvg }}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {!topSvg && !isLoading && !runBacktest.isPending && (
+            <div style={{ color: "#484849", fontSize: "9px", textAlign: "center", padding: "8px 0" }}>
+              Click "Plot Charts" to generate annotated setup snapshots.<br/>
+              The agent will walk the bars, detect confirmations, and snapshot each setup.
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SCHEDULER PANEL — Non-Stop Brain Control
+// ═══════════════════════════════════════════════════════════════════════════
+// AUTONOMOUS BRAIN PANEL — Command center for the self-directing brain
+// ═══════════════════════════════════════════════════════════════════════════
+
+const BRAIN_MODE_COLORS: Record<string, string> = {
+  AGGRESSIVE: "#ff9800",
+  NORMAL: "#00ff88",
+  DEFENSIVE: "#ff4444",
+  PAUSED: "#484849",
+};
+
+function AutonomousBrainPanel({ stocks }: { stocks: StockNodeData[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const [activeTab, setActiveTab] = useState<"overview" | "jobs" | "queue">("overview");
+
+  const { data: status } = useAutonomousBrainStatus();
+  const startBrain = useStartAutonomousBrain();
+  const stopBrain = useStopAutonomousBrain();
+  const setMode = useSetBrainMode();
+  const { data: jobData } = useJobQueue();
+  const enqueue = useEnqueueJob();
+
+  const brain = status?.brain;
+  const queue = status?.queue ?? jobData?.stats;
+  const isRunning = status?.running ?? false;
+  const modeColor = brain?.mode ? BRAIN_MODE_COLORS[brain.mode] ?? "#888" : "#484849";
+
+  const handleStart = () => {
+    startBrain.mutate({ symbols: stocks.slice(0, 10).map((s) => s.symbol), cycleIntervalMs: 30_000 });
+  };
+
+  const uptimeMin = brain?.startedAt && isRunning ? Math.floor((Date.now() - brain.startedAt) / 60_000) : 0;
+
+  return (
+    <div style={{ background: "#0f111a", borderRadius: "10px", border: `2px solid ${isRunning ? modeColor : "#1e2235"}`, overflow: "hidden" }}>
+      <div
+        style={{ padding: "8px 10px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", background: "#12141f" }}
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <span style={{ fontSize: "10px", color: modeColor, fontWeight: 700, letterSpacing: "0.15em" }}>
+            {isRunning ? `⚡ BRAIN ${brain?.mode ?? ""}` : "○ AUTONOMOUS BRAIN"}
+          </span>
+          {isRunning && brain && (
+            <span style={{ background: `${modeColor}20`, color: modeColor, padding: "1px 5px", borderRadius: "3px", fontSize: "9px" }}>
+              {brain.cycleCount} cycles
+            </span>
+          )}
+        </div>
+        <span style={{ color: "#484849", fontSize: "10px" }}>{expanded ? "▲" : "▼"}</span>
+      </div>
+
+      {expanded && (
+        <div style={{ padding: "8px 10px" }}>
+          {isRunning && brain ? (
+            <>
+              {/* Tabs */}
+              <div style={{ display: "flex", gap: "4px", marginBottom: "8px" }}>
+                {(["overview", "jobs", "queue"] as const).map((t) => (
+                  <button key={t} onClick={() => setActiveTab(t)} style={{ padding: "2px 8px", borderRadius: "3px", border: "none", cursor: "pointer", background: activeTab === t ? modeColor : "#1a1d35", color: activeTab === t ? "#000" : "#666", fontSize: "9px", fontWeight: 700, textTransform: "uppercase" }}>{t}</button>
+                ))}
+              </div>
+
+              {activeTab === "overview" && (
+                <>
+                  {[
+                    ["Mode", brain.mode, modeColor],
+                    ["Uptime", `${uptimeMin}m`, "#e0e0e0"],
+                    ["Symbols", brain.symbols?.join(", ") ?? "—", "#e0e0e0"],
+                    ["Scans", String(brain.scanCount), "#7c83fd"],
+                    ["Backtests", String(brain.backtestCount), "#00ccff"],
+                    ["Evolutions", String(brain.evolutionCount), "#00ff88"],
+                    ["Jobs Done", String(brain.totalJobsCompleted), "#00ff88"],
+                    ["Errors", String(brain.errors), brain.errors > 10 ? "#ff4444" : "#666"],
+                    ["Win Streak", `${brain.consecutiveWins}W / ${brain.consecutiveLosses}L`, brain.consecutiveLosses >= 5 ? "#ff4444" : "#00ff88"],
+                  ].map(([label, value, color]) => (
+                    <div key={label as string} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0", borderBottom: "1px solid #1a1d35" }}>
+                      <span style={{ color: "#666", fontSize: "9px" }}>{label}</span>
+                      <span style={{ color: color as string, fontSize: "9px" }}>{value}</span>
+                    </div>
+                  ))}
+
+                  {/* Attention map */}
+                  {brain.opportunityRank?.length > 0 && (
+                    <div style={{ marginTop: "6px" }}>
+                      <div style={{ color: "#666", fontSize: "8px", letterSpacing: "0.1em", marginBottom: "3px" }}>ATTENTION RANK</div>
+                      {brain.opportunityRank.slice(0, 5).map((sym, i) => (
+                        <div key={sym} style={{ display: "flex", justifyContent: "space-between", padding: "1px 0" }}>
+                          <span style={{ color: i === 0 ? "#ffd700" : "#888", fontSize: "9px" }}>{i + 1}. {sym}</span>
+                          <span style={{ color: "#7c83fd", fontSize: "9px" }}>{((brain.attentionMap?.[sym] ?? 0) * 100).toFixed(0)}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Mode switch */}
+                  <div style={{ display: "flex", gap: "3px", marginTop: "8px", flexWrap: "wrap" }}>
+                    {(["AGGRESSIVE", "NORMAL", "DEFENSIVE"] as const).map((m) => (
+                      <button key={m} onClick={() => setMode.mutate(m)} style={{ padding: "2px 6px", borderRadius: "3px", border: `1px solid ${BRAIN_MODE_COLORS[m]}`, background: brain.mode === m ? BRAIN_MODE_COLORS[m] : "transparent", color: brain.mode === m ? "#000" : BRAIN_MODE_COLORS[m], fontSize: "8px", cursor: "pointer" }}>{m}</button>
+                    ))}
+                  </div>
+
+                  <button onClick={() => stopBrain.mutate()} style={{ width: "100%", marginTop: "8px", padding: "4px", borderRadius: "4px", border: "1px solid #ff4444", background: "transparent", color: "#ff4444", fontSize: "9px", cursor: "pointer" }}>
+                    Stop Autonomous Brain
+                  </button>
+                </>
+              )}
+
+              {activeTab === "jobs" && queue && (
+                <>
+                  <div style={{ marginBottom: "6px" }}>
+                    {[
+                      ["Queued", queue.queued, "#ffcc00"],
+                      ["Running", queue.running, "#00ccff"],
+                      ["Done", queue.done, "#00ff88"],
+                      ["Failed", queue.failed, "#ff4444"],
+                    ].map(([label, count, color]) => (
+                      <div key={label as string} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0" }}>
+                        <span style={{ color: "#666", fontSize: "9px" }}>{label}</span>
+                        <span style={{ color: color as string, fontSize: "9px", fontWeight: 700 }}>{count}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Type breakdown */}
+                  {queue.byType && Object.entries(queue.byType).slice(0, 6).map(([type, count]) => (
+                    <div key={type} style={{ display: "flex", justifyContent: "space-between", padding: "1px 0" }}>
+                      <span style={{ color: "#484849", fontSize: "8px" }}>{type}</span>
+                      <span style={{ color: "#888", fontSize: "8px" }}>{String(count)}</span>
+                    </div>
+                  ))}
+                </>
+              )}
+
+              {activeTab === "queue" && (
+                <>
+                  {/* Manual job enqueue */}
+                  <div style={{ color: "#666", fontSize: "8px", letterSpacing: "0.1em", marginBottom: "5px" }}>MANUAL JOB DISPATCH</div>
+                  {(["SCAN_SYMBOL", "BACKTEST", "RETRAIN_ML", "BUILD_RULEBOOK"] as const).map((type) => (
+                    <button
+                      key={type}
+                      onClick={() => enqueue.mutate({ type, symbol: brain.symbols?.[0] ?? "BTCUSD", reason: "Manual dispatch" })}
+                      style={{ display: "block", width: "100%", textAlign: "left", padding: "3px 6px", marginBottom: "3px", borderRadius: "3px", border: "1px solid #2a2d4a", background: "#1a1d35", color: "#888", fontSize: "9px", cursor: "pointer" }}
+                    >
+                      + {type}
+                    </button>
+                  ))}
+
+                  {/* Recent completed */}
+                  {jobData?.recentCompleted && jobData.recentCompleted.length > 0 && (
+                    <div style={{ marginTop: "8px" }}>
+                      <div style={{ color: "#666", fontSize: "8px", letterSpacing: "0.1em", marginBottom: "3px" }}>RECENT COMPLETED</div>
+                      {jobData.recentCompleted.slice(-5).reverse().map((j) => (
+                        <div key={j.id} style={{ display: "flex", justifyContent: "space-between", padding: "1px 0", borderBottom: "1px solid #1a1d35" }}>
+                          <span style={{ color: j.status === "done" ? "#00ff88" : "#ff4444", fontSize: "8px" }}>{j.type}</span>
+                          <span style={{ color: "#484849", fontSize: "8px" }}>{j.latencyMs != null ? `${(j.latencyMs / 1000).toFixed(1)}s` : "—"}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              <div style={{ color: "#484849", fontSize: "9px", marginBottom: "8px" }}>
+                The Autonomous Brain runs all 8 agent layers continuously, assigns jobs to agents, learns from outcomes, and evolves strategies non-stop.
+              </div>
+              <div style={{ color: "#666", fontSize: "8px", marginBottom: "6px" }}>
+                Symbols: {stocks.slice(0, 8).map((s) => s.symbol).join(", ")}
+              </div>
+              <button onClick={handleStart} disabled={startBrain.isPending} style={{ width: "100%", padding: "6px", borderRadius: "4px", border: "none", background: startBrain.isPending ? "#1a1d35" : "#00ff88", color: startBrain.isPending ? "#666" : "#000", fontSize: "11px", fontWeight: 700, cursor: "pointer" }}>
+                {startBrain.isPending ? "Starting…" : "⚡ Launch Autonomous Brain"}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// STRATEGY EVOLUTION PANEL
+// ═══════════════════════════════════════════════════════════════════════════
+
+const TIER_COLORS: Record<string, string> = {
+  ELITE: "#ffd700",
+  PROVEN: "#00ff88",
+  LEARNING: "#7c83fd",
+  SEED: "#666",
+  DEGRADING: "#ff9800",
+  SUSPENDED: "#ff4444",
+};
+
+function StrategyEvolutionPanel({ stocks }: { stocks: StockNodeData[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const { data: rankData } = useStrategyRankings(stocks.map((s) => s.symbol));
+  const { data: stratData } = useStrategies();
+
+  const rankings = rankData?.rankings ?? [];
+  const strategies = stratData?.strategies ?? [];
+  const eliteCount = strategies.filter((s) => s.tier === "ELITE").length;
+  const degradingCount = strategies.filter((s) => s.tier === "DEGRADING" || s.tier === "SUSPENDED").length;
+
+  return (
+    <div style={{ background: "#0f111a", borderRadius: "10px", border: `1px solid ${eliteCount > 0 ? "#ffd700" : "#1e2235"}`, overflow: "hidden" }}>
+      <div
+        style={{ padding: "8px 10px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", background: "#12141f" }}
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <span style={{ fontSize: "9px", color: "#ffd700", fontWeight: 700, letterSpacing: "0.15em" }}>STRATEGY EVOLUTION</span>
+          {strategies.length > 0 && (
+            <span style={{ background: "#1a1d35", color: "#ffd700", padding: "1px 5px", borderRadius: "3px", fontSize: "9px" }}>{strategies.length} active</span>
+          )}
+          {degradingCount > 0 && (
+            <span style={{ background: "#ff443020", color: "#ff4444", padding: "1px 5px", borderRadius: "3px", fontSize: "9px" }}>⚠ {degradingCount} degrading</span>
+          )}
+        </div>
+        <span style={{ color: "#484849", fontSize: "10px" }}>{expanded ? "▲" : "▼"}</span>
+      </div>
+
+      {expanded && (
+        <div style={{ padding: "8px 10px" }}>
+          {strategies.length === 0 ? (
+            <div style={{ color: "#484849", fontSize: "9px", textAlign: "center", padding: "10px" }}>
+              No strategies evolved yet. Start the Autonomous Brain to begin.
+            </div>
+          ) : (
+            <>
+              {/* Rankings */}
+              {rankings.slice(0, 8).map((r) => (
+                <div key={`${r.strategyId}-${r.symbol}`} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "3px 0", borderBottom: "1px solid #1a1d35" }}>
+                  <div>
+                    <span style={{ color: "#e0e0e0", fontSize: "9px", fontWeight: 700 }}>{r.symbol}</span>
+                    <span style={{ color: "#484849", fontSize: "8px", marginLeft: "4px" }}>v{r.version}</span>
+                  </div>
+                  <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                    <span style={{ color: TIER_COLORS[r.tier] ?? "#666", fontSize: "8px", fontWeight: 700 }}>{r.tier}</span>
+                    <span style={{ color: "#7c83fd", fontSize: "8px" }}>{(r.compositeScore * 100).toFixed(0)}</span>
+                  </div>
+                </div>
+              ))}
+
+              {/* Strategy detail for top strategies */}
+              {strategies.filter((s) => s.tier === "ELITE" || s.tier === "PROVEN").slice(0, 3).map((s) => (
+                <div key={`${s.strategyId}-${s.symbol}`} style={{ marginTop: "6px", padding: "6px", background: `${TIER_COLORS[s.tier]}10`, borderRadius: "4px", border: `1px solid ${TIER_COLORS[s.tier]}30` }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
+                    <span style={{ color: TIER_COLORS[s.tier], fontSize: "10px", fontWeight: 700 }}>{s.symbol} — {s.tier}</span>
+                    <span style={{ color: "#666", fontSize: "8px" }}>{s.changeCount} mutations</span>
+                  </div>
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                    {[
+                      ["WR", `${(s.winRate * 100).toFixed(0)}%`],
+                      ["Sharpe", s.sharpeRatio.toFixed(1)],
+                      ["Score", (s.minConfirmationScore * 100).toFixed(0) + "%"],
+                      ["Kelly", `${(s.maxKellyFraction * 100).toFixed(0)}%`],
+                    ].map(([label, val]) => (
+                      <div key={label} style={{ textAlign: "center" }}>
+                        <div style={{ color: "#484849", fontSize: "7px" }}>{label}</div>
+                        <div style={{ color: "#e0e0e0", fontSize: "9px", fontWeight: 700 }}>{val}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {s.requireMTFAlignment && <div style={{ color: "#00ff88", fontSize: "8px", marginTop: "2px" }}>✓ MTF Required</div>}
+                  {s.blacklistedRegimes.length > 0 && <div style={{ color: "#ff9800", fontSize: "8px", marginTop: "2px" }}>⊘ {s.blacklistedRegimes.join(", ")}</div>}
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SUPER INTELLIGENCE V2 PANEL
+// ═══════════════════════════════════════════════════════════════════════════
+
+function SuperIntelV2Panel({ stocks }: { stocks: StockNodeData[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const [selectedSymbol, setSelectedSymbol] = useState(stocks[0]?.symbol ?? "BTCUSD");
+
+  const { data: intelData } = useSuperIntelStatus();
+  const retrain = useRetrainSuperIntel();
+
+  const models = intelData?.models ?? [];
+  const selectedModel = models.find((m) => m.symbol === selectedSymbol) ?? models[0];
+
+  const totalOutcomes = models.reduce((sum, m) => sum + m.outcomes, 0);
+  const avgAccuracy = models.length > 0 ? models.reduce((sum, m) => sum + m.accuracy, 0) / models.length : 0;
+
+  return (
+    <div style={{ background: "#0f111a", borderRadius: "10px", border: "1px solid #1e2235", overflow: "hidden" }}>
+      <div
+        style={{ padding: "8px 10px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", background: "#12141f" }}
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <span style={{ fontSize: "9px", color: "#cc88ff", fontWeight: 700, letterSpacing: "0.15em" }}>SUPER INTEL v2</span>
+          {totalOutcomes > 0 && (
+            <span style={{ background: "#1a1d35", color: "#cc88ff", padding: "1px 5px", borderRadius: "3px", fontSize: "9px" }}>{totalOutcomes} outcomes</span>
+          )}
+          {avgAccuracy > 0 && (
+            <span style={{ background: avgAccuracy > 0.6 ? "#00ff8820" : "#1a1d35", color: avgAccuracy > 0.6 ? "#00ff88" : "#888", padding: "1px 5px", borderRadius: "3px", fontSize: "9px" }}>
+              {(avgAccuracy * 100).toFixed(0)}% acc
+            </span>
+          )}
+        </div>
+        <span style={{ color: "#484849", fontSize: "10px" }}>{expanded ? "▲" : "▼"}</span>
+      </div>
+
+      {expanded && (
+        <div style={{ padding: "8px 10px" }}>
+          {models.length === 0 ? (
+            <div style={{ color: "#484849", fontSize: "9px", textAlign: "center", padding: "10px" }}>
+              No model data yet. Record trade outcomes to begin learning.
+            </div>
+          ) : (
+            <>
+              {/* Symbol selector */}
+              <div style={{ display: "flex", gap: "5px", marginBottom: "8px" }}>
+                <select value={selectedSymbol} onChange={(e) => setSelectedSymbol(e.target.value)} style={{ flex: 1, background: "#1a1d35", border: "1px solid #2a2d4a", color: "#e0e0e0", fontSize: "10px", borderRadius: "4px", padding: "3px 6px" }}>
+                  {models.map((m) => <option key={m.symbol} value={m.symbol}>{m.symbol}</option>)}
+                </select>
+                <button onClick={() => retrain.mutate(selectedSymbol)} disabled={retrain.isPending} style={{ padding: "3px 8px", borderRadius: "4px", border: "none", background: retrain.isPending ? "#1a1d35" : "#cc88ff", color: retrain.isPending ? "#666" : "#000", fontSize: "9px", cursor: "pointer" }}>
+                  {retrain.isPending ? "…" : "Retrain"}
+                </button>
+              </div>
+
+              {selectedModel && (
+                <>
+                  {/* Model metrics */}
+                  {[
+                    ["Version", `v${selectedModel.version}`, "#cc88ff"],
+                    ["Outcomes", String(selectedModel.outcomes), "#e0e0e0"],
+                    ["Accuracy", `${(selectedModel.accuracy * 100).toFixed(1)}%`, selectedModel.accuracy > 0.6 ? "#00ff88" : "#ffcc00"],
+                    ["Brier Score", selectedModel.brier.toFixed(3), selectedModel.brier < 0.15 ? "#00ff88" : "#ffcc00"],
+                    ["Last Retrain", new Date(selectedModel.lastRetrainedAt).toLocaleTimeString(), "#666"],
+                  ].map(([label, value, color]) => (
+                    <div key={label as string} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0", borderBottom: "1px solid #1a1d35" }}>
+                      <span style={{ color: "#666", fontSize: "9px" }}>{label}</span>
+                      <span style={{ color: color as string, fontSize: "9px" }}>{value}</span>
+                    </div>
+                  ))}
+
+                  {/* Sub-model weights */}
+                  <div style={{ marginTop: "6px" }}>
+                    <div style={{ color: "#666", fontSize: "8px", letterSpacing: "0.1em", marginBottom: "3px" }}>ENSEMBLE WEIGHTS</div>
+                    {Object.entries(selectedModel.weights).map(([model, w]) => (
+                      <div key={model} style={{ display: "flex", alignItems: "center", gap: "5px", marginBottom: "2px" }}>
+                        <span style={{ color: "#666", fontSize: "8px", width: "22px" }}>{model.toUpperCase()}</span>
+                        <div style={{ flex: 1, height: "4px", background: "#1a1d35", borderRadius: "2px" }}>
+                          <div style={{ width: `${(w * 100)}%`, height: "100%", background: "#cc88ff", borderRadius: "2px" }} />
+                        </div>
+                        <span style={{ color: "#888", fontSize: "8px", width: "30px", textAlign: "right" }}>{((w as number) * 100).toFixed(0)}%</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Regime calibration */}
+                  {Object.keys(selectedModel.regimeCalibration).length > 0 && (
+                    <div style={{ marginTop: "6px" }}>
+                      <div style={{ color: "#666", fontSize: "8px", letterSpacing: "0.1em", marginBottom: "3px" }}>REGIME CALIBRATION</div>
+                      {Object.entries(selectedModel.regimeCalibration).slice(0, 5).map(([regime, cal]) => (
+                        <div key={regime} style={{ display: "flex", justifyContent: "space-between", padding: "1px 0" }}>
+                          <span style={{ color: "#484849", fontSize: "8px" }}>{regime}</span>
+                          <span style={{ color: (cal as number) > 1 ? "#00ff88" : "#ff9800", fontSize: "8px" }}>{(cal as number).toFixed(2)}×</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+
+function SchedulerPanel({ stocks }: { stocks: StockNodeData[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const { data: status } = useSchedulerStatus();
+  const startScheduler = useStartScheduler();
+  const stopScheduler = useStopScheduler();
+
+  const handleStart = () => {
+    startScheduler.mutate({ symbols: stocks.slice(0, 10).map((s) => s.symbol), cycleIntervalMs: 30_000 });
+  };
+
+  const uptimeSec = status ? Math.floor((Date.now() - (status.lastCycleAt || Date.now())) / 1000) : 0;
+
+  return (
+    <div style={{ background: "#0f111a", borderRadius: "10px", border: `1px solid ${status?.running ? "#00ff88" : "#1e2235"}`, overflow: "hidden" }}>
+      <div
+        style={{ padding: "8px 10px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", background: "#12141f" }}
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <span style={{ fontSize: "9px", color: status?.running ? "#00ff88" : "#484849", fontWeight: 700, letterSpacing: "0.15em" }}>
+            {status?.running ? "● " : "○ "}AUTO-SCHEDULER
+          </span>
+          {status?.running && (
+            <span style={{ background: "#00ff8820", color: "#00ff88", padding: "1px 5px", borderRadius: "3px", fontSize: "9px" }}>
+              {status.cycleCount} cycles
+            </span>
+          )}
+        </div>
+        <span style={{ color: "#484849", fontSize: "10px" }}>{expanded ? "▲" : "▼"}</span>
+      </div>
+
+      {expanded && (
+        <div style={{ padding: "8px 10px" }}>
+          {status?.running ? (
+            <>
+              <div style={{ marginBottom: "6px" }}>
+                {[
+                  ["Status", "Running", "#00ff88"],
+                  ["Symbols", status.symbols?.join(", ") ?? "—", "#e0e0e0"],
+                  ["Cycles", String(status.cycleCount), "#7c83fd"],
+                  ["Errors", String(status.errorCount), status.errorCount > 5 ? "#ff4444" : "#666"],
+                  ["Last Cycle", status.lastCycleAt ? new Date(status.lastCycleAt).toLocaleTimeString() : "—", "#666"],
+                ].map(([label, value, color]) => (
+                  <div key={label} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0", borderBottom: "1px solid #1a1d35" }}>
+                    <span style={{ color: "#666", fontSize: "9px" }}>{label}</span>
+                    <span style={{ color: color as string, fontSize: "9px" }}>{value}</span>
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={() => stopScheduler.mutate()}
+                style={{ width: "100%", padding: "5px", borderRadius: "4px", border: "1px solid #ff4444", background: "transparent", color: "#ff4444", fontSize: "10px", cursor: "pointer" }}
+              >
+                Stop Scheduler
+              </button>
+            </>
+          ) : (
+            <>
+              <div style={{ color: "#484849", fontSize: "9px", marginBottom: "8px" }}>
+                Start non-stop 8-layer brain cycles for all symbols. L1-L6 every 30s, L7-L8 every hour.
+              </div>
+              <div style={{ marginBottom: "6px", color: "#666", fontSize: "8px" }}>
+                {stocks.slice(0, 10).map((s) => s.symbol).join(", ")}
+              </div>
+              <button
+                onClick={handleStart}
+                disabled={startScheduler.isPending}
+                style={{
+                  width: "100%", padding: "5px", borderRadius: "4px", border: "none",
+                  background: startScheduler.isPending ? "#1a1d35" : "#00ff88",
+                  color: startScheduler.isPending ? "#666" : "#000",
+                  fontSize: "10px", fontWeight: 700, cursor: "pointer",
+                }}
+              >
+                {startScheduler.isPending ? "Starting…" : "▶ Start Non-Stop Brain"}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function RegimePanel({ supreme }: { supreme: SupremeState }) {
   const regimeColor = supreme.regime === "RISK-ON" ? "#00ffcc" : supreme.regime === "RISK-OFF" ? "#ff7162" : "#ffcc00";
@@ -1297,6 +2102,981 @@ function StockDrawer({
   );
 }
 
+// ─── Agent Intelligence Panel ──────────────────────────────────────────────
+// Shows live agent statuses, brain cycle controls, and decision reasoning
+
+// 6-Layer agent labels with sub-agents
+const AGENT_LABELS: Record<string, { label: string; icon: string; isLayer?: boolean; color?: string }> = {
+  // Layer agents (primary)
+  L1_perception:   { label: "L1 PERCEPTION",    icon: "visibility",       isLayer: true, color: "#00ccff" },
+  L2_structure:    { label: "L2 STRUCTURE",      icon: "architecture",     isLayer: true, color: "#00ffcc" },
+  L3_context:      { label: "L3 CONTEXT",        icon: "public",           isLayer: true, color: "#ffcc00" },
+  L4_memory:       { label: "L4 MEMORY",         icon: "psychology",       isLayer: true, color: "#cc88ff" },
+  L5_intelligence: { label: "L5 INTELLIGENCE",   icon: "neurology",        isLayer: true, color: "#ff6688" },
+  L6_evolution:    { label: "L6 EVOLUTION",       icon: "auto_awesome",     isLayer: true, color: "#88ff88" },
+  // Sub-agents
+  structure:       { label: "SMC",               icon: "architecture" },
+  regime:          { label: "Regime",             icon: "insights" },
+  orderflow:       { label: "Orderflow",         icon: "waterfall_chart" },
+  liquidity:       { label: "Liquidity",         icon: "water_drop" },
+  volatility:      { label: "Volatility",        icon: "bolt" },
+  stress:          { label: "Stress",             icon: "warning" },
+  memory:          { label: "Memory",             icon: "psychology" },
+  dna:             { label: "DNA",                icon: "dna" },
+  risk:            { label: "Risk Gate",          icon: "shield" },
+  brain:           { label: "Brain",              icon: "neurology" },
+  macro:           { label: "Macro",              icon: "language" },
+  sentiment:       { label: "Sentiment",          icon: "sentiment_satisfied" },
+  mtf:             { label: "MTF",                icon: "stacked_line_chart" },
+  ml_model:        { label: "ML Model",           icon: "model_training" },
+  circuit_breaker: { label: "Breaker",            icon: "power_off" },
+  attribution:     { label: "Attribution",        icon: "attribution" },
+  production_gate: { label: "Prod Gate",          icon: "verified" },
+  reasoning:       { label: "Reasoning",          icon: "lightbulb" },
+  position_sizer:  { label: "Sizing",             icon: "scale" },
+  super_intel:     { label: "Super Intel",        icon: "rocket_launch" },
+};
+
+function getAgentStatusColor(status: string): string {
+  switch (status) {
+    case "running": return "#ffcc00";
+    case "done": return "#00ffcc";
+    case "error": return "#ff4444";
+    default: return "#484849";
+  }
+}
+
+function getActionColor(action: string): string {
+  switch (action) {
+    case "STRONG_LONG": return "#00ffcc";
+    case "STRONG_SHORT": return "#ff4444";
+    case "WATCH_LONG": return "#00cc99";
+    case "WATCH_SHORT": return "#ff8844";
+    case "BLOCKED": return "#ff4444";
+    default: return "#484849";
+  }
+}
+
+function AgentIntelPanel({ stocks }: { stocks: StockNodeData[] }) {
+  const {
+    cycleId, isRunning, connected, agents, decisions,
+    cycleStartedAt, cycleFinishedAt, cycleLatencyMs,
+    triggerCycle, error,
+  } = useBrainCycleContext();
+
+  const [expanded, setExpanded] = useState(true);
+
+  const handleRunCycle = useCallback(() => {
+    const symbols = stocks.map((s) => s.symbol).slice(0, 10);
+    if (symbols.length > 0) triggerCycle(symbols);
+  }, [stocks, triggerCycle]);
+
+  const agentList = useMemo(() => Array.from(agents.values()), [agents]);
+  const doneCount = agentList.filter((a) => a.status === "done").length;
+  const errorCount = agentList.filter((a) => a.status === "error").length;
+  const runningCount = agentList.filter((a) => a.status === "running").length;
+
+  return (
+    <div style={{
+      ...panelStyle,
+      padding: "10px 12px",
+      maxHeight: expanded ? "520px" : "42px",
+      overflow: "hidden",
+      transition: "max-height 0.3s ease",
+    }}>
+      {/* Header */}
+      <div
+        onClick={() => setExpanded(!expanded)}
+        style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          cursor: "pointer", marginBottom: expanded ? "8px" : 0,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <span className="material-symbols-outlined" style={{
+            fontSize: "14px",
+            color: isRunning ? "#ffcc00" : connected ? "#00ffcc" : "#ff4444",
+            animation: isRunning ? "glowPulse 0.5s ease-in-out infinite" : "none",
+          }}>hub</span>
+          <span style={{ fontSize: "10px", fontWeight: 700, color: "#ffffff", fontFamily: "Space Grotesk", letterSpacing: "0.08em" }}>
+            AGENTS {cycleId > 0 ? `#${cycleId}` : ""}
+          </span>
+          {isRunning && (
+            <span style={{ fontSize: "8px", color: "#ffcc00", fontFamily: "JetBrains Mono", animation: "glowPulse 1s ease-in-out infinite" }}>
+              RUNNING
+            </span>
+          )}
+        </div>
+        <span className="material-symbols-outlined" style={{ fontSize: "14px", color: "#484849", transform: expanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>
+          expand_more
+        </span>
+      </div>
+
+      {expanded && (
+        <>
+          {/* Run Cycle Button */}
+          <button
+            onClick={handleRunCycle}
+            disabled={isRunning}
+            style={{
+              width: "100%", padding: "6px 10px", marginBottom: "8px",
+              borderRadius: "4px", border: "1px solid rgba(0,255,204,0.2)",
+              backgroundColor: isRunning ? "rgba(255,204,0,0.05)" : "rgba(0,255,204,0.06)",
+              color: isRunning ? "#ffcc00" : "#00ffcc",
+              fontSize: "9px", fontWeight: 700, fontFamily: "Space Grotesk",
+              letterSpacing: "0.1em", cursor: isRunning ? "wait" : "pointer",
+              transition: "all 0.15s",
+            }}
+          >
+            {isRunning ? "CYCLE RUNNING..." : "RUN BRAIN CYCLE"}
+          </button>
+
+          {/* 6-Layer Agent Grid */}
+          {agentList.length > 0 && (() => {
+            // Separate layer agents from sub-agents
+            const layers = agentList.filter((a) => a.agentId.startsWith("L"));
+            const subs = agentList.filter((a) => !a.agentId.startsWith("L"));
+
+            return (
+              <div style={{ display: "flex", flexDirection: "column", gap: "2px", marginBottom: "8px" }}>
+                <div style={{ fontSize: "8px", color: "#484849", fontFamily: "JetBrains Mono", marginBottom: "2px" }}>
+                  {layers.filter((a) => a.status === "done").length}/6 LAYERS {runningCount > 0 ? ` \u00B7 ${runningCount} ACTIVE` : ""}{errorCount > 0 ? ` \u00B7 ${errorCount} ERR` : ""}
+                </div>
+
+                {/* Layer agents — prominent */}
+                {layers.map((agent) => {
+                  const info = AGENT_LABELS[agent.agentId] ?? { label: agent.agentId, icon: "smart_toy" };
+                  const layerColor = info.color ?? getAgentStatusColor(agent.status);
+                  // Find sub-agents belonging to this layer
+                  const layerSubs = subs.filter((s) => {
+                    // Match by symbol and approximate timing
+                    return s.symbol === agent.symbol;
+                  });
+
+                  return (
+                    <div key={`${agent.agentId}:${agent.symbol}`}>
+                      {/* Layer row */}
+                      <div style={{
+                        display: "flex", alignItems: "center", gap: "5px",
+                        padding: "4px 6px", borderRadius: "4px",
+                        backgroundColor: agent.status === "running" ? `${layerColor}08` : agent.status === "done" ? `${layerColor}06` : "transparent",
+                        borderLeft: `2px solid ${agent.status === "done" ? layerColor : agent.status === "running" ? "#ffcc00" : "#333"}`,
+                      }}>
+                        <div style={{
+                          width: "6px", height: "6px", borderRadius: "50%",
+                          backgroundColor: agent.status === "running" ? "#ffcc00" : agent.status === "done" ? layerColor : "#484849",
+                          boxShadow: `0 0 4px ${agent.status === "running" ? "#ffcc00" : layerColor}`,
+                          animation: agent.status === "running" ? "glowPulse 0.5s ease-in-out infinite" : "none",
+                        }} />
+                        <span className="material-symbols-outlined" style={{ fontSize: "12px", color: agent.status === "done" ? layerColor : "#666" }}>
+                          {info.icon}
+                        </span>
+                        <span style={{ fontSize: "8px", fontWeight: 700, color: agent.status === "done" ? "#fff" : "#888", fontFamily: "Space Grotesk", flex: 1, letterSpacing: "0.05em" }}>
+                          {info.label}
+                        </span>
+                        {agent.report && (
+                          <span style={{
+                            fontSize: "8px", fontWeight: 700, fontFamily: "JetBrains Mono",
+                            color: agent.report.score > 0.6 ? layerColor : agent.report.score < 0.35 ? "#ff4444" : "#888",
+                          }}>
+                            {(agent.report.score * 100).toFixed(0)}%
+                          </span>
+                        )}
+                      </div>
+                      {/* Score bar */}
+                      {agent.report && (
+                        <div style={{ height: "2px", marginLeft: "8px", marginRight: "4px", marginTop: "1px", marginBottom: "2px", borderRadius: "1px", backgroundColor: "#1a1a1a" }}>
+                          <div style={{
+                            height: "100%", borderRadius: "1px", transition: "width 0.5s ease",
+                            width: `${Math.max(2, agent.report.score * 100)}%`,
+                            backgroundColor: agent.report.score > 0.6 ? layerColor : agent.report.score > 0.4 ? "#ffcc00" : "#ff4444",
+                            opacity: 0.7,
+                          }} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
+          {/* Latest Decisions */}
+          {decisions.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+              <div style={{ fontSize: "8px", color: "#484849", fontFamily: "JetBrains Mono", letterSpacing: "0.1em" }}>
+                DECISIONS
+              </div>
+              {decisions.slice(0, 4).map((d, i) => (
+                <div key={i} style={{
+                  padding: "5px 7px", borderRadius: "4px",
+                  backgroundColor: "rgba(0,255,204,0.03)",
+                  border: `1px solid ${getActionColor(d.action)}22`,
+                }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: "9px", fontWeight: 700, color: getActionColor(d.action), fontFamily: "Space Grotesk" }}>
+                      {d.symbol} {d.action.replace("_", " ")}
+                    </span>
+                    <span style={{ fontSize: "8px", color: "#666", fontFamily: "JetBrains Mono" }}>
+                      {(d.confidence * 100).toFixed(0)}%
+                    </span>
+                  </div>
+                  <div style={{ fontSize: "7px", color: "#767576", fontFamily: "JetBrains Mono", marginTop: "2px", lineHeight: "1.3" }}>
+                    {d.reasoning.length > 120 ? d.reasoning.slice(0, 120) + "..." : d.reasoning}
+                  </div>
+                  {d.riskGate !== "ALLOW" && (
+                    <div style={{ fontSize: "7px", color: d.riskGate === "BLOCK" ? "#ff4444" : "#ffcc00", fontFamily: "JetBrains Mono", marginTop: "2px" }}>
+                      RISK: {d.riskGate}{d.blockReason ? ` \u2014 ${d.blockReason}` : ""}
+                    </div>
+                  )}
+                  {/* Agent summary bar */}
+                  <div style={{ display: "flex", gap: "3px", marginTop: "3px" }}>
+                    {d.agentReports?.map((r, j) => {
+                      const info = AGENT_LABELS[r.agentId] ?? { label: r.agentId, icon: "smart_toy" };
+                      return (
+                        <div key={j} title={`${info.label}: ${r.verdict}`} style={{
+                          flex: 1, height: "3px", borderRadius: "1.5px",
+                          backgroundColor: r.score > 0.6 ? "#00ffcc" : r.score > 0.4 ? "#ffcc00" : "#ff4444",
+                          opacity: 0.6,
+                        }} />
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Cycle timing */}
+          {cycleLatencyMs != null && (
+            <div style={{ fontSize: "7px", color: "#484849", fontFamily: "JetBrains Mono", marginTop: "6px", textAlign: "center" }}>
+              CYCLE #{cycleId} \u00B7 {cycleLatencyMs}ms \u00B7 {decisions.length} decisions
+            </div>
+          )}
+
+          {/* Error */}
+          {error && (
+            <div style={{ fontSize: "8px", color: "#ff4444", fontFamily: "JetBrains Mono", marginTop: "4px", padding: "4px", backgroundColor: "rgba(255,68,68,0.05)", borderRadius: "3px" }}>
+              {error}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PHASE 7: LIVE EXECUTION BRIDGE PANEL
+// ═══════════════════════════════════════════════════════════════════════════
+
+function ExecutionBridgePanel({ stocks }: { stocks: StockNodeData[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const [activeTab, setActiveTab] = useState<"positions" | "history" | "stats">("positions");
+  const [selectedSymbol, setSelectedSymbol] = useState(stocks[0]?.symbol ?? "SPY");
+
+  const { data: bridge } = useExecutionBridgeStatus();
+  const { data: pnl } = useBrainPnL();
+  const { data: portfolio } = usePortfolioStats();
+  const { data: outcomes } = useTradeOutcomes(selectedSymbol, 20);
+  const closePos = useClosePosition();
+  const startTracker = useStartPnLTracker();
+  const stopTracker = useStopPnLTracker();
+
+  const bridgeEnabled = bridge?.enabled ?? false;
+  const openCount = bridge?.openPositions?.length ?? 0;
+  const todayPnl = pnl?.todayPnlR ?? 0;
+  const allTimePnl = pnl?.allTimePnlR ?? 0;
+  const pnlColor = todayPnl >= 0 ? "#00e676" : "#ff1744";
+
+  return (
+    <div style={{ background: "#0f111a", borderRadius: "10px", border: `2px solid ${bridgeEnabled ? "#7c3aed" : "#1e2235"}`, overflow: "hidden" }}>
+      <div
+        style={{ padding: "8px 10px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", background: "#12141f" }}
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <span style={{ fontSize: "10px", color: "#7c3aed", fontWeight: 700, letterSpacing: "0.15em" }}>⚡ LIVE EXECUTION</span>
+          {bridgeEnabled && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#00e676", display: "inline-block" }} />}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <span style={{ fontSize: "9px", color: pnlColor, fontWeight: 700 }}>{todayPnl >= 0 ? "+" : ""}{todayPnl.toFixed(2)}R today</span>
+          <span style={{ fontSize: "10px", color: "#555" }}>{expanded ? "▲" : "▼"}</span>
+        </div>
+      </div>
+      {expanded && (
+        <div style={{ padding: "8px 10px" }}>
+          {/* Status row */}
+          <div style={{ display: "flex", gap: "6px", marginBottom: "8px", flexWrap: "wrap" }}>
+            {[
+              { label: "POSITIONS", val: openCount, color: openCount > 0 ? "#fbbf24" : "#555" },
+              { label: "APPROVED", val: bridge?.totalApproved ?? 0, color: "#00e676" },
+              { label: "BLOCKED", val: bridge?.totalBlocked ?? 0, color: "#ff1744" },
+              { label: "ALL-TIME R", val: `${allTimePnl >= 0 ? "+" : ""}${allTimePnl.toFixed(1)}`, color: allTimePnl >= 0 ? "#00e676" : "#ff1744" },
+            ].map(({ label, val, color }) => (
+              <div key={label} style={{ flex: 1, minWidth: "44px", background: "#0a0c14", borderRadius: 4, padding: "3px 4px", textAlign: "center" }}>
+                <div style={{ fontSize: "11px", color, fontWeight: 700 }}>{val}</div>
+                <div style={{ fontSize: "8px", color: "#555" }}>{label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Tabs */}
+          <div style={{ display: "flex", gap: "4px", marginBottom: "8px" }}>
+            {(["positions", "history", "stats"] as const).map((t) => (
+              <button key={t} onClick={() => setActiveTab(t)}
+                style={{ flex: 1, padding: "3px 0", background: activeTab === t ? "#7c3aed" : "#1a1d2e", border: "none", borderRadius: 4, color: activeTab === t ? "#fff" : "#666", fontSize: "9px", cursor: "pointer", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                {t}
+              </button>
+            ))}
+          </div>
+
+          {activeTab === "positions" && (
+            <div>
+              {(pnl?.openPositions ?? []).length === 0 ? (
+                <div style={{ textAlign: "center", color: "#444", fontSize: "10px", padding: "12px 0" }}>No open positions</div>
+              ) : (
+                (pnl?.openPositions ?? []).map((pos: BrainPositionSnapshot) => (
+                  <div key={pos.symbol} style={{ background: "#0a0c14", borderRadius: 4, padding: "6px 8px", marginBottom: "4px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ fontSize: "10px", color: pos.direction === "long" ? "#00e676" : "#ff6b6b", fontWeight: 700 }}>
+                        {pos.direction === "long" ? "▲" : "▼"} {pos.symbol}
+                      </span>
+                      <span style={{ fontSize: "10px", color: pos.unrealizedPnlR >= 0 ? "#00e676" : "#ff1744", fontWeight: 700 }}>
+                        {pos.unrealizedPnlR >= 0 ? "+" : ""}{pos.unrealizedPnlR.toFixed(2)}R
+                      </span>
+                    </div>
+                    <div style={{ fontSize: "9px", color: "#666", marginTop: "2px" }}>
+                      Entry {pos.entryPrice.toFixed(2)} → Current {pos.currentPrice.toFixed(2)} | {pos.ageMinutes}min
+                    </div>
+                    <div style={{ display: "flex", gap: "4px", marginTop: "4px" }}>
+                      <span style={{ flex: 1, fontSize: "8px", color: "#ff6b6b", background: "#1a1020", padding: "2px 3px", borderRadius: 2, textAlign: "center" }}>
+                        SL {pos.stopLoss.toFixed(2)}
+                      </span>
+                      <span style={{ flex: 1, fontSize: "8px", color: "#00e676", background: "#0a1a10", padding: "2px 3px", borderRadius: 2, textAlign: "center" }}>
+                        TP {pos.takeProfit.toFixed(2)}
+                      </span>
+                    </div>
+                    <div style={{ display: "flex", gap: "3px", marginTop: "4px" }}>
+                      <button onClick={() => closePos.mutate({ symbol: pos.symbol, exitPrice: pos.currentPrice, reason: "MANUAL" })}
+                        style={{ flex: 1, padding: "2px 0", background: "#ff1744", border: "none", borderRadius: 3, color: "#fff", fontSize: "8px", cursor: "pointer", fontWeight: 700 }}>
+                        CLOSE
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+              {/* P&L Today row */}
+              <div style={{ borderTop: "1px solid #1e2235", marginTop: "6px", paddingTop: "6px", display: "flex", justifyContent: "space-between" }}>
+                <span style={{ fontSize: "9px", color: "#666" }}>Today: {pnl?.todayWins ?? 0}W / {pnl?.todayLosses ?? 0}L</span>
+                <span style={{ fontSize: "9px", color: pnlColor, fontWeight: 700 }}>WR {((pnl?.runningWinRate ?? 0) * 100).toFixed(0)}%</span>
+              </div>
+            </div>
+          )}
+
+          {activeTab === "history" && (
+            <div>
+              <select value={selectedSymbol} onChange={(e) => setSelectedSymbol(e.target.value)}
+                style={{ width: "100%", background: "#1a1d2e", color: "#ccc", border: "1px solid #2a2d3e", borderRadius: 4, padding: "3px 5px", fontSize: "10px", marginBottom: "6px" }}>
+                {stocks.map((s) => <option key={s.symbol} value={s.symbol}>{s.symbol}</option>)}
+              </select>
+              {(outcomes?.outcomes ?? []).slice(0, 10).map((o: TradeOutcomeItem) => (
+                <div key={o.id} style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", borderBottom: "1px solid #1a1d2e" }}>
+                  <span style={{ fontSize: "9px", color: o.outcome === "WIN" ? "#00e676" : o.outcome === "LOSS" ? "#ff6b6b" : "#fbbf24" }}>
+                    {o.outcome ?? "?"} {o.direction.toUpperCase()[0]}
+                  </span>
+                  <span style={{ fontSize: "9px", color: Number(o.pnl_r ?? 0) >= 0 ? "#00e676" : "#ff6b6b" }}>
+                    {Number(o.pnl_r ?? 0) >= 0 ? "+" : ""}{Number(o.pnl_r ?? 0).toFixed(2)}R
+                  </span>
+                  <span style={{ fontSize: "8px", color: "#555" }}>
+                    {o.regime?.substring(0, 6) ?? "?"}
+                  </span>
+                </div>
+              ))}
+              {(outcomes?.outcomes ?? []).length === 0 && (
+                <div style={{ textAlign: "center", color: "#444", fontSize: "10px", padding: "8px 0" }}>No outcomes recorded yet</div>
+              )}
+            </div>
+          )}
+
+          {activeTab === "stats" && (
+            <div>
+              <div style={{ fontSize: "9px", color: "#666", marginBottom: "6px", letterSpacing: "0.1em" }}>PORTFOLIO PERFORMANCE</div>
+              {(portfolio?.stats ?? []).slice(0, 6).map((s: any) => (
+                <div key={s.symbol} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "3px 0", borderBottom: "1px solid #1a1d2e" }}>
+                  <span style={{ fontSize: "9px", color: "#aaa", fontWeight: 600 }}>{s.symbol}</span>
+                  <span style={{ fontSize: "9px", color: s.winRate >= 0.5 ? "#00e676" : "#ff6b6b" }}>{(s.winRate * 100).toFixed(0)}% WR</span>
+                  <span style={{ fontSize: "9px", color: s.totalPnlR >= 0 ? "#00e676" : "#ff1744", fontWeight: 700 }}>
+                    {s.totalPnlR >= 0 ? "+" : ""}{s.totalPnlR.toFixed(1)}R
+                  </span>
+                </div>
+              ))}
+              {(portfolio?.stats ?? []).length === 0 && (
+                <div style={{ textAlign: "center", color: "#444", fontSize: "10px", padding: "8px 0" }}>No portfolio data yet</div>
+              )}
+              {/* Bridge config */}
+              <div style={{ marginTop: "8px", background: "#0a0c14", borderRadius: 4, padding: "6px 8px" }}>
+                <div style={{ fontSize: "8px", color: "#555", marginBottom: "4px" }}>BRIDGE CONFIG</div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: "9px", color: "#666" }}>Min Score</span>
+                  <span style={{ fontSize: "9px", color: "#ccc" }}>{bridge?.config?.minScore ?? "--"}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: "9px", color: "#666" }}>Min Win Prob</span>
+                  <span style={{ fontSize: "9px", color: "#ccc" }}>{((bridge?.config?.minWinProb ?? 0) * 100).toFixed(0)}%</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: "9px", color: "#666" }}>Max Positions</span>
+                  <span style={{ fontSize: "9px", color: "#ccc" }}>{bridge?.config?.maxPositions ?? "--"}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: "9px", color: "#666" }}>Risk/Trade</span>
+                  <span style={{ fontSize: "9px", color: "#ccc" }}>{bridge?.config?.riskPerTradePct ?? "--"}%</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PHASE 7: JOB HISTORY + LATENCY ANALYTICS PANEL
+// ═══════════════════════════════════════════════════════════════════════════
+
+function JobHistoryPanel({ stocks }: { stocks: StockNodeData[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const [activeTab, setActiveTab] = useState<"recent" | "latency">("recent");
+  const [filterType, setFilterType] = useState<string>("");
+
+  const { data: historyData } = useJobHistory(50, filterType || undefined);
+  const { data: latencyData } = useJobLatencyStats();
+
+  const jobTypeOptions = ["", "SCAN_SYMBOL", "BACKTEST", "EVOLVE_STRATEGY", "RETRAIN_ML", "CHART_SNAPSHOT", "RANK_SYMBOLS"];
+
+  const statusColor = (s: string) => {
+    if (s === "completed") return "#00e676";
+    if (s === "failed") return "#ff1744";
+    if (s === "cancelled") return "#fbbf24";
+    return "#888";
+  };
+
+  return (
+    <div style={{ background: "#0f111a", borderRadius: "10px", border: "2px solid #1e2235", overflow: "hidden" }}>
+      <div
+        style={{ padding: "8px 10px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", background: "#12141f" }}
+        onClick={() => setExpanded(!expanded)}
+      >
+        <span style={{ fontSize: "10px", color: "#22d3ee", fontWeight: 700, letterSpacing: "0.15em" }}>📋 JOB HISTORY</span>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <span style={{ fontSize: "9px", color: "#666" }}>{historyData?.count ?? 0} records</span>
+          <span style={{ fontSize: "10px", color: "#555" }}>{expanded ? "▲" : "▼"}</span>
+        </div>
+      </div>
+      {expanded && (
+        <div style={{ padding: "8px 10px" }}>
+          {/* Tabs */}
+          <div style={{ display: "flex", gap: "4px", marginBottom: "8px" }}>
+            {(["recent", "latency"] as const).map((t) => (
+              <button key={t} onClick={() => setActiveTab(t)}
+                style={{ flex: 1, padding: "3px 0", background: activeTab === t ? "#22d3ee" : "#1a1d2e", border: "none", borderRadius: 4, color: activeTab === t ? "#000" : "#666", fontSize: "9px", cursor: "pointer", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                {t}
+              </button>
+            ))}
+          </div>
+
+          {activeTab === "recent" && (
+            <div>
+              <select value={filterType} onChange={(e) => setFilterType(e.target.value)}
+                style={{ width: "100%", background: "#1a1d2e", color: "#ccc", border: "1px solid #2a2d3e", borderRadius: 4, padding: "3px 5px", fontSize: "10px", marginBottom: "6px" }}>
+                {jobTypeOptions.map((t) => <option key={t} value={t}>{t || "All Types"}</option>)}
+              </select>
+              {(historyData?.jobs ?? []).slice(0, 15).map((j: JobHistoryItem) => (
+                <div key={j.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "3px 0", borderBottom: "1px solid #1a1d2e" }}>
+                  <div style={{ flex: 1 }}>
+                    <span style={{ fontSize: "9px", color: "#ccc", fontWeight: 600 }}>{j.job_type.replace("_", " ")}</span>
+                    {j.symbol && <span style={{ fontSize: "8px", color: "#555", marginLeft: "4px" }}>{j.symbol}</span>}
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <span style={{ fontSize: "9px", color: statusColor(j.status) }}>{j.status.toUpperCase()[0]}</span>
+                    {j.latency_ms && <span style={{ fontSize: "8px", color: "#555", marginLeft: "4px" }}>{j.latency_ms < 1000 ? `${j.latency_ms}ms` : `${(j.latency_ms / 1000).toFixed(1)}s`}</span>}
+                  </div>
+                </div>
+              ))}
+              {(historyData?.jobs ?? []).length === 0 && (
+                <div style={{ textAlign: "center", color: "#444", fontSize: "10px", padding: "8px 0" }}>No job history yet</div>
+              )}
+            </div>
+          )}
+
+          {activeTab === "latency" && (
+            <div>
+              {(latencyData?.stats ?? []).map((s: any) => (
+                <div key={s.jobType} style={{ background: "#0a0c14", borderRadius: 4, padding: "5px 7px", marginBottom: "4px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "3px" }}>
+                    <span style={{ fontSize: "9px", color: "#ccc", fontWeight: 600 }}>{s.jobType.replace(/_/g, " ")}</span>
+                    <span style={{ fontSize: "8px", color: "#555" }}>{s.count} jobs</span>
+                  </div>
+                  <div style={{ display: "flex", gap: "6px" }}>
+                    <div style={{ flex: 1, textAlign: "center" }}>
+                      <div style={{ fontSize: "10px", color: "#22d3ee", fontWeight: 700 }}>{s.p50LatencyMs ? `${(s.p50LatencyMs / 1000).toFixed(1)}s` : "—"}</div>
+                      <div style={{ fontSize: "7px", color: "#555" }}>P50</div>
+                    </div>
+                    <div style={{ flex: 1, textAlign: "center" }}>
+                      <div style={{ fontSize: "10px", color: "#fbbf24", fontWeight: 700 }}>{s.p95LatencyMs ? `${(s.p95LatencyMs / 1000).toFixed(1)}s` : "—"}</div>
+                      <div style={{ fontSize: "7px", color: "#555" }}>P95</div>
+                    </div>
+                    <div style={{ flex: 1, textAlign: "center" }}>
+                      <div style={{ fontSize: "10px", color: s.failCount > 0 ? "#ff6b6b" : "#00e676", fontWeight: 700 }}>{s.failCount}</div>
+                      <div style={{ fontSize: "7px", color: "#555" }}>FAIL</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {(latencyData?.stats ?? []).length === 0 && (
+                <div style={{ textAlign: "center", color: "#444", fontSize: "10px", padding: "8px 0" }}>No latency data yet</div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PHASE 8: ALERT FEED PANEL
+// ═══════════════════════════════════════════════════════════════════════════
+
+function AlertFeedPanel() {
+  const [expanded, setExpanded] = useState(false);
+  const [activeTab, setActiveTab] = useState<"all" | "warnings" | "critical">("all");
+  const { data: alertData } = useBrainAlerts(30, activeTab === "all" ? undefined : activeTab.toUpperCase());
+  const markRead = useMarkAlertsRead();
+
+  const alerts = alertData?.alerts ?? [];
+  const stats = alertData?.stats;
+  const unread = stats?.unread ?? 0;
+
+  const levelColor = (level: string) => {
+    if (level === "CRITICAL") return "#ff1744";
+    if (level === "WARNING") return "#fbbf24";
+    return "#22d3ee";
+  };
+
+  const codeIcon = (code: string) => {
+    if (code.includes("TP_HIT")) return "✓";
+    if (code.includes("SL_HIT")) return "✗";
+    if (code.includes("ELITE")) return "★";
+    if (code.includes("DEFENSIVE")) return "🛡";
+    if (code.includes("CONTAGION")) return "⚠";
+    if (code.includes("LOSSES")) return "📉";
+    if (code.includes("BRAIN_STOPPED")) return "💀";
+    return "●";
+  };
+
+  return (
+    <div style={{ background: "#0f111a", borderRadius: "10px", border: `2px solid ${unread > 0 ? "#ff6b35" : "#1e2235"}`, overflow: "hidden" }}>
+      <div
+        style={{ padding: "8px 10px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", background: "#12141f" }}
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <span style={{ fontSize: "10px", color: "#ff6b35", fontWeight: 700, letterSpacing: "0.15em" }}>🔔 ALERTS</span>
+          {unread > 0 && (
+            <span style={{ background: "#ff1744", color: "#fff", borderRadius: "8px", padding: "0 5px", fontSize: "8px", fontWeight: 700 }}>{unread}</span>
+          )}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <span style={{ fontSize: "9px", color: "#666" }}>{alertData?.count ?? 0} total</span>
+          <span style={{ fontSize: "10px", color: "#555" }}>{expanded ? "▲" : "▼"}</span>
+        </div>
+      </div>
+      {expanded && (
+        <div style={{ padding: "8px 10px" }}>
+          {/* Tabs */}
+          <div style={{ display: "flex", gap: "4px", marginBottom: "8px" }}>
+            {(["all", "warnings", "critical"] as const).map((t) => (
+              <button key={t} onClick={() => setActiveTab(t)}
+                style={{ flex: 1, padding: "3px 0", background: activeTab === t ? "#ff6b35" : "#1a1d2e", border: "none", borderRadius: 4, color: activeTab === t ? "#000" : "#666", fontSize: "9px", cursor: "pointer", fontWeight: 600, textTransform: "uppercase" }}>
+                {t}
+              </button>
+            ))}
+          </div>
+
+          {/* Mark all read */}
+          {unread > 0 && (
+            <button onClick={() => markRead.mutate({ all: true })}
+              style={{ width: "100%", padding: "3px 0", background: "#1a1d2e", border: "1px solid #2a2d3e", borderRadius: 4, color: "#888", fontSize: "9px", cursor: "pointer", marginBottom: "6px" }}>
+              Mark all read ({unread})
+            </button>
+          )}
+
+          {/* Alert list */}
+          <div style={{ maxHeight: "200px", overflowY: "auto" }}>
+            {alerts.slice(0, 15).map((a: BrainAlertItem) => (
+              <div key={a.id} style={{
+                padding: "5px 7px", marginBottom: "4px", borderRadius: 4,
+                background: a.readAt ? "#0a0c14" : "#12142a",
+                borderLeft: `3px solid ${levelColor(a.level)}`,
+                opacity: a.readAt ? 0.7 : 1,
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: "9px", color: levelColor(a.level), fontWeight: 700 }}>
+                    {codeIcon(a.code)} {a.title}
+                  </span>
+                  {a.symbol && <span style={{ fontSize: "8px", color: "#555" }}>{a.symbol}</span>}
+                </div>
+                <div style={{ fontSize: "9px", color: "#888", marginTop: "2px", lineHeight: "1.3" }}>{a.message}</div>
+                <div style={{ fontSize: "8px", color: "#444", marginTop: "2px" }}>
+                  {new Date(a.createdAt).toISOString().slice(11, 19)}
+                </div>
+              </div>
+            ))}
+            {alerts.length === 0 && (
+              <div style={{ textAlign: "center", color: "#444", fontSize: "10px", padding: "12px 0" }}>No alerts</div>
+            )}
+          </div>
+
+          {/* Stats row */}
+          <div style={{ borderTop: "1px solid #1e2235", marginTop: "6px", paddingTop: "6px", display: "flex", gap: "6px" }}>
+            {[
+              { label: "INFO", val: stats?.byLevel?.INFO ?? 0, color: "#22d3ee" },
+              { label: "WARN", val: stats?.byLevel?.WARNING ?? 0, color: "#fbbf24" },
+              { label: "CRIT", val: stats?.byLevel?.CRITICAL ?? 0, color: "#ff1744" },
+            ].map(({ label, val, color }) => (
+              <div key={label} style={{ flex: 1, textAlign: "center" }}>
+                <div style={{ fontSize: "11px", color, fontWeight: 700 }}>{val}</div>
+                <div style={{ fontSize: "8px", color: "#555" }}>{label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PHASE 8: WATCHDOG + STREAM HEALTH PANEL
+// ═══════════════════════════════════════════════════════════════════════════
+
+function WatchdogPanel() {
+  const [expanded, setExpanded] = useState(false);
+  const { data: watchdogData } = useWatchdogReport();
+  const { data: streamData } = useStreamBridgeStatus();
+  const startWatchdog = useStartWatchdog();
+  const startStream = useStartStreamBridge();
+
+  const report = watchdogData?.report;
+  const overallColor = report?.overallHealth === "HEALTHY" ? "#00e676"
+    : report?.overallHealth === "DEGRADED" ? "#fbbf24"
+    : report?.overallHealth === "FAILED" ? "#ff1744" : "#888";
+
+  const subsystemColor = (h: string) => {
+    if (h === "HEALTHY") return "#00e676";
+    if (h === "DEGRADED") return "#fbbf24";
+    if (h === "FAILED") return "#ff1744";
+    return "#888";
+  };
+
+  return (
+    <div style={{ background: "#0f111a", borderRadius: "10px", border: `2px solid ${overallColor}`, overflow: "hidden" }}>
+      <div
+        style={{ padding: "8px 10px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", background: "#12141f" }}
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <span style={{ fontSize: "10px", color: overallColor, fontWeight: 700, letterSpacing: "0.15em" }}>🩺 WATCHDOG</span>
+          <span style={{ width: 6, height: 6, borderRadius: "50%", background: overallColor, display: "inline-block" }} />
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <span style={{ fontSize: "9px", color: "#666" }}>{report?.memoryUsageMb ?? 0}MB</span>
+          <span style={{ fontSize: "10px", color: "#555" }}>{expanded ? "▲" : "▼"}</span>
+        </div>
+      </div>
+      {expanded && (
+        <div style={{ padding: "8px 10px" }}>
+          {/* Controls */}
+          <div style={{ display: "flex", gap: "4px", marginBottom: "8px" }}>
+            <button onClick={() => startWatchdog.mutate()}
+              style={{ flex: 1, padding: "3px 0", background: "#1a2e1a", border: "1px solid #00e676", borderRadius: 4, color: "#00e676", fontSize: "9px", cursor: "pointer" }}>
+              Start Watchdog
+            </button>
+            <button onClick={() => startStream.mutate()}
+              style={{ flex: 1, padding: "3px 0", background: "#1a1a2e", border: "1px solid #7c3aed", borderRadius: 4, color: "#7c3aed", fontSize: "9px", cursor: "pointer" }}>
+              Start Stream
+            </button>
+          </div>
+
+          {/* Subsystems */}
+          <div style={{ fontSize: "9px", color: "#666", marginBottom: "4px", letterSpacing: "0.1em" }}>SUBSYSTEMS</div>
+          {(report?.subsystems ?? []).map((s: any) => (
+            <div key={s.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "3px 0", borderBottom: "1px solid #1a1d2e" }}>
+              <span style={{ fontSize: "9px", color: "#aaa" }}>{s.name.replace(/_/g, " ")}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                {s.restartCount > 0 && <span style={{ fontSize: "8px", color: "#fbbf24" }}>↺{s.restartCount}</span>}
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: subsystemColor(s.health), display: "inline-block" }} />
+              </div>
+            </div>
+          ))}
+
+          {/* Stream status */}
+          <div style={{ marginTop: "8px", background: "#0a0c14", borderRadius: 4, padding: "5px 7px" }}>
+            <div style={{ fontSize: "8px", color: "#555", marginBottom: "3px" }}>STREAM BRIDGE</div>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span style={{ fontSize: "9px", color: "#666" }}>WS</span>
+              <span style={{ fontSize: "9px", color: streamData?.stockWsConnected ? "#00e676" : "#ff6b6b" }}>
+                {streamData?.stockWsConnected ? "CONNECTED" : "OFFLINE"}
+              </span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span style={{ fontSize: "9px", color: "#666" }}>Ticks</span>
+              <span style={{ fontSize: "9px", color: "#ccc" }}>{streamData?.totalTicks ?? 0}</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span style={{ fontSize: "9px", color: "#666" }}>Subscribed</span>
+              <span style={{ fontSize: "9px", color: "#ccc" }}>{(streamData?.stockSubscribed ?? []).length}</span>
+            </div>
+          </div>
+
+          {/* Uptime + memory */}
+          <div style={{ display: "flex", gap: "4px", marginTop: "6px" }}>
+            <div style={{ flex: 1, background: "#0a0c14", borderRadius: 4, padding: "4px 6px", textAlign: "center" }}>
+              <div style={{ fontSize: "10px", color: "#22d3ee", fontWeight: 700 }}>
+                {report ? `${Math.floor((report.uptimeSeconds ?? 0) / 3600)}h${Math.floor(((report.uptimeSeconds ?? 0) % 3600) / 60)}m` : "--"}
+              </div>
+              <div style={{ fontSize: "8px", color: "#555" }}>UPTIME</div>
+            </div>
+            <div style={{ flex: 1, background: "#0a0c14", borderRadius: 4, padding: "4px 6px", textAlign: "center" }}>
+              <div style={{ fontSize: "10px", color: (report?.memoryUsageMb ?? 0) > 1000 ? "#ff6b6b" : "#00e676", fontWeight: 700 }}>
+                {report?.memoryUsageMb ?? 0}MB
+              </div>
+              <div style={{ fontSize: "8px", color: "#555" }}>RAM</div>
+            </div>
+            <div style={{ flex: 1, background: "#0a0c14", borderRadius: 4, padding: "4px 6px", textAlign: "center" }}>
+              <div style={{ fontSize: "10px", color: (report?.stuckJobs ?? []).length > 0 ? "#ff1744" : "#00e676", fontWeight: 700 }}>
+                {(report?.stuckJobs ?? []).length}
+              </div>
+              <div style={{ fontSize: "8px", color: "#555" }}>STUCK</div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PHASE 8: CORRELATION + CONTAGION PANEL
+// ═══════════════════════════════════════════════════════════════════════════
+
+function CorrelationPanel() {
+  const [expanded, setExpanded] = useState(false);
+  const { data: corrData } = useCorrelationSummary();
+
+  const contagionColor = !corrData?.contagionScore ? "#555"
+    : corrData.contagionScore > 0.7 ? "#ff1744"
+    : corrData.contagionScore > 0.4 ? "#fbbf24"
+    : "#00e676";
+
+  const divColor = !corrData?.diversificationScore ? "#555"
+    : corrData.diversificationScore > 0.7 ? "#00e676"
+    : corrData.diversificationScore > 0.4 ? "#fbbf24"
+    : "#ff6b6b";
+
+  return (
+    <div style={{ background: "#0f111a", borderRadius: "10px", border: `2px solid ${corrData?.hasContagionAlert ? "#ff1744" : "#1e2235"}`, overflow: "hidden" }}>
+      <div
+        style={{ padding: "8px 10px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", background: "#12141f" }}
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <span style={{ fontSize: "10px", color: "#a855f7", fontWeight: 700, letterSpacing: "0.15em" }}>🕸 CORRELATION</span>
+          {corrData?.hasContagionAlert && (
+            <span style={{ background: "#ff1744", color: "#fff", borderRadius: 3, padding: "0 4px", fontSize: "7px", fontWeight: 700 }}>CONTAGION</span>
+          )}
+        </div>
+        <span style={{ fontSize: "10px", color: "#555" }}>{expanded ? "▲" : "▼"}</span>
+      </div>
+      {expanded && (
+        <div style={{ padding: "8px 10px" }}>
+          {/* Key metrics */}
+          <div style={{ display: "flex", gap: "4px", marginBottom: "8px" }}>
+            <div style={{ flex: 1, background: "#0a0c14", borderRadius: 4, padding: "4px 6px", textAlign: "center" }}>
+              <div style={{ fontSize: "10px", color: contagionColor, fontWeight: 700 }}>{((corrData?.contagionScore ?? 0) * 100).toFixed(0)}%</div>
+              <div style={{ fontSize: "8px", color: "#555" }}>CONTAGION</div>
+            </div>
+            <div style={{ flex: 1, background: "#0a0c14", borderRadius: 4, padding: "4px 6px", textAlign: "center" }}>
+              <div style={{ fontSize: "10px", color: divColor, fontWeight: 700 }}>{((corrData?.diversificationScore ?? 1) * 100).toFixed(0)}%</div>
+              <div style={{ fontSize: "8px", color: "#555" }}>DIVERSIFIED</div>
+            </div>
+            <div style={{ flex: 1, background: "#0a0c14", borderRadius: 4, padding: "4px 6px", textAlign: "center" }}>
+              <div style={{ fontSize: "10px", color: "#ccc", fontWeight: 700 }}>{corrData?.trackedSymbols ?? 0}</div>
+              <div style={{ fontSize: "8px", color: "#555" }}>SYMBOLS</div>
+            </div>
+          </div>
+
+          {/* Contagion alert */}
+          {corrData?.contagionAlert && (
+            <div style={{ background: "#1a0a0a", border: "1px solid #ff1744", borderRadius: 4, padding: "6px 8px", marginBottom: "8px" }}>
+              <div style={{ fontSize: "9px", color: "#ff1744", fontWeight: 700 }}>⚠ {corrData.contagionAlert.severity}</div>
+              <div style={{ fontSize: "8px", color: "#cc6666", marginTop: "2px" }}>{corrData.contagionAlert.message}</div>
+            </div>
+          )}
+
+          {/* Top correlations */}
+          <div style={{ fontSize: "9px", color: "#666", marginBottom: "4px" }}>TOP CORRELATIONS</div>
+          {(corrData?.topCorrelations ?? []).slice(0, 4).map((p: any, i: number) => (
+            <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0", borderBottom: "1px solid #1a1d2e" }}>
+              <span style={{ fontSize: "8px", color: "#888" }}>{p.symbolA}/{p.symbolB}</span>
+              <span style={{ fontSize: "9px", fontWeight: 700, color: p.correlation > 0.8 ? "#ff6b6b" : p.correlation > 0.5 ? "#fbbf24" : "#00e676" }}>
+                {(p.correlation * 100).toFixed(0)}%
+              </span>
+            </div>
+          ))}
+          {(corrData?.topCorrelations ?? []).length === 0 && (
+            <div style={{ textAlign: "center", color: "#444", fontSize: "10px", padding: "6px 0" }}>Insufficient data</div>
+          )}
+
+          {/* Portfolio betas to SPY */}
+          {(corrData?.portfolioBetas ?? []).length > 0 && (
+            <>
+              <div style={{ fontSize: "9px", color: "#666", marginBottom: "4px", marginTop: "8px" }}>BETA TO SPY</div>
+              {(corrData?.portfolioBetas ?? []).slice(0, 4).map((b: any) => (
+                <div key={b.symbol} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0" }}>
+                  <span style={{ fontSize: "8px", color: "#888" }}>{b.symbol}</span>
+                  <span style={{ fontSize: "8px", color: b.direction === "HEDGE" ? "#a855f7" : b.direction === "ALIGNED" ? "#ff6b6b" : "#888" }}>
+                    {b.betaToSpy >= 0 ? "+" : ""}{(b.betaToSpy * 100).toFixed(0)}% {b.direction[0]}
+                  </span>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PHASE 8: EQUITY CURVE + PERFORMANCE PANEL
+// ═══════════════════════════════════════════════════════════════════════════
+
+function PerformancePanel({ stocks }: { stocks: StockNodeData[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const [selectedSymbol, setSelectedSymbol] = useState(stocks[0]?.symbol ?? "SPY");
+
+  const { data: perfData } = useBrainPerformance(selectedSymbol);
+  const { data: portfolioData } = usePortfolioEquityCurve();
+
+  const totalPnlR = perfData?.totalPnlR ?? 0;
+  const pnlColor = totalPnlR >= 0 ? "#00e676" : "#ff1744";
+
+  // Mini sparkline for equity curve
+  const curve = perfData?.equityCurve ?? [];
+  const curvePoints = curve.length > 1 ? (() => {
+    const minR = Math.min(...curve.map((p: EquityPoint) => p.cumulativeR));
+    const maxR = Math.max(...curve.map((p: EquityPoint) => p.cumulativeR));
+    const range = maxR - minR || 1;
+    const W = 180, H = 40;
+    return curve.map((p: EquityPoint, i: number) => ({
+      x: (i / (curve.length - 1)) * W,
+      y: H - ((p.cumulativeR - minR) / range) * H,
+    }));
+  })() : [];
+
+  const svgPath = curvePoints.length > 1
+    ? curvePoints.map((p: any, i: number) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ")
+    : "";
+
+  return (
+    <div style={{ background: "#0f111a", borderRadius: "10px", border: `2px solid #1e2235`, overflow: "hidden" }}>
+      <div
+        style={{ padding: "8px 10px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", background: "#12141f" }}
+        onClick={() => setExpanded(!expanded)}
+      >
+        <span style={{ fontSize: "10px", color: "#10b981", fontWeight: 700, letterSpacing: "0.15em" }}>📈 PERFORMANCE</span>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <span style={{ fontSize: "9px", color: pnlColor, fontWeight: 700 }}>{totalPnlR >= 0 ? "+" : ""}{totalPnlR.toFixed(1)}R</span>
+          <span style={{ fontSize: "10px", color: "#555" }}>{expanded ? "▲" : "▼"}</span>
+        </div>
+      </div>
+      {expanded && (
+        <div style={{ padding: "8px 10px" }}>
+          {/* Symbol selector */}
+          <select value={selectedSymbol} onChange={(e) => setSelectedSymbol(e.target.value)}
+            style={{ width: "100%", background: "#1a1d2e", color: "#ccc", border: "1px solid #2a2d3e", borderRadius: 4, padding: "3px 5px", fontSize: "10px", marginBottom: "8px" }}>
+            {stocks.map((s) => <option key={s.symbol} value={s.symbol}>{s.symbol}</option>)}
+          </select>
+
+          {/* Key stats */}
+          <div style={{ display: "flex", gap: "4px", marginBottom: "8px", flexWrap: "wrap" }}>
+            {[
+              { label: "WR", val: `${((perfData?.winRate ?? 0) * 100).toFixed(0)}%`, color: (perfData?.winRate ?? 0) > 0.5 ? "#00e676" : "#ff6b6b" },
+              { label: "SHARPE", val: (perfData?.sharpeRatio ?? 0).toFixed(2), color: (perfData?.sharpeRatio ?? 0) > 1 ? "#00e676" : "#fbbf24" },
+              { label: "MAX DD", val: `${(perfData?.maxDrawdownR ?? 0).toFixed(1)}R`, color: "#ff6b6b" },
+              { label: "EXPECT", val: (perfData?.expectancy ?? 0).toFixed(2), color: (perfData?.expectancy ?? 0) > 0 ? "#00e676" : "#ff6b6b" },
+            ].map(({ label, val, color }) => (
+              <div key={label} style={{ flex: 1, minWidth: "44px", background: "#0a0c14", borderRadius: 4, padding: "3px 4px", textAlign: "center" }}>
+                <div style={{ fontSize: "10px", color, fontWeight: 700 }}>{val}</div>
+                <div style={{ fontSize: "8px", color: "#555" }}>{label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Equity curve sparkline */}
+          {svgPath && (
+            <div style={{ marginBottom: "8px" }}>
+              <div style={{ fontSize: "9px", color: "#666", marginBottom: "3px" }}>EQUITY CURVE ({perfData?.totalTrades ?? 0} trades)</div>
+              <svg width="180" height="40" style={{ background: "#0a0c14", borderRadius: 4, display: "block" }}>
+                <path d={svgPath} fill="none" stroke={totalPnlR >= 0 ? "#00e676" : "#ff1744"} strokeWidth="1.5" />
+                {/* Zero line */}
+                {curvePoints.length > 0 && (
+                  <line x1="0" y1="20" x2="180" y2="20" stroke="#2a2d3e" strokeWidth="0.5" strokeDasharray="2,2" />
+                )}
+              </svg>
+            </div>
+          )}
+
+          {/* By regime */}
+          {(perfData?.byRegime ?? []).length > 0 && (
+            <>
+              <div style={{ fontSize: "9px", color: "#666", marginBottom: "4px" }}>BY REGIME</div>
+              {(perfData?.byRegime ?? []).slice(0, 4).map((r: any) => (
+                <div key={r.regime} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0", borderBottom: "1px solid #1a1d2e" }}>
+                  <span style={{ fontSize: "8px", color: "#888" }}>{r.regime.substring(0, 10)}</span>
+                  <span style={{ fontSize: "8px", color: r.winRate > 0.5 ? "#00e676" : "#ff6b6b" }}>{(r.winRate * 100).toFixed(0)}% ({r.trades})</span>
+                  <span style={{ fontSize: "8px", color: r.totalPnlR >= 0 ? "#00e676" : "#ff6b6b" }}>{r.totalPnlR >= 0 ? "+" : ""}{r.totalPnlR.toFixed(1)}R</span>
+                </div>
+              ))}
+            </>
+          )}
+
+          {/* Portfolio total */}
+          {portfolioData && (
+            <div style={{ marginTop: "8px", background: "#0a0c14", borderRadius: 4, padding: "5px 7px" }}>
+              <div style={{ fontSize: "8px", color: "#555", marginBottom: "3px" }}>PORTFOLIO TOTAL</div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ fontSize: "9px", color: "#666" }}>All-time P&L</span>
+                <span style={{ fontSize: "9px", color: (portfolioData.totalPnlR ?? 0) >= 0 ? "#00e676" : "#ff1744", fontWeight: 700 }}>
+                  {(portfolioData.totalPnlR ?? 0) >= 0 ? "+" : ""}{(portfolioData.totalPnlR ?? 0).toFixed(1)}R
+                </span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ fontSize: "9px", color: "#666" }}>Sharpe</span>
+                <span style={{ fontSize: "9px", color: "#ccc" }}>{(portfolioData.sharpe ?? 0).toFixed(2)}</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Brain Page ─────────────────────────────────────────────────────────────
 
 function BrainPageComponent() {
@@ -1308,19 +3088,21 @@ function BrainPageComponent() {
   const { data: consciousness } = useBrainConsciousness();
   const livePrices = useLivePrices();
   const { decisions: siDecisions, connected: sseConnected } = useSIStream();
+  const { connected: brainConnected, isRunning: brainCycleRunning, cycleId: brainCycleId } = useBrainCycleContext();
   const { data: intelligence } = useBrainIntelligence(selectedStock?.symbol ?? "");
   const { data: brainState } = useBrainState(selectedStock?.symbol ?? "");
   const { data: smcState } = useSMCState(selectedStock?.symbol ?? "");
   const { data: regimeState } = useRegimeState(selectedStock?.symbol ?? "");
   
-  const entitiesSymbols = useMemo(() => brainEntities?.map((e: any) => e.symbol) || [], [brainEntities]);
+  const entitiesSymbols = useMemo(() => Array.isArray(brainEntities) ? brainEntities.map((e: any) => e.symbol) : [], [brainEntities]);
   const { data: marketStress } = useMarketStress(entitiesSymbols);
 
   const stocks = useMemo(() => {
-    if (!brainEntities?.length) return MOCK_STOCKS;
+    if (!Array.isArray(brainEntities) || brainEntities.length === 0) return MOCK_STOCKS;
     return brainEntities.map((entity: any): StockNodeData => {
       const lp = livePrices.find((p) => p.symbol === entity.symbol);
-      const sj = entity.state_json ? JSON.parse(entity.state_json) : {};
+      let sj: any = {};
+      try { sj = entity.state_json ? JSON.parse(entity.state_json) : {}; } catch { sj = {}; }
       return {
         symbol: entity.symbol,
         displaySymbol: entity.name || entity.symbol.replace("USD", ""),
@@ -1498,6 +3280,8 @@ function BrainPageComponent() {
         <div style={{ fontSize: "9px", color: "#484849", fontFamily: "JetBrains Mono", letterSpacing: "0.1em" }}>
           {stocks.length} NODES \u00B7 CYCLE {supreme.lastCycleMs}ms \u00B7 {supreme.regime}
           {sseConnected ? " \u00B7 SI LIVE" : ""}
+          {brainConnected ? ` \u00B7 BRAIN #${brainCycleId}` : ""}
+          {brainCycleRunning ? " \u00B7 THINKING" : ""}
         </div>
       </div>
 
@@ -1513,7 +3297,20 @@ function BrainPageComponent() {
       </svg>
 
       {/* Left panels */}
-      <div style={{ position: "absolute", top: "16px", left: "20px", marginTop: "52px", zIndex: 10, display: "flex", flexDirection: "column", gap: "10px", width: "220px" }}>
+      <div style={{ position: "absolute", top: "16px", left: "20px", marginTop: "52px", zIndex: 10, display: "flex", flexDirection: "column", gap: "10px", width: "220px", maxHeight: "calc(100vh - 100px)", overflowY: "auto" }}>
+        <AutonomousBrainPanel stocks={stocks} />
+        <AlertFeedPanel />
+        <ExecutionBridgePanel stocks={stocks} />
+        <WatchdogPanel />
+        <CorrelationPanel />
+        <PerformancePanel stocks={stocks} />
+        <StrategyEvolutionPanel stocks={stocks} />
+        <SuperIntelV2Panel stocks={stocks} />
+        <AgentIntelPanel stocks={stocks} />
+        <BacktestPanel stocks={stocks} />
+        <ChartPlotPanel stocks={stocks} />
+        <JobHistoryPanel stocks={stocks} />
+        <SchedulerPanel stocks={stocks} />
         <RegimePanel supreme={supreme} />
         <AttentionPanel stocks={stocks} />
         <RiskGatePanel stocks={stocks} stress={marketStress} />
@@ -1591,4 +3388,12 @@ function BrainPageComponent() {
   );
 }
 
-export default BrainPageComponent;
+function BrainPageWithProvider() {
+  return (
+    <BrainCycleProvider>
+      <BrainPageComponent />
+    </BrainCycleProvider>
+  );
+}
+
+export default BrainPageWithProvider;
