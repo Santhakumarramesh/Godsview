@@ -88,6 +88,31 @@ type SIStatus = {
     lr_accuracy: number; samples: number; trained_at: string;
   } | null;
   message: string;
+  current_regime?: string;
+};
+
+type AutonomousStatus = {
+  enabled: boolean;
+  scans_completed: number;
+  strategies_rated: number;
+  last_scan_time: string;
+  current_regime?: string;
+};
+
+type StrategyLeaderboardItem = {
+  rank: number;
+  strategy: string;
+  win_rate: number;
+  profit_factor: number;
+  sharpe: number;
+  trades: number;
+  stars: number;
+};
+
+type SystemMetrics = {
+  win_rate: number;
+  profit_factor: number;
+  governance_metrics?: Record<string, any>;
 };
 
 // ── SSE Hook ───────────────────────────────────────────────────────────────
@@ -123,7 +148,8 @@ export default function SuperIntelligencePage() {
   const [backtestDays, setBacktestDays] = useState(30);
   const [isRunning, setIsRunning] = useState(false);
   const [backtestResult, setBacktestResult] = useState<BacktestResult | null>(null);
-  const [activeTab, setActiveTab] = useState<"overview" | "equity" | "regimes" | "setups" | "feed" | "openbb">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "equity" | "regimes" | "setups" | "feed" | "leaderboard">("overview");
+  const [autonomousMode, setAutonomousMode] = useState(false);
 
   // Real-time SSE feed
   const { events: siEvents, connected: sseConnected } = useSSEStream("/api/super-intelligence/stream");
@@ -145,12 +171,26 @@ export default function SuperIntelligencePage() {
     refetchInterval: 30_000,
   });
 
-  // OpenBB Python pipeline decision + backtest
-  const { data: openbbDecision, dataUpdatedAt: openbbTs } = useQuery<any>({
-    queryKey: ["openbb-latest"],
-    queryFn: () => fetch("/api/system/openbb/latest").then(r => r.ok ? r.json() : null),
+  // Autonomous mode status
+  const { data: autonomousStatus } = useQuery<AutonomousStatus>({
+    queryKey: ["autonomous-status"],
+    queryFn: () => fetch("/api/super-intelligence/autonomous/status").then(r => r.json()),
+    refetchInterval: 10_000,
+    enabled: autonomousMode,
+  });
+
+  // Strategy leaderboard
+  const { data: leaderboard } = useQuery<StrategyLeaderboardItem[]>({
+    queryKey: ["strategy-leaderboard"],
+    queryFn: () => fetch("/api/super-intelligence/strategy-leaderboard").then(r => r.json()),
+    refetchInterval: 60_000,
+  });
+
+  // System metrics (for market readiness)
+  const { data: systemMetrics } = useQuery<SystemMetrics>({
+    queryKey: ["system-metrics"],
+    queryFn: () => fetch("/api/system").then(r => r.json()),
     refetchInterval: 30_000,
-    retry: 1,
   });
 
   const runBacktest = useCallback(async () => {
@@ -169,6 +209,16 @@ export default function SuperIntelligencePage() {
       setIsRunning(false);
     }
   }, [backtestDays]);
+
+  const toggleAutonomousMode = useCallback(async () => {
+    try {
+      const endpoint = autonomousMode ? "/api/super-intelligence/autonomous/stop" : "/api/super-intelligence/autonomous/start";
+      await fetch(endpoint, { method: "POST" });
+      setAutonomousMode(!autonomousMode);
+    } catch (err) {
+      console.error("Failed to toggle autonomous mode:", err);
+    }
+  }, [autonomousMode]);
 
   // Auto-run backtest on mount
   useEffect(() => { runBacktest(); }, []);
@@ -244,6 +294,119 @@ export default function SuperIntelligencePage() {
         </div>
       </div>
 
+      {/* ── A. Autonomous Mode Controls ── */}
+      <div className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+        <div className="flex items-center justify-between mb-4">
+          <MicroLabel>Autonomous Mode</MicroLabel>
+          <button onClick={toggleAutonomousMode}
+            className="px-3 py-1.5 rounded text-xs transition-colors"
+            style={{
+              backgroundColor: autonomousMode ? "rgba(156,255,147,0.15)" : "rgba(255,113,98,0.15)",
+              color: autonomousMode ? C.primary : C.tertiary,
+              border: `1px solid ${autonomousMode ? "rgba(156,255,147,0.3)" : "rgba(255,113,98,0.3)"}`,
+              fontFamily: "Space Grotesk", fontWeight: 600,
+            }}>
+            {autonomousMode ? "Stop" : "Start"}
+          </button>
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div>
+            <div style={{ fontSize: "8px", color: C.outline, fontFamily: "Space Grotesk", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: "8px" }}>
+              Status
+            </div>
+            <div style={{
+              fontSize: "14px", fontWeight: 600, color: autonomousMode ? C.primary : C.tertiary,
+              fontFamily: "JetBrains Mono, monospace",
+            }}>
+              {autonomousMode ? "ACTIVE" : "INACTIVE"}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: "8px", color: C.outline, fontFamily: "Space Grotesk", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: "8px" }}>
+              Scans Completed
+            </div>
+            <div style={{
+              fontSize: "14px", fontWeight: 600, color: C.secondary,
+              fontFamily: "JetBrains Mono, monospace",
+            }}>
+              {autonomousStatus?.scans_completed ?? 0}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: "8px", color: C.outline, fontFamily: "Space Grotesk", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: "8px" }}>
+              Strategies Rated
+            </div>
+            <div style={{
+              fontSize: "14px", fontWeight: 600, color: C.secondary,
+              fontFamily: "JetBrains Mono, monospace",
+            }}>
+              {autonomousStatus?.strategies_rated ?? 0}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: "8px", color: C.outline, fontFamily: "Space Grotesk", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: "8px" }}>
+              Last Scan
+            </div>
+            <div style={{
+              fontSize: "12px", color: C.muted,
+              fontFamily: "JetBrains Mono, monospace",
+            }}>
+              {autonomousStatus?.last_scan_time ? new Date(autonomousStatus.last_scan_time).toLocaleTimeString() : "—"}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── C. Market Readiness Indicator ── */}
+      {systemMetrics && (
+        <div className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+          <div className="flex items-center gap-6">
+            <div className="flex flex-col items-center">
+              <MicroLabel style={{ marginBottom: "12px" }}>Market Readiness</MicroLabel>
+              <div className="flex items-center justify-center" style={{ width: "80px", height: "80px" }}>
+                <div style={{
+                  width: "100%", height: "100%", borderRadius: "50%",
+                  backgroundColor: (systemMetrics.win_rate > 0.55 && systemMetrics.profit_factor > 1.2) ? C.primary :
+                    (systemMetrics.win_rate > 0.45 && systemMetrics.profit_factor > 0.9) ? C.gold : C.tertiary,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  opacity: 0.3,
+                }} />
+                <div style={{
+                  position: "absolute", fontSize: "12px", fontWeight: 600,
+                  color: (systemMetrics.win_rate > 0.55 && systemMetrics.profit_factor > 1.2) ? C.primary :
+                    (systemMetrics.win_rate > 0.45 && systemMetrics.profit_factor > 0.9) ? C.gold : C.tertiary,
+                  fontFamily: "Space Grotesk", letterSpacing: "0.05em",
+                  textAlign: "center",
+                }}>
+                  {(systemMetrics.win_rate > 0.55 && systemMetrics.profit_factor > 1.2) ? "MARKET\nREADY" :
+                    (systemMetrics.win_rate > 0.45 && systemMetrics.profit_factor > 0.9) ? "CAUTION" : "STAND\nDOWN"}
+                </div>
+              </div>
+            </div>
+            <div className="flex-1 space-y-2">
+              <div className="flex justify-between" style={{ fontSize: "11px" }}>
+                <span style={{ color: C.outline }}>Win Rate</span>
+                <span style={{ color: C.secondary, fontFamily: "JetBrains Mono, monospace", fontWeight: 600 }}>
+                  {(systemMetrics.win_rate * 100).toFixed(1)}%
+                </span>
+              </div>
+              <div className="flex justify-between" style={{ fontSize: "11px" }}>
+                <span style={{ color: C.outline }}>Profit Factor</span>
+                <span style={{ color: C.secondary, fontFamily: "JetBrains Mono, monospace", fontWeight: 600 }}>
+                  {systemMetrics.profit_factor.toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between" style={{ fontSize: "11px" }}>
+                <span style={{ color: C.outline }}>Current Regime</span>
+                <span style={{ color: C.muted, fontFamily: "JetBrains Mono, monospace" }}>
+                  {autonomousStatus?.current_regime?.replace(/_/g, " ") ?? siStatus?.current_regime?.replace(/_/g, " ") ?? "—"}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Top Metrics Row ── */}
       <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
         <StatCard label="Ensemble Accuracy"
@@ -274,7 +437,7 @@ export default function SuperIntelligencePage() {
 
       {/* ── Tab Navigation ── */}
       <div className="flex gap-1 p-1 rounded" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
-        {(["overview", "equity", "regimes", "setups", "feed", "openbb"] as const).map(tab => (
+        {(["overview", "equity", "regimes", "setups", "leaderboard", "feed"] as const).map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
             className="px-3 py-1.5 rounded text-xs transition-colors"
             style={{
@@ -283,7 +446,7 @@ export default function SuperIntelligencePage() {
               border: activeTab === tab ? `1px solid rgba(156,255,147,0.2)` : "1px solid transparent",
               fontFamily: "Space Grotesk", textTransform: "uppercase", letterSpacing: "0.1em",
             }}>
-            {tab === "feed" ? `Feed (${siEvents.length})` : tab === "openbb" ? "OpenBB Pipeline" : tab}
+            {tab === "feed" ? `Feed (${siEvents.length})` : tab}
           </button>
         ))}
         <div className="flex-1" />
@@ -533,6 +696,62 @@ export default function SuperIntelligencePage() {
         </div>
       )}
 
+      {/* LEADERBOARD TAB */}
+      {activeTab === "leaderboard" && leaderboard && leaderboard.length > 0 && (
+        <div className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+          <div className="flex items-center justify-between mb-4">
+            <MicroLabel>Strategy Leaderboard</MicroLabel>
+            <span style={{ fontSize: "10px", color: C.outline }}>
+              Top {leaderboard.length} strategies by performance
+            </span>
+          </div>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", fontSize: "11px", fontFamily: "JetBrains Mono, monospace" }}>
+              <thead>
+                <tr style={{ borderBottom: `1px solid ${C.outlineVar}` }}>
+                  <th style={{ padding: "8px", textAlign: "left", color: C.outline, fontWeight: 600 }}>Rank</th>
+                  <th style={{ padding: "8px", textAlign: "left", color: C.outline, fontWeight: 600 }}>Strategy</th>
+                  <th style={{ padding: "8px", textAlign: "right", color: C.outline, fontWeight: 600 }}>Win Rate</th>
+                  <th style={{ padding: "8px", textAlign: "right", color: C.outline, fontWeight: 600 }}>Profit Factor</th>
+                  <th style={{ padding: "8px", textAlign: "right", color: C.outline, fontWeight: 600 }}>Sharpe</th>
+                  <th style={{ padding: "8px", textAlign: "right", color: C.outline, fontWeight: 600 }}>Trades</th>
+                  <th style={{ padding: "8px", textAlign: "center", color: C.outline, fontWeight: 600 }}>Rating</th>
+                </tr>
+              </thead>
+              <tbody>
+                {leaderboard.map((item) => (
+                  <tr key={item.rank} style={{ borderBottom: `1px solid ${C.outlineVar}` }}>
+                    <td style={{ padding: "8px", color: C.secondary }}>{item.rank}</td>
+                    <td style={{ padding: "8px", color: C.muted }}>{item.strategy}</td>
+                    <td style={{
+                      padding: "8px", textAlign: "right",
+                      color: item.win_rate > 0.6 ? C.primary : item.win_rate > 0.5 ? C.gold : C.tertiary,
+                    }}>
+                      {(item.win_rate * 100).toFixed(1)}%
+                    </td>
+                    <td style={{
+                      padding: "8px", textAlign: "right",
+                      color: item.profit_factor > 1.2 ? C.primary : item.profit_factor > 0.9 ? C.gold : C.tertiary,
+                    }}>
+                      {item.profit_factor.toFixed(2)}
+                    </td>
+                    <td style={{ padding: "8px", textAlign: "right", color: C.secondary }}>
+                      {item.sharpe.toFixed(2)}
+                    </td>
+                    <td style={{ padding: "8px", textAlign: "right", color: C.muted }}>
+                      {item.trades}
+                    </td>
+                    <td style={{ padding: "8px", textAlign: "center", color: C.gold }}>
+                      {Array(item.stars).fill("★").join("")}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* LIVE FEED TAB */}
       {activeTab === "feed" && (
         <div className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
@@ -595,184 +814,6 @@ export default function SuperIntelligencePage() {
               ))}
             </div>
           )}
-        </div>
-      )}
-
-      {/* ── OpenBB Pipeline Tab ── */}
-      {activeTab === "openbb" && (
-        <div className="space-y-4">
-          {/* Header */}
-          <div className="rounded p-4" style={{ background: C.card, border: `1px solid ${C.border}` }}>
-            <div className="flex items-center gap-3 mb-2">
-              <span style={{ fontSize: "18px" }}>🧠</span>
-              <div>
-                <div style={{ fontFamily: "Bebas Neue", fontSize: "18px", color: "#fff", letterSpacing: "0.06em" }}>
-                  OPENBB DECISION PIPELINE
-                </div>
-                <div style={{ fontSize: "10px", color: C.muted, marginTop: 1 }}>
-                  Python ML pipeline → SK signal detection → confidence filter → execution gate
-                </div>
-              </div>
-              {openbbTs > 0 && (
-                <div className="ml-auto" style={{ fontSize: "9px", color: C.outline }}>
-                  Last fetch: {new Date(openbbTs).toLocaleTimeString()}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {!openbbDecision?.has_data ? (
-            <div className="rounded p-8 flex flex-col items-center gap-3"
-              style={{ background: C.card, border: `1px solid ${C.border}`, color: C.outline }}>
-              <span style={{ fontSize: 32 }}>🔬</span>
-              <div style={{ fontSize: 13, color: C.muted }}>No OpenBB decision data yet.</div>
-              <div style={{ fontSize: 11, textAlign: "center" }}>
-                Run <code style={{ color: C.secondary, fontFamily: "JetBrains Mono" }}>python -m app.main</code> inside{" "}
-                <code style={{ color: C.secondary }}>godsview-openbb/</code> to generate a decision.
-              </div>
-            </div>
-          ) : (() => {
-            const d = openbbDecision?.decision ?? {};
-            const bt = openbbDecision?.backtest ?? null;
-            const actionColor = d.action === "buy" ? C.primary : d.action === "sell" ? C.tertiary : C.gold;
-            const filterOk = d.filter_approved;
-
-            // Build pipeline stages from the decision structure
-            const pipelineStages = [
-              { name: "Data Ingestion", status: "pass", detail: `${d.symbol} ${d.timeframe} · ${d.train_rows + d.test_rows} rows loaded` },
-              { name: "Feature Engineering", status: "pass", detail: `Train: ${d.train_rows} rows · Test: ${d.test_rows} rows` },
-              { name: "ML Training", status: d.model_accuracy > 0 ? "pass" : "fail", detail: `Accuracy ${(d.model_accuracy * 100).toFixed(1)}% · ROC-AUC ${(d.roc_auc * 100).toFixed(1)}%`, value: d.model_accuracy },
-              { name: "Signal Generation", status: d.action !== "error" ? "pass" : "fail", detail: `Action: ${d.action} · Prob↑ ${(d.prob_up * 100).toFixed(1)}% · Threshold buy ${(d.threshold_buy * 100).toFixed(0)}%`, value: d.confidence },
-              { name: "Confidence Filter", status: filterOk ? "pass" : "blocked", detail: d.filter_reasons.length > 0 ? d.filter_reasons.join("; ") : "All checks passed" },
-              { name: "Execution Gate", status: d.execution_status === "blocked_by_filter" ? "blocked" : d.execution_status === "executed" ? "pass" : "unknown", detail: d.execution_status.replace(/_/g, " ").toUpperCase() },
-            ];
-
-            return (
-              <div className="space-y-4">
-                {/* Decision banner */}
-                <div className="rounded p-5" style={{ background: C.card, border: `1px solid ${C.border}`, borderLeft: `4px solid ${actionColor}` }}>
-                  <div className="flex items-center gap-6 flex-wrap">
-                    <div>
-                      <div style={{ fontSize: "9px", color: C.outline, letterSpacing: "0.1em", textTransform: "uppercase" }}>Final Action</div>
-                      <div style={{ fontFamily: "JetBrains Mono", fontSize: 32, fontWeight: 700, color: actionColor, lineHeight: 1 }}>
-                        {d.action.toUpperCase()}
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: "9px", color: C.outline, letterSpacing: "0.1em", textTransform: "uppercase" }}>Symbol · TF</div>
-                      <div style={{ fontFamily: "JetBrains Mono", fontSize: 18, color: "#fff" }}>{d.symbol} {d.timeframe}</div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: "9px", color: C.outline, letterSpacing: "0.1em", textTransform: "uppercase" }}>Confidence</div>
-                      <div style={{ fontFamily: "JetBrains Mono", fontSize: 22, color: C.secondary }}>
-                        {(d.confidence * 100).toFixed(2)}%
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: "9px", color: C.outline, letterSpacing: "0.1em", textTransform: "uppercase" }}>Prob Up</div>
-                      <div style={{ fontFamily: "JetBrains Mono", fontSize: 22, color: d.prob_up >= 0.6 ? C.primary : d.prob_up <= 0.4 ? C.tertiary : C.gold }}>
-                        {(d.prob_up * 100).toFixed(2)}%
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: "9px", color: C.outline, letterSpacing: "0.1em", textTransform: "uppercase" }}>Close Price</div>
-                      <div style={{ fontFamily: "JetBrains Mono", fontSize: 18, color: C.muted }}>${d.close_price.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: "9px", color: C.outline, letterSpacing: "0.1em", textTransform: "uppercase" }}>Mode</div>
-                      <div style={{ fontFamily: "JetBrains Mono", fontSize: 13, color: d.dry_run ? C.gold : C.tertiary }}>
-                        {d.dry_run ? "DRY RUN" : "LIVE"}
-                      </div>
-                    </div>
-                  </div>
-                  <div style={{ marginTop: 12, fontSize: "9px", color: C.outline }}>
-                    Generated {new Date(d.generated_at).toLocaleString()}
-                  </div>
-                </div>
-
-                {/* Pipeline stages */}
-                <div className="rounded p-4" style={{ background: C.card, border: `1px solid ${C.border}` }}>
-                  <div style={{ fontFamily: "Bebas Neue", fontSize: "14px", color: "#fff", letterSpacing: "0.06em", marginBottom: 12 }}>
-                    OPENBB PIPELINE — 6 STAGES
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    {pipelineStages.map((stage, i) => {
-                      const ok = stage.status === "pass";
-                      const blocked = stage.status === "blocked";
-                      const color = ok ? C.primary : blocked ? C.tertiary : C.gold;
-                      return (
-                        <div key={i} className="flex items-center gap-3 rounded p-3"
-                          style={{ background: C.cardHigh, border: `1px solid ${C.outlineVar}33` }}>
-                          <div style={{ width: 20, height: 20, borderRadius: "50%", background: `${color}22`,
-                            border: `1px solid ${color}`, display: "flex", alignItems: "center", justifyContent: "center",
-                            fontSize: 10, color, fontFamily: "JetBrains Mono", fontWeight: 700, flexShrink: 0 }}>
-                            {i + 1}
-                          </div>
-                          <div style={{ flex: 1 }}>
-                            <div className="flex items-center gap-2">
-                              <span style={{ fontSize: "12px", color: "#fff", fontWeight: 600 }}>{stage.name}</span>
-                              <span style={{ fontSize: "8px", color, background: `${color}15`, padding: "1px 6px",
-                                borderRadius: 3, letterSpacing: "0.1em", textTransform: "uppercase" }}>
-                                {stage.status}
-                              </span>
-                            </div>
-                            {stage.detail && (
-                              <div style={{ fontSize: "10px", color: C.muted, marginTop: 2 }}>{stage.detail}</div>
-                            )}
-                          </div>
-                          {stage.value !== undefined && (
-                            <div style={{ fontFamily: "JetBrains Mono", fontSize: "14px", color, flexShrink: 0 }}>
-                              {typeof stage.value === "number" ? `${(stage.value * 100).toFixed(1)}%` : String(stage.value)}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* ML Model stats */}
-                <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
-                  {[
-                    { label: "Model Accuracy", value: `${(d.model_accuracy * 100).toFixed(1)}%`, color: d.model_accuracy >= 0.6 ? C.primary : C.gold },
-                    { label: "ROC AUC", value: `${(d.roc_auc * 100).toFixed(1)}%`, color: d.roc_auc >= 0.6 ? C.primary : C.gold },
-                    { label: "Train Rows", value: d.train_rows.toLocaleString(), color: C.purple },
-                    { label: "Test Rows", value: d.test_rows.toLocaleString(), color: C.secondary },
-                  ].map(m => (
-                    <div key={m.label} className="rounded p-4" style={{ background: C.cardHigh, border: `1px solid ${C.border}` }}>
-                      <div style={{ fontSize: "9px", color: C.outline, letterSpacing: "0.1em", textTransform: "uppercase" }}>{m.label}</div>
-                      <div style={{ fontFamily: "JetBrains Mono", fontSize: 20, color: m.color, marginTop: 4 }}>{m.value}</div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* OpenBB Backtest summary */}
-                {bt && (
-                  <div className="rounded p-4" style={{ background: C.card, border: `1px solid ${C.border}` }}>
-                    <div style={{ fontFamily: "Bebas Neue", fontSize: "14px", color: "#fff", letterSpacing: "0.06em", marginBottom: 12 }}>
-                      OPENBB BACKTEST SUMMARY — {bt.symbol} {bt.timeframe}
-                    </div>
-                    <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
-                      {[
-                        { label: "Total Bars", value: bt.total_bars.toLocaleString(), color: C.muted },
-                        { label: "Signaled Bars", value: bt.signaled_bars.toLocaleString(), color: C.secondary },
-                        { label: "Hit Rate", value: `${(bt.hit_rate * 100).toFixed(1)}%`, color: bt.hit_rate >= 0.7 ? C.primary : C.gold },
-                        { label: "Signal Rate", value: `${(bt.signal_rate * 100).toFixed(1)}%`, color: C.purple },
-                      ].map(m => (
-                        <div key={m.label} className="rounded p-3" style={{ background: C.cardHigh, border: `1px solid ${C.border}` }}>
-                          <div style={{ fontSize: "9px", color: C.outline, letterSpacing: "0.1em", textTransform: "uppercase" }}>{m.label}</div>
-                          <div style={{ fontFamily: "JetBrains Mono", fontSize: 20, color: m.color, marginTop: 3 }}>{m.value}</div>
-                        </div>
-                      ))}
-                    </div>
-                    <div style={{ marginTop: 8, fontSize: "9px", color: C.outline }}>
-                      Generated {new Date(bt.generated_at).toLocaleString()}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })()}
         </div>
       )}
 

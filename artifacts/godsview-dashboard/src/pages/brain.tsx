@@ -1299,7 +1299,7 @@ function StockDrawer({
 
 // ─── Brain Page ─────────────────────────────────────────────────────────────
 
-export default function BrainPage() {
+function BrainPageComponent() {
   const [selectedStock, setSelectedStock] = useState<StockNodeData | null>(null);
   const [focusModeOpen, setFocusModeOpen] = useState(false);
 
@@ -1376,14 +1376,87 @@ export default function BrainPage() {
           from { transform: translateX(100%); opacity: 0; }
           to   { transform: translateX(0);    opacity: 1; }
         }
+
+        @keyframes glowPulse {
+          0%, 100% { text-shadow: 0 0 10px rgba(0,255,204,0.5), 0 0 20px rgba(0,255,204,0.3); }
+          50% { text-shadow: 0 0 20px rgba(0,255,204,0.8), 0 0 40px rgba(0,255,204,0.5), 0 0 60px rgba(0,255,204,0.3); }
+        }
+
+        @keyframes breathingGradient {
+          0%, 100% { background: radial-gradient(ellipse at center, #081a14 0%, #0a0a0b 60%, #050506 100%); }
+          50% { background: radial-gradient(ellipse at center, #0a1f18 0%, #0c0c0d 60%, #070708 100%); }
+        }
+
+        @keyframes neuralPulse {
+          0%, 100% { opacity: 0.15; }
+          50% { opacity: 0.35; }
+        }
+
+        @keyframes connectionFlow {
+          0% { background-position: 0% 50%; }
+          100% { background-position: 100% 50%; }
+        }
+
+        @keyframes superBrainGlow {
+          0%, 100% {
+            text-shadow:
+              0 0 10px rgba(0,255,204,0.6),
+              0 0 20px rgba(0,255,204,0.4),
+              0 0 30px rgba(0,255,204,0.2);
+            letter-spacing: 0.2em;
+          }
+          50% {
+            text-shadow:
+              0 0 20px rgba(0,255,204,0.9),
+              0 0 40px rgba(0,255,204,0.6),
+              0 0 60px rgba(0,255,204,0.4),
+              0 0 80px rgba(0,255,204,0.2);
+            letter-spacing: 0.25em;
+          }
+        }
+
+        .brain-canvas-container {
+          animation: breathingGradient 8s ease-in-out infinite;
+        }
+
+        .brain-title {
+          animation: superBrainGlow 3s ease-in-out infinite;
+        }
+
+        .neural-network-overlay {
+          position: absolute;
+          inset: 0;
+          background:
+            radial-gradient(circle at 20% 30%, rgba(0,255,204,0.03) 0%, transparent 50%),
+            radial-gradient(circle at 80% 70%, rgba(0,255,204,0.02) 0%, transparent 50%);
+          pointer-events: none;
+          animation: neuralPulse 4s ease-in-out infinite;
+          z-index: 2;
+        }
+
+        .connection-line {
+          position: absolute;
+          height: 2px;
+          background: linear-gradient(90deg, rgba(0,255,204,0.3), rgba(0,255,204,0.1), transparent);
+          animation: connectionFlow 3s linear infinite;
+          pointer-events: none;
+        }
       `}</style>
 
-      {/* 3D Canvas */}
-      <div style={{ position: "absolute", inset: 0 }}>
+      {/* 3D Canvas with error boundary and fallback */}
+      <div style={{ position: "absolute", inset: 0 }} className="brain-canvas-container">
         <Canvas
           camera={{ position: [0, 1.5, 9], fov: 52 }}
           style={{ background: "radial-gradient(ellipse at center, #081a14 0%, #0a0a0b 60%, #050506 100%)" }}
-          gl={{ antialias: true, alpha: true }}
+          gl={{ antialias: true, alpha: true, failIfMajorPerformanceCaveat: false }}
+          dpr={[1, 1.5]}
+          onCreated={(state) => {
+            try {
+              state.gl.capabilities;
+            } catch (e) {
+              console.warn("WebGL not fully supported, using fallback rendering");
+            }
+          }}
         >
           <Suspense fallback={null}>
             <BrainScene
@@ -1394,19 +1467,32 @@ export default function BrainPage() {
             />
           </Suspense>
         </Canvas>
+
+        {/* Neural network CSS fallback overlay */}
+        <div className="neural-network-overlay" />
       </div>
 
       {/* Title + SSE status */}
       <div style={{ position: "absolute", top: "16px", left: "20px", zIndex: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
-          <span className="material-symbols-outlined" style={{ fontSize: "18px", color: "#00ffcc" }}>neurology</span>
-          <span style={{ fontSize: "14px", fontFamily: "Space Grotesk", fontWeight: 700, letterSpacing: "0.2em", color: "#ffffff" }}>
-            GODSVIEW BRAIN
+          <span className="material-symbols-outlined" style={{
+            fontSize: "18px",
+            color: "#00ffcc",
+            animation: "glowPulse 2s ease-in-out infinite",
+          }}>neurology</span>
+          <span className="brain-title" style={{
+            fontSize: "14px",
+            fontFamily: "Space Grotesk",
+            fontWeight: 700,
+            color: "#ffffff",
+          }}>
+            SUPER BRAIN
           </span>
           <div style={{
             width: "6px", height: "6px", borderRadius: "50%",
             backgroundColor: sseConnected ? "#00ffcc" : "#ff4444",
             boxShadow: `0 0 6px ${sseConnected ? "#00ffcc" : "#ff4444"}`,
+            animation: sseConnected ? "glowPulse 1.5s ease-in-out infinite" : "none",
           }} />
         </div>
         <div style={{ fontSize: "9px", color: "#484849", fontFamily: "JetBrains Mono", letterSpacing: "0.1em" }}>
@@ -1414,6 +1500,17 @@ export default function BrainPage() {
           {sseConnected ? " \u00B7 SI LIVE" : ""}
         </div>
       </div>
+
+      {/* Animated connection lines between panels */}
+      <svg style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 3 }}>
+        <defs>
+          <linearGradient id="connectionGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="rgba(0,255,204,0.3)" />
+            <stop offset="50%" stopColor="rgba(0,255,204,0.6)" />
+            <stop offset="100%" stopColor="rgba(0,255,204,0.1)" />
+          </linearGradient>
+        </defs>
+      </svg>
 
       {/* Left panels */}
       <div style={{ position: "absolute", top: "16px", left: "20px", marginTop: "52px", zIndex: 10, display: "flex", flexDirection: "column", gap: "10px", width: "220px" }}>
@@ -1493,3 +1590,5 @@ export default function BrainPage() {
     </div>
   );
 }
+
+export default BrainPageComponent;

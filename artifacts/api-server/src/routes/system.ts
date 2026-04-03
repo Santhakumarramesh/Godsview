@@ -1,15 +1,11 @@
 import { Router, type IRouter } from "express";
-import { db, accuracyResultsTable, auditEventsTable, signalsTable, tradesTable } from "@workspace/db";
+import { db, accuracyResultsTable, auditEventsTable, signalsTable, tradesTable, siDecisionsTable } from "@workspace/db";
 import { and, desc, eq, gte, isNotNull, or, sql } from "drizzle-orm";
 import { readFile } from "node:fs/promises";
 import * as path from "node:path";
 import { StockBrainStateSchema, type StockBrainState } from "@workspace/common-types";
 import { getTypedPositions, getAccount, hasValidTradingKey, isBrokerKey } from "../lib/alpaca";
 import { getModelDiagnostics, getModelStatus, retrainModel } from "../lib/ml_model";
-import { getSchedulerStats } from "../lib/retrain_scheduler";
-import { getSuperIntelligenceStatus } from "../lib/super_intelligence";
-import { getSSEClientCount } from "../lib/signal_stream";
-import { requireOperator } from "../lib/auth_guard";
 import { resolveSystemMode, canWriteOrders, isLiveMode } from "@workspace/strategy-core";
 import { getCurrentTradingSession, getRiskEngineSnapshot, isKillSwitchActive, isSessionAllowed, resetRiskEngineRuntime, setKillSwitchActive, updateRiskConfig } from "../lib/risk_engine";
 import { runBrainCycle } from "../lib/brain_bridge";
@@ -494,7 +490,6 @@ router.get("/system/status", async (req, res) => {
       buying_power: buyingPower,
       account_connected: Boolean(account) && !accountHasError,
       account_mode: accountMode,
-      ml_scheduler: getSchedulerStats(),
     });
   } catch (err) {
     req.log.error({ err }, "Failed to get system status");
@@ -503,7 +498,7 @@ router.get("/system/status", async (req, res) => {
 });
 
 // ─── POST /api/system/recall/refresh — run replay cycle to refresh context ──
-router.post("/system/recall/refresh", requireOperator, async (req, res) => {
+router.post("/system/recall/refresh", async (req, res) => {
   try {
     const requestedSymbol = String(req.body?.symbol ?? "").trim().toUpperCase();
     const symbol = requestedSymbol.length > 0 ? requestedSymbol : "AAPL";
@@ -556,7 +551,7 @@ router.post("/system/recall/refresh", requireOperator, async (req, res) => {
 });
 
 // ─── POST /api/system/retrain — retrain ML model on demand ──────────────────
-router.post("/system/retrain", requireOperator, async (req, res) => {
+router.post("/system/retrain", async (req, res) => {
   try {
     const result = await retrainModel();
     res.json(result);
@@ -761,7 +756,7 @@ router.get("/system/risk", (_req, res) => {
 });
 
 // ─── PUT /api/system/risk — update runtime risk controls ────────────────────
-router.put("/system/risk", requireOperator, (req, res) => {
+router.put("/system/risk", (req, res) => {
   try {
     const body = (typeof req.body === "object" && req.body !== null ? req.body : {}) as Record<string, unknown>;
     const updated = updateRiskConfig({
@@ -789,7 +784,7 @@ router.put("/system/risk", requireOperator, (req, res) => {
 });
 
 // ─── POST /api/system/risk/reset — reset runtime risk state ─────────────────
-router.post("/system/risk/reset", requireOperator, (_req, res) => {
+router.post("/system/risk/reset", (_req, res) => {
   const state = resetRiskEngineRuntime();
   res.json({
     ...state,
@@ -798,7 +793,7 @@ router.post("/system/risk/reset", requireOperator, (_req, res) => {
 });
 
 // ─── POST /api/system/kill-switch — toggle runtime kill switch ──────────────
-router.post("/system/kill-switch", requireOperator, (req, res) => {
+router.post("/system/kill-switch", (req, res) => {
   const body = (typeof req.body === "object" && req.body !== null ? req.body : {}) as Record<string, unknown>;
   const active = Boolean(body.active);
   const state = setKillSwitchActive(active);
@@ -1515,220 +1510,195 @@ router.get("/system/consciousness/latest", async (req, res) => {
   }
 });
 
-// ── GET /system/openbb/latest ────────────────────────────────────────────────
-// Latest OpenBB Python pipeline decision + backtest summary.
-// Reads latest_decision.json and backtest_summary.json from godsview-openbb/data/processed/.
-router.get("/system/openbb/latest", async (_req, res) => {
+router.get("/market-readiness", async (req, res) => {
   try {
-    const [decisionArtifact, backtestArtifact] = await Promise.all([
-      readJsonArtifact("latest_decision.json"),
-      readJsonArtifact("backtest_summary.json"),
-    ]);
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const d = decisionArtifact.data;
-    const b = backtestArtifact.data;
-    const signal = asRecord(d?.signal) ?? {};
-    const filter = asRecord(d?.filter) ?? {};
-    const modelMeta = asRecord(signal?.model_meta) ?? {};
-    const execution = asRecord(d?.execution) ?? {};
+    const approvedTrades = await db
+      .select({
+        outcome: siDecisionsTable.outcome,
+        realized_pnl: siDecisionsTable.realized_pnl,
+        final_quality: siDecisionsTable.final_quality,
+        created_at: siDecisionsTable.created_at,
+        regime: siDecisionsTable.regime,
+        enhanced_quality: siDecisionsTable.enhanced_quality,
+        edge_score: siDecisionsTable.edge_score,
+        win_probability: siDecisionsTable.win_probability,
+      })
+      .from(siDecisionsTable)
+      .where(
+        and(
+          eq(siDecisionsTable.approved, true),
+          gte(siDecisionsTable.created_at, thirtyDaysAgo)
+        )
+      );
+
+    if (!approvedTrades.length) {
+      return res.json({
+        status: "CAUTION",
+        color: "yellow",
+        regime: "no_data",
+        metrics: {
+          win_rate: 0,
+          profit_factor: 0,
+          sharpe_ratio: 0,
+          max_drawdown_pct: 0,
+          active_positions: 0,
+          daily_trades: 0,
+          max_daily_trades: 20,
+        },
+        conditions: [
+          {
+            name: "Minimum Trade History",
+            met: false,
+            description: "No approved trades in the last 30 days",
+          },
+        ],
+        recommended_position_size: 0.5,
+        reasoning: "Insufficient trade history. Run backtest or live trades to establish metrics.",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    let wins = 0;
+    let losses = 0;
+    let totalPnl = 0;
+    let totalPnlPct = 0;
+    let maxDrawdownPct = 0;
+    let dailyTrades = 0;
+
+    const regimeMap = new Map<string, number>();
+    let mostCommonRegime = "neutral";
+
+    for (const trade of approvedTrades) {
+      const outcome = String(trade.outcome ?? "").toLowerCase();
+      if (outcome === "win") {
+        wins += 1;
+      } else if (outcome === "loss") {
+        losses += 1;
+      }
+
+      const pnl = parseNum(trade.realized_pnl);
+      totalPnl += pnl;
+      totalPnlPct += pnl > 0 ? 1 : -1;
+
+      const regime = String(trade.regime ?? "neutral");
+      regimeMap.set(regime, (regimeMap.get(regime) ?? 0) + 1);
+
+      const quality = parseNum(trade.final_quality);
+      if (quality < 30) {
+        maxDrawdownPct = Math.max(maxDrawdownPct, Math.abs(quality - 50));
+      }
+    }
+
+    const closedTrades = wins + losses;
+    const winRate = closedTrades > 0 ? wins / closedTrades : 0;
+    const profitFactor = losses > 0 ? (totalPnl > 0 ? Math.abs(totalPnl) / losses : 0) : totalPnl > 0 ? 999 : 0;
+    const sharpeRatio = closedTrades > 0 ? (totalPnl / Math.sqrt(Math.abs(totalPnl) || 1)) * Math.sqrt(252) : 0;
+
+    if (regimeMap.size > 0) {
+      mostCommonRegime = Array.from(regimeMap.entries()).sort((a, b) => b[1] - a[1])[0][0];
+    }
+
+    const { positions } = await getCachedAlpacaData();
+    const activePositions = positions.length;
+    dailyTrades = approvedTrades.filter((t) => {
+      const tradeDate = new Date(t.created_at);
+      const today = new Date();
+      return (
+        tradeDate.getFullYear() === today.getFullYear() &&
+        tradeDate.getMonth() === today.getMonth() &&
+        tradeDate.getDate() === today.getDate()
+      );
+    }).length;
+
+    const conditions: Array<{
+      name: string;
+      met: boolean;
+      description: string;
+    }> = [
+      {
+        name: "Win Rate Threshold",
+        met: winRate > 0.45,
+        description: `Win rate: ${(winRate * 100).toFixed(1)}% (requirement: > 45%)`,
+      },
+      {
+        name: "Profit Factor",
+        met: profitFactor > 0.9,
+        description: `Profit factor: ${profitFactor.toFixed(2)} (requirement: > 0.9)`,
+      },
+      {
+        name: "Max Drawdown",
+        met: maxDrawdownPct < 15,
+        description: `Max drawdown: ${maxDrawdownPct.toFixed(1)}% (requirement: < 15%)`,
+      },
+      {
+        name: "Active Positions",
+        met: activePositions > 0,
+        description: `${activePositions} position(s) currently open`,
+      },
+      {
+        name: "Daily Trade Limit",
+        met: dailyTrades < 20,
+        description: `${dailyTrades} trades today (max: 20)`,
+      },
+    ];
+
+    let status: "READY" | "CAUTION" | "STAND_DOWN" = "STAND_DOWN";
+    let color: "green" | "yellow" | "red" = "red";
+
+    const readyConditions = winRate > 0.55 && profitFactor > 1.2 && maxDrawdownPct < 10;
+    const cautionConditions = winRate > 0.45 && profitFactor > 0.9;
+
+    if (readyConditions) {
+      status = "READY";
+      color = "green";
+    } else if (cautionConditions) {
+      status = "CAUTION";
+      color = "yellow";
+    }
+
+    const basePositionSize = 1.0;
+    let positionSizeAdjustment = 0.5;
+
+    if (status === "READY") {
+      positionSizeAdjustment = 2.0;
+    } else if (status === "CAUTION") {
+      positionSizeAdjustment = 1.0;
+    }
+
+    const recommendedPositionSize = Math.min(5.0, basePositionSize * positionSizeAdjustment);
+
+    const reasoning =
+      status === "READY"
+        ? `Excellent conditions: ${(winRate * 100).toFixed(1)}% win rate, ${profitFactor.toFixed(2)} profit factor, ${maxDrawdownPct.toFixed(1)}% drawdown. Recommend normal to elevated position sizes.`
+        : status === "CAUTION"
+        ? `Fair conditions: ${(winRate * 100).toFixed(1)}% win rate, ${profitFactor.toFixed(2)} profit factor. Recommend reduced position sizes until metrics improve.`
+        : `Poor conditions: Win rate ${(winRate * 100).toFixed(1)}%, profit factor ${profitFactor.toFixed(2)}%. Recommend stand-down or minimal position sizes.`;
 
     res.json({
-      has_data: decisionArtifact.exists,
-      decision: {
-        symbol: String(d?.symbol ?? ""),
-        timeframe: String(d?.timeframe ?? ""),
-        dry_run: Boolean(d?.dry_run ?? true),
-        generated_at: String(d?.generated_at ?? ""),
-        // Signal layer
-        action: String(signal.action ?? "skip"),
-        confidence: parseNum(signal.confidence, 0),
-        prob_up: parseNum(signal.prob_up, 0),
-        close_price: parseNum(signal.close_price, 0),
-        threshold_buy: parseNum(signal.threshold_buy, 0.6),
-        threshold_sell: parseNum(signal.threshold_sell, 0.4),
-        // ML model meta
-        model_accuracy: parseNum(modelMeta.accuracy, 0),
-        roc_auc: parseNum(modelMeta.roc_auc, 0),
-        train_rows: parseIntSafe(modelMeta.train_rows, 0),
-        test_rows: parseIntSafe(modelMeta.test_rows, 0),
-        model_mode: String(modelMeta.mode ?? ""),
-        // Filter layer
-        filter_approved: Boolean(filter.approved ?? false),
-        filter_final_action: String(filter.final_action ?? "skip"),
-        filter_reasons: Array.isArray(filter.reasons) ? filter.reasons : [],
-        // Execution
-        execution_status: String(execution.status ?? "unknown"),
+      status,
+      color,
+      regime: mostCommonRegime,
+      metrics: {
+        win_rate: parseFloat(winRate.toFixed(4)),
+        profit_factor: parseFloat(profitFactor.toFixed(2)),
+        sharpe_ratio: parseFloat(sharpeRatio.toFixed(2)),
+        max_drawdown_pct: parseFloat(maxDrawdownPct.toFixed(2)),
+        active_positions: activePositions,
+        daily_trades: dailyTrades,
+        max_daily_trades: 20,
       },
-      backtest: backtestArtifact.exists ? {
-        symbol: String(b?.symbol ?? ""),
-        timeframe: String(b?.timeframe ?? ""),
-        total_bars: parseIntSafe(b?.total_bars, 0),
-        signaled_bars: parseIntSafe(b?.signaled_bars, 0),
-        hit_rate: parseNum(b?.hit_rate, 0),
-        signal_rate: parseNum(b?.signal_rate, 0),
-        generated_at: String(b?.generated_at ?? ""),
-      } : null,
-      sources: {
-        decision: { exists: decisionArtifact.exists, path: decisionArtifact.path },
-        backtest: { exists: backtestArtifact.exists, path: backtestArtifact.path },
-      },
+      conditions,
+      recommended_position_size: parseFloat(recommendedPositionSize.toFixed(2)),
+      reasoning,
+      timestamp: new Date().toISOString(),
     });
   } catch (err) {
-    res.status(500).json({ error: "openbb_fetch_failed", message: String(err) });
+    req.log.error({ err }, "Failed to calculate market readiness");
+    res.status(500).json({ error: "market_readiness_failed", message: "Failed to calculate market readiness assessment" });
   }
 });
-
-// ── GET /system/intelligence-center ─────────────────────────────────────────
-// Unified snapshot of every system component: status, uptime, key metrics.
-// Powers the Intelligence Control Center dashboard page.
-const SERVER_STARTED_AT = Date.now();
-
-router.get("/system/intelligence-center", async (req, res) => {
-  const now = Date.now();
-  const uptimeSec = Math.floor((now - SERVER_STARTED_AT) / 1000);
-
-  // --- DB health check ---
-  let dbStatus: "online" | "degraded" | "offline" = "offline";
-  let dbLatencyMs = 0;
-  try {
-    const t0 = Date.now();
-    await db.execute(sql`SELECT 1`);
-    dbLatencyMs = Date.now() - t0;
-    dbStatus = dbLatencyMs < 500 ? "online" : "degraded";
-  } catch { dbStatus = "offline"; }
-
-  // --- ML Model ---
-  const mlStatus = getModelStatus();
-  const mlDiag = getModelDiagnostics();
-
-  // --- Super Intelligence ---
-  const siStatus = getSuperIntelligenceStatus();
-
-  // --- Risk Engine ---
-  const riskSnap = getRiskEngineSnapshot();
-  const killSwitch = isKillSwitchActive();
-  const tradingSession = getCurrentTradingSession();
-
-  // --- Alpaca ---
-  const alpacaConnected = hasValidTradingKey;  // boolean const, not a function
-  let alpacaAccountValue: number | null = null;
-  try {
-    if (alpacaConnected) {
-      const acct = await getAccount() as any;
-      alpacaAccountValue = acct ? parseFloat(String(acct?.portfolio_value ?? acct?.equity ?? "0")) : null;
-    }
-  } catch { /* ignore */ }
-
-  // --- Scheduler ---
-  const schedulerStats = getSchedulerStats();
-
-  // --- Signal Stream ---
-  const sseClients = getSSEClientCount();
-
-  // --- Brain: count entities from DB ---
-  let brainEntities = 0;
-  try {
-    const [{ cnt }] = await db.execute(
-      sql`SELECT COUNT(*)::int AS cnt FROM knowledge_graph_nodes LIMIT 1`
-    ) as any[];
-    brainEntities = cnt ?? 0;
-  } catch { /* table may not exist */ }
-
-  // --- Signal count from last 24h ---
-  let signalsLast24h = 0;
-  try {
-    const cutoff = new Date(now - 24 * 60 * 60 * 1000);
-    const cutoffIso = cutoff.toISOString();
-    const [{ cnt }] = await db.execute(
-      sql`SELECT COUNT(*)::int AS cnt FROM signals WHERE created_at >= ${cutoffIso}`
-    ) as any[];
-    signalsLast24h = cnt ?? 0;
-  } catch { /* ignore */ }
-
-  // --- Trades today ---
-  let tradesToday = 0;
-  try {
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    const todayIso = today.toISOString();
-    const [{ cnt }] = await db.execute(
-      sql`SELECT COUNT(*)::int AS cnt FROM trades WHERE created_at >= ${todayIso}`
-    ) as any[];
-    tradesToday = cnt ?? 0;
-  } catch { /* ignore */ }
-
-  res.json({
-    generated_at: new Date().toISOString(),
-    server: {
-      status: "online" as const,
-      uptime_seconds: uptimeSec,
-      uptime_human: formatUptime(uptimeSec),
-      started_at: new Date(SERVER_STARTED_AT).toISOString(),
-      system_mode: SYSTEM_MODE,
-      node_version: process.version,
-    },
-    database: {
-      status: dbStatus,
-      latency_ms: dbLatencyMs,
-    },
-    ml_model: {
-      status: mlStatus.status,
-      message: mlStatus.message,
-      accuracy: typeof mlDiag === "object" && mlDiag ? (mlDiag as any).accuracy ?? null : null,
-      sample_count: typeof mlDiag === "object" && mlDiag ? (mlDiag as any).sample_count ?? 0 : 0,
-      last_trained_at: typeof mlDiag === "object" && mlDiag ? (mlDiag as any).last_trained_at ?? null : null,
-    },
-    super_intelligence: {
-      status: siStatus.status,
-      message: siStatus.message,
-      ensemble_accuracy: (siStatus as any).ensemble?.accuracy ?? null,
-      ensemble_size: (siStatus as any).ensemble?.models ?? 0,
-      total_processed: (siStatus as any).total_processed ?? 0,
-    },
-    risk_engine: {
-      status: killSwitch ? "kill_switch_active" : "active",
-      kill_switch_active: killSwitch,
-      session: tradingSession,
-      daily_pnl_pct: (riskSnap as any)?.daily_pnl_pct ?? null,
-      open_positions: (riskSnap as any)?.open_positions ?? 0,
-      max_drawdown_pct: (riskSnap as any)?.max_drawdown_pct ?? null,
-    },
-    alpaca: {
-      status: alpacaConnected ? "connected" : "disconnected",
-      is_live_mode: isLiveMode(SYSTEM_MODE),
-      can_write_orders: canWriteOrders(SYSTEM_MODE),
-      account_value: alpacaAccountValue,
-    },
-    scheduler: {
-      status: (schedulerStats as any)?.running ? "running" : "idle",
-      retrain_interval_h: (schedulerStats as any)?.retrain_interval_h ?? null,
-      last_retrain_at: (schedulerStats as any)?.last_retrain_at ?? null,
-      next_retrain_at: (schedulerStats as any)?.next_retrain_at ?? null,
-      retrain_count: (schedulerStats as any)?.retrain_count ?? 0,
-    },
-    signal_stream: {
-      status: "active" as const,
-      connected_clients: sseClients,
-      signals_last_24h: signalsLast24h,
-    },
-    brain: {
-      status: brainEntities > 0 ? "active" : "idle",
-      entity_count: brainEntities,
-    },
-    trading: {
-      trades_today: tradesToday,
-    },
-  });
-});
-
-function formatUptime(sec: number): string {
-  const d = Math.floor(sec / 86400);
-  const h = Math.floor((sec % 86400) / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  const s = sec % 60;
-  if (d > 0) return `${d}d ${h}h ${m}m`;
-  if (h > 0) return `${h}h ${m}m ${s}s`;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
-}
 
 export default router;

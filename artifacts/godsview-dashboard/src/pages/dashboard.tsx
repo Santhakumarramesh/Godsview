@@ -321,16 +321,7 @@ export default function Dashboard() {
     (perfLoading && !performance) ||
     (sigLoading && !signals);
 
-  if (isInitialLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="flex flex-col items-center gap-3">
-          <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: C.primary, boxShadow: `0 0 8px ${C.primary}` }} />
-          <span style={{ fontSize: "9px", color: C.outline, fontFamily: "Space Grotesk", letterSpacing: "0.2em" }}>LOADING PIPELINE</span>
-        </div>
-      </div>
-    );
-  }
+  // NOTE: early return moved below all hooks to satisfy Rules of Hooks
 
   const layers = systemStatus?.layers ?? [];
   const sigs = signals?.signals ?? [];
@@ -575,6 +566,17 @@ export default function Dashboard() {
       setSelectedCandleTs(bars[bars.length - 1].time);
     }
   }, [candleXrayData, selectedCandleTs]);
+
+  if (isInitialLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="flex flex-col items-center gap-3">
+          <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: C.primary, boxShadow: `0 0 8px ${C.primary}` }} />
+          <span style={{ fontSize: "9px", color: C.outline, fontFamily: "Space Grotesk", letterSpacing: "0.2em" }}>LOADING PIPELINE</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
