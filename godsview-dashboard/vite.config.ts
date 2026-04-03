@@ -42,9 +42,14 @@ export default defineConfig({
     dedupe: ["react", "react-dom"],
   },
   root: path.resolve(import.meta.dirname),
+  css: {
+    // Use esbuild transformer as fallback when lightningcss native binary is unavailable
+    // (e.g. aarch64 sandbox). Docker build (linux/amd64) uses lightningcss natively.
+    transformer: "postcss",
+  },
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
-    emptyOutDir: true,
+    emptyOutDir: false,
     chunkSizeWarningLimit: 600,
     rollupOptions: {
       output: {
@@ -83,6 +88,21 @@ export default defineConfig({
     },
   },
   server: {
+    proxy: {
+      "/api": {
+        target: "http://localhost:3001",
+        changeOrigin: true,
+      },
+      "/health": {
+        target: "http://localhost:3001",
+        changeOrigin: true,
+      },
+      "/streaming": {
+        target: "http://localhost:3001",
+        changeOrigin: true,
+        ws: true,
+      },
+    },
     port,
     host: "0.0.0.0",
     allowedHosts: true,

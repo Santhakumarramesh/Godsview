@@ -793,8 +793,8 @@ export async function trainEnsemble(): Promise<void> {
       )
       .limit(200_000);
 
-    if (rows.length < 100) {
-      console.log(`[super] Only ${rows.length} samples — need ≥100 for ensemble.`);
+    if (rows.length < 50) {
+      console.log(`[super] Only ${rows.length} samples — need ≥50 for ensemble.`);
       _ensembleStatus = "untrained";
       return;
     }
