@@ -88,6 +88,21 @@ export default defineConfig({
     },
   },
   server: {
+    proxy: {
+      "/api": {
+        target: "http://localhost:3001",
+        changeOrigin: true,
+      },
+      "/health": {
+        target: "http://localhost:3001",
+        changeOrigin: true,
+      },
+      "/streaming": {
+        target: "http://localhost:3001",
+        changeOrigin: true,
+        ws: true,
+      },
+    },
     port,
     host: "0.0.0.0",
     allowedHosts: true,
