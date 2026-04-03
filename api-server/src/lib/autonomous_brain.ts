@@ -34,6 +34,8 @@ import { brainEventBus } from "./brain_event_bus";
 import { brainJobQueue, BrainJobs, registerJobHandler, dispatchBatch, type JobType, type BrainJob } from "./job_queue";
 import { evolveStrategy, rankStrategies, strategyRegistry } from "./strategy_evolution";
 import { superIntelligenceV2 } from "./super_intelligence_v2";
+import { brainAlerts } from "./brain_alerts.js";
+import { brainPerformance } from "./brain_performance.js";
 
 // ── Brain Operating Modes ─────────────────────────────────────────────────
 
@@ -157,6 +159,10 @@ class AutonomousBrain {
     this._registerJobHandlers();
     this._scheduleScan();
     this._scheduleDispatch();
+    this._scheduleAttentionBacktest();
+
+    // Boot all Phase 8 subsystems automatically
+    this._autoBootSubsystems(symbols);
 
     // Seed the queue with initial work
     this._seedInitialJobs();
@@ -176,10 +182,126 @@ class AutonomousBrain {
     });
   }
 
+  // ── Phase 9: Auto-boot all subsystems ─────────────────────────────────────
+
+  private _autoBootSubsystems(symbols: string[]): void {
+    // Use dynamic imports to avoid circular deps at module load time
+    Promise.all([
+      import("./brain_watchdog.js"),
+      import("./brain_stream_bridge.js"),
+      import("./correlation_engine.js"),
+      import("./brain_pnl_tracker.js"),
+    ]).then(([{ brainWatchdog }, { brainStreamBridge }, { correlationEngine }, { brainPnLTracker }]) => {
+      // Start watchdog
+      if (!brainWatchdog.isRunning?.()) {
+        brainWatchdog.start();
+        console.log("[AutonomousBrain] Watchdog auto-started");
+      }
+
+      // Start stream bridge (stock WebSocket)
+      if (!brainStreamBridge.isConnected?.()) {
+        brainStreamBridge.start();
+        // Subscribe to all tracked symbols
+        for (const sym of symbols) {
+          brainStreamBridge.subscribeSymbol(sym);
+        }
+        console.log(`[AutonomousBrain] StreamBridge auto-started — ${symbols.length} symbols`);
+      }
+
+      // Start correlation engine feeds
+      console.log("[AutonomousBrain] CorrelationEngine ready");
+
+      // Start P&L tracker
+      if (!brainPnLTracker.isRunning?.()) {
+        brainPnLTracker.start();
+        console.log("[AutonomousBrain] P&L Tracker auto-started");
+      }
+
+      // Warm-load performance engine for all symbols
+      for (const sym of symbols) {
+        brainPerformance.warmLoad(sym).catch(() => {});
+      }
+
+      console.log("[AutonomousBrain] All Phase 8 subsystems booted");
+    }).catch((err) => {
+      console.warn("[AutonomousBrain] Subsystem auto-boot warning:", err?.message ?? err);
+    });
+  }
+
+  // ── Phase 9: Continuous attention-based backtest loop (every 15 min) ──────
+
+  private _attentionBacktestTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly ATTENTION_BACKTEST_INTERVAL_MS = 15 * 60_000; // 15 minutes
+
+  private _scheduleAttentionBacktest(): void {
+    if (!this.state.running) return;
+
+    const tick = async () => {
+      if (!this.state.running) return;
+      try {
+        await this._runAttentionBacktest();
+      } catch (err) {
+        console.error("[AutonomousBrain] Attention backtest tick error:", err);
+      }
+      if (this.state.running) {
+        this._attentionBacktestTimer = setTimeout(tick, this.ATTENTION_BACKTEST_INTERVAL_MS);
+      }
+    };
+
+    // First run after 2 minutes to let initial scans settle
+    this._attentionBacktestTimer = setTimeout(tick, 2 * 60_000);
+  }
+
+  private async _runAttentionBacktest(): Promise<void> {
+    // Identify high-attention symbols (score ≥ 0.65) or degrading strategies
+    const candidates = this.state.symbols.filter((sym) => {
+      const attention = this.state.attentionMap[sym] ?? 0.5;
+      const strategy = strategyRegistry.get("smc_ob_fvg", sym);
+      const isDegrading = strategy?.tier === "DEGRADING" || strategy?.tier === "SEED" || strategy?.tier === "LEARNING";
+      const isHighAttention = attention >= 0.65;
+      const notRecentlyTested = (Date.now() - (this.state.lastBacktestAt[sym] ?? 0)) > 15 * 60_000;
+      return (isHighAttention || isDegrading) && notRecentlyTested;
+    });
+
+    if (candidates.length === 0) return;
+
+    // Limit to top 3 to avoid overwhelming the job queue
+    const topCandidates = candidates
+      .sort((a, b) => (this.state.attentionMap[b] ?? 0.5) - (this.state.attentionMap[a] ?? 0.5))
+      .slice(0, 3);
+
+    for (const sym of topCandidates) {
+      BrainJobs.backtest(sym, 1000, "attention-based 15min backtest", 2);
+      this.state.totalJobsCreated++;
+      this.state.lastBacktestAt[sym] = Date.now();
+    }
+
+    if (topCandidates.length > 0) {
+      console.log(`[AutonomousBrain] Attention backtest queued: ${topCandidates.join(", ")}`);
+    }
+  }
+
   stop(): void {
     this.state.running = false;
     if (this.scanTimer) { clearTimeout(this.scanTimer); this.scanTimer = null; }
     if (this.dispatchTimer) { clearTimeout(this.dispatchTimer); this.dispatchTimer = null; }
+    if (this._attentionBacktestTimer) { clearTimeout(this._attentionBacktestTimer); this._attentionBacktestTimer = null; }
+
+    // Signal subsystems to stop
+    Promise.all([
+      import("./brain_watchdog.js"),
+      import("./brain_stream_bridge.js"),
+      import("./brain_pnl_tracker.js"),
+    ]).then(([{ brainWatchdog }, { brainStreamBridge }, { brainPnLTracker }]) => {
+      brainWatchdog.stop?.();
+      brainStreamBridge.stop?.();
+      brainPnLTracker.stop?.();
+    }).catch(() => {});
+
+    brainAlerts.custom("BRAIN_STOPPED", "warning", "Autonomous Brain Stopped",
+      `Brain stopped after ${this.state.cycleCount} cycles, ${this.state.totalJobsCompleted} jobs`
+    ).catch(() => {});
+
     console.log(`[AutonomousBrain] Stopped. Cycles: ${this.state.cycleCount}, Jobs: ${this.state.totalJobsCompleted}`);
   }
 
@@ -240,7 +362,19 @@ class AutonomousBrain {
       this.state.evolutionCount++;
       this.state.lastEvolveAt[symbol] = Date.now();
 
-      // If tier changed to DEGRADING/SUSPENDED → notify
+      // If tier changed → fire alerts
+      if (result.newTier === "SUSPENDED") {
+        brainAlerts.strategySuspended(symbol, strategy ?? "smc_ob_fvg").catch(() => {});
+      } else if (result.newTier === "ELITE") {
+        brainAlerts.newEliteStrategy(symbol, strategy ?? "smc_ob_fvg").catch(() => {});
+      } else if (result.newTier === "DEGRADING") {
+        brainAlerts.custom(
+          "STRATEGY_SUSPENDED", "warning",
+          `Strategy Degrading — ${symbol}`,
+          `${strategy} on ${symbol} degraded to ${result.newTier} after ${result.changes.length} param changes`
+        ).catch(() => {});
+      }
+
       if (result.newTier === "DEGRADING" || result.newTier === "SUSPENDED") {
         brainEventBus.agentReport({
           agentId: "L6_evolution",
@@ -274,6 +408,19 @@ class AutonomousBrain {
         const r = superIntelligenceV2.retrain(symbol);
         count = 1;
         this.state.retrainCount++;
+
+        // Phase 9: detect SI drift (accuracy < 50% or brier > 0.30)
+        if (r.accuracy < 0.50 || r.brier > 0.30) {
+          brainAlerts.siDrift(symbol, r.accuracy, r.brier).catch(() => {});
+        }
+
+        // Alert on retrain completion
+        brainAlerts.custom(
+          "RETRAIN_COMPLETE", "info",
+          `SI Retrained — ${symbol}`,
+          `v${r.version} | Accuracy: ${(r.accuracy * 100).toFixed(1)}% | Brier: ${r.brier.toFixed(3)}`
+        ).catch(() => {});
+
         return { symbol, version: r.version, accuracy: r.accuracy, brier: r.brier };
       } else {
         count = superIntelligenceV2.triggerGlobalEvolution();
@@ -381,6 +528,11 @@ class AutonomousBrain {
     if (this.state.consecutiveLosses >= 5 && this.state.mode !== "DEFENSIVE") {
       this.state.mode = "DEFENSIVE";
       console.log("[AutonomousBrain] Entering DEFENSIVE mode after 5 consecutive losses");
+
+      // Phase 9: fire alert for consecutive losses + defensive mode
+      brainAlerts.consecutiveLosses(symbol, this.state.consecutiveLosses).catch(() => {});
+      brainAlerts.defensiveMode(this.state.consecutiveLosses).catch(() => {});
+
       brainEventBus.agentReport({
         agentId: "brain",
         symbol: "SYSTEM",

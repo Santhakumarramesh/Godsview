@@ -29,6 +29,8 @@ import { strategyRegistry } from "./strategy_evolution.js";
 import { superIntelligenceV2 } from "./super_intelligence_v2.js";
 import { brainEventBus } from "./brain_event_bus.js";
 import { saveTradeOutcome, saveChartSnapshot } from "./brain_persistence.js";
+import { brainPerformance } from "./brain_performance.js";
+import { brainAlerts } from "./brain_alerts.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -355,6 +357,23 @@ class BrainExecutionBridge {
       entry_time: new Date(pos.openedAt),
       exit_time: exitTime,
     });
+
+    // ── Feed Performance Engine (equity curve, Sharpe, Sortino) ─────────────
+    brainPerformance.recordOutcome({
+      symbol,
+      direction: pos.direction.toUpperCase() as "LONG" | "SHORT",
+      regime: "unknown",
+      pnlR,
+      won,
+      timestamp: exitTime.getTime(),
+    });
+
+    // ── Emit TP/SL alert ─────────────────────────────────────────────────────
+    if (reason === "TP_HIT") {
+      brainAlerts.tpHit(symbol, pnlR).catch(() => {});
+    } else if (reason === "SL_HIT") {
+      brainAlerts.slHit(symbol, pnlR).catch(() => {});
+    }
 
     // Feed super intelligence with outcome
     superIntelligenceV2.recordOutcome({
