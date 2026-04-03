@@ -14,6 +14,7 @@
     "db:push": "corepack pnpm --filter @workspace/db run push",
     "db:migrate": "corepack pnpm --filter @workspace/db run migrate",
     "health-check": "corepack pnpm --filter @workspace/scripts run health-check",
+    "deploy:readiness": "corepack pnpm --filter @workspace/scripts run deploy-readiness",
     "seed": "corepack pnpm --filter @workspace/scripts run seed",
     "codegen": "corepack pnpm --filter @workspace/api-spec run codegen"
   },

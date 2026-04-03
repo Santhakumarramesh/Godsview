@@ -1,0 +1,434 @@
+#!/usr/bin/env tsx
+import { existsSync } from "node:fs";
+import path from "node:path";
+import { spawn, type ChildProcess } from "node:child_process";
+
+interface CheckResult {
+  name: string;
+  passed: boolean;
+  critical: boolean;
+  detail: string;
+  durationMs: number;
+}
+
+interface CommandResult {
+  code: number | null;
+  stdout: string;
+  stderr: string;
+}
+
+const ROOT = path.resolve(process.cwd());
+const API_DIST_ENTRY = path.resolve(ROOT, "artifacts/api-server/dist/index.mjs");
+
+const BASE_URL_INPUT = String(process.env.BASE_URL ?? "http://127.0.0.1:3000").replace(/\/$/, "");
+const REQUIRE_HTTP = boolEnv("REQUIRE_HTTP", false);
+const INCLUDE_PREFLIGHT = boolEnv("INCLUDE_PREFLIGHT", true);
+const RUN_BUILD_CHECKS = boolEnv("RUN_BUILD_CHECKS", true);
+const RUN_SMOKE_TESTS = boolEnv("RUN_SMOKE_TESTS", true);
+const START_SERVER_LOCAL = boolEnv("START_SERVER_LOCAL", false);
+const READINESS_PORT = Number(process.env.DEPLOY_READINESS_PORT ?? 3310);
+
+let localServer: ChildProcess | null = null;
+let localBaseUrl: string | null = null;
+
+function boolEnv(name: string, fallback: boolean): boolean {
+  const raw = String(process.env[name] ?? "").trim().toLowerCase();
+  if (!raw) return fallback;
+  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+}
+
+function timeoutEnv(name: string, fallbackMs: number): number {
+  const n = Number(process.env[name]);
+  return Number.isFinite(n) && n > 0 ? n : fallbackMs;
+}
+
+function tail(text: string, lines = 6): string {
+  const parts = text.split("\n").filter(Boolean);
+  return parts.slice(-lines).join("\n");
+}
+
+function color(code: number, text: string): string {
+  return `\x1b[${code}m${text}\x1b[0m`;
+}
+
+async function runCommand(
+  name: string,
+  critical: boolean,
+  cmd: string,
+  args: string[],
+  timeoutMs = timeoutEnv("COMMAND_TIMEOUT_MS", 8 * 60_000),
+): Promise<CheckResult> {
+  const started = Date.now();
+  try {
+    const result = await execWithCapture(cmd, args, timeoutMs);
+    const ok = result.code === 0;
+    return {
+      name,
+      critical,
+      passed: ok,
+      detail: ok
+        ? "OK"
+        : `exit=${String(result.code)}\n${tail(result.stderr || result.stdout || "no output")}`,
+      durationMs: Date.now() - started,
+    };
+  } catch (err) {
+    return {
+      name,
+      critical,
+      passed: false,
+      detail: err instanceof Error ? err.message : String(err),
+      durationMs: Date.now() - started,
+    };
+  }
+}
+
+function execWithCapture(cmd: string, args: string[], timeoutMs: number): Promise<CommandResult> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, {
+      cwd: ROOT,
+      env: { ...process.env },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout.on("data", (d) => {
+      stdout += String(d);
+    });
+    child.stderr.on("data", (d) => {
+      stderr += String(d);
+    });
+
+    const timer = setTimeout(() => {
+      child.kill("SIGTERM");
+      reject(new Error(`Command timed out after ${timeoutMs}ms: ${cmd} ${args.join(" ")}`));
+    }, timeoutMs);
+
+    child.on("error", (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      resolve({ code, stdout, stderr });
+    });
+  });
+}
+
+async function httpJson(url: string, timeoutMs = timeoutEnv("HTTP_TIMEOUT_MS", 12_000)): Promise<{ status: number; body: any }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: { Accept: "application/json" },
+    });
+    const text = await res.text();
+    let body: any = null;
+    try {
+      body = text ? JSON.parse(text) : null;
+    } catch {
+      body = { raw: text };
+    }
+    return { status: res.status, body };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function checkHttp(
+  name: string,
+  critical: boolean,
+  url: string,
+  predicate: (status: number, body: any) => { ok: boolean; detail: string },
+): Promise<CheckResult> {
+  const started = Date.now();
+  try {
+    const { status, body } = await httpJson(url);
+    const verdict = predicate(status, body);
+    return {
+      name,
+      critical,
+      passed: verdict.ok,
+      detail: verdict.detail,
+      durationMs: Date.now() - started,
+    };
+  } catch (err) {
+    return {
+      name,
+      critical,
+      passed: false,
+      detail: err instanceof Error ? err.message : String(err),
+      durationMs: Date.now() - started,
+    };
+  }
+}
+
+function artifactFileChecks(): CheckResult[] {
+  const started = Date.now();
+  const checks: Array<{ name: string; rel: string; critical: boolean }> = [
+    { name: "API dist bundle exists", rel: "artifacts/api-server/dist/index.mjs", critical: true },
+    { name: "Dashboard dist index exists", rel: "artifacts/godsview-dashboard/dist/public/index.html", critical: true },
+    { name: "Dockerfile exists", rel: "Dockerfile", critical: false },
+    { name: "Docker entrypoint exists", rel: "docker-entrypoint.sh", critical: false },
+    { name: "Replit startup script exists", rel: "replit-start.sh", critical: false },
+  ];
+
+  return checks.map((check) => {
+    const file = path.resolve(ROOT, check.rel);
+    const exists = existsSync(file);
+    return {
+      name: check.name,
+      passed: exists,
+      critical: check.critical,
+      detail: exists ? check.rel : `Missing ${check.rel}`,
+      durationMs: Date.now() - started,
+    };
+  });
+}
+
+async function ensureRuntimeBase(): Promise<string | null> {
+  try {
+    const health = await httpJson(`${BASE_URL_INPUT}/healthz`, 3_000);
+    if (health.status === 200) return BASE_URL_INPUT;
+  } catch {
+    // ignore
+  }
+
+  if (!START_SERVER_LOCAL) {
+    return null;
+  }
+
+  if (!existsSync(API_DIST_ENTRY)) {
+    throw new Error(`Cannot start local server: missing ${API_DIST_ENTRY}`);
+  }
+
+  const env = {
+    ...process.env,
+    PORT: String(READINESS_PORT),
+    NODE_ENV: process.env.NODE_ENV ?? "development",
+    GODSVIEW_SYSTEM_MODE: process.env.GODSVIEW_SYSTEM_MODE ?? "paper",
+  };
+
+  localServer = spawn("node", ["--enable-source-maps", API_DIST_ENTRY], {
+    cwd: ROOT,
+    env,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  localServer.stdout?.on("data", (d) => {
+    const line = String(d).trim();
+    if (line) process.stdout.write(`${color(90, `[server] ${line}`)}\n`);
+  });
+  localServer.stderr?.on("data", (d) => {
+    const line = String(d).trim();
+    if (line) process.stdout.write(`${color(90, `[server-err] ${line}`)}\n`);
+  });
+
+  const base = `http://127.0.0.1:${READINESS_PORT}`;
+  const started = Date.now();
+  const timeoutMs = timeoutEnv("LOCAL_SERVER_BOOT_TIMEOUT_MS", 45_000);
+
+  while (Date.now() - started < timeoutMs) {
+    await new Promise((r) => setTimeout(r, 750));
+    try {
+      const health = await httpJson(`${base}/healthz`, 2_500);
+      if (health.status === 200) {
+        localBaseUrl = base;
+        return base;
+      }
+    } catch {
+      // keep polling
+    }
+  }
+
+  throw new Error(`Local server did not become healthy within ${timeoutMs}ms`);
+}
+
+async function stopLocalServer(): Promise<void> {
+  if (!localServer) return;
+  await new Promise<void>((resolve) => {
+    localServer?.once("exit", () => resolve());
+    localServer?.kill("SIGTERM");
+    setTimeout(() => {
+      localServer?.kill("SIGKILL");
+      resolve();
+    }, 3_000);
+  });
+  localServer = null;
+  localBaseUrl = null;
+}
+
+function printResults(results: CheckResult[]): void {
+  let passed = 0;
+  let criticalFailed = 0;
+  let warningFailed = 0;
+
+  for (const result of results) {
+    const tag = result.passed
+      ? color(32, "PASS")
+      : result.critical
+      ? color(31, "FAIL")
+      : color(33, "WARN");
+    const icon = result.passed
+      ? color(32, "✓")
+      : result.critical
+      ? color(31, "✗")
+      : color(33, "⚠");
+
+    console.log(`${icon} ${tag} ${result.name} ${color(90, `(${result.durationMs}ms)`)}`);
+    if (!result.passed) {
+      console.log(`    ${color(90, result.detail)}`);
+    }
+
+    if (result.passed) passed += 1;
+    else if (result.critical) criticalFailed += 1;
+    else warningFailed += 1;
+  }
+
+  console.log("");
+  console.log(
+    `${color(36, "Summary")}: ${passed}/${results.length} passed, ` +
+      `${criticalFailed} critical failures, ${warningFailed} warnings`,
+  );
+
+  if (criticalFailed > 0) {
+    console.log(color(31, "Deployment readiness: NOT READY"));
+    process.exit(1);
+  }
+
+  if (warningFailed > 0) {
+    console.log(color(33, "Deployment readiness: DEGRADED"));
+    process.exit(0);
+  }
+
+  console.log(color(32, "Deployment readiness: READY"));
+  process.exit(0);
+}
+
+async function main(): Promise<void> {
+  const results: CheckResult[] = [];
+
+  console.log(color(36, "GodsView Deployment Readiness"));
+  console.log(color(90, `root=${ROOT}`));
+
+  results.push(...artifactFileChecks());
+
+  if (RUN_BUILD_CHECKS) {
+    results.push(
+      await runCommand(
+        "Build API server",
+        true,
+        "corepack",
+        ["pnpm", "--filter", "@workspace/api-server", "run", "build"],
+      ),
+    );
+    results.push(
+      await runCommand(
+        "Build dashboard",
+        true,
+        "corepack",
+        ["pnpm", "--filter", "@workspace/godsview-dashboard", "run", "build"],
+      ),
+    );
+  }
+
+  if (RUN_SMOKE_TESTS) {
+    results.push(
+      await runCommand(
+        "API smoke tests (vitest)",
+        true,
+        "corepack",
+        ["pnpm", "--filter", "@workspace/api-server", "run", "test", "--", "src/__tests__/e2e_smoke.test.ts"],
+      ),
+    );
+  }
+
+  let runtimeBase: string | null = null;
+  try {
+    runtimeBase = await ensureRuntimeBase();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    results.push({
+      name: "Runtime base URL available",
+      passed: false,
+      critical: REQUIRE_HTTP,
+      detail: message,
+      durationMs: 0,
+    });
+  }
+
+  if (runtimeBase) {
+    results.push(
+      await checkHttp(
+        "GET /healthz",
+        true,
+        `${runtimeBase}/healthz`,
+        (status, body) => ({
+          ok: status === 200 && body?.status === "ok",
+          detail: `status=${status}, body.status=${String(body?.status ?? "unknown")}`,
+        }),
+      ),
+    );
+
+    results.push(
+      await checkHttp(
+        "GET /readyz",
+        true,
+        `${runtimeBase}/readyz`,
+        (status, body) => ({
+          ok: status === 200 || status === 503,
+          detail: `status=${status}, readiness=${String(body?.status ?? "unknown")}`,
+        }),
+      ),
+    );
+
+    const readinessPath = `${runtimeBase}/api/system/deployment/readiness?include_preflight=${INCLUDE_PREFLIGHT ? "1" : "0"}&refresh=1`;
+    results.push(
+      await checkHttp(
+        "GET /api/system/deployment/readiness",
+        true,
+        readinessPath,
+        (status, body) => {
+          const reportStatus = String(body?.status ?? "unknown");
+          const ok = (status === 200 || status === 503) && ["READY", "DEGRADED", "NOT_READY"].includes(reportStatus);
+          return {
+            ok,
+            detail: `status=${status}, report=${reportStatus}`,
+          };
+        },
+      ),
+    );
+
+    results.push(
+      await checkHttp(
+        "GET /api/execution/risk-guard",
+        false,
+        `${runtimeBase}/api/execution/risk-guard`,
+        (status, body) => ({
+          ok: status === 200 || status === 401 || status === 403,
+          detail: `status=${status}, risk_state=${String(body?.risk_state ?? "n/a")}`,
+        }),
+      ),
+    );
+  } else {
+    results.push({
+      name: "Runtime probes",
+      passed: false,
+      critical: REQUIRE_HTTP,
+      detail: "Runtime server unavailable; skipped HTTP readiness probes",
+      durationMs: 0,
+    });
+  }
+
+  await stopLocalServer();
+  printResults(results);
+}
+
+main().catch(async (err) => {
+  await stopLocalServer();
+  console.error(color(31, `deploy-readiness failed: ${err instanceof Error ? err.message : String(err)}`));
+  process.exit(1);
+});

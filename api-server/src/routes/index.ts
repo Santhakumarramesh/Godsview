@@ -27,6 +27,7 @@ import engineHealthRouter from "./engine_health";
 import executionRouter from "./execution";
 import sessionsRouter from "./sessions";
 import streamingRouter from "./streaming";
+import deploymentReadinessRouter from "./deployment_readiness";
 import strategyParamsRouter from "./strategy_params";
 import positionSizingRouter from "./position_sizing";
 import brainHealthRouter from "./brain_health";
@@ -61,6 +62,7 @@ router.use(engineHealthRouter);
 router.use("/api/execution", executionRouter);
 router.use("/api", sessionsRouter);
 router.use(streamingRouter);
+router.use(deploymentReadinessRouter);
 router.use(strategyParamsRouter);    // Phase 11B — /brain/strategy/params
 router.use(positionSizingRouter);    // Phase 11C — /brain/positions/sizing, /brain/account/equity
 router.use(brainHealthRouter);       // Phase 12D — /brain/health/*
