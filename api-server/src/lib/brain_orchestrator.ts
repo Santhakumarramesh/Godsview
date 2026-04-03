@@ -31,6 +31,7 @@ import {
   type BrainDecision,
 } from "./brain_event_bus";
 
+import { telemetry } from "./brain_health_telemetry.js";
 import {
   runPerceptionLayer,
   runStructureLayer,
@@ -168,18 +169,27 @@ export async function runBrainCycleForSymbol(input: LayerInput): Promise<BrainDe
 
   // ━━━ PHASE 1: Run L1-L4 in PARALLEL ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   // These 4 layers have NO dependencies — they all read raw data
+  const tL1 = telemetry.startLayer("L1_PERCEPTION");
+  const tL2 = telemetry.startLayer("L2_STRUCTURE");
+  const tL3 = telemetry.startLayer("L3_CONTEXT");
+  const tL4 = telemetry.startLayer("L4_MEMORY");
+
   const [l1Result, l2Result, l3Result, l4Result] = await Promise.all([
-    Promise.resolve(runPerceptionLayer(input)),
-    Promise.resolve(runStructureLayer(input)),
-    Promise.resolve(runContextLayer(input)),
-    runMemoryLayer(input), // async (DB query)
+    Promise.resolve(runPerceptionLayer(input)).then(r => { tL1.end("success"); return r; }).catch(e => { tL1.end("error", String(e)); throw e; }),
+    Promise.resolve(runStructureLayer(input)).then(r => { tL2.end("success"); return r; }).catch(e => { tL2.end("error", String(e)); throw e; }),
+    Promise.resolve(runContextLayer(input)).then(r => { tL3.end("success"); return r; }).catch(e => { tL3.end("error", String(e)); throw e; }),
+    runMemoryLayer(input).then(r => { tL4.end("success"); return r; }).catch(e => { tL4.end("error", String(e)); throw e; }),
   ]);
 
   // ━━━ PHASE 2: L5 Intelligence — depends on L1-L4 outputs ━━━━━━━━━━━━━
+  const tL5 = telemetry.startLayer("L5_INTELLIGENCE");
   const l5Result = runIntelligenceLayer(input, l2Result.output, l3Result.output, l4Result.output);
+  tL5.end("success");
 
   // ━━━ PHASE 3: L6 Evolution — depends on L4 + L5 ━━━━━━━━━━━━━━━━━━━━━━
+  const tL6 = telemetry.startLayer("L6_EVOLUTION");
   const l6Result = runEvolutionLayer(input, l4Result.output, l5Result.output);
+  tL6.end("success");
 
   // ━━━ PHASE 4: Brain Synthesis — combine all 6 layer reports ━━━━━━━━━━━
   const layerReports = [
@@ -254,6 +264,9 @@ export async function runBrainCycleForSymbol(input: LayerInput): Promise<BrainDe
     timestamp: Date.now(),
     cycleLatencyMs: Date.now() - cycleStart,
   };
+
+  // Record cycle telemetry (Phase 12D)
+  telemetry.recordCycle(decision.cycleLatencyMs ?? Date.now() - cycleStart, !decision.blockReason);
 
   // Publish decision to event bus
   brainEventBus.brainDecision(decision);

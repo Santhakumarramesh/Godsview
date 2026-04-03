@@ -19,7 +19,9 @@ import * as THREE from "three";
 import { useBrainConsciousness, useBrainEntities, useBrainIntelligence, useBrainState, useSMCState, useRegimeState, useMarketStress, useRunBacktest, useBacktestList, useBacktestResult, useSchedulerStatus, useStartScheduler, useStopScheduler, useAutonomousBrainStatus, useStartAutonomousBrain, useStopAutonomousBrain, useSetBrainMode, useJobQueue, useEnqueueJob, useStrategies, useStrategyRankings, useSuperIntelStatus, useRetrainSuperIntel, useExecutionBridgeStatus, useClosePosition, useBrainPnL, useStartPnLTracker, useStopPnLTracker, useJobHistory, useJobLatencyStats, useTradeOutcomes, useOutcomeStats, usePortfolioStats, useChartHistory, useStreamBridgeStatus, useStartStreamBridge, useCorrelationSummary, useBrainAlerts, useMarkAlertsRead, useWatchdogReport, useStartWatchdog, useBrainPerformance, usePortfolioEquityCurve, useCircuitBreakerStatus, useTripCircuitBreaker, useResetCircuitBreaker, useBrainRulebook, useRebuildRulebook, useBrainStatusSnapshot, type BacktestResult, type RulebookEntry, type StrategyItem, type StrategyRanking, type SuperIntelStatus, type BrainPositionSnapshot, type BrainPnLSummary, type BridgeStatus, type TradeOutcomeItem, type JobHistoryItem, type OutcomeStats, type BrainAlertItem, type WatchdogReport, type CorrelationSummary, type BrainPerformanceReport, type EquityPoint, type CircuitSnapshot, type Rulebook,
   useStrategyParams, useSetStrategyParam, useResetStrategyParam, useResetAllStrategyParams,
   usePositionSizing, useAccountEquity,
-  type StrategyParamOverride, type StrategyParamSnapshot, type PositionSizingSnapshot, type AccountEquitySnapshot } from "@/lib/api";
+  type StrategyParamOverride, type StrategyParamSnapshot, type PositionSizingSnapshot, type AccountEquitySnapshot,
+  useBrainHealthTelemetry, useResetTelemetry, useAccountStreamStatus,
+  type PipelineTelemetry, type LayerTelemetry, type AccountStreamStatus } from "@/lib/api";
 import { useLivePrices } from "@/lib/market-store";
 import BrainFocusMode from "@/components/BrainFocusMode";
 import { BrainCycleProvider, useBrainCycleContext, type AgentLiveStatus } from "@/lib/brain_cycle_provider";
@@ -3081,6 +3083,117 @@ function PerformancePanel({ stocks }: { stocks: StockNodeData[] }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// PHASE 12D: BRAIN HEALTH PANEL
+// ═══════════════════════════════════════════════════════════════════════════
+
+function BrainHealthPanel() {
+  const { data: healthData } = useBrainHealthTelemetry();
+  const { data: streamData } = useAccountStreamStatus();
+  const resetTelemetry = useResetTelemetry();
+  const [expanded, setExpanded] = useState(false);
+
+  const telem: PipelineTelemetry | null = healthData?.telemetry ?? null;
+  const stream: AccountStreamStatus | null = streamData?.stream ?? null;
+
+  const scoreColor = !telem ? "#64748b"
+    : telem.healthTier === "EXCELLENT" ? "#22c55e"
+    : telem.healthTier === "GOOD" ? "#86efac"
+    : telem.healthTier === "DEGRADED" ? "#f59e0b"
+    : "#ef4444";
+
+  const accent = "#a78bfa";
+  const border = "rgba(167,139,250,0.35)";
+  const panelBg = "rgba(0,0,0,0.82)";
+
+  return (
+    <div style={{ background: panelBg, border: `1px solid ${border}`, borderRadius: 10, padding: "10px 12px", color: "#e2e8f0", fontFamily: "monospace", fontSize: 11, width: "100%" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", marginBottom: expanded ? 8 : 0 }} onClick={() => setExpanded(p => !p)}>
+        <span style={{ color: accent, fontWeight: 700, fontSize: 11, letterSpacing: 1 }}>♥ BRAIN HEALTH</span>
+        <span style={{ color: scoreColor, fontWeight: 700 }}>{telem ? `${telem.healthScore}/100` : "…"} {expanded ? "▲" : "▼"}</span>
+      </div>
+
+      {!expanded && telem && (
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 3 }}>
+          <span style={{ color: "#64748b", fontSize: 10 }}>{telem.healthTier}</span>
+          <span style={{ color: "#64748b", fontSize: 10 }}>{telem.throughputPerMin}/min · {telem.cycleSuccessRate >= 0 ? `${(telem.cycleSuccessRate * 100).toFixed(0)}%✓` : ""}</span>
+        </div>
+      )}
+
+      {expanded && telem && (
+        <>
+          {/* Health score bar */}
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ background: "rgba(255,255,255,0.08)", borderRadius: 3, height: 6, overflow: "hidden", marginBottom: 3 }}>
+              <div style={{ width: `${telem.healthScore}%`, height: "100%", background: scoreColor, borderRadius: 3, transition: "width 0.5s" }} />
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span style={{ color: scoreColor, fontWeight: 700, fontSize: 10 }}>{telem.healthTier}</span>
+              <span style={{ color: "#64748b", fontSize: 9 }}>uptime {Math.round(telem.uptimeMs / 60000)}m</span>
+            </div>
+          </div>
+
+          {/* Alert flags */}
+          {telem.alertFlags.length > 0 && (
+            <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 5, padding: "4px 6px", marginBottom: 6 }}>
+              {telem.alertFlags.map((flag, i) => (
+                <div key={i} style={{ color: "#fca5a5", fontSize: 9 }}>⚠ {flag}</div>
+              ))}
+            </div>
+          )}
+
+          {/* Pipeline stats */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "3px 8px", marginBottom: 8 }}>
+            <span style={{ color: "#64748b", fontSize: 9 }}>Cycles: <span style={{ color: "#e2e8f0" }}>{telem.totalCycles}</span></span>
+            <span style={{ color: "#64748b", fontSize: 9 }}>Success: <span style={{ color: "#22c55e" }}>{(telem.cycleSuccessRate * 100).toFixed(0)}%</span></span>
+            <span style={{ color: "#64748b", fontSize: 9 }}>Avg: <span style={{ color: "#cbd5e1" }}>{telem.avgCycleLatencyMs.toFixed(0)}ms</span></span>
+            <span style={{ color: "#64748b", fontSize: 9 }}>p95: <span style={{ color: "#cbd5e1" }}>{telem.p95CycleLatencyMs}ms</span></span>
+            <span style={{ color: "#64748b", fontSize: 9 }}>Throughput: <span style={{ color: "#94a3b8" }}>{telem.throughputPerMin}/min</span></span>
+          </div>
+
+          {/* Per-layer table */}
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ color: "#475569", fontSize: 9, marginBottom: 4, letterSpacing: 0.5 }}>LAYER LATENCY</div>
+            {telem.layers.filter(l => l.totalCalls > 0).map(l => (
+              <div key={l.layer} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 2 }}>
+                <span style={{ color: l.lastStatus === "error" ? "#ef4444" : "#94a3b8", fontSize: 9, width: 110, overflow: "hidden", textOverflow: "ellipsis" }}>{l.layer}</span>
+                <span style={{ color: "#64748b", fontSize: 9 }}>p50:{l.p50Ms}ms</span>
+                <span style={{ color: l.successRate < 0.9 ? "#f59e0b" : "#22c55e", fontSize: 9 }}>{(l.successRate * 100).toFixed(0)}%</span>
+              </div>
+            ))}
+            {telem.layers.filter(l => l.totalCalls > 0).length === 0 && (
+              <div style={{ color: "#475569", fontSize: 9 }}>No cycles run yet</div>
+            )}
+          </div>
+
+          {/* Account stream */}
+          {stream && (
+            <div style={{ borderTop: "1px solid rgba(167,139,250,0.15)", paddingTop: 6, marginBottom: 6 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ color: "#64748b", fontSize: 9 }}>Account WS ({stream.mode})</span>
+                <span style={{ color: stream.connected ? "#22c55e" : "#ef4444", fontSize: 9 }}>
+                  {stream.connected ? "●" : "○"} {stream.connected ? `${stream.uptimeSeconds}s` : "offline"}
+                </span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 2 }}>
+                <span style={{ color: "#475569", fontSize: 9 }}>Fills: {stream.totalFills}</span>
+                <span style={{ color: "#475569", fontSize: 9 }}>Disconnects: {stream.disconnectCount}</span>
+              </div>
+            </div>
+          )}
+
+          <button
+            onClick={() => resetTelemetry.mutate()}
+            style={{ width: "100%", background: "rgba(167,139,250,0.1)", border: "1px solid rgba(167,139,250,0.25)", color: "#c4b5fd", borderRadius: 5, padding: "3px 0", fontSize: 10, cursor: "pointer" }}
+          >
+            Reset Counters
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // PHASE 11B: STRATEGY PARAM EDITOR PANEL
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -3735,6 +3848,7 @@ function BrainPageComponent() {
         <CorrelationPanel />
         <PerformancePanel stocks={stocks} />
         <LivingRulebookPanel />
+        <BrainHealthPanel />
         <StrategyParamEditorPanel />
         <PositionSizingPanel />
         <StrategyEvolutionPanel stocks={stocks} />

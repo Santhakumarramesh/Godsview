@@ -1702,3 +1702,112 @@ export function useAccountEquity() {
     refetchInterval: 30_000,
   });
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 12 — Brain Health Telemetry + Account Stream + MTF Confluence
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+export interface LayerTelemetry {
+  layer: string;
+  totalCalls: number;
+  successCount: number;
+  errorCount: number;
+  successRate: number;
+  avgLatencyMs: number;
+  p50Ms: number;
+  p95Ms: number;
+  p99Ms: number;
+  maxLatencyMs: number;
+  lastRunAt: string | null;
+  lastStatus: string | null;
+  lastErrorMsg: string | null;
+  recentLatencies: number[];
+}
+
+export interface PipelineTelemetry {
+  layers: LayerTelemetry[];
+  totalCycles: number;
+  successfulCycles: number;
+  cycleSuccessRate: number;
+  avgCycleLatencyMs: number;
+  p95CycleLatencyMs: number;
+  throughputPerMin: number;
+  healthScore: number;
+  healthTier: "EXCELLENT" | "GOOD" | "DEGRADED" | "CRITICAL";
+  alertFlags: string[];
+  uptimeMs: number;
+  startedAt: string;
+  snapshot_at: string;
+}
+
+export interface AccountStreamStatus {
+  connected: boolean;
+  authenticated: boolean;
+  connectedAt: string | null;
+  uptimeSeconds: number;
+  totalFills: number;
+  totalOrders: number;
+  disconnectCount: number;
+  wsUrl: string;
+  mode: "paper" | "live";
+}
+
+export interface MTFTimeframeAnalysis {
+  tf: string;
+  bars: number;
+  trend: "bullish" | "bearish" | "neutral";
+  momentum: number;
+  volumeConfirmed: boolean;
+  ema9AboveEma21: boolean;
+  score: number;
+}
+
+export interface MTFConfluenceResult {
+  symbol: string;
+  direction: "long" | "short";
+  alignmentScore: number;
+  timeframes: MTFTimeframeAnalysis[];
+  agreementCount: number;
+  strongTFs: string[];
+  conflictTFs: string[];
+  compressed: boolean;
+  timestamp: number;
+  cached: boolean;
+}
+
+// ── Brain Health Hooks ────────────────────────────────────────────────────────
+
+export function useBrainHealthTelemetry() {
+  return useQuery({
+    queryKey: ["brain", "health", "telemetry"],
+    queryFn: () => apiFetch<{ ok: boolean; telemetry: PipelineTelemetry }>("/brain/health/telemetry"),
+    refetchInterval: 5_000,
+  });
+}
+
+export function useResetTelemetry() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch<{ ok: boolean }>("/brain/health/reset", { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["brain", "health"] }),
+  });
+}
+
+export function useAccountStreamStatus() {
+  return useQuery({
+    queryKey: ["brain", "health", "account-stream"],
+    queryFn: () => apiFetch<{ ok: boolean; stream: AccountStreamStatus }>("/brain/health/account-stream"),
+    refetchInterval: 10_000,
+  });
+}
+
+export function useMTFConfluence(symbol: string, direction: "long" | "short") {
+  return useQuery({
+    queryKey: ["brain", "health", "mtf", symbol, direction],
+    queryFn: () => apiFetch<{ ok: boolean; confluence: MTFConfluenceResult }>(`/brain/health/mtf/${symbol}?direction=${direction}`),
+    enabled: !!symbol,
+    staleTime: 60_000,
+  });
+}

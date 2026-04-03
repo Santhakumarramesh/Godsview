@@ -34,6 +34,9 @@ import { brainAlerts } from "./brain_alerts.js";
 import { brainCircuitBreaker } from "./brain_daily_circuit_breaker.js";
 import { registerCostBasis, clearCostBasis } from "./fill_reconciler.js";
 import { strategyParamsStore } from "./strategy_params_store.js";
+import { computeMTFConfluence, MTF_MIN_ALIGNMENT } from "./brain_mtf_confluence.js";
+import { adaptKellyToRegime, regimeSizingInfo } from "./regime_sizing_adapter.js";
+import { telemetry } from "./brain_health_telemetry.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -149,6 +152,7 @@ class BrainExecutionBridge {
    * Returns a BridgeDecision for logging/UI display.
    */
   async evaluate(signal: BrainSignal): Promise<BridgeDecision> {
+    const bridgeTimer = telemetry.startLayer("EXECUTION_BRIDGE");
     this.totalSignals++;
 
     // ── Gate 0: Bridge enabled? ───────────────────────────────────────────────
@@ -205,6 +209,25 @@ class BrainExecutionBridge {
       return this._reject(signal, "BLACKLISTED_REGIME", `Regime ${signal.regime} is blacklisted for ${signal.strategyId}`);
     }
 
+    // ── Gate 2.7: Multi-timeframe confluence (Phase 12B) ──────────────────────
+    const mtfEnabled = String(process.env.BRAIN_MTF_ENABLED ?? "true").toLowerCase() !== "false";
+    if (mtfEnabled) {
+      try {
+        const dir = signal.direction.includes("LONG") ? "long" : "short";
+        const mtf = await computeMTFConfluence(signal.symbol, dir);
+        if (mtf.alignmentScore < MTF_MIN_ALIGNMENT) {
+          return this._reject(
+            signal,
+            "MTF_MISALIGNMENT",
+            `MTF alignment ${(mtf.alignmentScore * 100).toFixed(1)}% < ${(MTF_MIN_ALIGNMENT * 100).toFixed(0)}% (${mtf.agreementCount}/${mtf.timeframes.length} TFs aligned; conflicts: ${mtf.conflictTFs.join(",") || "none"})`,
+          );
+        }
+        logger.debug({ symbol: signal.symbol, alignment: mtf.alignmentScore, strongTFs: mtf.strongTFs }, "[BrainBridge] MTF gate passed");
+      } catch (err) {
+        logger.warn({ err, symbol: signal.symbol }, "[BrainBridge] MTF check failed — continuing without gate");
+      }
+    }
+
     // ── Gates passed — compute position sizing ────────────────────────────────
     this.totalApproved++;
 
@@ -212,11 +235,17 @@ class BrainExecutionBridge {
     const stopDistance = Math.abs(signal.entryPrice - signal.stopLoss);
     const rawQty = stopDistance > 0 ? Math.floor(riskPerTrade / stopDistance) : 1;
 
-    // Apply Kelly scaling — respects per-strategy override from Phase 11B
+    // Apply Kelly scaling — respects per-strategy override (Phase 11B) +
+    // regime-adaptive multiplier (Phase 12C)
     const baseKelly = strategyParamsStore.effectiveMaxKelly(signal.strategyId, strategy.maxKellyFraction);
+    const regimeConfidence = (signal.layerContext?.regimeConfidence as number) ?? 0.7;
+    const regimeAdaptedKelly = adaptKellyToRegime(baseKelly, signal.regime, regimeConfidence);
     const kellyFraction = brainState.mode === "DEFENSIVE"
-      ? baseKelly * 0.5
-      : baseKelly;
+      ? regimeAdaptedKelly * 0.5
+      : regimeAdaptedKelly;
+
+    const sizingMeta = regimeSizingInfo(signal.regime, regimeConfidence);
+    logger.debug({ symbol: signal.symbol, baseKelly, regimeAdaptedKelly, kellyFraction, ...sizingMeta }, "[BrainBridge] Regime-adaptive sizing applied");
     const maxQtyByKelly = Math.floor(ACCOUNT_EQUITY * kellyFraction / signal.entryPrice);
     const finalQty = Math.max(1, Math.min(rawQty, maxQtyByKelly));
 
@@ -314,6 +343,7 @@ class BrainExecutionBridge {
           latencyMs: 0,
         });
 
+        bridgeTimer.end("success");
         return {
           approved: true,
           reason: `Executed ${execResult.mode} order — ${side} ${finalQty} @ ${signal.entryPrice}`,
@@ -326,10 +356,12 @@ class BrainExecutionBridge {
           executedAt: new Date().toISOString(),
         };
       } else {
+        bridgeTimer.end("error", execResult.error ?? "not-executed");
         return this._reject(signal, "EXECUTION_FAILED", execResult.error ?? "Order executor returned not-executed");
       }
     } catch (err: any) {
       logger.error({ err, symbol: signal.symbol }, "[BrainBridge] Execution error");
+      bridgeTimer.end("error", String(err?.message ?? err));
       return this._reject(signal, "EXECUTION_ERROR", String(err?.message ?? err));
     }
   }

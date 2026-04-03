@@ -28,6 +28,7 @@ import sessionsRouter from "./sessions";
 import streamingRouter from "./streaming";
 import strategyParamsRouter from "./strategy_params";
 import positionSizingRouter from "./position_sizing";
+import brainHealthRouter from "./brain_health";
 
 const router: IRouter = Router();
 
@@ -60,5 +61,6 @@ router.use("/api", sessionsRouter);
 router.use(streamingRouter);
 router.use(strategyParamsRouter);    // Phase 11B — /brain/strategy/params
 router.use(positionSizingRouter);    // Phase 11C — /brain/positions/sizing, /brain/account/equity
+router.use(brainHealthRouter);       // Phase 12D — /brain/health/*
 
 export default router;

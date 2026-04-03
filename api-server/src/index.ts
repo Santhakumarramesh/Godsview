@@ -10,6 +10,7 @@ import { alpacaStream } from "./lib/alpaca_stream";
 import { MacroContextService } from "./lib/macro_context_service";
 import { ScannerScheduler } from "./lib/scanner_scheduler";
 import { startReconciler, stopReconciler } from "./lib/fill_reconciler";
+import { alpacaAccountStream, wireAccountStreamToReconciler } from "./lib/alpaca_account_stream";
 
 // ── Validate environment before anything else ───────────────────
 validateEnv();
@@ -76,6 +77,11 @@ const server = app.listen(port, (err) => {
   if (process.env.ALPACA_API_KEY || process.env.ALPACA_KEY_ID) {
     startReconciler();
     logger.info("Fill reconciler started (10s poll interval)");
+
+    // Phase 12A — real-time fill events via account WebSocket (supplements polling)
+    wireAccountStreamToReconciler();
+    alpacaAccountStream.start();
+    logger.info("Alpaca account stream started (real-time trade_updates)");
   } else {
     logger.warn("Alpaca not configured — fill reconciler disabled");
   }
@@ -183,10 +189,11 @@ onShutdown(async () => {
   }
 });
 
-// Register cleanup: stop fill reconciler
+// Register cleanup: stop fill reconciler + account stream
 onShutdown(async () => {
-  logger.info("Stopping fill reconciler...");
+  logger.info("Stopping fill reconciler + account stream...");
   stopReconciler();
+  alpacaAccountStream.stop();
 });
 
 // Register cleanup: end trading session
