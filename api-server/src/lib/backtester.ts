@@ -132,6 +132,104 @@ export interface BacktestMetrics {
   avg_hold_quality: number;
 }
 
+export type StrategyTier = "SEED" | "LEARNING" | "PROVEN" | "ELITE" | "DEGRADING" | "SUSPENDED";
+
+export interface WalkForwardConfig {
+  strategy_id: string;
+  lookback_days?: number;
+  train_days?: number;
+  test_days?: number;
+  step_days?: number;
+  min_train_samples?: number;
+  min_test_samples?: number;
+  min_win_rate?: number;
+  min_profit_factor?: number;
+  max_drawdown_pct?: number;
+}
+
+export interface WalkForwardWindowMetrics {
+  trades: number;
+  wins: number;
+  losses: number;
+  win_rate: number;
+  profit_factor: number;
+  sharpe_ratio: number;
+  expectancy_r: number;
+  max_drawdown_pct: number;
+  avg_rr: number;
+  avg_quality: number;
+}
+
+export interface WalkForwardWindowResult {
+  window_index: number;
+  train_start: string;
+  train_end: string;
+  test_start: string;
+  test_end: string;
+  selected_quality_threshold: number;
+  train: WalkForwardWindowMetrics;
+  test: WalkForwardWindowMetrics;
+  passed: boolean;
+  fail_reasons: string[];
+}
+
+export interface WalkForwardPromotionDecision {
+  action: "PROMOTE" | "HOLD" | "DEGRADE" | "SUSPEND";
+  current_tier: StrategyTier;
+  next_tier: StrategyTier;
+  reasons: string[];
+  scored_at: string;
+}
+
+export interface WalkForwardResult {
+  strategy_id: string;
+  strategy_filter: {
+    setup_type: string | null;
+    regime: string | null;
+    symbol: string | null;
+  };
+  config: {
+    lookback_days: number;
+    train_days: number;
+    test_days: number;
+    step_days: number;
+    min_train_samples: number;
+    min_test_samples: number;
+    min_win_rate: number;
+    min_profit_factor: number;
+    max_drawdown_pct: number;
+  };
+  sample_size: number;
+  windows: WalkForwardWindowResult[];
+  aggregate_oos: WalkForwardWindowMetrics & {
+    pass_rate: number;
+    windows_passed: number;
+    windows_total: number;
+  };
+  stability: {
+    score: number;
+    win_rate_cv: number;
+    profit_factor_cv: number;
+    sharpe_cv: number;
+    expectancy_cv: number;
+    threshold_cv: number;
+  };
+  promotion: WalkForwardPromotionDecision;
+  generated_at: string;
+}
+
+interface WalkForwardSample {
+  id: number;
+  symbol: string;
+  setup_type: string;
+  regime: string;
+  outcome: "win" | "loss";
+  final_quality: number;
+  tp_ticks: number;
+  sl_ticks: number;
+  created_at: Date;
+}
+
 // ── Backtest Engine ────────────────────────────────────────────────────────
 
 const BASELINE_QUALITY_THRESHOLD = 0.68;
@@ -533,6 +631,7 @@ export interface StrategyLeaderboardEntry {
   strategy_name: string;
   setup_type: string;
   regime: string;
+  tier?: StrategyTier;
   stars: number; // 1-5 star rating based on accuracy
   win_rate: number;
   profit_factor: number;
@@ -546,6 +645,15 @@ let _continuousBacktestRunning = false;
 let _continuousBacktestInterval: NodeJS.Timer | null = null;
 let _strategyLeaderboard: Map<string, StrategyLeaderboardEntry> = new Map();
 let _lastBacktestResult: { result: BacktestResult; timestamp: string } | null = null;
+const _strategyTierRegistry: Map<string, {
+  strategy_id: string;
+  tier: StrategyTier;
+  updated_at: string;
+  notes: string[];
+  aggregate_oos: WalkForwardResult["aggregate_oos"];
+}> = new Map();
+const _latestWalkForwardByStrategy: Map<string, WalkForwardResult> = new Map();
+const _walkForwardCache: Map<string, { ts: number; result: WalkForwardResult }> = new Map();
 
 /**
  * Start continuous backtesting: runs backtests over 30d, 60d, 90d, 180d, 365d
@@ -723,6 +831,7 @@ function updateStrategyLeaderboard(results: BacktestResult[]): void {
         strategy_name: `${setupType}${isSI ? " [SI]" : ""}`,
         setup_type: setupType,
         regime: isSI ? "super_intelligence" : "baseline",
+        tier: _strategyTierRegistry.get(`${setupType}::*::*`)?.tier,
         stars,
         win_rate: avgWinRate,
         profit_factor: avgPF,
@@ -769,4 +878,548 @@ export function getStrategyLeaderboard(): StrategyLeaderboardEntry[] {
     if (Math.abs(b.win_rate - a.win_rate) > 0.001) return b.win_rate - a.win_rate;
     return b.consistency_score - a.consistency_score;
   });
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// WALK-FORWARD HARNESS: rolling train/test validation + tier promotion
+// ══════════════════════════════════════════════════════════════════════════════
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const WALK_FORWARD_CACHE_TTL_MS = 2 * 60_000;
+const DEFAULT_WALK_FORWARD_CONFIG: Required<Omit<WalkForwardConfig, "strategy_id">> = {
+  lookback_days: 240,
+  train_days: 60,
+  test_days: 20,
+  step_days: 20,
+  min_train_samples: 30,
+  min_test_samples: 10,
+  min_win_rate: 0.56,
+  min_profit_factor: 1.15,
+  max_drawdown_pct: 18,
+};
+
+function clamp01(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(1, value));
+}
+
+function toFiniteNumber(value: unknown, fallback = 0): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function toDate(value: unknown): Date | null {
+  if (value instanceof Date && Number.isFinite(value.getTime())) return value;
+  const d = new Date(String(value ?? ""));
+  return Number.isFinite(d.getTime()) ? d : null;
+}
+
+function asOutcome(value: unknown): "win" | "loss" | null {
+  const out = String(value ?? "").toLowerCase();
+  if (out === "win" || out === "loss") return out;
+  return null;
+}
+
+function normalizeWalkForwardConfig(config: WalkForwardConfig): Required<Omit<WalkForwardConfig, "strategy_id">> {
+  return {
+    lookback_days: Math.max(30, Math.min(730, Math.round(toFiniteNumber(config.lookback_days, DEFAULT_WALK_FORWARD_CONFIG.lookback_days)))),
+    train_days: Math.max(15, Math.min(365, Math.round(toFiniteNumber(config.train_days, DEFAULT_WALK_FORWARD_CONFIG.train_days)))),
+    test_days: Math.max(7, Math.min(120, Math.round(toFiniteNumber(config.test_days, DEFAULT_WALK_FORWARD_CONFIG.test_days)))),
+    step_days: Math.max(5, Math.min(90, Math.round(toFiniteNumber(config.step_days, DEFAULT_WALK_FORWARD_CONFIG.step_days)))),
+    min_train_samples: Math.max(10, Math.min(500, Math.round(toFiniteNumber(config.min_train_samples, DEFAULT_WALK_FORWARD_CONFIG.min_train_samples)))),
+    min_test_samples: Math.max(5, Math.min(200, Math.round(toFiniteNumber(config.min_test_samples, DEFAULT_WALK_FORWARD_CONFIG.min_test_samples)))),
+    min_win_rate: Math.max(0.45, Math.min(0.9, toFiniteNumber(config.min_win_rate, DEFAULT_WALK_FORWARD_CONFIG.min_win_rate))),
+    min_profit_factor: Math.max(0.8, Math.min(5, toFiniteNumber(config.min_profit_factor, DEFAULT_WALK_FORWARD_CONFIG.min_profit_factor))),
+    max_drawdown_pct: Math.max(5, Math.min(60, toFiniteNumber(config.max_drawdown_pct, DEFAULT_WALK_FORWARD_CONFIG.max_drawdown_pct))),
+  };
+}
+
+function parseStrategyFilter(strategyIdRaw: string): {
+  canonical_id: string;
+  setup_type: string | null;
+  regime: string | null;
+  symbol: string | null;
+} {
+  const raw = String(strategyIdRaw ?? "").trim();
+  if (!raw) {
+    throw new Error("strategy_id is required");
+  }
+
+  const parts = raw.split("::").map((p) => p.trim()).filter((p) => p.length > 0);
+  const setup = parts[0] && parts[0] !== "*" ? parts[0] : null;
+  const regime = parts[1] && parts[1] !== "*" ? parts[1] : null;
+  const symbolRaw = parts[2] && parts[2] !== "*" ? parts[2] : null;
+  const symbol = symbolRaw ? symbolRaw.toUpperCase() : null;
+  const canonical_id = `${setup ?? "*"}::${regime ?? "*"}::${symbol ?? "*"}`;
+  return { canonical_id, setup_type: setup, regime, symbol };
+}
+
+function strategyTierRank(tier: StrategyTier): number {
+  switch (tier) {
+    case "SUSPENDED": return -1;
+    case "SEED": return 0;
+    case "LEARNING": return 1;
+    case "DEGRADING": return 1;
+    case "PROVEN": return 2;
+    case "ELITE": return 3;
+    default: return 0;
+  }
+}
+
+function sampleReturnR(sample: WalkForwardSample): number {
+  const tp = Math.max(1, toFiniteNumber(sample.tp_ticks, 4));
+  const sl = Math.max(1, toFiniteNumber(sample.sl_ticks, 4));
+  const rr = tp / sl;
+  return sample.outcome === "win" ? rr : -1;
+}
+
+function computeWalkForwardMetrics(samples: WalkForwardSample[]): WalkForwardWindowMetrics {
+  if (samples.length === 0) {
+    return {
+      trades: 0,
+      wins: 0,
+      losses: 0,
+      win_rate: 0,
+      profit_factor: 0,
+      sharpe_ratio: 0,
+      expectancy_r: 0,
+      max_drawdown_pct: 0,
+      avg_rr: 0,
+      avg_quality: 0,
+    };
+  }
+
+  const wins = samples.filter((s) => s.outcome === "win");
+  const losses = samples.length - wins.length;
+  const returnsR = samples.map(sampleReturnR);
+  const grossWin = returnsR.filter((r) => r > 0).reduce((s, v) => s + v, 0);
+  const grossLoss = Math.abs(returnsR.filter((r) => r < 0).reduce((s, v) => s + v, 0));
+  const profitFactor = grossLoss > 0 ? grossWin / grossLoss : grossWin > 0 ? 99.9 : 0;
+  const expectancy = returnsR.reduce((s, v) => s + v, 0) / samples.length;
+  const avg = expectancy;
+  const variance = returnsR.reduce((s, v) => s + (v - avg) ** 2, 0) / samples.length;
+  const stdDev = Math.sqrt(variance);
+  const sharpe = stdDev > 0 ? (avg / stdDev) * Math.sqrt(Math.max(1, samples.length / 8)) : 0;
+
+  // R-multiple drawdown
+  let peak = 0;
+  let equityR = 0;
+  let maxDD = 0;
+  for (const r of returnsR) {
+    equityR += r;
+    if (equityR > peak) peak = equityR;
+    const dd = peak - equityR;
+    if (dd > maxDD) maxDD = dd;
+  }
+
+  const avgRR = wins.length > 0
+    ? wins.reduce((s, sample) => s + (Math.max(1, sample.tp_ticks) / Math.max(1, sample.sl_ticks)), 0) / wins.length
+    : 0;
+  const avgQuality = samples.reduce((s, sample) => s + sample.final_quality, 0) / samples.length;
+
+  return {
+    trades: samples.length,
+    wins: wins.length,
+    losses,
+    win_rate: wins.length / samples.length,
+    profit_factor: Number.isFinite(profitFactor) ? profitFactor : 0,
+    sharpe_ratio: Number.isFinite(sharpe) ? sharpe : 0,
+    expectancy_r: Number.isFinite(expectancy) ? expectancy : 0,
+    max_drawdown_pct: Math.max(0, maxDD * 100),
+    avg_rr: Number.isFinite(avgRR) ? avgRR : 0,
+    avg_quality: Number.isFinite(avgQuality) ? avgQuality : 0,
+  };
+}
+
+function optimizeQualityThreshold(samples: WalkForwardSample[], minSamples: number): number {
+  if (samples.length === 0) return 0.68;
+
+  const thresholdCandidates = [0.45, 0.5, 0.55, 0.6, 0.65, 0.68, 0.7, 0.72, 0.75, 0.8];
+  const requiredTrades = Math.max(6, Math.floor(minSamples / 2));
+  let bestThreshold = 0.68;
+  let bestScore = Number.NEGATIVE_INFINITY;
+
+  for (const threshold of thresholdCandidates) {
+    const filtered = samples.filter((s) => s.final_quality >= threshold);
+    if (filtered.length < requiredTrades) continue;
+
+    const metrics = computeWalkForwardMetrics(filtered);
+    const score = (
+      metrics.expectancy_r * 0.45 +
+      metrics.win_rate * 0.25 +
+      (Math.min(metrics.profit_factor, 3) / 3) * 0.20 +
+      Math.max(0, 1 - metrics.max_drawdown_pct / 25) * 0.10
+    );
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestThreshold = threshold;
+    }
+  }
+
+  return bestThreshold;
+}
+
+function coefficientOfVariation(values: number[]): number {
+  if (values.length < 2) return 0;
+  const mean = values.reduce((s, v) => s + v, 0) / values.length;
+  if (Math.abs(mean) < 1e-9) return 1;
+  const variance = values.reduce((s, v) => s + (v - mean) ** 2, 0) / values.length;
+  const std = Math.sqrt(variance);
+  return Math.abs(std / mean);
+}
+
+function decideWalkForwardTier(
+  currentTier: StrategyTier,
+  aggregate: WalkForwardResult["aggregate_oos"],
+  stabilityScore: number,
+  config: WalkForwardResult["config"],
+): WalkForwardPromotionDecision {
+  const passRate = aggregate.pass_rate;
+  const windows = aggregate.windows_total;
+  const reasons: string[] = [];
+  let nextTier: StrategyTier = currentTier;
+
+  if (
+    aggregate.trades >= Math.max(12, config.min_test_samples * 2) &&
+    (aggregate.win_rate < 0.45 || aggregate.profit_factor < 0.85 || aggregate.max_drawdown_pct > 30 || passRate < 0.2)
+  ) {
+    nextTier = "SUSPENDED";
+    reasons.push("Severe out-of-sample underperformance detected.");
+  } else if (
+    aggregate.trades >= Math.max(10, config.min_test_samples) &&
+    (aggregate.win_rate < config.min_win_rate || aggregate.profit_factor < config.min_profit_factor || passRate < 0.45)
+  ) {
+    nextTier = "DEGRADING";
+    reasons.push("Walk-forward pass rate fell below reliability threshold.");
+  } else if (
+    windows >= 4 &&
+    aggregate.win_rate >= 0.68 &&
+    aggregate.profit_factor >= 1.8 &&
+    aggregate.sharpe_ratio >= 1.1 &&
+    stabilityScore >= 0.72 &&
+    passRate >= 0.75
+  ) {
+    nextTier = "ELITE";
+    reasons.push("Elite out-of-sample profile achieved.");
+  } else if (
+    windows >= 3 &&
+    aggregate.win_rate >= config.min_win_rate &&
+    aggregate.profit_factor >= config.min_profit_factor &&
+    aggregate.sharpe_ratio >= 0.5 &&
+    stabilityScore >= 0.55 &&
+    passRate >= 0.60
+  ) {
+    nextTier = "PROVEN";
+    reasons.push("Out-of-sample thresholds cleared with stable windows.");
+  } else if (aggregate.trades >= Math.max(8, config.min_test_samples)) {
+    nextTier = "LEARNING";
+    reasons.push("Collecting more evidence before promotion.");
+  } else {
+    nextTier = "SEED";
+    reasons.push("Insufficient out-of-sample evidence.");
+  }
+
+  const now = new Date().toISOString();
+  if (nextTier === "SUSPENDED") {
+    return {
+      action: "SUSPEND",
+      current_tier: currentTier,
+      next_tier: nextTier,
+      reasons,
+      scored_at: now,
+    };
+  }
+
+  const nextRank = strategyTierRank(nextTier);
+  const currRank = strategyTierRank(currentTier);
+  const action: WalkForwardPromotionDecision["action"] =
+    nextRank > currRank ? "PROMOTE" : nextRank < currRank ? "DEGRADE" : "HOLD";
+
+  return {
+    action,
+    current_tier: currentTier,
+    next_tier: nextTier,
+    reasons,
+    scored_at: now,
+  };
+}
+
+export async function runWalkForwardBacktest(config: WalkForwardConfig): Promise<WalkForwardResult> {
+  const strategyFilter = parseStrategyFilter(config.strategy_id);
+  const normalized = normalizeWalkForwardConfig(config);
+  const cacheKey = [
+    strategyFilter.canonical_id,
+    normalized.lookback_days,
+    normalized.train_days,
+    normalized.test_days,
+    normalized.step_days,
+    normalized.min_train_samples,
+    normalized.min_test_samples,
+    normalized.min_win_rate.toFixed(4),
+    normalized.min_profit_factor.toFixed(4),
+    normalized.max_drawdown_pct.toFixed(4),
+  ].join("|");
+
+  const cached = _walkForwardCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < WALK_FORWARD_CACHE_TTL_MS) {
+    return cached.result;
+  }
+
+  const { db, accuracyResultsTable } = await import("@workspace/db");
+  const { and, asc, eq, gte, or } = await import("drizzle-orm");
+
+  const cutoff = new Date(Date.now() - normalized.lookback_days * DAY_MS);
+  const conditions: any[] = [
+    or(eq(accuracyResultsTable.outcome, "win"), eq(accuracyResultsTable.outcome, "loss")),
+    gte(accuracyResultsTable.created_at, cutoff),
+  ];
+
+  if (strategyFilter.setup_type) {
+    conditions.push(eq(accuracyResultsTable.setup_type, strategyFilter.setup_type));
+  }
+  if (strategyFilter.regime) {
+    conditions.push(eq(accuracyResultsTable.regime, strategyFilter.regime));
+  }
+  if (strategyFilter.symbol) {
+    conditions.push(eq(accuracyResultsTable.symbol, strategyFilter.symbol));
+  }
+
+  const rows = await db
+    .select({
+      id: accuracyResultsTable.id,
+      symbol: accuracyResultsTable.symbol,
+      setup_type: accuracyResultsTable.setup_type,
+      regime: accuracyResultsTable.regime,
+      outcome: accuracyResultsTable.outcome,
+      final_quality: accuracyResultsTable.final_quality,
+      tp_ticks: accuracyResultsTable.tp_ticks,
+      sl_ticks: accuracyResultsTable.sl_ticks,
+      created_at: accuracyResultsTable.created_at,
+    })
+    .from(accuracyResultsTable)
+    .where(and(...conditions))
+    .orderBy(asc(accuracyResultsTable.created_at))
+    .limit(200_000);
+
+  const samples: WalkForwardSample[] = (rows as any[])
+    .map((row) => {
+      const outcome = asOutcome(row.outcome);
+      const createdAt = toDate(row.created_at);
+      if (!outcome || !createdAt) return null;
+      return {
+        id: Number(row.id ?? 0),
+        symbol: String(row.symbol ?? "UNKNOWN"),
+        setup_type: String(row.setup_type ?? "unknown"),
+        regime: String(row.regime ?? "unknown"),
+        outcome,
+        final_quality: toFiniteNumber(row.final_quality, 0),
+        tp_ticks: Math.max(1, Math.round(toFiniteNumber(row.tp_ticks, 4))),
+        sl_ticks: Math.max(1, Math.round(toFiniteNumber(row.sl_ticks, 4))),
+        created_at: createdAt,
+      } as WalkForwardSample;
+    })
+    .filter((row): row is WalkForwardSample => row !== null);
+
+  const windows: WalkForwardWindowResult[] = [];
+  const allTestSamples: WalkForwardSample[] = [];
+  const selectedThresholds: number[] = [];
+
+  if (samples.length > 0) {
+    const firstTs = samples[0].created_at.getTime();
+    const lastTs = samples[samples.length - 1].created_at.getTime();
+    const trainMs = normalized.train_days * DAY_MS;
+    const testMs = normalized.test_days * DAY_MS;
+    const stepMs = normalized.step_days * DAY_MS;
+
+    let cursor = firstTs;
+    let windowIndex = 0;
+    while (cursor + trainMs + testMs <= lastTs + DAY_MS && windowIndex < 80) {
+      const trainStart = cursor;
+      const trainEnd = cursor + trainMs;
+      const testStart = trainEnd;
+      const testEnd = trainEnd + testMs;
+
+      const trainSlice = samples.filter((s) => {
+        const ts = s.created_at.getTime();
+        return ts >= trainStart && ts < trainEnd;
+      });
+      const testSlice = samples.filter((s) => {
+        const ts = s.created_at.getTime();
+        return ts >= testStart && ts < testEnd;
+      });
+
+      const threshold = optimizeQualityThreshold(trainSlice, normalized.min_train_samples);
+      selectedThresholds.push(threshold);
+      const trainFiltered = trainSlice.filter((s) => s.final_quality >= threshold);
+      const testFiltered = testSlice.filter((s) => s.final_quality >= threshold);
+      const trainMetrics = computeWalkForwardMetrics(trainFiltered);
+      const testMetrics = computeWalkForwardMetrics(testFiltered);
+
+      const failReasons: string[] = [];
+      if (trainFiltered.length < normalized.min_train_samples) {
+        failReasons.push(`Train samples below minimum (${trainFiltered.length}/${normalized.min_train_samples})`);
+      }
+      if (testMetrics.trades < normalized.min_test_samples) {
+        failReasons.push(`Test samples below minimum (${testMetrics.trades}/${normalized.min_test_samples})`);
+      }
+      if (testMetrics.win_rate < normalized.min_win_rate) {
+        failReasons.push(`Win rate ${testMetrics.win_rate.toFixed(3)} < ${normalized.min_win_rate.toFixed(3)}`);
+      }
+      if (testMetrics.profit_factor < normalized.min_profit_factor) {
+        failReasons.push(`Profit factor ${testMetrics.profit_factor.toFixed(3)} < ${normalized.min_profit_factor.toFixed(3)}`);
+      }
+      if (testMetrics.max_drawdown_pct > normalized.max_drawdown_pct) {
+        failReasons.push(`Drawdown ${testMetrics.max_drawdown_pct.toFixed(2)}% > ${normalized.max_drawdown_pct.toFixed(2)}%`);
+      }
+      if (testMetrics.expectancy_r <= 0) {
+        failReasons.push("Expectancy is non-positive");
+      }
+
+      const passed = failReasons.length === 0;
+      if (testFiltered.length > 0) {
+        allTestSamples.push(...testFiltered);
+      }
+
+      windows.push({
+        window_index: windowIndex,
+        train_start: new Date(trainStart).toISOString(),
+        train_end: new Date(trainEnd).toISOString(),
+        test_start: new Date(testStart).toISOString(),
+        test_end: new Date(testEnd).toISOString(),
+        selected_quality_threshold: threshold,
+        train: trainMetrics,
+        test: testMetrics,
+        passed,
+        fail_reasons: failReasons,
+      });
+
+      windowIndex += 1;
+      cursor += stepMs;
+    }
+
+    // Fallback: if time-based windows failed but there is enough sample count, run one split.
+    if (windows.length === 0 && samples.length >= normalized.min_train_samples + normalized.min_test_samples) {
+      const split = Math.floor(samples.length * 0.7);
+      const trainSlice = samples.slice(0, split);
+      const testSlice = samples.slice(split);
+      const threshold = optimizeQualityThreshold(trainSlice, normalized.min_train_samples);
+      selectedThresholds.push(threshold);
+      const trainFiltered = trainSlice.filter((s) => s.final_quality >= threshold);
+      const testFiltered = testSlice.filter((s) => s.final_quality >= threshold);
+      const trainMetrics = computeWalkForwardMetrics(trainFiltered);
+      const testMetrics = computeWalkForwardMetrics(testFiltered);
+      const failReasons: string[] = [];
+      if (trainFiltered.length < normalized.min_train_samples) {
+        failReasons.push(`Train samples below minimum (${trainFiltered.length}/${normalized.min_train_samples})`);
+      }
+      if (testMetrics.trades < normalized.min_test_samples) {
+        failReasons.push(`Test samples below minimum (${testMetrics.trades}/${normalized.min_test_samples})`);
+      }
+      if (testMetrics.win_rate < normalized.min_win_rate) {
+        failReasons.push(`Win rate ${testMetrics.win_rate.toFixed(3)} < ${normalized.min_win_rate.toFixed(3)}`);
+      }
+      if (testMetrics.profit_factor < normalized.min_profit_factor) {
+        failReasons.push(`Profit factor ${testMetrics.profit_factor.toFixed(3)} < ${normalized.min_profit_factor.toFixed(3)}`);
+      }
+      if (testMetrics.max_drawdown_pct > normalized.max_drawdown_pct) {
+        failReasons.push(`Drawdown ${testMetrics.max_drawdown_pct.toFixed(2)}% > ${normalized.max_drawdown_pct.toFixed(2)}%`);
+      }
+      if (testMetrics.expectancy_r <= 0) {
+        failReasons.push("Expectancy is non-positive");
+      }
+
+      windows.push({
+        window_index: 0,
+        train_start: trainSlice[0].created_at.toISOString(),
+        train_end: trainSlice[trainSlice.length - 1].created_at.toISOString(),
+        test_start: testSlice[0].created_at.toISOString(),
+        test_end: testSlice[testSlice.length - 1].created_at.toISOString(),
+        selected_quality_threshold: threshold,
+        train: trainMetrics,
+        test: testMetrics,
+        passed: failReasons.length === 0,
+        fail_reasons: failReasons,
+      });
+      if (testFiltered.length > 0) {
+        allTestSamples.push(...testFiltered);
+      }
+    }
+  }
+
+  const aggregateMetrics = computeWalkForwardMetrics(allTestSamples);
+  const windowsPassed = windows.filter((w) => w.passed).length;
+  const passRate = windows.length > 0 ? windowsPassed / windows.length : 0;
+  const aggregate_oos: WalkForwardResult["aggregate_oos"] = {
+    ...aggregateMetrics,
+    pass_rate: passRate,
+    windows_passed: windowsPassed,
+    windows_total: windows.length,
+  };
+
+  const evalWindows = windows.filter((w) => w.test.trades > 0);
+  const winCV = coefficientOfVariation(evalWindows.map((w) => w.test.win_rate));
+  const pfCV = coefficientOfVariation(evalWindows.map((w) => w.test.profit_factor));
+  const sharpeCV = coefficientOfVariation(evalWindows.map((w) => w.test.sharpe_ratio));
+  const expectancyCV = coefficientOfVariation(evalWindows.map((w) => w.test.expectancy_r));
+  const thresholdCV = coefficientOfVariation(selectedThresholds);
+  const stabilityScore = clamp01(
+    1 - (winCV * 0.35 + pfCV * 0.3 + sharpeCV * 0.2 + expectancyCV * 0.15 + thresholdCV * 0.1),
+  );
+
+  const currentTier = _strategyTierRegistry.get(strategyFilter.canonical_id)?.tier ?? "SEED";
+  const promotion = decideWalkForwardTier(currentTier, aggregate_oos, stabilityScore, normalized);
+  const result: WalkForwardResult = {
+    strategy_id: strategyFilter.canonical_id,
+    strategy_filter: {
+      setup_type: strategyFilter.setup_type,
+      regime: strategyFilter.regime,
+      symbol: strategyFilter.symbol,
+    },
+    config: normalized,
+    sample_size: samples.length,
+    windows,
+    aggregate_oos,
+    stability: {
+      score: stabilityScore,
+      win_rate_cv: winCV,
+      profit_factor_cv: pfCV,
+      sharpe_cv: sharpeCV,
+      expectancy_cv: expectancyCV,
+      threshold_cv: thresholdCV,
+    },
+    promotion,
+    generated_at: new Date().toISOString(),
+  };
+
+  _walkForwardCache.set(cacheKey, { ts: Date.now(), result });
+  _latestWalkForwardByStrategy.set(strategyFilter.canonical_id, result);
+  _strategyTierRegistry.set(strategyFilter.canonical_id, {
+    strategy_id: strategyFilter.canonical_id,
+    tier: promotion.next_tier,
+    updated_at: result.generated_at,
+    notes: promotion.reasons,
+    aggregate_oos,
+  });
+
+  return result;
+}
+
+export function getWalkForwardTierRegistry(): Array<{
+  strategy_id: string;
+  tier: StrategyTier;
+  updated_at: string;
+  notes: string[];
+  aggregate_oos: WalkForwardResult["aggregate_oos"];
+}> {
+  return Array.from(_strategyTierRegistry.values()).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+}
+
+export function getLatestWalkForward(strategyId?: string): WalkForwardResult | WalkForwardResult[] | null {
+  if (strategyId) {
+    const filter = parseStrategyFilter(strategyId);
+    return _latestWalkForwardByStrategy.get(filter.canonical_id) ?? null;
+  }
+  const all = Array.from(_latestWalkForwardByStrategy.values()).sort((a, b) => b.generated_at.localeCompare(a.generated_at));
+  return all;
 }

@@ -16,7 +16,7 @@ import { useState, useRef, useMemo, useCallback, useEffect, Suspense } from "rea
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Float, Billboard, Text, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
-import { useBrainConsciousness, useBrainEntities, useBrainIntelligence, useBrainState, useSMCState, useRegimeState, useMarketStress } from "@/lib/api";
+import { useBrainConsciousness, useBrainEntities, useBrainIntelligence, useBrainState, useSMCState, useRegimeState, useMarketStress, useWalkForwardBacktest, useStrategyTierRegistry } from "@/lib/api";
 import { useLivePrices } from "@/lib/market-store";
 import BrainFocusMode from "@/components/BrainFocusMode";
 
@@ -132,6 +132,25 @@ function getRiskGateColor(gate: string): string {
   if (gate === "WATCH") return "#ffcc00";
   if (gate === "REDUCE") return "#ff8844";
   return "#ff4444";
+}
+
+function normalizeSetupFamily(setupFamily: string): string {
+  const key = String(setupFamily ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+
+  const mapping: Record<string, string> = {
+    breakout: "opening_range_breakout",
+    continuation: "post_news_continuation",
+    reversal: "absorption_reversal",
+    pullback: "support_bounce",
+    trend: "momentum_breakout",
+    range: "liquidity_sweep_reversal",
+    unknown: "absorption_reversal",
+  };
+
+  return mapping[key] ?? (key.length > 0 ? key : "absorption_reversal");
 }
 
 // ─── SSE Hook for SI Decisions ──────────────────────────────────────────────
@@ -782,6 +801,96 @@ function RiskGatePanel({ stocks, stress }: { stocks: StockNodeData[]; stress?: a
   );
 }
 
+function WalkForwardPanel({
+  strategyId,
+  walkForward,
+  tierRegistry,
+}: {
+  strategyId: string;
+  walkForward?: any;
+  tierRegistry?: { count: number; tiers: Array<{ strategy_id: string; tier: string }> } | undefined;
+}) {
+  const activeTier = walkForward?.promotion?.next_tier
+    ?? tierRegistry?.tiers?.find((t) => t.strategy_id === strategyId)?.tier
+    ?? "SEED";
+  const tierColor =
+    activeTier === "ELITE" ? "#00ffcc" :
+    activeTier === "PROVEN" ? "#88ff99" :
+    activeTier === "LEARNING" ? "#ffcc00" :
+    activeTier === "DEGRADING" ? "#ff8844" :
+    activeTier === "SUSPENDED" ? "#ff4444" : "#767576";
+
+  const oos = walkForward?.aggregate_oos;
+  const stability = walkForward?.stability?.score;
+  const passRate = oos?.pass_rate ?? 0;
+  const strategyLabel = strategyId.replaceAll("::", " / ");
+
+  return (
+    <div style={panelStyle}>
+      <div style={labelStyle}>Walk-Forward Engine</div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+        <div style={{ fontSize: "9px", color: "#767576", fontFamily: "Space Grotesk", maxWidth: "135px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {strategyLabel}
+        </div>
+        <div style={{
+          fontSize: "9px",
+          fontFamily: "JetBrains Mono",
+          fontWeight: 700,
+          color: tierColor,
+          padding: "2px 6px",
+          borderRadius: "999px",
+          border: `1px solid ${tierColor}55`,
+          backgroundColor: `${tierColor}12`,
+        }}>
+          {activeTier}
+        </div>
+      </div>
+
+      {walkForward ? (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+            <div style={{ padding: "6px", borderRadius: "6px", backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(72,72,73,0.14)" }}>
+              <div style={{ fontSize: "7px", color: "#484849", letterSpacing: "0.1em", textTransform: "uppercase" }}>OOS Win</div>
+              <div style={{ fontSize: "12px", color: (oos?.win_rate ?? 0) >= 0.56 ? "#00ffcc" : "#ff7162", fontFamily: "JetBrains Mono", fontWeight: 700 }}>
+                {Math.round((oos?.win_rate ?? 0) * 100)}%
+              </div>
+            </div>
+            <div style={{ padding: "6px", borderRadius: "6px", backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(72,72,73,0.14)" }}>
+              <div style={{ fontSize: "7px", color: "#484849", letterSpacing: "0.1em", textTransform: "uppercase" }}>Profit Factor</div>
+              <div style={{ fontSize: "12px", color: (oos?.profit_factor ?? 0) >= 1.15 ? "#00ffcc" : "#ff7162", fontFamily: "JetBrains Mono", fontWeight: 700 }}>
+                {(oos?.profit_factor ?? 0).toFixed(2)}
+              </div>
+            </div>
+            <div style={{ padding: "6px", borderRadius: "6px", backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(72,72,73,0.14)" }}>
+              <div style={{ fontSize: "7px", color: "#484849", letterSpacing: "0.1em", textTransform: "uppercase" }}>Pass Rate</div>
+              <div style={{ fontSize: "12px", color: passRate >= 0.6 ? "#00ffcc" : "#ffcc00", fontFamily: "JetBrains Mono", fontWeight: 700 }}>
+                {Math.round(passRate * 100)}%
+              </div>
+            </div>
+            <div style={{ padding: "6px", borderRadius: "6px", backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(72,72,73,0.14)" }}>
+              <div style={{ fontSize: "7px", color: "#484849", letterSpacing: "0.1em", textTransform: "uppercase" }}>Stability</div>
+              <div style={{ fontSize: "12px", color: (stability ?? 0) >= 0.55 ? "#00ffcc" : "#ffcc00", fontFamily: "JetBrains Mono", fontWeight: 700 }}>
+                {Math.round((stability ?? 0) * 100)}%
+              </div>
+            </div>
+          </div>
+
+          <div style={{ fontSize: "8px", color: "#767576", marginTop: "8px", fontFamily: "JetBrains Mono" }}>
+            Windows {oos?.windows_passed ?? 0}/{oos?.windows_total ?? 0} · Trades {oos?.trades ?? 0}
+          </div>
+          {walkForward?.promotion?.reasons?.[0] && (
+            <div style={{ marginTop: "6px", fontSize: "8px", color: "#adaaab", lineHeight: 1.4 }}>
+              {walkForward.promotion.reasons[0]}
+            </div>
+          )}
+        </>
+      ) : (
+        <div style={{ fontSize: "9px", color: "#767576" }}>Computing walk-forward windows...</div>
+      )}
+    </div>
+  );
+}
+
 function LiveSIFeed({ decisions }: { decisions: SIDecisionEvent[] }) {
   if (!decisions.length) return null;
   return (
@@ -1359,6 +1468,29 @@ function BrainPageComponent() {
     };
   }, [consciousness, stocks.length]);
 
+  const activeStrategyId = useMemo(() => {
+    const anchor = selectedStock ?? stocks[0];
+    const setup = normalizeSetupFamily(anchor?.setupFamily ?? "absorption_reversal");
+    const regime = String(anchor?.regime ?? "ranging")
+      .trim()
+      .toLowerCase()
+      .replace(/[\s-]+/g, "_") || "ranging";
+    return `${setup}::${regime}`;
+  }, [selectedStock, stocks]);
+
+  const { data: walkForward } = useWalkForwardBacktest(activeStrategyId, {
+    lookback_days: 240,
+    train_days: 60,
+    test_days: 20,
+    step_days: 20,
+    min_train_samples: 24,
+    min_test_samples: 8,
+  }, {
+    enabled: !!activeStrategyId,
+    refetchInterval: 120_000,
+  });
+  const { data: tierRegistry } = useStrategyTierRegistry({ refetchInterval: 120_000 });
+
   const handleSelectStock = useCallback((stock: StockNodeData) => {
     setSelectedStock((prev) => (prev?.symbol === stock.symbol ? null : stock));
   }, []);
@@ -1517,6 +1649,7 @@ function BrainPageComponent() {
         <RegimePanel supreme={supreme} />
         <AttentionPanel stocks={stocks} />
         <RiskGatePanel stocks={stocks} stress={marketStress} />
+        <WalkForwardPanel strategyId={activeStrategyId} walkForward={walkForward} tierRegistry={tierRegistry} />
         <LiveSIFeed decisions={siDecisions} />
       </div>
 

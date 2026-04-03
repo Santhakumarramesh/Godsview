@@ -143,6 +143,132 @@ export function useBacktest() {
       apiFetch<any>("/alpaca/backtest", { method: "POST", body: JSON.stringify(params) }),
   });
 }
+
+export type StrategyTier = "SEED" | "LEARNING" | "PROVEN" | "ELITE" | "DEGRADING" | "SUSPENDED";
+
+export interface WalkForwardWindowMetrics {
+  trades: number;
+  wins: number;
+  losses: number;
+  win_rate: number;
+  profit_factor: number;
+  sharpe_ratio: number;
+  expectancy_r: number;
+  max_drawdown_pct: number;
+  avg_rr: number;
+  avg_quality: number;
+}
+
+export interface WalkForwardWindowResult {
+  window_index: number;
+  train_start: string;
+  train_end: string;
+  test_start: string;
+  test_end: string;
+  selected_quality_threshold: number;
+  train: WalkForwardWindowMetrics;
+  test: WalkForwardWindowMetrics;
+  passed: boolean;
+  fail_reasons: string[];
+}
+
+export interface WalkForwardResult {
+  strategy_id: string;
+  strategy_filter: {
+    setup_type: string | null;
+    regime: string | null;
+    symbol: string | null;
+  };
+  config: {
+    lookback_days: number;
+    train_days: number;
+    test_days: number;
+    step_days: number;
+    min_train_samples: number;
+    min_test_samples: number;
+    min_win_rate: number;
+    min_profit_factor: number;
+    max_drawdown_pct: number;
+  };
+  sample_size: number;
+  windows: WalkForwardWindowResult[];
+  aggregate_oos: WalkForwardWindowMetrics & {
+    pass_rate: number;
+    windows_passed: number;
+    windows_total: number;
+  };
+  stability: {
+    score: number;
+    win_rate_cv: number;
+    profit_factor_cv: number;
+    sharpe_cv: number;
+    expectancy_cv: number;
+    threshold_cv: number;
+  };
+  promotion: {
+    action: "PROMOTE" | "HOLD" | "DEGRADE" | "SUSPEND";
+    current_tier: StrategyTier;
+    next_tier: StrategyTier;
+    reasons: string[];
+    scored_at: string;
+  };
+  generated_at: string;
+}
+
+export interface StrategyTierSnapshot {
+  strategy_id: string;
+  tier: StrategyTier;
+  updated_at: string;
+  notes: string[];
+  aggregate_oos: WalkForwardResult["aggregate_oos"];
+}
+
+export function useWalkForwardBacktest(
+  strategyId: string,
+  params?: Partial<{
+    lookback_days: number;
+    train_days: number;
+    test_days: number;
+    step_days: number;
+    min_train_samples: number;
+    min_test_samples: number;
+    min_win_rate: number;
+    min_profit_factor: number;
+    max_drawdown_pct: number;
+  }>,
+  options?: Omit<UseQueryOptions<WalkForwardResult>, "queryKey" | "queryFn">,
+) {
+  const query = new URLSearchParams();
+  if (params?.lookback_days != null) query.set("lookback_days", String(params.lookback_days));
+  if (params?.train_days != null) query.set("train_days", String(params.train_days));
+  if (params?.test_days != null) query.set("test_days", String(params.test_days));
+  if (params?.step_days != null) query.set("step_days", String(params.step_days));
+  if (params?.min_train_samples != null) query.set("min_train_samples", String(params.min_train_samples));
+  if (params?.min_test_samples != null) query.set("min_test_samples", String(params.min_test_samples));
+  if (params?.min_win_rate != null) query.set("min_win_rate", String(params.min_win_rate));
+  if (params?.min_profit_factor != null) query.set("min_profit_factor", String(params.min_profit_factor));
+  if (params?.max_drawdown_pct != null) query.set("max_drawdown_pct", String(params.max_drawdown_pct));
+  const qs = query.toString();
+  const path = `/backtest/walk-forward/${encodeURIComponent(strategyId)}${qs ? `?${qs}` : ""}`;
+
+  return useQuery({
+    queryKey: ["backtest", "walk-forward", strategyId, qs],
+    queryFn: () => apiFetch<WalkForwardResult>(path),
+    enabled: !!strategyId,
+    refetchInterval: 120_000,
+    ...options,
+  });
+}
+
+export function useStrategyTierRegistry(options?: Omit<UseQueryOptions<{ count: number; tiers: StrategyTierSnapshot[] }>, "queryKey" | "queryFn">) {
+  return useQuery({
+    queryKey: ["backtest", "walk-forward", "tiers"],
+    queryFn: () => apiFetch<{ count: number; tiers: StrategyTierSnapshot[] }>("/backtest/walk-forward/tiers"),
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+    ...options,
+  });
+}
 export function useAccuracy() {
   return useQuery({ queryKey: ["alpaca", "accuracy"], queryFn: () => apiFetch<any>("/alpaca/accuracy"), staleTime: 120_000 });
 }
@@ -166,7 +292,15 @@ export interface BrainSnapshot {
 
 export function useBrainEntities(symbols?: string[]) {
   const params = symbols?.length ? `?symbols=${symbols.join(",")}` : "";
-  return useQuery({ queryKey: ["brain", "entities", params], queryFn: () => apiFetch<BrainEntity[]>(`/brain/entities${params}`), staleTime: 30_000 });
+  return useQuery({
+    queryKey: ["brain", "entities", params],
+    queryFn: async () => {
+      const raw = await apiFetch<any>(`/brain/entities${params}`);
+      // API returns {count, entities} but consumers expect BrainEntity[]
+      return (Array.isArray(raw) ? raw : raw?.entities ?? []) as BrainEntity[];
+    },
+    staleTime: 30_000,
+  });
 }
 
 export function useBrainSnapshot() {
