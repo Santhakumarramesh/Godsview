@@ -87,6 +87,43 @@ const server = app.listen(port, (err) => {
   } else {
     logger.warn("Alpaca not configured — watchlist scanner requires market data and is disabled");
   }
+
+  // ── Phase 10B: Autonomous Brain Auto-Start ────────────────────────────────
+  // Starts the brain automatically if BRAIN_AUTOSTART=true and Alpaca is configured.
+  // Loads symbols from the watchlist; brain will boot all Phase 8 subsystems itself.
+  if ((process.env.ALPACA_API_KEY || process.env.ALPACA_KEY_ID) &&
+      process.env.BRAIN_AUTOSTART === "true") {
+    setTimeout(async () => {
+      try {
+        const { watchlist } = await import("./lib/watchlist.js");
+        const { autonomousBrain } = await import("./lib/autonomous_brain.js");
+        const { runFullBrainCycle, runBacktestAndChartPipeline } = await import("./lib/brain_orchestrator.js");
+        const { brainRulebook } = await import("./lib/brain_rulebook.js");
+
+        // Build inputFn inline (mirrors buildCycleInput in routes/brain.ts)
+        const buildInput = async (symbol: string) => {
+          const { default: alpacaLib } = await import("./lib/alpaca.js");
+          let bars1m: any[] = [], bars5m: any[] = [];
+          try { bars1m = (await alpacaLib.getBars(symbol, "1Min", 200)) ?? []; } catch {}
+          try { bars5m = (await alpacaLib.getBars(symbol, "5Min", 200)) ?? []; } catch {}
+          return { symbol, bars1m, bars5m, orderbook: null, dna: null, marketStress: null };
+        };
+
+        const enabled = watchlist.getAll().filter((e) => e.enabled).map((e) => e.symbol);
+        const symbols = enabled.length > 0 ? enabled : ["SPY", "QQQ", "AAPL", "TSLA", "NVDA", "BTC/USD"];
+
+        if (!autonomousBrain.status.running) {
+          autonomousBrain.start(symbols, buildInput, runFullBrainCycle, runBacktestAndChartPipeline);
+          brainRulebook.start();
+          logger.info({ symbols }, "Autonomous Brain auto-started");
+        }
+      } catch (err: any) {
+        logger.warn({ err: err?.message }, "Brain auto-start failed — manual start required");
+      }
+    }, 8_000); // 8s delay — let server fully initialize first
+  } else {
+    logger.info("Brain auto-start disabled (set BRAIN_AUTOSTART=true to enable)");
+  }
 });
 
 // ── Graceful shutdown with connection draining ──────────────────
@@ -119,6 +156,21 @@ onShutdown(async () => {
 onShutdown(async () => {
   logger.info("Stopping watchlist scanner...");
   ScannerScheduler.getInstance().stop();
+});
+
+// Register cleanup: stop autonomous brain + rulebook
+onShutdown(async () => {
+  try {
+    const { autonomousBrain } = await import("./lib/autonomous_brain.js");
+    const { brainRulebook } = await import("./lib/brain_rulebook.js");
+    if (autonomousBrain.status.running) {
+      logger.info("Stopping autonomous brain...");
+      autonomousBrain.stop();
+    }
+    brainRulebook.stop();
+  } catch {
+    // May not be loaded if auto-start was disabled
+  }
 });
 
 // Register cleanup: end trading session

@@ -258,7 +258,118 @@ export async function runBrainCycleForSymbol(input: LayerInput): Promise<BrainDe
   // Publish decision to event bus
   brainEventBus.brainDecision(decision);
 
+  // ── Phase 10C: Auto-route STRONG signals to execution bridge ─────────────
+  if (action === "STRONG_LONG" || action === "STRONG_SHORT") {
+    _autoEvaluateSignal(decision, l2Result.output, l5Result.output, input).catch(() => {});
+  }
+
   return decision;
+}
+
+/**
+ * Phase 10C: Auto-route a strong brain decision to the execution bridge.
+ * Builds a BrainSignal from layer outputs and calls brainExecutionBridge.evaluate().
+ * Fire-and-forget — never blocks the brain cycle.
+ */
+async function _autoEvaluateSignal(
+  decision: BrainDecision,
+  structureOut: import("./brain_layers").StructureOutput,
+  intelOut: import("./brain_layers").IntelligenceOutput,
+  input: LayerInput,
+): Promise<void> {
+  try {
+    // Dynamic imports to avoid circular deps
+    const [{ brainExecutionBridge }, { brainCircuitBreaker }, { brainRulebook }] = await Promise.all([
+      import("./brain_execution_bridge.js"),
+      import("./brain_daily_circuit_breaker.js"),
+      import("./brain_rulebook.js"),
+    ]);
+
+    // Circuit breaker check
+    if (!brainCircuitBreaker.allowSignal()) {
+      brainEventBus.agentReport({
+        agentId: "bridge",
+        symbol: decision.symbol,
+        status: "done",
+        confidence: 0,
+        score: 0,
+        verdict: "Signal blocked by daily circuit breaker",
+        data: { state: brainCircuitBreaker.getSnapshot().state },
+        flags: [{ level: "warning", code: "CIRCUIT_BREAKER", message: "Daily risk limit active — signal blocked" }],
+        timestamp: Date.now(),
+        latencyMs: 0,
+      });
+      return;
+    }
+
+    // Rulebook check
+    const direction = decision.action === "STRONG_LONG" ? "LONG" : "SHORT";
+    const regime = structureOut.regimeLabel ?? "unknown";
+    const rulebookCheck = brainRulebook.evaluate(decision.symbol, direction, regime);
+    if (!rulebookCheck.allowed) {
+      brainEventBus.agentReport({
+        agentId: "bridge",
+        symbol: decision.symbol,
+        status: "done",
+        confidence: 0,
+        score: 0,
+        verdict: `Rulebook block: ${rulebookCheck.reason}`,
+        data: { edge: rulebookCheck.edge, regime },
+        flags: [{ level: "warning", code: "RULEBOOK_BLOCK", message: rulebookCheck.reason }],
+        timestamp: Date.now(),
+        latencyMs: 0,
+      });
+      return;
+    }
+
+    // Build the signal from layer outputs
+    const lastBar = input.bars5m?.slice(-1)[0] ?? input.bars1m?.slice(-1)[0];
+    const entryPrice = lastBar?.Close ?? lastBar?.close ?? 0;
+    if (entryPrice <= 0) return;
+
+    const atr = structureOut.atr ?? entryPrice * 0.01;
+    const strategy = await import("./strategy_evolution.js").then(({ strategyRegistry }) =>
+      strategyRegistry.get("smc_ob_fvg", decision.symbol)
+    );
+    const stopMult = strategy?.stopAtrMultiplier ?? 1.5;
+    const tpMult = strategy?.takeProfitAtrMultiplier ?? 3.0;
+    const isLong = direction === "LONG";
+
+    const signal: import("./brain_execution_bridge.js").BrainSignal = {
+      confirmationId: `auto_${decision.symbol}_${Date.now()}`,
+      symbol: decision.symbol,
+      direction: decision.action as "STRONG_LONG" | "STRONG_SHORT",
+      entryPrice,
+      stopLoss: isLong ? entryPrice - atr * stopMult : entryPrice + atr * stopMult,
+      takeProfit: isLong ? entryPrice + atr * tpMult : entryPrice - atr * tpMult,
+      confirmationScore: decision.readinessScore,
+      regime,
+      strategyId: strategy?.strategyId ?? "smc_ob_fvg",
+      winProbability: intelOut.winProbability,
+      siConfidence: intelOut.winProbability,
+      mtfAligned: structureOut.mtfAlignment?.aligned ?? false,
+      layerContext: { readinessScore: decision.readinessScore, action: decision.action },
+    };
+
+    const result = await brainExecutionBridge.evaluate(signal);
+    if (result.approved) {
+      brainEventBus.agentReport({
+        agentId: "bridge",
+        symbol: decision.symbol,
+        status: "done",
+        confidence: signal.winProbability ?? signal.confirmationScore,
+        score: 1,
+        verdict: `Auto-executed: ${direction} ${decision.symbol} @ ${entryPrice} | ${result.reason}`,
+        data: { orderId: result.orderId, qty: result.suggestedQty, tier: result.tier },
+        flags: [],
+        timestamp: Date.now(),
+        latencyMs: 0,
+      });
+    }
+  } catch (err: any) {
+    // Never throw — this is fire-and-forget
+    console.warn("[BrainOrchestrator] Auto-signal evaluation error:", err?.message ?? err);
+  }
 }
 
 /**

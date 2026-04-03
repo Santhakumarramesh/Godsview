@@ -31,6 +31,7 @@ import { brainEventBus } from "./brain_event_bus.js";
 import { saveTradeOutcome, saveChartSnapshot } from "./brain_persistence.js";
 import { brainPerformance } from "./brain_performance.js";
 import { brainAlerts } from "./brain_alerts.js";
+import { brainCircuitBreaker } from "./brain_daily_circuit_breaker.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -357,6 +358,9 @@ class BrainExecutionBridge {
       entry_time: new Date(pos.openedAt),
       exit_time: exitTime,
     });
+
+    // ── Feed Daily Circuit Breaker ───────────────────────────────────────────
+    brainCircuitBreaker.recordTrade(pnlR);
 
     // ── Feed Performance Engine (equity curve, Sharpe, Sortino) ─────────────
     brainPerformance.recordOutcome({

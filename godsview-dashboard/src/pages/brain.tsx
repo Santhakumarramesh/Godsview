@@ -16,7 +16,7 @@ import { useState, useRef, useMemo, useCallback, useEffect, Suspense } from "rea
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Float, Billboard, Text, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
-import { useBrainConsciousness, useBrainEntities, useBrainIntelligence, useBrainState, useSMCState, useRegimeState, useMarketStress, useRunBacktest, useBacktestList, useBacktestResult, useSchedulerStatus, useStartScheduler, useStopScheduler, useAutonomousBrainStatus, useStartAutonomousBrain, useStopAutonomousBrain, useSetBrainMode, useJobQueue, useEnqueueJob, useStrategies, useStrategyRankings, useSuperIntelStatus, useRetrainSuperIntel, useExecutionBridgeStatus, useClosePosition, useBrainPnL, useStartPnLTracker, useStopPnLTracker, useJobHistory, useJobLatencyStats, useTradeOutcomes, useOutcomeStats, usePortfolioStats, useChartHistory, useStreamBridgeStatus, useStartStreamBridge, useCorrelationSummary, useBrainAlerts, useMarkAlertsRead, useWatchdogReport, useStartWatchdog, useBrainPerformance, usePortfolioEquityCurve, type BacktestResult, type RulebookEntry, type StrategyItem, type StrategyRanking, type SuperIntelStatus, type BrainPositionSnapshot, type BrainPnLSummary, type BridgeStatus, type TradeOutcomeItem, type JobHistoryItem, type OutcomeStats, type BrainAlertItem, type WatchdogReport, type CorrelationSummary, type BrainPerformanceReport, type EquityPoint } from "@/lib/api";
+import { useBrainConsciousness, useBrainEntities, useBrainIntelligence, useBrainState, useSMCState, useRegimeState, useMarketStress, useRunBacktest, useBacktestList, useBacktestResult, useSchedulerStatus, useStartScheduler, useStopScheduler, useAutonomousBrainStatus, useStartAutonomousBrain, useStopAutonomousBrain, useSetBrainMode, useJobQueue, useEnqueueJob, useStrategies, useStrategyRankings, useSuperIntelStatus, useRetrainSuperIntel, useExecutionBridgeStatus, useClosePosition, useBrainPnL, useStartPnLTracker, useStopPnLTracker, useJobHistory, useJobLatencyStats, useTradeOutcomes, useOutcomeStats, usePortfolioStats, useChartHistory, useStreamBridgeStatus, useStartStreamBridge, useCorrelationSummary, useBrainAlerts, useMarkAlertsRead, useWatchdogReport, useStartWatchdog, useBrainPerformance, usePortfolioEquityCurve, useCircuitBreakerStatus, useTripCircuitBreaker, useResetCircuitBreaker, useBrainRulebook, useRebuildRulebook, useBrainStatusSnapshot, type BacktestResult, type RulebookEntry, type StrategyItem, type StrategyRanking, type SuperIntelStatus, type BrainPositionSnapshot, type BrainPnLSummary, type BridgeStatus, type TradeOutcomeItem, type JobHistoryItem, type OutcomeStats, type BrainAlertItem, type WatchdogReport, type CorrelationSummary, type BrainPerformanceReport, type EquityPoint, type CircuitSnapshot, type Rulebook } from "@/lib/api";
 import { useLivePrices } from "@/lib/market-store";
 import BrainFocusMode from "@/components/BrainFocusMode";
 import { BrainCycleProvider, useBrainCycleContext, type AgentLiveStatus } from "@/lib/brain_cycle_provider";
@@ -3077,6 +3077,209 @@ function PerformancePanel({ stocks }: { stocks: StockNodeData[] }) {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// PHASE 10: CIRCUIT BREAKER PANEL
+// ═══════════════════════════════════════════════════════════════════════════
+
+function CircuitBreakerPanel() {
+  const [expanded, setExpanded] = useState(false);
+  const { data: circuitData } = useCircuitBreakerStatus();
+  const tripBreaker = useTripCircuitBreaker();
+  const resetBreaker = useResetCircuitBreaker();
+
+  const circuit = circuitData as any;
+  const state: string = circuit?.state ?? "OPEN";
+  const stateColor = state === "TRIPPED" ? "#ff1744" : state === "HALF_OPEN" ? "#ff9100" : "#00e676";
+  const stateIcon = state === "TRIPPED" ? "🚨" : state === "HALF_OPEN" ? "⚠️" : "✅";
+
+  return (
+    <div style={{ background: "rgba(10,12,20,0.95)", border: `1px solid ${stateColor}40`, borderRadius: 8, padding: "8px 10px", minWidth: 200 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}
+        onClick={() => setExpanded((x) => !x)}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: 13 }}>{stateIcon}</span>
+          <span style={{ fontSize: 10, fontWeight: 700, color: "#aaa", letterSpacing: 1 }}>CIRCUIT BREAKER</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: 9, fontWeight: 700, color: stateColor, background: `${stateColor}22`, padding: "1px 6px", borderRadius: 4 }}>{state}</span>
+          <span style={{ fontSize: 9, color: "#555" }}>{expanded ? "▲" : "▼"}</span>
+        </div>
+      </div>
+
+      {/* Summary row always visible */}
+      <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+        {[
+          { label: "DAY P&L", value: circuit ? `${(circuit.dailyPnlR ?? 0) >= 0 ? "+" : ""}${(circuit.dailyPnlR ?? 0).toFixed(1)}R`, color: (circuit?.dailyPnlR ?? 0) >= 0 ? "#00e676" : "#ff1744" },
+          { label: "TRADES", value: String(circuit?.dailyTrades ?? 0), color: "#ccc" },
+          { label: "WIN%", value: circuit?.dailyTrades > 0 ? `${((circuit.dailyWinRate ?? 0) * 100).toFixed(0)}%` : "—", color: "#888" },
+        ].map((m) => (
+          <div key={m.label} style={{ flex: 1, background: "#0a0c14", borderRadius: 4, padding: "3px 5px", textAlign: "center" }}>
+            <div style={{ fontSize: "7px", color: "#555", marginBottom: 1 }}>{m.label}</div>
+            <div style={{ fontSize: "10px", color: m.color, fontWeight: 700 }}>{m.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {expanded && (
+        <div style={{ marginTop: 8 }}>
+          {/* Daily limits progress */}
+          <div style={{ marginBottom: 6 }}>
+            <div style={{ fontSize: "8px", color: "#555", marginBottom: 3 }}>DAILY LOSS LIMIT</div>
+            <div style={{ height: 4, background: "#1a1a2e", borderRadius: 2, overflow: "hidden" }}>
+              <div style={{
+                height: "100%", borderRadius: 2,
+                width: `${Math.min(100, Math.abs(circuit?.dailyPnlR ?? 0) / Math.abs(circuit?.maxDailyLossR ?? 6) * 100)}%`,
+                background: state === "TRIPPED" ? "#ff1744" : state === "HALF_OPEN" ? "#ff9100" : "#00e676",
+                transition: "width 0.5s ease",
+              }} />
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 2 }}>
+              <span style={{ fontSize: "8px", color: "#555" }}>0R</span>
+              <span style={{ fontSize: "8px", color: "#555" }}>{circuit?.maxDailyLossR ?? -6}R</span>
+            </div>
+          </div>
+
+          {/* Trip events */}
+          {(circuit?.tripEvents?.length ?? 0) > 0 && (
+            <div style={{ marginBottom: 6 }}>
+              <div style={{ fontSize: "8px", color: "#555", marginBottom: 3 }}>RECENT TRIPS</div>
+              {circuit.tripEvents.slice(-3).reverse().map((e: any, i: number) => (
+                <div key={i} style={{ fontSize: "8px", color: "#ff9100", marginBottom: 2, padding: "2px 5px", background: "#1a0a0a", borderRadius: 3 }}>
+                  {e.reason} — {e.details?.substring(0, 40)}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Action buttons */}
+          <div style={{ display: "flex", gap: 4 }}>
+            <button
+              onClick={() => tripBreaker.mutate("Manual emergency stop")}
+              style={{ flex: 1, background: "#ff174422", border: "1px solid #ff174444", borderRadius: 4, padding: "4px 6px", fontSize: "8px", color: "#ff1744", cursor: "pointer", fontWeight: 700 }}>
+              🛑 TRIP
+            </button>
+            <button
+              onClick={() => resetBreaker.mutate()}
+              style={{ flex: 1, background: "#00e67622", border: "1px solid #00e67644", borderRadius: 4, padding: "4px 6px", fontSize: "8px", color: "#00e676", cursor: "pointer", fontWeight: 700 }}>
+              ✅ RESET
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PHASE 10: LIVING RULEBOOK PANEL
+// ═══════════════════════════════════════════════════════════════════════════
+
+function LivingRulebookPanel() {
+  const [expanded, setExpanded] = useState(false);
+  const [activeTab, setActiveTab] = useState<"insights" | "regimes" | "avoid">("insights");
+  const { data: rulebookData } = useBrainRulebook();
+  const rebuild = useRebuildRulebook();
+
+  const rulebook = (rulebookData as any)?.rulebook as Rulebook | undefined;
+  const totalOutcomes = rulebook?.totalOutcomesAnalyzed ?? 0;
+  const eliteCount = rulebook?.byRegime?.filter((r: any) => r.edge === "STRONG").length ?? 0;
+
+  return (
+    <div style={{ background: "rgba(10,12,20,0.95)", border: "1px solid #7c4dff40", borderRadius: 8, padding: "8px 10px", minWidth: 200 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}
+        onClick={() => setExpanded((x) => !x)}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: 13 }}>📚</span>
+          <span style={{ fontSize: 10, fontWeight: 700, color: "#aaa", letterSpacing: 1 }}>LIVING RULEBOOK</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: 9, color: "#7c4dff" }}>v{rulebook?.version ?? 0}</span>
+          <span style={{ fontSize: 9, color: "#555" }}>{expanded ? "▲" : "▼"}</span>
+        </div>
+      </div>
+
+      {/* Summary always visible */}
+      <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+        {[
+          { label: "OUTCOMES", value: String(totalOutcomes), color: "#ccc" },
+          { label: "ELITE REGIMES", value: String(eliteCount), color: "#ffd600" },
+          { label: "INSIGHTS", value: String(rulebook?.eliteInsights?.length ?? 0), color: "#00e676" },
+        ].map((m) => (
+          <div key={m.label} style={{ flex: 1, background: "#0a0c14", borderRadius: 4, padding: "3px 5px", textAlign: "center" }}>
+            <div style={{ fontSize: "7px", color: "#555", marginBottom: 1 }}>{m.label}</div>
+            <div style={{ fontSize: "10px", color: m.color, fontWeight: 700 }}>{m.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {expanded && (
+        <div style={{ marginTop: 8 }}>
+          {/* Tab bar */}
+          <div style={{ display: "flex", gap: 3, marginBottom: 6 }}>
+            {(["insights", "regimes", "avoid"] as const).map((t) => (
+              <button key={t} onClick={() => setActiveTab(t)}
+                style={{ flex: 1, padding: "3px 4px", fontSize: "7px", fontWeight: 700,
+                  background: activeTab === t ? "#7c4dff33" : "#0a0c14",
+                  border: `1px solid ${activeTab === t ? "#7c4dff" : "#1a1a2e"}`,
+                  borderRadius: 3, color: activeTab === t ? "#7c4dff" : "#555", cursor: "pointer", textTransform: "uppercase" }}>
+                {t}
+              </button>
+            ))}
+          </div>
+
+          {/* Insights */}
+          {activeTab === "insights" && (
+            <div style={{ maxHeight: 120, overflowY: "auto" }}>
+              {(rulebook?.eliteInsights ?? []).length === 0
+                ? <div style={{ fontSize: "8px", color: "#555", textAlign: "center", padding: "8px 0" }}>No insights yet — run more trades</div>
+                : (rulebook?.eliteInsights ?? []).map((ins: string, i: number) => (
+                  <div key={i} style={{ fontSize: "8px", color: "#00e676", padding: "2px 5px", background: "#001a0a", borderRadius: 3, marginBottom: 2 }}>
+                    ✦ {ins}
+                  </div>
+                ))
+              }
+            </div>
+          )}
+
+          {/* Regimes */}
+          {activeTab === "regimes" && (
+            <div style={{ maxHeight: 120, overflowY: "auto" }}>
+              {(rulebook?.byRegime ?? []).slice(0, 8).map((r: any, i: number) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "2px 5px", background: "#0a0c14", borderRadius: 3, marginBottom: 2 }}>
+                  <span style={{ fontSize: "8px", color: r.edge === "STRONG" ? "#ffd600" : r.edge === "AVOID" ? "#ff1744" : "#888" }}>{r.regime}</span>
+                  <span style={{ fontSize: "8px", color: r.winRate >= 0.6 ? "#00e676" : r.winRate < 0.45 ? "#ff1744" : "#aaa", fontWeight: 700 }}>
+                    {(r.winRate * 100).toFixed(0)}% ({r.trades})
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Avoid */}
+          {activeTab === "avoid" && (
+            <div style={{ maxHeight: 120, overflowY: "auto" }}>
+              {(rulebook?.avoidanceList ?? []).length === 0
+                ? <div style={{ fontSize: "8px", color: "#555", textAlign: "center", padding: "8px 0" }}>No avoidance rules yet</div>
+                : (rulebook?.avoidanceList ?? []).map((rule: string, i: number) => (
+                  <div key={i} style={{ fontSize: "8px", color: "#ff1744", padding: "2px 5px", background: "#1a0a0a", borderRadius: 3, marginBottom: 2 }}>
+                    ✗ {rule}
+                  </div>
+                ))
+              }
+            </div>
+          )}
+
+          <button onClick={() => rebuild.mutate()}
+            disabled={rebuild.isPending}
+            style={{ width: "100%", marginTop: 6, background: "#7c4dff22", border: "1px solid #7c4dff44", borderRadius: 4, padding: "4px 6px", fontSize: "8px", color: "#7c4dff", cursor: "pointer", fontWeight: 700 }}>
+            {rebuild.isPending ? "Rebuilding…" : "↺ Rebuild Rulebook"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Brain Page ─────────────────────────────────────────────────────────────
 
 function BrainPageComponent() {
@@ -3300,10 +3503,12 @@ function BrainPageComponent() {
       <div style={{ position: "absolute", top: "16px", left: "20px", marginTop: "52px", zIndex: 10, display: "flex", flexDirection: "column", gap: "10px", width: "220px", maxHeight: "calc(100vh - 100px)", overflowY: "auto" }}>
         <AutonomousBrainPanel stocks={stocks} />
         <AlertFeedPanel />
+        <CircuitBreakerPanel />
         <ExecutionBridgePanel stocks={stocks} />
         <WatchdogPanel />
         <CorrelationPanel />
         <PerformancePanel stocks={stocks} />
+        <LivingRulebookPanel />
         <StrategyEvolutionPanel stocks={stocks} />
         <SuperIntelV2Panel stocks={stocks} />
         <AgentIntelPanel stocks={stocks} />

@@ -1431,3 +1431,128 @@ export function usePortfolioEquityCurve() {
     staleTime: 60_000,
   });
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PHASE 10: CIRCUIT BREAKER + LIVING RULEBOOK + BRAIN STATUS SSE
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── Types ─────────────────────────────────────────────────────────────────
+
+export type CircuitState = "OPEN" | "HALF_OPEN" | "TRIPPED";
+
+export interface CircuitSnapshot {
+  state: CircuitState;
+  dailyPnlR: number;
+  dailyTrades: number;
+  dailyWins: number;
+  dailyLosses: number;
+  dailyWinRate: number;
+  maxDailyLossR: number;
+  maxDailyTrades: number;
+  tripEvents: Array<{
+    reason: string;
+    triggeredAt: number;
+    dailyPnlR: number;
+    dailyTrades: number;
+    dailyWinRate: number;
+    details: string;
+  }>;
+  lastResetAt: number;
+  lastCheckAt: number;
+}
+
+export interface RegimeRule {
+  regime: string;
+  trades: number;
+  winRate: number;
+  avgPnlR: number;
+  edge: "STRONG" | "MODERATE" | "WEAK" | "AVOID";
+}
+
+export interface SymbolDirectionRule {
+  symbol: string;
+  direction: "LONG" | "SHORT";
+  trades: number;
+  winRate: number;
+  avgPnlR: number;
+  bestRegime: string;
+  worstRegime: string;
+  edge: "STRONG" | "MODERATE" | "WEAK" | "AVOID";
+}
+
+export interface Rulebook {
+  version: number;
+  generatedAt: number;
+  totalOutcomesAnalyzed: number;
+  byRegime: RegimeRule[];
+  bySymbolDirection: SymbolDirectionRule[];
+  byStrategy: Array<{ symbol: string; strategyId: string; tier: string; winRate: number; sharpe: number; notes: string[] }>;
+  scoreThreshold: { minScoreForEdge: number; minScoreForElite: number; sampleSize: number };
+  eliteInsights: string[];
+  avoidanceList: string[];
+  lastFullRebuildAt: number;
+}
+
+export interface BrainStatusSnapshot {
+  brain: {
+    brain: { mode: string; running: boolean; cycleCount: number; scanCount: number; backtestCount: number;
+              totalJobsCreated: number; totalJobsCompleted: number; consecutiveLosses: number; consecutiveWins: number;
+              recentWinRate: number; symbols: string[]; startedAt: number; errors: number };
+    running: boolean;
+    uptime: number;
+  };
+  circuit: CircuitSnapshot;
+  alerts: { total: number; unread: number; critical: number; warning: number };
+  ts: number;
+}
+
+// ── Hooks ─────────────────────────────────────────────────────────────────
+
+export function useCircuitBreakerStatus() {
+  return useQuery({
+    queryKey: ["brain", "circuit", "status"],
+    queryFn: () => apiFetch<CircuitSnapshot & { ok: boolean }>("/brain/circuit/status"),
+    refetchInterval: 10_000,
+  });
+}
+
+export function useTripCircuitBreaker() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (reason: string) =>
+      apiFetch<{ ok: boolean }>("/brain/circuit/trip", { method: "POST", body: JSON.stringify({ reason }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["brain", "circuit"] }),
+  });
+}
+
+export function useResetCircuitBreaker() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch<{ ok: boolean }>("/brain/circuit/reset", { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["brain", "circuit"] }),
+  });
+}
+
+export function useBrainRulebook() {
+  return useQuery({
+    queryKey: ["brain", "rulebook"],
+    queryFn: () => apiFetch<{ ok: boolean; rulebook: Rulebook }>("/brain/rulebook"),
+    staleTime: 4 * 60_000,
+  });
+}
+
+export function useRebuildRulebook() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch<{ ok: boolean; rulebook: Rulebook }>("/brain/rulebook/rebuild", { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["brain", "rulebook"] }),
+  });
+}
+
+export function useBrainStatusSnapshot() {
+  return useQuery({
+    queryKey: ["brain", "status", "snapshot"],
+    queryFn: () => apiFetch<BrainStatusSnapshot & { ok: boolean }>("/brain/status/snapshot"),
+    refetchInterval: 5_000,
+  });
+}

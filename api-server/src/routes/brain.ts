@@ -37,6 +37,8 @@ import { correlationEngine } from "../lib/correlation_engine";
 import { brainAlerts } from "../lib/brain_alerts";
 import { brainWatchdog } from "../lib/brain_watchdog";
 import { brainPerformance } from "../lib/brain_performance";
+import { brainCircuitBreaker } from "../lib/brain_daily_circuit_breaker";
+import { brainRulebook } from "../lib/brain_rulebook";
 
 const router: IRouter = Router();
 
@@ -2127,6 +2129,130 @@ router.get("/brain/performance/portfolio/summary", async (_req, res) => {
     res.json({ ok: true, ...report });
   } catch (err) {
     res.status(500).json({ error: "perf_error", message: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PHASE 10: BRAIN STATUS SSE + CIRCUIT BREAKER + LIVING RULEBOOK
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * GET /brain/status/stream
+ * SSE stream — pushes full brain status every 5 seconds.
+ * Clients can use this to drive a live dashboard without polling.
+ */
+router.get("/brain/status/stream", (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders?.();
+
+  const send = () => {
+    try {
+      const payload = {
+        brain: autonomousBrain.getFullStatus(),
+        circuit: brainCircuitBreaker.getSnapshot(),
+        watchdog: brainWatchdog.getReport(),
+        alerts: brainAlerts.getStats(),
+        ts: Date.now(),
+      };
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    } catch {
+      // client may have disconnected
+    }
+  };
+
+  // Send immediately + every 5s
+  send();
+  const timer = setInterval(send, 5_000);
+
+  req.on("close", () => {
+    clearInterval(timer);
+  });
+});
+
+/**
+ * GET /brain/status/snapshot
+ * One-shot full brain status snapshot (non-streaming).
+ */
+router.get("/brain/status/snapshot", (_req, res) => {
+  res.json({
+    ok: true,
+    brain: autonomousBrain.getFullStatus(),
+    circuit: brainCircuitBreaker.getSnapshot(),
+    watchdog: brainWatchdog.getReport(),
+    alerts: brainAlerts.getStats(),
+    ts: Date.now(),
+  });
+});
+
+// ── Circuit Breaker ───────────────────────────────────────────────────────────
+
+/**
+ * GET /brain/circuit/status
+ * Current circuit breaker state and daily stats.
+ */
+router.get("/brain/circuit/status", (_req, res) => {
+  res.json({ ok: true, ...brainCircuitBreaker.getSnapshot() });
+});
+
+/**
+ * POST /brain/circuit/trip
+ * Manually trip the circuit breaker (emergency pause).
+ */
+router.post("/brain/circuit/trip", (req, res) => {
+  const reason = String(req.body?.reason ?? "Manual circuit trip");
+  brainCircuitBreaker.manualTrip(reason);
+  res.json({ ok: true, message: "Circuit breaker tripped", state: "TRIPPED" });
+});
+
+/**
+ * POST /brain/circuit/reset
+ * Manually reset the circuit breaker.
+ */
+router.post("/brain/circuit/reset", (_req, res) => {
+  brainCircuitBreaker.manualReset();
+  res.json({ ok: true, message: "Circuit breaker reset", state: "OPEN" });
+});
+
+// ── Living Rulebook ───────────────────────────────────────────────────────────
+
+/**
+ * GET /brain/rulebook
+ * The brain's current living rulebook — what it has learned.
+ */
+router.get("/brain/rulebook", (_req, res) => {
+  res.json({ ok: true, rulebook: brainRulebook.current });
+});
+
+/**
+ * POST /brain/rulebook/rebuild
+ * Force a full rulebook rebuild from DB outcomes.
+ */
+router.post("/brain/rulebook/rebuild", async (_req, res) => {
+  try {
+    const rulebook = await brainRulebook.rebuild();
+    res.json({ ok: true, rulebook });
+  } catch (err) {
+    res.status(500).json({ error: "rebuild_failed", message: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+/**
+ * GET /brain/rulebook/evaluate
+ * Check if a symbol+direction+regime combo has edge per the rulebook.
+ * Query: ?symbol=SPY&direction=LONG&regime=trend_up
+ */
+router.get("/brain/rulebook/evaluate", (req, res) => {
+  try {
+    const symbol = asRequiredSymbol(req.query.symbol);
+    const direction = (String(req.query.direction ?? "LONG").toUpperCase()) as "LONG" | "SHORT";
+    const regime = String(req.query.regime ?? "unknown");
+    const result = brainRulebook.evaluate(symbol, direction, regime);
+    res.json({ ok: true, symbol, direction, regime, ...result });
+  } catch (err) {
+    res.status(400).json({ error: "invalid_request", message: err instanceof Error ? err.message : String(err) });
   }
 });
 
