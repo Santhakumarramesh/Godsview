@@ -28,6 +28,7 @@ import executionRouter from "./execution";
 import sessionsRouter from "./sessions";
 import streamingRouter from "./streaming";
 import deploymentReadinessRouter from "./deployment_readiness";
+import autonomySupervisorRouter from "./autonomy_supervisor";
 import leaderboardRouter from "./leaderboard";
 import pythonV2Router from "./python_v2";
 
@@ -63,6 +64,7 @@ router.use("/api", sessionsRouter);
 router.use("/api", leaderboardRouter);
 router.use(streamingRouter);
 router.use(deploymentReadinessRouter);
+router.use(autonomySupervisorRouter);
 
 // Python v2 microservices proxy — shadow routes at /v2/*
 router.use(pythonV2Router);

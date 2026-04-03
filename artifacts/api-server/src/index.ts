@@ -12,6 +12,15 @@ import { seedHistoricalData } from "./lib/historical_seeder";
 import { seedBrainEntities } from "./lib/brain_seeder";
 import { startRetrainScheduler, stopRetrainScheduler } from "./lib/retrain_scheduler";
 import { startPaperValidationLoop, stopPaperValidationLoop } from "./lib/paper_validation_loop";
+import { markMlBootstrapFailed, markMlBootstrapReady, markMlBootstrapRunning } from "./lib/startup_state";
+import { MacroContextService } from "./lib/macro_context_service";
+import { ScannerScheduler } from "./lib/scanner_scheduler";
+import { stopReconciler } from "./lib/fill_reconciler";
+import {
+  shouldAutonomySupervisorAutoStart,
+  startAutonomySupervisor,
+  stopAutonomySupervisor,
+} from "./lib/autonomy_supervisor";
 
 // ── Validate environment before anything else ───────────────────
 validateEnv();
@@ -72,10 +81,13 @@ const server = app.listen(port, (err) => {
     .catch((err) => logger.error({ err }, "Historical seeder failed"))
     .then(async () => {
       // Train ML model AFTER ensuring seed data exists (non-blocking)
+      markMlBootstrapRunning();
       try {
         await trainModel();
+        markMlBootstrapReady();
         logger.info("ML model trained from accuracy_results");
       } catch (err) {
+        markMlBootstrapFailed(err);
         logger.error({ err }, "ML model training failed");
       }
       // ── Super Intelligence: train GBM ensemble after LR model is ready ────
@@ -115,6 +127,14 @@ const server = app.listen(port, (err) => {
   } else {
     logger.warn("ALPACA_API_KEY not set — market data stream disabled");
   }
+
+  if (shouldAutonomySupervisorAutoStart()) {
+    startAutonomySupervisor({ runImmediate: true })
+      .then((result) => logger.info({ intervalMs: result.interval_ms }, "Autonomy supervisor started"))
+      .catch((err) => logger.error({ err }, "Autonomy supervisor failed to start"));
+  } else {
+    logger.info("Autonomy supervisor auto-start disabled");
+  }
 });
 
 // ── Graceful shutdown with connection draining ──────────────────
@@ -137,6 +157,14 @@ onShutdown(async () => {
   alpacaStream.stop();
 });
 
+// Register cleanup: stop scanner scheduler + macro service + fill reconciler
+onShutdown(async () => {
+  logger.info("Stopping scanner + macro + reconciler services...");
+  ScannerScheduler.getInstance().stop();
+  MacroContextService.getInstance().stop();
+  stopReconciler();
+});
+
 // Register cleanup: stop retrain scheduler
 onShutdown(async () => {
   logger.info("Stopping retrain scheduler...");
@@ -147,6 +175,12 @@ onShutdown(async () => {
 onShutdown(async () => {
   logger.info("Stopping paper validation loop...");
   stopPaperValidationLoop();
+});
+
+// Register cleanup: stop autonomy supervisor
+onShutdown(async () => {
+  logger.info("Stopping autonomy supervisor...");
+  stopAutonomySupervisor();
 });
 
 // Register cleanup: end trading session

@@ -404,6 +404,18 @@ async function main(): Promise<void> {
 
     results.push(
       await checkHttp(
+        "GET /api/brain/autonomy/supervisor/status",
+        false,
+        `${runtimeBase}/api/brain/autonomy/supervisor/status`,
+        (status, body) => ({
+          ok: status === 200 && typeof body?.running === "boolean",
+          detail: `status=${status}, running=${String(body?.running ?? "unknown")}, services=${String(body?.services?.length ?? 0)}`,
+        }),
+      ),
+    );
+
+    results.push(
+      await checkHttp(
         "GET /api/execution/risk-guard",
         false,
         `${runtimeBase}/api/execution/risk-guard`,

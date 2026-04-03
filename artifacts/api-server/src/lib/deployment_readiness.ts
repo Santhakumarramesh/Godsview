@@ -8,6 +8,7 @@ import { getLatestPortfolioRiskSnapshot } from "./portfolio_risk_guard";
 import { getRiskEngineSnapshot, isKillSwitchActive } from "./risk_engine";
 import { runtimeConfig } from "./runtime_config";
 import { getStartupSnapshot } from "./startup_state";
+import { getAutonomySupervisorSnapshot } from "./autonomy_supervisor";
 
 export type DeploymentReadinessStatus = "READY" | "DEGRADED" | "NOT_READY";
 
@@ -44,6 +45,12 @@ export interface DeploymentReadinessReport {
     passed: boolean | null;
     duration_ms: number | null;
     failed_critical_checks: string[];
+  };
+  autonomy: {
+    supervisor_running: boolean;
+    expected_services: number;
+    healthy_services: number;
+    total_heal_actions: number;
   };
   config: {
     system_mode: string;
@@ -221,7 +228,16 @@ async function dependencyChecks(checks: DeploymentReadinessCheck[]): Promise<voi
   }
 }
 
-function runtimeChecks(checks: DeploymentReadinessCheck[]): { killSwitch: boolean; breakerLevel: string; breakerMultiplier: number; portfolioRiskState: string | null } {
+function runtimeChecks(checks: DeploymentReadinessCheck[]): {
+  killSwitch: boolean;
+  breakerLevel: string;
+  breakerMultiplier: number;
+  portfolioRiskState: string | null;
+  supervisorRunning: boolean;
+  expectedServices: number;
+  healthyServices: number;
+  totalHealActions: number;
+} {
   const startedKillSwitch = nowMs();
   const killSwitch = isKillSwitchActive();
   timedCheck(
@@ -282,11 +298,46 @@ function runtimeChecks(checks: DeploymentReadinessCheck[]): { killSwitch: boolea
     startedPortfolio,
   );
 
+  const supervisor = getAutonomySupervisorSnapshot();
+  const expectedServices = supervisor.services.filter((svc) => svc.expected).length;
+  const healthyServices = supervisor.services.filter((svc) => svc.expected && svc.health === "HEALTHY").length;
+  const healthRatio = expectedServices > 0 ? healthyServices / expectedServices : 1;
+
+  const startedSupervisor = nowMs();
+  timedCheck(
+    checks,
+    {
+      name: "Autonomy supervisor running",
+      category: "runtime",
+      passed: supervisor.running,
+      critical: false,
+      detail: `running=${supervisor.running}, ticks=${supervisor.total_ticks}`,
+    },
+    startedSupervisor,
+  );
+
+  const startedSupervisorHealth = nowMs();
+  timedCheck(
+    checks,
+    {
+      name: "Autonomy service health ratio",
+      category: "runtime",
+      passed: healthRatio >= 0.6,
+      critical: false,
+      detail: `${healthyServices}/${expectedServices} healthy (${Math.round(healthRatio * 100)}%)`,
+    },
+    startedSupervisorHealth,
+  );
+
   return {
     killSwitch,
     breakerLevel: breaker.level,
     breakerMultiplier: breaker.position_size_multiplier,
     portfolioRiskState: portfolioRisk?.risk_state ?? null,
+    supervisorRunning: supervisor.running,
+    expectedServices,
+    healthyServices,
+    totalHealActions: supervisor.total_heal_actions,
   };
 }
 
@@ -384,6 +435,12 @@ export async function getDeploymentReadinessReport(options?: {
       passed: preflight?.passed ?? null,
       duration_ms: preflight?.duration_ms ?? null,
       failed_critical_checks: preflightFailureSummary(preflight),
+    },
+    autonomy: {
+      supervisor_running: runtime.supervisorRunning,
+      expected_services: runtime.expectedServices,
+      healthy_services: runtime.healthyServices,
+      total_heal_actions: runtime.totalHealActions,
     },
     config: {
       system_mode: runtimeConfig.systemMode,

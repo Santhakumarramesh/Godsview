@@ -361,6 +361,111 @@ export function useRunPaperValidation() {
     },
   });
 }
+
+export type AutonomySupervisorServiceHealth = "HEALTHY" | "DEGRADED" | "STOPPED" | "DISABLED";
+
+export interface AutonomySupervisorServiceSnapshot {
+  name: string;
+  expected: boolean;
+  running: boolean;
+  health: AutonomySupervisorServiceHealth;
+  detail: string;
+  restart_count: number;
+  error_count: number;
+  last_check_at: string | null;
+  last_healthy_at: string | null;
+  last_restart_at: string | null;
+}
+
+export interface AutonomySupervisorAction {
+  at: string;
+  service: string;
+  action: "HEAL_START";
+  success: boolean;
+  detail: string;
+}
+
+export interface AutonomySupervisorSnapshot {
+  running: boolean;
+  tick_in_flight: boolean;
+  interval_ms: number;
+  started_at: string | null;
+  last_tick_at: string | null;
+  last_tick_duration_ms: number | null;
+  last_error: string | null;
+  consecutive_failures: number;
+  total_ticks: number;
+  total_heal_actions: number;
+  policy: {
+    auto_heal: boolean;
+    interval_ms: number;
+    services: Record<string, boolean>;
+  };
+  services: AutonomySupervisorServiceSnapshot[];
+  recent_actions: AutonomySupervisorAction[];
+}
+
+export function useAutonomySupervisorStatus(options?: Omit<UseQueryOptions<AutonomySupervisorSnapshot>, "queryKey" | "queryFn">) {
+  return useQuery({
+    queryKey: ["brain", "autonomy", "supervisor", "status"],
+    queryFn: () => apiFetch<AutonomySupervisorSnapshot>("/brain/autonomy/supervisor/status"),
+    refetchInterval: 10_000,
+    ...options,
+  });
+}
+
+export function useStartAutonomySupervisor() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params?: { interval_ms?: number; run_immediate?: boolean }) =>
+      apiFetch<{
+        success: boolean;
+        message: string;
+        interval_ms: number;
+        snapshot: AutonomySupervisorSnapshot;
+      }>("/brain/autonomy/supervisor/start", {
+        method: "POST",
+        body: JSON.stringify(params ?? {}),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["brain", "autonomy", "supervisor"] });
+    },
+  });
+}
+
+export function useStopAutonomySupervisor() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{
+        success: boolean;
+        message: string;
+        snapshot: AutonomySupervisorSnapshot;
+      }>("/brain/autonomy/supervisor/stop", {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["brain", "autonomy", "supervisor"] });
+    },
+  });
+}
+
+export function useRunAutonomySupervisorTick() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{
+        ok: boolean;
+        snapshot: AutonomySupervisorSnapshot;
+      }>("/brain/autonomy/supervisor/tick", {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["brain", "autonomy", "supervisor"] });
+    },
+  });
+}
+
 export function useAccuracy() {
   return useQuery({ queryKey: ["alpaca", "accuracy"], queryFn: () => apiFetch<any>("/alpaca/accuracy"), staleTime: 120_000 });
 }

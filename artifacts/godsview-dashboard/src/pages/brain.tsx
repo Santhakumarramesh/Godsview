@@ -16,7 +16,22 @@ import { useState, useRef, useMemo, useCallback, useEffect, Suspense } from "rea
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Float, Billboard, Text, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
-import { useBrainConsciousness, useBrainEntities, useBrainIntelligence, useBrainState, useSMCState, useRegimeState, useMarketStress, useWalkForwardBacktest, useStrategyTierRegistry } from "@/lib/api";
+import {
+  useBrainConsciousness,
+  useBrainEntities,
+  useBrainIntelligence,
+  useBrainState,
+  useSMCState,
+  useRegimeState,
+  useMarketStress,
+  useWalkForwardBacktest,
+  useStrategyTierRegistry,
+  useAutonomySupervisorStatus,
+  useStartAutonomySupervisor,
+  useStopAutonomySupervisor,
+  useRunAutonomySupervisorTick,
+  type AutonomySupervisorSnapshot,
+} from "@/lib/api";
 import { useLivePrices } from "@/lib/market-store";
 import BrainFocusMode from "@/components/BrainFocusMode";
 
@@ -801,6 +816,117 @@ function RiskGatePanel({ stocks, stress }: { stocks: StockNodeData[]; stress?: a
   );
 }
 
+function AutonomySupervisorPanel({
+  supervisor,
+  busy,
+  onStart,
+  onStop,
+  onTick,
+}: {
+  supervisor?: AutonomySupervisorSnapshot;
+  busy: boolean;
+  onStart: () => void;
+  onStop: () => void;
+  onTick: () => void;
+}) {
+  const services = supervisor?.services ?? [];
+  const expected = services.filter((svc) => svc.expected).length;
+  const healthy = services.filter((svc) => svc.expected && svc.health === "HEALTHY").length;
+  const ratio = expected > 0 ? healthy / expected : 0;
+  const running = !!supervisor?.running;
+
+  const healthColor =
+    running && ratio >= 0.8 ? "#00ffcc" :
+    running && ratio >= 0.5 ? "#ffcc00" :
+    running ? "#ff7162" : "#767576";
+
+  return (
+    <div style={panelStyle}>
+      <div style={{ ...labelStyle, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span>Autonomy Supervisor</span>
+        <span style={{ color: healthColor, fontFamily: "JetBrains Mono", fontSize: "9px", letterSpacing: "0.1em" }}>
+          {running ? "ONLINE" : "OFFLINE"}
+        </span>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "8px" }}>
+        <div style={{ padding: "6px", borderRadius: "6px", backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(72,72,73,0.14)" }}>
+          <div style={{ fontSize: "7px", color: "#484849", letterSpacing: "0.1em", textTransform: "uppercase" }}>Services</div>
+          <div style={{ fontSize: "12px", color: healthColor, fontFamily: "JetBrains Mono", fontWeight: 700 }}>
+            {healthy}/{expected}
+          </div>
+        </div>
+        <div style={{ padding: "6px", borderRadius: "6px", backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(72,72,73,0.14)" }}>
+          <div style={{ fontSize: "7px", color: "#484849", letterSpacing: "0.1em", textTransform: "uppercase" }}>Heal Actions</div>
+          <div style={{ fontSize: "12px", color: "#adaaab", fontFamily: "JetBrains Mono", fontWeight: 700 }}>
+            {supervisor?.total_heal_actions ?? 0}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: "6px", marginBottom: "8px" }}>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={running ? onStop : onStart}
+          style={{
+            flex: 1,
+            fontSize: "9px",
+            borderRadius: "6px",
+            border: `1px solid ${running ? "rgba(255,113,98,0.3)" : "rgba(0,255,204,0.3)"}`,
+            backgroundColor: running ? "rgba(255,113,98,0.12)" : "rgba(0,255,204,0.12)",
+            color: running ? "#ff7162" : "#00ffcc",
+            padding: "6px 8px",
+            cursor: busy ? "not-allowed" : "pointer",
+            opacity: busy ? 0.65 : 1,
+          }}
+        >
+          {running ? "Stop" : "Start"}
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onTick}
+          style={{
+            flex: 1,
+            fontSize: "9px",
+            borderRadius: "6px",
+            border: "1px solid rgba(255,204,0,0.3)",
+            backgroundColor: "rgba(255,204,0,0.1)",
+            color: "#ffcc00",
+            padding: "6px 8px",
+            cursor: busy ? "not-allowed" : "pointer",
+            opacity: busy ? 0.65 : 1,
+          }}
+        >
+          Run Tick
+        </button>
+      </div>
+
+      <div style={{ fontSize: "8px", color: "#767576", fontFamily: "JetBrains Mono", marginBottom: "6px" }}>
+        every {Math.max(1, Math.round((supervisor?.interval_ms ?? 0) / 1000))}s · ticks {supervisor?.total_ticks ?? 0}
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: "4px", maxHeight: "96px", overflowY: "auto" }}>
+        {services.slice(0, 6).map((svc) => {
+          const svcColor =
+            svc.health === "HEALTHY" ? "#00ffcc" :
+            svc.health === "DEGRADED" ? "#ffcc00" :
+            svc.health === "STOPPED" ? "#ff7162" : "#767576";
+          return (
+            <div key={svc.name} style={{ fontSize: "8px", display: "flex", justifyContent: "space-between", gap: "8px" }}>
+              <span style={{ color: "#adaaab", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{svc.name}</span>
+              <span style={{ color: svcColor, fontFamily: "JetBrains Mono" }}>
+                {svc.health}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function WalkForwardPanel({
   strategyId,
   walkForward,
@@ -1424,6 +1550,10 @@ function BrainPageComponent() {
   
   const entitiesSymbols = useMemo(() => brainEntities?.map((e: any) => e.symbol) || [], [brainEntities]);
   const { data: marketStress } = useMarketStress(entitiesSymbols);
+  const { data: autonomySupervisor } = useAutonomySupervisorStatus({ refetchInterval: 10_000 });
+  const startAutonomySupervisor = useStartAutonomySupervisor();
+  const stopAutonomySupervisor = useStopAutonomySupervisor();
+  const runAutonomySupervisorTick = useRunAutonomySupervisorTick();
 
   const stocks = useMemo(() => {
     if (!brainEntities?.length) return MOCK_STOCKS;
@@ -1494,6 +1624,23 @@ function BrainPageComponent() {
   const handleSelectStock = useCallback((stock: StockNodeData) => {
     setSelectedStock((prev) => (prev?.symbol === stock.symbol ? null : stock));
   }, []);
+
+  const supervisorBusy =
+    startAutonomySupervisor.isPending ||
+    stopAutonomySupervisor.isPending ||
+    runAutonomySupervisorTick.isPending;
+
+  const handleSupervisorStart = useCallback(() => {
+    startAutonomySupervisor.mutate({ run_immediate: true });
+  }, [startAutonomySupervisor]);
+
+  const handleSupervisorStop = useCallback(() => {
+    stopAutonomySupervisor.mutate();
+  }, [stopAutonomySupervisor]);
+
+  const handleSupervisorTick = useCallback(() => {
+    runAutonomySupervisorTick.mutate();
+  }, [runAutonomySupervisorTick]);
 
   useEffect(() => {
     if (!selectedStock) {
@@ -1649,6 +1796,13 @@ function BrainPageComponent() {
         <RegimePanel supreme={supreme} />
         <AttentionPanel stocks={stocks} />
         <RiskGatePanel stocks={stocks} stress={marketStress} />
+        <AutonomySupervisorPanel
+          supervisor={autonomySupervisor}
+          busy={supervisorBusy}
+          onStart={handleSupervisorStart}
+          onStop={handleSupervisorStop}
+          onTick={handleSupervisorTick}
+        />
         <WalkForwardPanel strategyId={activeStrategyId} walkForward={walkForward} tierRegistry={tierRegistry} />
         <LiveSIFeed decisions={siDecisions} />
       </div>
