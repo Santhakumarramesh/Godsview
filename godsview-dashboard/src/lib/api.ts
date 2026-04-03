@@ -1556,3 +1556,149 @@ export function useBrainStatusSnapshot() {
     refetchInterval: 5_000,
   });
 }
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 11 — Strategy Param Editor + Position Sizing Dashboard
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+export interface StrategyParamOverride {
+  strategyId: string;
+  minScore?: number;
+  minWinProb?: number;
+  maxKellyFraction?: number;
+  atrMultiplierSL?: number;
+  atrMultiplierTP?: number;
+  enabled?: boolean;
+  blacklistedRegimes?: string[];
+  updatedAt?: string;
+  note?: string;
+}
+
+export interface StrategyParamSnapshot {
+  overrides: StrategyParamOverride[];
+  count: number;
+  persistedAt: string | null;
+}
+
+export interface PositionSizingDetail {
+  symbol: string;
+  direction: "long" | "short";
+  entryPrice: number;
+  stopLoss: number;
+  takeProfit: number;
+  quantity: number;
+  strategyId: string;
+  orderId?: string;
+  openedAt: string;
+  ageMinutes: number;
+  slDistance: number;
+  tpDistance: number;
+  riskDollars: number;
+  effectiveRiskPct: number;
+  riskRewardRatio: number;
+  livePrice: number;
+  unrealizedPnl: number;
+  unrealizedR: number;
+  winProbAtEntry: number | null;
+}
+
+export interface PositionSizingSnapshot {
+  positions: PositionSizingDetail[];
+  count: number;
+  maxPositions: number;
+  slotsRemaining: number;
+  totalRiskDollars: number;
+  totalPortfolioRiskPct: number;
+  maxRiskPerTradePct: number;
+  realizedPnlToday: number;
+  unrealizedPnlTotal: number;
+  netPnlToday: number;
+  configuredEquity: number;
+  effectiveEquity: number;
+  equityUtilizationPct: number;
+  reconciler: {
+    last_poll_at: string | null;
+    fills_today: number;
+    realized_pnl_today: number;
+    unmatched_fills: number;
+    is_running: boolean;
+  };
+  timestamp: string;
+}
+
+export interface AccountEquitySnapshot {
+  equity: number;
+  buyingPower: number | null;
+  portfolioValue: number | null;
+  source: string;
+  maxRiskPerTradePct: number;
+  maxRiskDollars: number;
+  timestamp: string;
+}
+
+// ── Strategy Param Hooks ──────────────────────────────────────────────────────
+
+export function useStrategyParams() {
+  return useQuery({
+    queryKey: ["brain", "strategy", "params"],
+    queryFn: () => apiFetch<StrategyParamSnapshot>("/brain/strategy/params"),
+    staleTime: 30_000,
+  });
+}
+
+export function useStrategyParamOverride(strategyId: string) {
+  return useQuery({
+    queryKey: ["brain", "strategy", "params", strategyId],
+    queryFn: () => apiFetch<{ strategyId: string; override: StrategyParamOverride | null }>(`/brain/strategy/params/${strategyId}`),
+    enabled: !!strategyId,
+    staleTime: 30_000,
+  });
+}
+
+export function useSetStrategyParam() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ strategyId, patch }: { strategyId: string; patch: Partial<StrategyParamOverride> }) =>
+      apiFetch<{ strategyId: string; override: StrategyParamOverride; saved: boolean }>(
+        `/brain/strategy/params/${strategyId}`,
+        { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) },
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["brain", "strategy", "params"] }),
+  });
+}
+
+export function useResetStrategyParam() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (strategyId: string) =>
+      apiFetch<{ strategyId: string; reset: boolean }>(`/brain/strategy/params/${strategyId}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["brain", "strategy", "params"] }),
+  });
+}
+
+export function useResetAllStrategyParams() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch<{ reset: boolean; message: string }>("/brain/strategy/params", { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["brain", "strategy", "params"] }),
+  });
+}
+
+// ── Position Sizing Hooks ─────────────────────────────────────────────────────
+
+export function usePositionSizing() {
+  return useQuery({
+    queryKey: ["brain", "positions", "sizing"],
+    queryFn: () => apiFetch<PositionSizingSnapshot>("/brain/positions/sizing"),
+    refetchInterval: 5_000,
+  });
+}
+
+export function useAccountEquity() {
+  return useQuery({
+    queryKey: ["brain", "account", "equity"],
+    queryFn: () => apiFetch<AccountEquitySnapshot>("/brain/account/equity"),
+    refetchInterval: 30_000,
+  });
+}

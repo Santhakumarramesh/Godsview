@@ -9,6 +9,7 @@ import { startSession, endSession } from "./lib/session_manager";
 import { alpacaStream } from "./lib/alpaca_stream";
 import { MacroContextService } from "./lib/macro_context_service";
 import { ScannerScheduler } from "./lib/scanner_scheduler";
+import { startReconciler, stopReconciler } from "./lib/fill_reconciler";
 
 // ── Validate environment before anything else ───────────────────
 validateEnv();
@@ -68,6 +69,15 @@ const server = app.listen(port, (err) => {
     logger.info("Alpaca market data stream started");
   } else {
     logger.warn("ALPACA_API_KEY not set — market data stream disabled");
+  }
+
+  // Start fill reconciler (Phase 11A) — polls Alpaca for fills every 10s,
+  // matches to brain positions, computes realized PnL, feeds circuit breaker
+  if (process.env.ALPACA_API_KEY || process.env.ALPACA_KEY_ID) {
+    startReconciler();
+    logger.info("Fill reconciler started (10s poll interval)");
+  } else {
+    logger.warn("Alpaca not configured — fill reconciler disabled");
   }
 
   // Start macro intelligence background refresh (YoungTraderWealth Layer 0 + 0.5)
@@ -171,6 +181,12 @@ onShutdown(async () => {
   } catch {
     // May not be loaded if auto-start was disabled
   }
+});
+
+// Register cleanup: stop fill reconciler
+onShutdown(async () => {
+  logger.info("Stopping fill reconciler...");
+  stopReconciler();
 });
 
 // Register cleanup: end trading session

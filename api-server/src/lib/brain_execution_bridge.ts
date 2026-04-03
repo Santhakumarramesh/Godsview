@@ -32,6 +32,8 @@ import { saveTradeOutcome, saveChartSnapshot } from "./brain_persistence.js";
 import { brainPerformance } from "./brain_performance.js";
 import { brainAlerts } from "./brain_alerts.js";
 import { brainCircuitBreaker } from "./brain_daily_circuit_breaker.js";
+import { registerCostBasis, clearCostBasis } from "./fill_reconciler.js";
+import { strategyParamsStore } from "./strategy_params_store.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -165,14 +167,21 @@ class BrainExecutionBridge {
       return this._reject(signal, "DEFENSIVE_FILTER", "DEFENSIVE mode: only STRONG_LONG/STRONG_SHORT allowed");
     }
 
-    // ── Gate 3: Confirmation score ────────────────────────────────────────────
-    if (signal.confirmationScore < MIN_SCORE_FOR_EXECUTION) {
-      return this._reject(signal, "LOW_SCORE", `Confirmation score ${signal.confirmationScore.toFixed(3)} < ${MIN_SCORE_FOR_EXECUTION} threshold`);
+    // ── Gate 2.5: Strategy param override — manually disabled ────────────────
+    if (!strategyParamsStore.isEnabled(signal.strategyId)) {
+      return this._reject(signal, "STRATEGY_DISABLED", `Strategy ${signal.strategyId} is manually disabled via param override`);
     }
 
-    // ── Gate 4: SI win probability ────────────────────────────────────────────
-    if (signal.winProbability !== undefined && signal.winProbability < MIN_WIN_PROB_FOR_EXECUTION) {
-      return this._reject(signal, "LOW_WIN_PROB", `SI win probability ${(signal.winProbability * 100).toFixed(1)}% < ${(MIN_WIN_PROB_FOR_EXECUTION * 100).toFixed(1)}% minimum`);
+    // ── Gate 3: Confirmation score (respects per-strategy override) ───────────
+    const effectiveMinScore = strategyParamsStore.effectiveMinScore(signal.strategyId, MIN_SCORE_FOR_EXECUTION);
+    if (signal.confirmationScore < effectiveMinScore) {
+      return this._reject(signal, "LOW_SCORE", `Confirmation score ${signal.confirmationScore.toFixed(3)} < ${effectiveMinScore} threshold`);
+    }
+
+    // ── Gate 4: SI win probability (respects per-strategy override) ───────────
+    const effectiveMinWinProb = strategyParamsStore.effectiveMinWinProb(signal.strategyId, MIN_WIN_PROB_FOR_EXECUTION);
+    if (signal.winProbability !== undefined && signal.winProbability < effectiveMinWinProb) {
+      return this._reject(signal, "LOW_WIN_PROB", `SI win probability ${(signal.winProbability * 100).toFixed(1)}% < ${(effectiveMinWinProb * 100).toFixed(1)}% minimum`);
     }
 
     // ── Gate 5: Existing position in symbol ───────────────────────────────────
@@ -203,10 +212,11 @@ class BrainExecutionBridge {
     const stopDistance = Math.abs(signal.entryPrice - signal.stopLoss);
     const rawQty = stopDistance > 0 ? Math.floor(riskPerTrade / stopDistance) : 1;
 
-    // Apply Kelly scaling
+    // Apply Kelly scaling — respects per-strategy override from Phase 11B
+    const baseKelly = strategyParamsStore.effectiveMaxKelly(signal.strategyId, strategy.maxKellyFraction);
     const kellyFraction = brainState.mode === "DEFENSIVE"
-      ? strategy.maxKellyFraction * 0.5
-      : strategy.maxKellyFraction;
+      ? baseKelly * 0.5
+      : baseKelly;
     const maxQtyByKelly = Math.floor(ACCOUNT_EQUITY * kellyFraction / signal.entryPrice);
     const finalQty = Math.max(1, Math.min(rawQty, maxQtyByKelly));
 
@@ -269,6 +279,14 @@ class BrainExecutionBridge {
           winProbAtEntry: signal.winProbability,
         });
 
+        // Register cost basis with fill reconciler (Phase 11A)
+        registerCostBasis(
+          signal.symbol,
+          signal.direction.includes("LONG") ? "long" : "short",
+          signal.entryPrice,
+          finalQty,
+        );
+
         // Persist chart if available
         if (signal.chartSvg) {
           saveChartSnapshot({
@@ -330,6 +348,9 @@ class BrainExecutionBridge {
       logger.warn({ symbol }, "[BrainBridge] onPositionClosed: no open position found");
       return;
     }
+
+    // Clear fill reconciler cost basis (Phase 11A)
+    clearCostBasis(symbol);
 
     const slDistance = Math.abs(pos.entryPrice - pos.stopLoss);
     const pnlDollar = (exitPrice - pos.entryPrice) * pos.quantity * (pos.direction === "long" ? 1 : -1);

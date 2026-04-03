@@ -16,7 +16,10 @@ import { useState, useRef, useMemo, useCallback, useEffect, Suspense } from "rea
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Float, Billboard, Text, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
-import { useBrainConsciousness, useBrainEntities, useBrainIntelligence, useBrainState, useSMCState, useRegimeState, useMarketStress, useRunBacktest, useBacktestList, useBacktestResult, useSchedulerStatus, useStartScheduler, useStopScheduler, useAutonomousBrainStatus, useStartAutonomousBrain, useStopAutonomousBrain, useSetBrainMode, useJobQueue, useEnqueueJob, useStrategies, useStrategyRankings, useSuperIntelStatus, useRetrainSuperIntel, useExecutionBridgeStatus, useClosePosition, useBrainPnL, useStartPnLTracker, useStopPnLTracker, useJobHistory, useJobLatencyStats, useTradeOutcomes, useOutcomeStats, usePortfolioStats, useChartHistory, useStreamBridgeStatus, useStartStreamBridge, useCorrelationSummary, useBrainAlerts, useMarkAlertsRead, useWatchdogReport, useStartWatchdog, useBrainPerformance, usePortfolioEquityCurve, useCircuitBreakerStatus, useTripCircuitBreaker, useResetCircuitBreaker, useBrainRulebook, useRebuildRulebook, useBrainStatusSnapshot, type BacktestResult, type RulebookEntry, type StrategyItem, type StrategyRanking, type SuperIntelStatus, type BrainPositionSnapshot, type BrainPnLSummary, type BridgeStatus, type TradeOutcomeItem, type JobHistoryItem, type OutcomeStats, type BrainAlertItem, type WatchdogReport, type CorrelationSummary, type BrainPerformanceReport, type EquityPoint, type CircuitSnapshot, type Rulebook } from "@/lib/api";
+import { useBrainConsciousness, useBrainEntities, useBrainIntelligence, useBrainState, useSMCState, useRegimeState, useMarketStress, useRunBacktest, useBacktestList, useBacktestResult, useSchedulerStatus, useStartScheduler, useStopScheduler, useAutonomousBrainStatus, useStartAutonomousBrain, useStopAutonomousBrain, useSetBrainMode, useJobQueue, useEnqueueJob, useStrategies, useStrategyRankings, useSuperIntelStatus, useRetrainSuperIntel, useExecutionBridgeStatus, useClosePosition, useBrainPnL, useStartPnLTracker, useStopPnLTracker, useJobHistory, useJobLatencyStats, useTradeOutcomes, useOutcomeStats, usePortfolioStats, useChartHistory, useStreamBridgeStatus, useStartStreamBridge, useCorrelationSummary, useBrainAlerts, useMarkAlertsRead, useWatchdogReport, useStartWatchdog, useBrainPerformance, usePortfolioEquityCurve, useCircuitBreakerStatus, useTripCircuitBreaker, useResetCircuitBreaker, useBrainRulebook, useRebuildRulebook, useBrainStatusSnapshot, type BacktestResult, type RulebookEntry, type StrategyItem, type StrategyRanking, type SuperIntelStatus, type BrainPositionSnapshot, type BrainPnLSummary, type BridgeStatus, type TradeOutcomeItem, type JobHistoryItem, type OutcomeStats, type BrainAlertItem, type WatchdogReport, type CorrelationSummary, type BrainPerformanceReport, type EquityPoint, type CircuitSnapshot, type Rulebook,
+  useStrategyParams, useSetStrategyParam, useResetStrategyParam, useResetAllStrategyParams,
+  usePositionSizing, useAccountEquity,
+  type StrategyParamOverride, type StrategyParamSnapshot, type PositionSizingSnapshot, type AccountEquitySnapshot } from "@/lib/api";
 import { useLivePrices } from "@/lib/market-store";
 import BrainFocusMode from "@/components/BrainFocusMode";
 import { BrainCycleProvider, useBrainCycleContext, type AgentLiveStatus } from "@/lib/brain_cycle_provider";
@@ -3078,6 +3081,229 @@ function PerformancePanel({ stocks }: { stocks: StockNodeData[] }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// PHASE 11B: STRATEGY PARAM EDITOR PANEL
+// ═══════════════════════════════════════════════════════════════════════════
+
+function StrategyParamEditorPanel() {
+  const { data: paramsData, isLoading } = useStrategyParams();
+  const setParam = useSetStrategyParam();
+  const resetParam = useResetStrategyParam();
+  const resetAll = useResetAllStrategyParams();
+  const [expanded, setExpanded] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValues, setEditValues] = useState<Partial<StrategyParamOverride>>({});
+
+  const overrides: StrategyParamOverride[] = paramsData?.overrides ?? [];
+
+  const handleEdit = (o: StrategyParamOverride) => {
+    setEditingId(o.strategyId);
+    setEditValues({ ...o });
+  };
+
+  const handleSave = () => {
+    if (!editingId) return;
+    setParam.mutate({ strategyId: editingId, patch: editValues });
+    setEditingId(null);
+    setEditValues({});
+  };
+
+  const handleReset = (id: string) => {
+    resetParam.mutate(id);
+    if (editingId === id) { setEditingId(null); setEditValues({}); }
+  };
+
+  const panelBg = "rgba(0,0,0,0.82)";
+  const accent = "#f59e0b";
+  const border = "rgba(245,158,11,0.35)";
+
+  return (
+    <div style={{ background: panelBg, border: `1px solid ${border}`, borderRadius: 10, padding: "10px 12px", color: "#e2e8f0", fontFamily: "monospace", fontSize: 11, width: "100%" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", marginBottom: expanded ? 8 : 0 }} onClick={() => setExpanded(p => !p)}>
+        <span style={{ color: accent, fontWeight: 700, fontSize: 11, letterSpacing: 1 }}>⚙ STRATEGY PARAMS</span>
+        <span style={{ color: "#64748b" }}>{overrides.length} override{overrides.length !== 1 ? "s" : ""} {expanded ? "▲" : "▼"}</span>
+      </div>
+
+      {expanded && (
+        <>
+          {isLoading && <div style={{ color: "#64748b", fontSize: 10, padding: "4px 0" }}>Loading overrides…</div>}
+
+          {overrides.length === 0 && !isLoading && (
+            <div style={{ color: "#64748b", fontSize: 10, padding: "4px 0" }}>No overrides — all strategies use system defaults.</div>
+          )}
+
+          {overrides.map(o => (
+            <div key={o.strategyId} style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.15)", borderRadius: 6, padding: "6px 8px", marginBottom: 6 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                <span style={{ color: "#fbbf24", fontWeight: 700, fontSize: 10 }}>{o.strategyId}</span>
+                <div style={{ display: "flex", gap: 4 }}>
+                  <button onClick={() => handleEdit(o)} style={{ background: "rgba(59,130,246,0.2)", border: "1px solid rgba(59,130,246,0.4)", color: "#93c5fd", borderRadius: 4, padding: "1px 6px", fontSize: 9, cursor: "pointer" }}>edit</button>
+                  <button onClick={() => handleReset(o.strategyId)} style={{ background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", color: "#fca5a5", borderRadius: 4, padding: "1px 6px", fontSize: 9, cursor: "pointer" }}>reset</button>
+                </div>
+              </div>
+              {editingId === o.strategyId ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {([
+                    ["minScore", "Min Score (0–1)"],
+                    ["minWinProb", "Min Win Prob (0–1)"],
+                    ["maxKellyFraction", "Max Kelly (0–1)"],
+                    ["atrMultiplierSL", "ATR SL Mult"],
+                    ["atrMultiplierTP", "ATR TP Mult"],
+                  ] as [keyof StrategyParamOverride, string][]).map(([field, label]) => (
+                    <div key={field} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ color: "#94a3b8", fontSize: 10 }}>{label}</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={editValues[field] !== undefined ? String(editValues[field]) : ""}
+                        placeholder="default"
+                        onChange={e => setEditValues(prev => ({ ...prev, [field]: e.target.value === "" ? undefined : Number(e.target.value) }))}
+                        style={{ background: "rgba(0,0,0,0.5)", border: "1px solid rgba(245,158,11,0.3)", color: "#fef3c7", borderRadius: 4, padding: "2px 4px", fontSize: 10, width: 70, textAlign: "right" }}
+                      />
+                    </div>
+                  ))}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ color: "#94a3b8", fontSize: 10 }}>Enabled</span>
+                    <input type="checkbox" checked={editValues.enabled ?? true}
+                      onChange={e => setEditValues(prev => ({ ...prev, enabled: e.target.checked }))}
+                      style={{ accentColor: accent }} />
+                  </div>
+                  <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
+                    <button onClick={handleSave} style={{ flex: 1, background: "rgba(34,197,94,0.2)", border: "1px solid rgba(34,197,94,0.4)", color: "#86efac", borderRadius: 4, padding: "3px 0", fontSize: 10, cursor: "pointer" }}>Save</button>
+                    <button onClick={() => { setEditingId(null); setEditValues({}); }} style={{ flex: 1, background: "rgba(100,116,139,0.2)", border: "1px solid rgba(100,116,139,0.3)", color: "#94a3b8", borderRadius: 4, padding: "3px 0", fontSize: 10, cursor: "pointer" }}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 8px" }}>
+                  {o.minScore !== undefined && <span style={{ color: "#94a3b8", fontSize: 10 }}>score≥{o.minScore}</span>}
+                  {o.minWinProb !== undefined && <span style={{ color: "#94a3b8", fontSize: 10 }}>prob≥{o.minWinProb}</span>}
+                  {o.maxKellyFraction !== undefined && <span style={{ color: "#94a3b8", fontSize: 10 }}>kelly≤{o.maxKellyFraction}</span>}
+                  {o.enabled === false && <span style={{ color: "#ef4444", fontSize: 10 }}>DISABLED</span>}
+                </div>
+              )}
+            </div>
+          ))}
+
+          {overrides.length > 0 && (
+            <button onClick={() => resetAll.mutate()} style={{ width: "100%", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)", color: "#fca5a5", borderRadius: 5, padding: "4px 0", fontSize: 10, cursor: "pointer", marginTop: 4 }}>
+              Reset All Overrides
+            </button>
+          )}
+
+          <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid rgba(245,158,11,0.15)", color: "#475569", fontSize: 9 }}>
+            Overrides persist across restarts · {paramsData?.persistedAt ? `Saved ${new Date(paramsData.persistedAt).toLocaleTimeString()}` : "Not yet saved"}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PHASE 11C: POSITION SIZING PANEL
+// ═══════════════════════════════════════════════════════════════════════════
+
+function PositionSizingPanel() {
+  const { data: sizing } = usePositionSizing();
+  const { data: equity } = useAccountEquity();
+  const [expanded, setExpanded] = useState(false);
+
+  const netPnl = sizing?.netPnlToday ?? 0;
+  const pnlColor = netPnl >= 0 ? "#22c55e" : "#ef4444";
+  const usedSlots = sizing?.count ?? 0;
+  const maxSlots = sizing?.maxPositions ?? 5;
+  const utilizationPct = sizing?.equityUtilizationPct ?? 0;
+  const utilizationColor = utilizationPct > 4 ? "#ef4444" : utilizationPct > 2.5 ? "#f59e0b" : "#22c55e";
+
+  const panelBg = "rgba(0,0,0,0.82)";
+  const accent = "#06b6d4";
+  const border = "rgba(6,182,212,0.35)";
+
+  return (
+    <div style={{ background: panelBg, border: `1px solid ${border}`, borderRadius: 10, padding: "10px 12px", color: "#e2e8f0", fontFamily: "monospace", fontSize: 11, width: "100%" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", marginBottom: expanded ? 8 : 0 }} onClick={() => setExpanded(p => !p)}>
+        <span style={{ color: accent, fontWeight: 700, fontSize: 11, letterSpacing: 1 }}>◈ POSITION SIZING</span>
+        <span style={{ color: "#64748b" }}>{usedSlots}/{maxSlots} pos {expanded ? "▲" : "▼"}</span>
+      </div>
+
+      {/* Collapsed summary bar */}
+      {!expanded && (
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
+          <span style={{ color: pnlColor, fontWeight: 700 }}>{netPnl >= 0 ? "+" : ""}{netPnl.toFixed(0)}</span>
+          <span style={{ color: utilizationColor, fontSize: 10 }}>{utilizationPct.toFixed(1)}% risk</span>
+        </div>
+      )}
+
+      {expanded && (
+        <>
+          {/* Equity bar */}
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+              <span style={{ color: "#94a3b8", fontSize: 10 }}>Equity</span>
+              <span style={{ color: "#e2e8f0", fontSize: 10 }}>${(equity?.equity ?? sizing?.configuredEquity ?? 0).toLocaleString()}</span>
+            </div>
+            <div style={{ background: "rgba(255,255,255,0.08)", borderRadius: 3, height: 5, overflow: "hidden" }}>
+              <div style={{ width: `${Math.min(100, utilizationPct * 10)}%`, height: "100%", background: utilizationColor, borderRadius: 3, transition: "width 0.4s" }} />
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 2 }}>
+              <span style={{ color: "#64748b", fontSize: 9 }}>{utilizationPct.toFixed(2)}% at risk</span>
+              <span style={{ color: pnlColor, fontSize: 9 }}>{netPnl >= 0 ? "+" : ""}${netPnl.toFixed(2)} today</span>
+            </div>
+          </div>
+
+          {/* PnL breakdown */}
+          <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+            <div style={{ flex: 1, background: "rgba(6,182,212,0.06)", borderRadius: 5, padding: "4px 6px" }}>
+              <div style={{ color: "#475569", fontSize: 9 }}>Realized</div>
+              <div style={{ color: (sizing?.realizedPnlToday ?? 0) >= 0 ? "#22c55e" : "#ef4444", fontWeight: 700 }}>${(sizing?.realizedPnlToday ?? 0).toFixed(2)}</div>
+            </div>
+            <div style={{ flex: 1, background: "rgba(6,182,212,0.06)", borderRadius: 5, padding: "4px 6px" }}>
+              <div style={{ color: "#475569", fontSize: 9 }}>Unrealized</div>
+              <div style={{ color: (sizing?.unrealizedPnlTotal ?? 0) >= 0 ? "#22c55e" : "#ef4444", fontWeight: 700 }}>${(sizing?.unrealizedPnlTotal ?? 0).toFixed(2)}</div>
+            </div>
+          </div>
+
+          {/* Open positions */}
+          {(sizing?.positions ?? []).length === 0 ? (
+            <div style={{ color: "#475569", fontSize: 10, textAlign: "center", padding: "6px 0" }}>No open brain positions</div>
+          ) : (
+            (sizing?.positions ?? []).map(pos => (
+              <div key={pos.symbol} style={{ background: pos.direction === "long" ? "rgba(34,197,94,0.05)" : "rgba(239,68,68,0.05)", border: `1px solid ${pos.direction === "long" ? "rgba(34,197,94,0.2)" : "rgba(239,68,68,0.2)"}`, borderRadius: 6, padding: "5px 8px", marginBottom: 5 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
+                  <span style={{ color: "#f1f5f9", fontWeight: 700 }}>{pos.symbol}</span>
+                  <span style={{ color: pos.direction === "long" ? "#22c55e" : "#ef4444", fontSize: 10 }}>{pos.direction.toUpperCase()}</span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2px 8px" }}>
+                  <span style={{ color: "#64748b", fontSize: 9 }}>Entry: <span style={{ color: "#cbd5e1" }}>${pos.entryPrice.toFixed(2)}</span></span>
+                  <span style={{ color: "#64748b", fontSize: 9 }}>Live: <span style={{ color: "#e2e8f0" }}>${pos.livePrice.toFixed(2)}</span></span>
+                  <span style={{ color: "#64748b", fontSize: 9 }}>Qty: <span style={{ color: "#cbd5e1" }}>{pos.quantity}</span></span>
+                  <span style={{ color: "#64748b", fontSize: 9 }}>Risk$: <span style={{ color: "#f59e0b" }}>${pos.riskDollars.toFixed(0)}</span></span>
+                  <span style={{ color: "#64748b", fontSize: 9 }}>R/R: <span style={{ color: "#94a3b8" }}>{pos.riskRewardRatio}x</span></span>
+                  <span style={{ color: "#64748b", fontSize: 9 }}>Age: <span style={{ color: "#94a3b8" }}>{pos.ageMinutes}m</span></span>
+                </div>
+                <div style={{ marginTop: 3, display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: 9, color: "#64748b" }}>PnL: <span style={{ color: pos.unrealizedPnl >= 0 ? "#22c55e" : "#ef4444", fontWeight: 700 }}>{pos.unrealizedPnl >= 0 ? "+" : ""}${pos.unrealizedPnl.toFixed(2)} ({pos.unrealizedR >= 0 ? "+" : ""}{pos.unrealizedR.toFixed(2)}R)</span></span>
+                  {pos.winProbAtEntry !== null && <span style={{ fontSize: 9, color: "#64748b" }}>SI: <span style={{ color: "#a78bfa" }}>{(pos.winProbAtEntry * 100).toFixed(0)}%</span></span>}
+                </div>
+              </div>
+            ))
+          )}
+
+          {/* Fill reconciler status */}
+          {sizing?.reconciler && (
+            <div style={{ marginTop: 6, paddingTop: 5, borderTop: "1px solid rgba(6,182,212,0.15)", display: "flex", justifyContent: "space-between" }}>
+              <span style={{ color: "#475569", fontSize: 9 }}>Fill reconciler</span>
+              <span style={{ color: sizing.reconciler.is_running ? "#22c55e" : "#ef4444", fontSize: 9 }}>
+                {sizing.reconciler.is_running ? "●" : "○"} {sizing.reconciler.fills_today} fills today
+              </span>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // PHASE 10: CIRCUIT BREAKER PANEL
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -3509,6 +3735,8 @@ function BrainPageComponent() {
         <CorrelationPanel />
         <PerformancePanel stocks={stocks} />
         <LivingRulebookPanel />
+        <StrategyParamEditorPanel />
+        <PositionSizingPanel />
         <StrategyEvolutionPanel stocks={stocks} />
         <SuperIntelV2Panel stocks={stocks} />
         <AgentIntelPanel stocks={stocks} />
