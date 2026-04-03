@@ -11,6 +11,7 @@ import { alpacaStream } from "./lib/alpaca_stream";
 import { seedHistoricalData } from "./lib/historical_seeder";
 import { seedBrainEntities } from "./lib/brain_seeder";
 import { startRetrainScheduler, stopRetrainScheduler } from "./lib/retrain_scheduler";
+import { startPaperValidationLoop, stopPaperValidationLoop } from "./lib/paper_validation_loop";
 
 // ── Validate environment before anything else ───────────────────
 validateEnv();
@@ -86,6 +87,13 @@ const server = app.listen(port, (err) => {
       }
       // ── Phase 36: Start auto-retrain scheduler ────────────────────────────
       startRetrainScheduler().catch((err) => logger.error({ err }, "Retrain scheduler failed to start"));
+
+      // ── Phase 15: Start paper validation loop (predicted vs realized) ─────
+      if ((process.env.PAPER_VALIDATION_AUTO_START ?? "true") !== "false") {
+        startPaperValidationLoop({ runImmediate: true })
+          .then((result) => logger.info({ intervalMs: result.interval_ms }, "Paper validation loop started"))
+          .catch((err) => logger.error({ err }, "Paper validation loop failed to start"));
+      }
     });
 
   // ── Phase 37: Initialize Brain knowledge graph (non-blocking) ───────────────
@@ -133,6 +141,12 @@ onShutdown(async () => {
 onShutdown(async () => {
   logger.info("Stopping retrain scheduler...");
   stopRetrainScheduler();
+});
+
+// Register cleanup: stop paper validation loop
+onShutdown(async () => {
+  logger.info("Stopping paper validation loop...");
+  stopPaperValidationLoop();
 });
 
 // Register cleanup: end trading session

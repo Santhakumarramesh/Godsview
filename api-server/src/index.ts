@@ -11,6 +11,7 @@ import { MacroContextService } from "./lib/macro_context_service";
 import { ScannerScheduler } from "./lib/scanner_scheduler";
 import { startReconciler, stopReconciler } from "./lib/fill_reconciler";
 import { alpacaAccountStream, wireAccountStreamToReconciler } from "./lib/alpaca_account_stream";
+import { startPaperValidationLoop, stopPaperValidationLoop } from "./lib/paper_validation_loop";
 
 // ── Validate environment before anything else ───────────────────
 validateEnv();
@@ -140,6 +141,13 @@ const server = app.listen(port, (err) => {
   } else {
     logger.info("Brain auto-start disabled (set BRAIN_AUTOSTART=true to enable)");
   }
+
+  // Phase 15: paper validation loop (predicted vs realized in paper mode)
+  if ((process.env.PAPER_VALIDATION_AUTO_START ?? "true") !== "false") {
+    startPaperValidationLoop({ runImmediate: true })
+      .then((result) => logger.info({ intervalMs: result.interval_ms }, "Paper validation loop started"))
+      .catch((err) => logger.error({ err }, "Paper validation loop failed to start"));
+  }
 });
 
 // ── Graceful shutdown with connection draining ──────────────────
@@ -194,6 +202,12 @@ onShutdown(async () => {
   logger.info("Stopping fill reconciler + account stream...");
   stopReconciler();
   alpacaAccountStream.stop();
+});
+
+// Register cleanup: stop paper validation loop
+onShutdown(async () => {
+  logger.info("Stopping paper validation loop...");
+  stopPaperValidationLoop();
 });
 
 // Register cleanup: end trading session

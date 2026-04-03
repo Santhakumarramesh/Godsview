@@ -288,6 +288,79 @@ export function useOptimizeStrategy() {
       }),
   });
 }
+
+export interface PaperValidationStatus {
+  running: boolean;
+  interval_ms: number;
+  last_cycle_at: string | null;
+  last_error: string | null;
+  history_size: number;
+  latest_status: "INSUFFICIENT" | "HEALTHY" | "WATCH" | "DRIFT" | "CRITICAL" | null;
+  latest_sample_count: number;
+}
+
+export interface PaperValidationReport {
+  generated_at: string;
+  days: number;
+  status: "INSUFFICIENT" | "HEALTHY" | "WATCH" | "DRIFT" | "CRITICAL";
+  threshold: number;
+  reconciliation: {
+    pending_before: number;
+    matched: number;
+    still_pending: number;
+    scanned_accuracy_rows: number;
+  };
+  approved: {
+    sample_count: number;
+    realized_win_rate: number;
+    average_predicted_win_prob: number;
+    calibration_bias: number;
+    brier_score: number;
+    precision: number;
+    recall: number;
+    realized_pnl_total: number;
+  };
+  optimization_actions: Array<{
+    strategy_id: string;
+    success: boolean;
+    message: string;
+    best_score?: number;
+    next_tier?: string;
+  }>;
+}
+
+export function usePaperValidationStatus(options?: Omit<UseQueryOptions<PaperValidationStatus>, "queryKey" | "queryFn">) {
+  return useQuery({
+    queryKey: ["paper", "validation", "status"],
+    queryFn: () => apiFetch<PaperValidationStatus>("/paper/validation/status"),
+    refetchInterval: 15_000,
+    ...options,
+  });
+}
+
+export function usePaperValidationReport(options?: Omit<UseQueryOptions<PaperValidationReport>, "queryKey" | "queryFn">) {
+  return useQuery({
+    queryKey: ["paper", "validation", "latest"],
+    queryFn: () => apiFetch<PaperValidationReport>("/paper/validation/latest"),
+    refetchInterval: 30_000,
+    retry: false,
+    ...options,
+  });
+}
+
+export function useRunPaperValidation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params?: { days?: number; threshold?: number; enable_auto_optimization?: boolean }) =>
+      apiFetch<PaperValidationReport>("/paper/validation/run-once", {
+        method: "POST",
+        body: JSON.stringify(params ?? {}),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["paper", "validation"] });
+    },
+  });
+}
 export function useAccuracy() {
   return useQuery({ queryKey: ["alpaca", "accuracy"], queryFn: () => apiFetch<any>("/alpaca/accuracy"), staleTime: 120_000 });
 }

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { usePaperValidationReport, usePaperValidationStatus, useRunPaperValidation } from "@/lib/api";
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid,
   ResponsiveContainer, Tooltip, XAxis, YAxis, Line, LineChart,
@@ -21,10 +22,11 @@ const C = {
   purple: "#a78bfa",
 };
 
-function MicroLabel({ children }: { children: React.ReactNode }) {
+function MicroLabel({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return (
     <span style={{ fontSize: "8px", fontFamily: "Space Grotesk",
       letterSpacing: "0.2em", textTransform: "uppercase", color: C.outline,
+      ...style,
     }}>
       {children}
     </span>
@@ -193,6 +195,13 @@ export default function SuperIntelligencePage() {
     refetchInterval: 30_000,
   });
 
+  // Paper validation loop: predicted vs realized in paper mode
+  const { data: paperValidationStatus } = usePaperValidationStatus();
+  const { data: paperValidationReport } = usePaperValidationReport({
+    enabled: Boolean(paperValidationStatus?.running || (paperValidationStatus?.history_size ?? 0) > 0),
+  });
+  const runPaperValidationMutation = useRunPaperValidation();
+
   const runBacktest = useCallback(async () => {
     setIsRunning(true);
     try {
@@ -219,6 +228,10 @@ export default function SuperIntelligencePage() {
       console.error("Failed to toggle autonomous mode:", err);
     }
   }, [autonomousMode]);
+
+  const runPaperValidationNow = useCallback(() => {
+    runPaperValidationMutation.mutate({ enable_auto_optimization: true });
+  }, [runPaperValidationMutation]);
 
   // Auto-run backtest on mount
   useEffect(() => { runBacktest(); }, []);
@@ -354,6 +367,89 @@ export default function SuperIntelligencePage() {
               {autonomousStatus?.last_scan_time ? new Date(autonomousStatus.last_scan_time).toLocaleTimeString() : "—"}
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* ── B. Paper Validation Loop ── */}
+      <div className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+        <div className="flex items-center justify-between mb-4">
+          <MicroLabel>Paper Validation Loop</MicroLabel>
+          <div className="flex items-center gap-2">
+            <div className="px-2 py-1 rounded" style={{
+              fontSize: "9px",
+              fontFamily: "JetBrains Mono, monospace",
+              backgroundColor: paperValidationReport?.status === "HEALTHY" ? "rgba(156,255,147,0.12)" :
+                paperValidationReport?.status === "WATCH" ? "rgba(251,191,36,0.12)" :
+                paperValidationReport?.status === "DRIFT" || paperValidationReport?.status === "CRITICAL" ? "rgba(255,113,98,0.12)" : "rgba(118,117,118,0.15)",
+              color: paperValidationReport?.status === "HEALTHY" ? C.primary :
+                paperValidationReport?.status === "WATCH" ? C.gold :
+                paperValidationReport?.status === "DRIFT" || paperValidationReport?.status === "CRITICAL" ? C.tertiary : C.outline,
+              border: `1px solid ${paperValidationReport?.status === "HEALTHY" ? "rgba(156,255,147,0.2)" :
+                paperValidationReport?.status === "WATCH" ? "rgba(251,191,36,0.2)" :
+                paperValidationReport?.status === "DRIFT" || paperValidationReport?.status === "CRITICAL" ? "rgba(255,113,98,0.2)" : "rgba(118,117,118,0.2)"}`,
+            }}>
+              {paperValidationReport?.status ?? "WAITING"}
+            </div>
+            <button onClick={runPaperValidationNow}
+              disabled={runPaperValidationMutation.isPending}
+              className="px-3 py-1.5 rounded text-xs transition-colors"
+              style={{
+                backgroundColor: runPaperValidationMutation.isPending ? C.outlineVar : "rgba(102,157,255,0.15)",
+                color: runPaperValidationMutation.isPending ? C.outline : C.secondary,
+                border: `1px solid ${runPaperValidationMutation.isPending ? "rgba(72,72,73,0.35)" : "rgba(102,157,255,0.35)"}`,
+                fontFamily: "Space Grotesk", fontWeight: 600,
+              }}>
+              {runPaperValidationMutation.isPending ? "Running..." : "Run Now"}
+            </button>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div>
+            <div style={{ fontSize: "8px", color: C.outline, fontFamily: "Space Grotesk", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: "8px" }}>
+              Loop
+            </div>
+            <div style={{ fontSize: "14px", fontWeight: 600, color: paperValidationStatus?.running ? C.primary : C.tertiary, fontFamily: "JetBrains Mono, monospace" }}>
+              {paperValidationStatus?.running ? "ACTIVE" : "STOPPED"}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: "8px", color: C.outline, fontFamily: "Space Grotesk", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: "8px" }}>
+              Resolved Samples
+            </div>
+            <div style={{ fontSize: "14px", fontWeight: 600, color: C.secondary, fontFamily: "JetBrains Mono, monospace" }}>
+              {paperValidationReport?.approved.sample_count ?? paperValidationStatus?.latest_sample_count ?? 0}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: "8px", color: C.outline, fontFamily: "Space Grotesk", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: "8px" }}>
+              Calibration Bias
+            </div>
+            <div style={{
+              fontSize: "14px", fontWeight: 600,
+              color: Math.abs(paperValidationReport?.approved.calibration_bias ?? 0) <= 0.05 ? C.primary : C.gold,
+              fontFamily: "JetBrains Mono, monospace",
+            }}>
+              {paperValidationReport ? `${paperValidationReport.approved.calibration_bias >= 0 ? "+" : ""}${paperValidationReport.approved.calibration_bias.toFixed(3)}` : "—"}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: "8px", color: C.outline, fontFamily: "Space Grotesk", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: "8px" }}>
+              Brier / Precision
+            </div>
+            <div style={{ fontSize: "14px", fontWeight: 600, color: C.muted, fontFamily: "JetBrains Mono, monospace" }}>
+              {paperValidationReport ? `${paperValidationReport.approved.brier_score.toFixed(3)} / ${(paperValidationReport.approved.precision * 100).toFixed(0)}%` : "—"}
+            </div>
+          </div>
+        </div>
+        <div className="mt-3 flex items-center justify-between" style={{ fontSize: "10px", color: C.outline }}>
+          <span>
+            Last cycle: {paperValidationStatus?.last_cycle_at ? new Date(paperValidationStatus.last_cycle_at).toLocaleTimeString() : "—"}
+            {" · "}
+            Interval: {paperValidationStatus?.interval_ms ? `${Math.round(paperValidationStatus.interval_ms / 1000)}s` : "—"}
+          </span>
+          <span style={{ color: C.gold }}>
+            Auto-optimizations: {paperValidationReport?.optimization_actions?.length ?? 0}
+          </span>
         </div>
       </div>
 
