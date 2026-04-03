@@ -136,6 +136,7 @@ export type StrategyTier = "SEED" | "LEARNING" | "PROVEN" | "ELITE" | "DEGRADING
 
 export interface WalkForwardConfig {
   strategy_id: string;
+  persist_result?: boolean;
   lookback_days?: number;
   train_days?: number;
   test_days?: number;
@@ -215,6 +216,29 @@ export interface WalkForwardResult {
     threshold_cv: number;
   };
   promotion: WalkForwardPromotionDecision;
+  generated_at: string;
+}
+
+export interface StrategyOptimizationConfig {
+  strategy_id: string;
+  lookback_days?: number;
+  min_train_samples?: number;
+  min_test_samples?: number;
+}
+
+export interface StrategyOptimizationResult {
+  strategy_id: string;
+  evaluated_candidates: number;
+  best_config: WalkForwardResult["config"];
+  best_score: number;
+  top_candidates: Array<{
+    score: number;
+    config: WalkForwardResult["config"];
+    aggregate_oos: WalkForwardResult["aggregate_oos"];
+    stability: WalkForwardResult["stability"];
+    promotion: WalkForwardResult["promotion"];
+  }>;
+  applied_result: WalkForwardResult;
   generated_at: string;
 }
 
@@ -886,7 +910,7 @@ export function getStrategyLeaderboard(): StrategyLeaderboardEntry[] {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WALK_FORWARD_CACHE_TTL_MS = 2 * 60_000;
-const DEFAULT_WALK_FORWARD_CONFIG: Required<Omit<WalkForwardConfig, "strategy_id">> = {
+const DEFAULT_WALK_FORWARD_CONFIG: Required<Omit<WalkForwardConfig, "strategy_id" | "persist_result">> = {
   lookback_days: 240,
   train_days: 60,
   test_days: 20,
@@ -920,7 +944,7 @@ function asOutcome(value: unknown): "win" | "loss" | null {
   return null;
 }
 
-function normalizeWalkForwardConfig(config: WalkForwardConfig): Required<Omit<WalkForwardConfig, "strategy_id">> {
+function normalizeWalkForwardConfig(config: WalkForwardConfig): Required<Omit<WalkForwardConfig, "strategy_id" | "persist_result">> {
   return {
     lookback_days: Math.max(30, Math.min(730, Math.round(toFiniteNumber(config.lookback_days, DEFAULT_WALK_FORWARD_CONFIG.lookback_days)))),
     train_days: Math.max(15, Math.min(365, Math.round(toFiniteNumber(config.train_days, DEFAULT_WALK_FORWARD_CONFIG.train_days)))),
@@ -1147,6 +1171,7 @@ function decideWalkForwardTier(
 
 export async function runWalkForwardBacktest(config: WalkForwardConfig): Promise<WalkForwardResult> {
   const strategyFilter = parseStrategyFilter(config.strategy_id);
+  const persistResult = config.persist_result !== false;
   const normalized = normalizeWalkForwardConfig(config);
   const cacheKey = [
     strategyFilter.canonical_id,
@@ -1393,16 +1418,111 @@ export async function runWalkForwardBacktest(config: WalkForwardConfig): Promise
   };
 
   _walkForwardCache.set(cacheKey, { ts: Date.now(), result });
-  _latestWalkForwardByStrategy.set(strategyFilter.canonical_id, result);
-  _strategyTierRegistry.set(strategyFilter.canonical_id, {
-    strategy_id: strategyFilter.canonical_id,
-    tier: promotion.next_tier,
-    updated_at: result.generated_at,
-    notes: promotion.reasons,
-    aggregate_oos,
-  });
+  if (persistResult) {
+    _latestWalkForwardByStrategy.set(strategyFilter.canonical_id, result);
+    _strategyTierRegistry.set(strategyFilter.canonical_id, {
+      strategy_id: strategyFilter.canonical_id,
+      tier: promotion.next_tier,
+      updated_at: result.generated_at,
+      notes: promotion.reasons,
+      aggregate_oos,
+    });
+  }
 
   return result;
+}
+
+export async function runStrategyOptimization(config: StrategyOptimizationConfig): Promise<StrategyOptimizationResult> {
+  const strategyId = String(config.strategy_id ?? "").trim();
+  if (!strategyId) {
+    throw new Error("strategy_id is required");
+  }
+
+  const lookback = Math.max(60, Math.min(730, Math.round(toFiniteNumber(config.lookback_days, 240))));
+  const minTrain = Math.max(10, Math.min(500, Math.round(toFiniteNumber(config.min_train_samples, 24))));
+  const minTest = Math.max(5, Math.min(200, Math.round(toFiniteNumber(config.min_test_samples, 8))));
+
+  const trainTestPairs: Array<[number, number]> = [[45, 15], [60, 20], [90, 30]];
+  const minWinRates = [0.54, 0.56, 0.58];
+  const minProfitFactors = [1.05, 1.15];
+
+  const candidates: Array<{
+    config: WalkForwardResult["config"];
+    result: WalkForwardResult;
+    score: number;
+  }> = [];
+
+  for (const [trainDays, testDays] of trainTestPairs) {
+    const stepDays = Math.max(5, Math.round(testDays / 2));
+    for (const minWin of minWinRates) {
+      for (const minPF of minProfitFactors) {
+        const wf = await runWalkForwardBacktest({
+          strategy_id: strategyId,
+          persist_result: false,
+          lookback_days: lookback,
+          train_days: trainDays,
+          test_days: testDays,
+          step_days: stepDays,
+          min_train_samples: minTrain,
+          min_test_samples: minTest,
+          min_win_rate: minWin,
+          min_profit_factor: minPF,
+        });
+
+        const aggregate = wf.aggregate_oos;
+        const score = (
+          aggregate.pass_rate * 0.35 +
+          aggregate.win_rate * 0.25 +
+          (Math.min(aggregate.profit_factor, 3) / 3) * 0.20 +
+          wf.stability.score * 0.20 -
+          Math.min(aggregate.max_drawdown_pct / 100, 0.3)
+        );
+
+        candidates.push({
+          config: wf.config,
+          result: wf,
+          score,
+        });
+      }
+    }
+  }
+
+  candidates.sort((a, b) => b.score - a.score);
+  const best = candidates[0];
+  if (!best) {
+    throw new Error("No optimization candidates were evaluated");
+  }
+
+  // Persist the best profile into strategy tier state.
+  const appliedResult = await runWalkForwardBacktest({
+    strategy_id: strategyId,
+    persist_result: true,
+    lookback_days: best.config.lookback_days,
+    train_days: best.config.train_days,
+    test_days: best.config.test_days,
+    step_days: best.config.step_days,
+    min_train_samples: best.config.min_train_samples,
+    min_test_samples: best.config.min_test_samples,
+    min_win_rate: best.config.min_win_rate,
+    min_profit_factor: best.config.min_profit_factor,
+    max_drawdown_pct: best.config.max_drawdown_pct,
+  });
+
+  return {
+    strategy_id: appliedResult.strategy_id,
+    evaluated_candidates: candidates.length,
+    best_config: best.config,
+    best_score: best.score,
+    top_candidates: candidates.slice(0, 5).map((candidate) => ({
+      score: candidate.score,
+      config: candidate.config,
+      aggregate_oos: candidate.result.aggregate_oos,
+      stability: candidate.result.stability,
+      promotion: candidate.result.promotion,
+    })),
+    applied_result: appliedResult,
+    generated_at: new Date().toISOString(),
+  };
 }
 
 export function getWalkForwardTierRegistry(): Array<{

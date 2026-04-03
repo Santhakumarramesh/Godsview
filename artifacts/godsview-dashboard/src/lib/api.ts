@@ -269,6 +269,25 @@ export function useStrategyTierRegistry(options?: Omit<UseQueryOptions<{ count: 
     ...options,
   });
 }
+
+export function useOptimizeStrategy() {
+  return useMutation({
+    mutationFn: (params: {
+      strategy_id: string;
+      lookback_days?: number;
+      min_train_samples?: number;
+      min_test_samples?: number;
+    }) =>
+      apiFetch<any>(`/backtest/optimize/${encodeURIComponent(params.strategy_id)}`, {
+        method: "POST",
+        body: JSON.stringify({
+          lookback_days: params.lookback_days,
+          min_train_samples: params.min_train_samples,
+          min_test_samples: params.min_test_samples,
+        }),
+      }),
+  });
+}
 export function useAccuracy() {
   return useQuery({ queryKey: ["alpaca", "accuracy"], queryFn: () => apiFetch<any>("/alpaca/accuracy"), staleTime: 120_000 });
 }

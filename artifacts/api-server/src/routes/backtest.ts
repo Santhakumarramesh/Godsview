@@ -6,10 +6,12 @@ import {
   getContinuousBacktestStatus,
   getStrategyLeaderboard,
   runWalkForwardBacktest,
+  runStrategyOptimization,
   getWalkForwardTierRegistry,
   getLatestWalkForward,
   type BacktestConfig,
   type WalkForwardConfig,
+  type StrategyOptimizationConfig,
 } from "../lib/backtester";
 
 const router: IRouter = Router();
@@ -228,6 +230,55 @@ router.get("/backtest/walk-forward/latest/:strategyId", async (req, res): Promis
     res.json(latest);
   } catch (err) {
     res.status(500).json({ error: "internal_error", message: "Failed to get walk-forward result" });
+  }
+});
+
+// ── POST /backtest/optimize/:strategyId ─────────────────────────────────────
+router.post("/backtest/optimize/:strategyId", async (req, res): Promise<void> => {
+  try {
+    const strategyId = String(req.params.strategyId ?? "").trim();
+    if (!strategyId) {
+      res.status(400).json({ error: "validation_error", message: "strategyId path param is required" });
+      return;
+    }
+
+    const body = req.body ?? {};
+    const config: StrategyOptimizationConfig = {
+      strategy_id: strategyId,
+      lookback_days: parseNum(body.lookback_days),
+      min_train_samples: parseNum(body.min_train_samples),
+      min_test_samples: parseNum(body.min_test_samples),
+    };
+
+    const result = await runStrategyOptimization(config);
+    res.json(result);
+  } catch (err) {
+    req.log.error({ err }, "Strategy optimization failed");
+    res.status(500).json({ error: "strategy_optimization_failed", message: String(err) });
+  }
+});
+
+router.post("/brain/backtest/optimize/:strategyId", async (req, res): Promise<void> => {
+  try {
+    const strategyId = String(req.params.strategyId ?? "").trim();
+    if (!strategyId) {
+      res.status(400).json({ error: "validation_error", message: "strategyId path param is required" });
+      return;
+    }
+
+    const body = req.body ?? {};
+    const config: StrategyOptimizationConfig = {
+      strategy_id: strategyId,
+      lookback_days: parseNum(body.lookback_days),
+      min_train_samples: parseNum(body.min_train_samples),
+      min_test_samples: parseNum(body.min_test_samples),
+    };
+
+    const result = await runStrategyOptimization(config);
+    res.json(result);
+  } catch (err) {
+    req.log.error({ err }, "Brain strategy optimization failed");
+    res.status(500).json({ error: "strategy_optimization_failed", message: String(err) });
   }
 });
 
