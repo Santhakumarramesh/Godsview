@@ -62,7 +62,7 @@ const WARNING_PCT = 0.50;
 const THROTTLE_PCT = 0.75;
 const MAX_CONSECUTIVE_LOSSES = parseNum("GODSVIEW_COOLDOWN_AFTER_LOSSES", 3);
 const COOLDOWN_MINUTES = parseNum("GODSVIEW_COOLDOWN_MINUTES", 30);
-const MAX_DRAWDOWN_FROM_PEAK_PCT = parseNum("GODSVIEW_MAX_DRAWDOWN_PCT", 0.05); // 5%
+const DEFAULT_MAX_DRAWDOWN_FROM_PEAK_PCT = parseNum("GODSVIEW_MAX_DRAWDOWN_PCT", 0.15);
 const VELOCITY_WINDOW_MS = 3_600_000; // 1 hour
 const VELOCITY_HALT_THRESHOLD = -200; // $-200/hour triggers halt
 
@@ -156,6 +156,7 @@ export function getBreakerSnapshot(): BreakerSnapshot {
   const velocity = computeVelocity();
   const totalPnl = realizedPnlToday + unrealizedPnl;
   const drawdownFromPeak = peakEquity > 0 ? (peakEquity - (peakEquity + totalPnl)) / peakEquity : 0;
+  const maxDrawdownPct = getConfiguredMaxDrawdownPct();
 
   return {
     level: currentLevel,
@@ -171,7 +172,7 @@ export function getBreakerSnapshot(): BreakerSnapshot {
     cooldown_until: cooldownUntil ? new Date(cooldownUntil).toISOString() : null,
     peak_equity: peakEquity,
     drawdown_from_peak: drawdownFromPeak,
-    max_drawdown_pct: MAX_DRAWDOWN_FROM_PEAK_PCT,
+    max_drawdown_pct: maxDrawdownPct,
     hourly_pnl_velocity: velocity,
     position_size_multiplier: positionSizeMultiplier,
     trades_today: tradesCount,
@@ -197,6 +198,7 @@ function evaluateBreaker(): void {
   const totalPnl = realizedPnlToday + unrealizedPnl;
   const absLoss = Math.abs(Math.min(0, totalPnl));
   const velocity = computeVelocity();
+  const maxDrawdownPct = getConfiguredMaxDrawdownPct();
   let newLevel: BreakerLevel = "NORMAL";
 
   // ── Check daily loss thresholds ──
@@ -216,7 +218,7 @@ function evaluateBreaker(): void {
   // ── Check drawdown from peak ──
   if (peakEquity > 0) {
     const drawdownPct = absLoss / peakEquity;
-    if (drawdownPct >= MAX_DRAWDOWN_FROM_PEAK_PCT) {
+    if (drawdownPct >= maxDrawdownPct) {
       newLevel = "HALT";
     }
   }
@@ -297,6 +299,14 @@ function computeVelocity(): number {
   const cutoff = Date.now() - VELOCITY_WINDOW_MS;
   const recentEvents = pnlEvents.filter((e) => e.ts >= cutoff);
   return recentEvents.reduce((sum, e) => sum + e.pnl, 0);
+}
+
+function getConfiguredMaxDrawdownPct(): number {
+  const configured = Number(getRiskEngineSnapshot().config.maxDrawdownPct);
+  if (Number.isFinite(configured)) {
+    return Math.max(0, Math.min(configured, 1));
+  }
+  return Math.max(0, Math.min(DEFAULT_MAX_DRAWDOWN_FROM_PEAK_PCT, 1));
 }
 
 function resetDayIfNeeded(): void {

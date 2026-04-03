@@ -19,6 +19,7 @@ import { registerCostBasis, getReconciliationSnapshot, getRecentFills } from "..
 import { getBreakerSnapshot, isCooldownActive, getPositionSizeMultiplier, resetBreaker } from "../lib/drawdown_breaker";
 import { setKillSwitchActive, isKillSwitchActive, getRiskEngineSnapshot } from "../lib/risk_engine";
 import { emergencyLiquidateAll, getLastLiquidation, isLiquidationInProgress } from "../lib/emergency_liquidator";
+import { evaluateExecutionRisk, evaluatePortfolioRisk, triggerEmergencyStopAll } from "../lib/portfolio_risk_guard";
 import { computeATR } from "../lib/strategy_engine";
 import { getBars } from "../lib/alpaca";
 
@@ -60,6 +61,20 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
         error: "breaker_halt",
         message: "Trading halted by drawdown circuit breaker",
         breaker: getBreakerSnapshot(),
+      });
+      return;
+    }
+
+    // Phase 16: Portfolio risk hardening gate (drawdown / VaR / correlation)
+    const portfolioRiskGate = await evaluateExecutionRisk(symbol);
+    if (!portfolioRiskGate.allowed) {
+      const status = portfolioRiskGate.action === "HALT" ? 423 : 429;
+      res.status(status).json({
+        error: "portfolio_risk_blocked",
+        message: `Execution blocked by portfolio risk guard (${portfolioRiskGate.action})`,
+        action: portfolioRiskGate.action,
+        reasons: portfolioRiskGate.reasons,
+        portfolio_risk: portfolioRiskGate.snapshot,
       });
       return;
     }
@@ -106,12 +121,16 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
           rejection_reason: decision.signal.rejection_reason,
         },
         meta: decision.meta,
+        portfolio_risk: portfolioRiskGate.snapshot,
       });
       return;
     }
 
-    // Apply throttle multiplier from breaker
-    const adjustedQty = Math.max(1, Math.round(decision.quantity * sizeMultiplier));
+    // Apply throttle multiplier from breaker + portfolio risk guard
+    const adjustedQty = Math.max(
+      1,
+      Math.round(decision.quantity * sizeMultiplier * portfolioRiskGate.size_multiplier),
+    );
 
     // 2. Execute order
     const executionResult = await executeOrder({
@@ -159,6 +178,10 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
         kelly_pct: decision.signal.kelly_fraction,
       },
       breaker_multiplier: sizeMultiplier,
+      portfolio_risk_action: portfolioRiskGate.action,
+      portfolio_risk_reasons: portfolioRiskGate.reasons,
+      portfolio_risk_multiplier: portfolioRiskGate.size_multiplier,
+      portfolio_risk: portfolioRiskGate.snapshot,
       adjusted_qty: adjustedQty,
       original_qty: decision.quantity,
     });
@@ -225,9 +248,22 @@ executionRouter.post("/emergency-close", requireOperator, async (req: Request, r
   }
 });
 
+// ── POST /emergency-stop-all — Kill switch + liquidation ──
+
+executionRouter.post("/emergency-stop-all", requireOperator, async (req: Request, res: Response) => {
+  try {
+    const reason = String(req.body.reason ?? "manual_emergency_stop_all");
+    const result = await triggerEmergencyStopAll(reason);
+    res.json(result);
+  } catch (err) {
+    logger.error({ err }, "Emergency stop all error");
+    res.status(500).json({ error: "internal_error", message: String(err) });
+  }
+});
+
 // ── GET /execution-status — Combined status ───────────
 
-executionRouter.get("/execution-status", (_req: Request, res: Response) => {
+executionRouter.get("/execution-status", async (_req: Request, res: Response) => {
   try {
     const mode = getExecutionMode();
     const breaker = getBreakerSnapshot();
@@ -236,6 +272,7 @@ executionRouter.get("/execution-status", (_req: Request, res: Response) => {
     const gateStats = getProductionGateStats();
     const risk = getRiskEngineSnapshot();
     const lastLiquidation = getLastLiquidation();
+    const portfolioRisk = await evaluatePortfolioRisk({ forceRefresh: false });
 
     res.json({
       mode,
@@ -255,11 +292,47 @@ executionRouter.get("/execution-status", (_req: Request, res: Response) => {
       })),
       gate_stats: gateStats,
       risk,
+      portfolio_risk: portfolioRisk,
       last_liquidation: lastLiquidation,
     });
   } catch (err) {
     logger.error({ err }, "Execution status error");
     res.status(500).json({ error: "internal_error" });
+  }
+});
+
+// ── GET /risk-guard — Portfolio drawdown/VAR/correlation state ──
+
+executionRouter.get("/risk-guard", async (req: Request, res: Response) => {
+  try {
+    const force = ["1", "true", "yes", "on"].includes(String(req.query.force ?? "").toLowerCase());
+    const candidateSymbol = String(req.query.candidate_symbol ?? "").trim().toUpperCase();
+    const snapshot = await evaluatePortfolioRisk({
+      forceRefresh: force,
+      candidateSymbol: candidateSymbol || undefined,
+    });
+    res.json(snapshot);
+  } catch (err) {
+    logger.error({ err }, "Risk guard status error");
+    res.status(500).json({ error: "internal_error", message: String(err) });
+  }
+});
+
+// ── POST /risk-guard/evaluate — Force a fresh portfolio risk evaluation ──
+
+executionRouter.post("/risk-guard/evaluate", requireOperator, async (req: Request, res: Response) => {
+  try {
+    const candidateSymbol = String(req.body?.candidate_symbol ?? "").trim().toUpperCase();
+    const autoHalt = req.body?.auto_halt === undefined ? false : Boolean(req.body.auto_halt);
+    const snapshot = await evaluatePortfolioRisk({
+      forceRefresh: true,
+      autoHalt,
+      candidateSymbol: candidateSymbol || undefined,
+    });
+    res.json(snapshot);
+  } catch (err) {
+    logger.error({ err }, "Risk guard evaluation error");
+    res.status(500).json({ error: "internal_error", message: String(err) });
   }
 });
 

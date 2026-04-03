@@ -1,6 +1,10 @@
 type MutableRiskConfig = {
   maxRiskPerTradePct: number;
   maxDailyLossUsd: number;
+  maxDrawdownPct: number;
+  maxPortfolioVarPct: number;
+  maxPortfolioCorrelation: number;
+  maxPairCorrelation: number;
   maxOpenExposurePct: number;
   maxConcurrentPositions: number;
   maxTradesPerSession: number;
@@ -50,6 +54,10 @@ function parseBooleanEnv(name: string, fallback: boolean): boolean {
 const config: MutableRiskConfig = {
   maxRiskPerTradePct: parseFloatEnv("GODSVIEW_MAX_RISK_PER_TRADE_PCT", 0.01, 0, 1),
   maxDailyLossUsd: parseFloatEnv("GODSVIEW_MAX_DAILY_LOSS_USD", 250, 0, 5_000_000),
+  maxDrawdownPct: parseFloatEnv("GODSVIEW_MAX_DRAWDOWN_PCT", 0.15, 0, 1),
+  maxPortfolioVarPct: parseFloatEnv("GODSVIEW_MAX_PORTFOLIO_VAR_PCT", 0.02, 0, 1),
+  maxPortfolioCorrelation: parseFloatEnv("GODSVIEW_MAX_PORTFOLIO_CORRELATION", 0.7, 0, 1),
+  maxPairCorrelation: parseFloatEnv("GODSVIEW_MAX_PAIR_CORRELATION", 0.9, 0, 1),
   maxOpenExposurePct: parseFloatEnv("GODSVIEW_MAX_OPEN_EXPOSURE_PCT", 0.6, 0, 5),
   maxConcurrentPositions: parseIntEnv("GODSVIEW_MAX_CONCURRENT_POSITIONS", 3, 1, 100),
   maxTradesPerSession: parseIntEnv("GODSVIEW_MAX_TRADES_PER_SESSION", 10, 1, 1000),
@@ -76,6 +84,22 @@ function sanitizePatch(patch: Partial<MutableRiskConfig>): Partial<MutableRiskCo
   if (patch.maxDailyLossUsd !== undefined) {
     const v = Number(patch.maxDailyLossUsd);
     if (Number.isFinite(v)) next.maxDailyLossUsd = Math.max(0, Math.min(v, 5_000_000));
+  }
+  if (patch.maxDrawdownPct !== undefined) {
+    const v = Number(patch.maxDrawdownPct);
+    if (Number.isFinite(v)) next.maxDrawdownPct = Math.max(0, Math.min(v, 1));
+  }
+  if (patch.maxPortfolioVarPct !== undefined) {
+    const v = Number(patch.maxPortfolioVarPct);
+    if (Number.isFinite(v)) next.maxPortfolioVarPct = Math.max(0, Math.min(v, 1));
+  }
+  if (patch.maxPortfolioCorrelation !== undefined) {
+    const v = Number(patch.maxPortfolioCorrelation);
+    if (Number.isFinite(v)) next.maxPortfolioCorrelation = Math.max(0, Math.min(v, 1));
+  }
+  if (patch.maxPairCorrelation !== undefined) {
+    const v = Number(patch.maxPairCorrelation);
+    if (Number.isFinite(v)) next.maxPairCorrelation = Math.max(0, Math.min(v, 1));
   }
   if (patch.maxOpenExposurePct !== undefined) {
     const v = Number(patch.maxOpenExposurePct);
