@@ -124,6 +124,21 @@ python -m pytest services/tests/ --cov=services --cov-report=html
 python -m pytest services/tests/test_integration_smoke.py -v
 ```
 
+## Release Gate (Node Stack)
+
+Run this before merging to production:
+
+```bash
+pnpm verify:release
+```
+
+This command enforces:
+- TypeScript typecheck for all workspaces
+- Full API-server Vitest suite
+- Production builds (API + dashboard)
+- Local runtime boot + HTTP deployment-readiness probes
+- Post-check cleanup of generated artifacts to keep git clean
+
 ## Monitoring
 
 ### Prometheus + Grafana

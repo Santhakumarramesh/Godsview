@@ -2,6 +2,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 interface CheckResult {
   name: string;
@@ -17,7 +18,8 @@ interface CommandResult {
   stderr: string;
 }
 
-const ROOT = path.resolve(process.cwd());
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.resolve(process.env.DEPLOY_READINESS_ROOT ?? path.resolve(SCRIPT_DIR, "..", ".."));
 const API_DIST_ENTRY = path.resolve(ROOT, "artifacts/api-server/dist/index.mjs");
 
 const BASE_URL_INPUT = String(process.env.BASE_URL ?? "http://127.0.0.1:3000").replace(/\/$/, "");
