@@ -42,6 +42,11 @@ import {
   stopProductionWatchdog,
 } from "./lib/production_watchdog";
 import {
+  shouldExecutionSafetySupervisorAutoStart,
+  startExecutionSafetySupervisor,
+  stopExecutionSafetySupervisor,
+} from "./lib/execution_safety_supervisor";
+import {
   shouldAutonomyDebugSchedulerAutoStart,
   startAutonomyDebugScheduler,
   stopAutonomyDebugScheduler,
@@ -200,6 +205,17 @@ const server = app.listen(port, (err) => {
   } else {
     logger.info("Autonomy debug scheduler auto-start disabled");
   }
+
+  if (shouldExecutionSafetySupervisorAutoStart()) {
+    startExecutionSafetySupervisor({ runImmediate: true })
+      .then((result) => logger.info(
+        { intervalMs: result.interval_ms, heartbeatSymbol: result.heartbeat_symbol },
+        "Execution safety supervisor started",
+      ))
+      .catch((err) => logger.error({ err }, "Execution safety supervisor failed to start"));
+  } else {
+    logger.info("Execution safety supervisor auto-start disabled");
+  }
 });
 
 // ── Graceful shutdown with connection draining ──────────────────
@@ -276,6 +292,12 @@ onShutdown(async () => {
 onShutdown(async () => {
   logger.info("Stopping autonomy debug scheduler...");
   stopAutonomyDebugScheduler();
+});
+
+// Register cleanup: stop execution safety supervisor
+onShutdown(async () => {
+  logger.info("Stopping execution safety supervisor...");
+  stopExecutionSafetySupervisor();
 });
 
 // Register cleanup: end trading session

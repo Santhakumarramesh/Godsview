@@ -894,6 +894,133 @@ export interface ProductionWatchdogAction {
   detail: string;
 }
 
+export interface ExecutionSafetySupervisorAction {
+  at: string;
+  cycle_reason: string;
+  action: "EVALUATE" | "ALERT_WARN_STREAK" | "ALERT_BLOCK_STREAK" | "ENGAGE_KILL_SWITCH" | "RECOVERED";
+  success: boolean;
+  detail: string;
+}
+
+export interface ExecutionSafetySupervisorSnapshot {
+  running: boolean;
+  cycle_in_flight: boolean;
+  started_at: string | null;
+  last_cycle_at: string | null;
+  last_cycle_duration_ms: number | null;
+  last_error: string | null;
+  total_cycles: number;
+  total_actions: number;
+  interval_ms: number;
+  consecutive_warn: number;
+  consecutive_blocked: number;
+  last_summary: {
+    autonomy_action: "ALLOW" | "WARN" | "BLOCK";
+    market_action: "ALLOW" | "WARN" | "BLOCK" | null;
+    portfolio_state: "NORMAL" | "ELEVATED" | "CRITICAL" | "HALT" | null;
+    incident_level: "NORMAL" | "WATCH" | "HALT";
+    incident_halt: boolean;
+    blocked_reasons: string[];
+    warning_reasons: string[];
+  } | null;
+  policy: {
+    auto_enforce: boolean;
+    interval_ms: number;
+    heartbeat_symbol: string;
+    include_market_guard: boolean;
+    include_portfolio_risk: boolean;
+    auto_heal_autonomy: boolean;
+    warn_alert_threshold: number;
+    block_alert_threshold: number;
+    auto_kill_switch_on_block: boolean;
+  };
+  recent_actions: ExecutionSafetySupervisorAction[];
+}
+
+export function useExecutionSafetySupervisorStatus(
+  options?: Omit<UseQueryOptions<ExecutionSafetySupervisorSnapshot>, "queryKey" | "queryFn">,
+) {
+  return useQuery({
+    queryKey: ["brain", "execution", "safety-supervisor", "status"],
+    queryFn: () => apiFetch<ExecutionSafetySupervisorSnapshot>("/brain/execution/safety-supervisor/status"),
+    refetchInterval: 10_000,
+    ...options,
+  });
+}
+
+export function useStartExecutionSafetySupervisor() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params?: { interval_ms?: number; run_immediate?: boolean; heartbeat_symbol?: string }) =>
+      apiFetch<{
+        success: boolean;
+        message: string;
+        interval_ms: number;
+        heartbeat_symbol: string;
+        snapshot: ExecutionSafetySupervisorSnapshot;
+      }>("/brain/execution/safety-supervisor/start", {
+        method: "POST",
+        body: JSON.stringify(params ?? {}),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["brain", "execution", "safety-supervisor"] });
+      qc.invalidateQueries({ queryKey: ["execution", "autonomy-guard"] });
+      qc.invalidateQueries({ queryKey: ["execution", "market-guard"] });
+    },
+  });
+}
+
+export function useStopExecutionSafetySupervisor() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{
+        success: boolean;
+        message: string;
+        snapshot: ExecutionSafetySupervisorSnapshot;
+      }>("/brain/execution/safety-supervisor/stop", {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["brain", "execution", "safety-supervisor"] });
+    },
+  });
+}
+
+export function useRunExecutionSafetySupervisorCycle() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{
+        ok: boolean;
+        snapshot: ExecutionSafetySupervisorSnapshot;
+      }>("/brain/execution/safety-supervisor/run-once", {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["brain", "execution", "safety-supervisor"] });
+      qc.invalidateQueries({ queryKey: ["execution", "autonomy-guard"] });
+      qc.invalidateQueries({ queryKey: ["execution", "market-guard"] });
+    },
+  });
+}
+
+export function useResetExecutionSafetySupervisor() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{
+        ok: boolean;
+        snapshot: ExecutionSafetySupervisorSnapshot;
+      }>("/brain/execution/safety-supervisor/reset", {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["brain", "execution", "safety-supervisor"] });
+    },
+  });
+}
+
 export interface ProductionWatchdogSnapshot {
   running: boolean;
   cycle_in_flight: boolean;

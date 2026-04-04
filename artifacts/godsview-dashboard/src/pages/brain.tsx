@@ -49,6 +49,12 @@ import {
   useRunProductionWatchdogCycle,
   useResetProductionWatchdog,
   type ProductionWatchdogSnapshot,
+  useExecutionSafetySupervisorStatus,
+  useStartExecutionSafetySupervisor,
+  useStopExecutionSafetySupervisor,
+  useRunExecutionSafetySupervisorCycle,
+  useResetExecutionSafetySupervisor,
+  type ExecutionSafetySupervisorSnapshot,
   useAutonomyDebugSnapshot,
   useRunAutonomyDebugFix,
   useAutonomyDebugSchedulerStatus,
@@ -1538,6 +1544,149 @@ function AutonomyDebugPanel({
   );
 }
 
+function ExecutionSafetySupervisorPanel({
+  supervisor,
+  busy,
+  onStart,
+  onStop,
+  onRun,
+  onReset,
+}: {
+  supervisor?: ExecutionSafetySupervisorSnapshot;
+  busy: boolean;
+  onStart: () => void;
+  onStop: () => void;
+  onRun: () => void;
+  onReset: () => void;
+}) {
+  const running = !!supervisor?.running;
+  const blocked = supervisor?.consecutive_blocked ?? 0;
+  const warn = supervisor?.consecutive_warn ?? 0;
+  const intervalSeconds = Math.max(1, Math.round((supervisor?.interval_ms ?? 45_000) / 1000));
+  const heartbeat = supervisor?.policy.heartbeat_symbol ?? "BTCUSD";
+  const topActions = (supervisor?.recent_actions ?? []).slice(0, 4);
+  const lastSummary = supervisor?.last_summary;
+  const levelColor =
+    blocked > 0 ? "#ff4444" :
+    warn > 0 ? "#ffcc00" : "#00ffcc";
+
+  return (
+    <div style={panelStyle}>
+      <div style={{ ...labelStyle, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span>Exec Safety Supervisor</span>
+        <span style={{ color: running ? "#00ffcc" : "#767576", fontFamily: "JetBrains Mono", fontSize: "9px", letterSpacing: "0.1em" }}>
+          {running ? "ACTIVE" : "IDLE"}
+        </span>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "8px" }}>
+        <div style={{ padding: "6px", borderRadius: "6px", backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(72,72,73,0.14)" }}>
+          <div style={{ fontSize: "7px", color: "#484849", letterSpacing: "0.1em", textTransform: "uppercase" }}>Blocked</div>
+          <div style={{ fontSize: "11px", color: blocked > 0 ? "#ff4444" : "#00ffcc", fontFamily: "JetBrains Mono", fontWeight: 700 }}>
+            {blocked}
+          </div>
+        </div>
+        <div style={{ padding: "6px", borderRadius: "6px", backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(72,72,73,0.14)" }}>
+          <div style={{ fontSize: "7px", color: "#484849", letterSpacing: "0.1em", textTransform: "uppercase" }}>Warnings</div>
+          <div style={{ fontSize: "11px", color: warn > 0 ? "#ffcc00" : "#adaaab", fontFamily: "JetBrains Mono", fontWeight: 700 }}>
+            {warn}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ fontSize: "8px", color: "#767576", fontFamily: "JetBrains Mono", marginBottom: "6px" }}>
+        heartbeat {heartbeat} · every {intervalSeconds}s
+      </div>
+      <div style={{ fontSize: "8px", color: levelColor, fontFamily: "JetBrains Mono", marginBottom: "8px" }}>
+        autonomy {lastSummary?.autonomy_action ?? "ALLOW"} · market {lastSummary?.market_action ?? "SKIP"} · portfolio {lastSummary?.portfolio_state ?? "SKIP"}
+      </div>
+
+      <div style={{ display: "flex", gap: "6px", marginBottom: "6px" }}>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={running ? onStop : onStart}
+          style={{
+            flex: 1,
+            fontSize: "9px",
+            borderRadius: "6px",
+            border: `1px solid ${running ? "rgba(255,113,98,0.3)" : "rgba(0,255,204,0.3)"}`,
+            backgroundColor: running ? "rgba(255,113,98,0.12)" : "rgba(0,255,204,0.12)",
+            color: running ? "#ff7162" : "#00ffcc",
+            padding: "6px 8px",
+            cursor: busy ? "not-allowed" : "pointer",
+            opacity: busy ? 0.65 : 1,
+          }}
+        >
+          {running ? "Stop" : "Start"}
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onRun}
+          style={{
+            flex: 1,
+            fontSize: "9px",
+            borderRadius: "6px",
+            border: "1px solid rgba(255,204,0,0.3)",
+            backgroundColor: "rgba(255,204,0,0.1)",
+            color: "#ffcc00",
+            padding: "6px 8px",
+            cursor: busy ? "not-allowed" : "pointer",
+            opacity: busy ? 0.65 : 1,
+          }}
+        >
+          Run Cycle
+        </button>
+      </div>
+
+      <button
+        type="button"
+        disabled={busy}
+        onClick={onReset}
+        style={{
+          width: "100%",
+          fontSize: "9px",
+          borderRadius: "6px",
+          border: "1px solid rgba(130,130,140,0.25)",
+          backgroundColor: "rgba(130,130,140,0.08)",
+          color: "#adaaab",
+          padding: "6px 8px",
+          cursor: busy ? "not-allowed" : "pointer",
+          opacity: busy ? 0.65 : 1,
+          marginBottom: "8px",
+        }}
+      >
+        Reset Counters
+      </button>
+
+      <div style={{ fontSize: "8px", color: "#767576", fontFamily: "JetBrains Mono", marginBottom: "6px" }}>
+        cycles {supervisor?.total_cycles ?? 0} · actions {supervisor?.total_actions ?? 0}
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: "4px", maxHeight: "86px", overflowY: "auto" }}>
+        {topActions.map((action, idx) => {
+          const color =
+            action.action === "ENGAGE_KILL_SWITCH" ? "#ff4444" :
+            action.action === "ALERT_BLOCK_STREAK" ? "#ff7162" :
+            action.action === "ALERT_WARN_STREAK" ? "#ffcc00" :
+            action.action === "RECOVERED" ? "#00ffcc" : "#adaaab";
+          return (
+            <div key={`${action.at}-${idx}`} style={{ fontSize: "8px", lineHeight: 1.3 }}>
+              <div style={{ color, fontFamily: "JetBrains Mono" }}>
+                {action.action}
+              </div>
+              <div style={{ color: "#adaaab", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {action.detail}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ExecutionAutonomyGuardPanel({
   autonomyGuard,
   busy,
@@ -2401,6 +2550,11 @@ function BrainPageComponent() {
   const stopProductionWatchdog = useStopProductionWatchdog();
   const runProductionWatchdogCycle = useRunProductionWatchdogCycle();
   const resetProductionWatchdog = useResetProductionWatchdog();
+  const { data: executionSafetySupervisor } = useExecutionSafetySupervisorStatus({ refetchInterval: 10_000 });
+  const startExecutionSafetySupervisor = useStartExecutionSafetySupervisor();
+  const stopExecutionSafetySupervisor = useStopExecutionSafetySupervisor();
+  const runExecutionSafetySupervisorCycle = useRunExecutionSafetySupervisorCycle();
+  const resetExecutionSafetySupervisor = useResetExecutionSafetySupervisor();
   const { data: autonomyDebugSnapshot } = useAutonomyDebugSnapshot(undefined, { refetchInterval: 10_000 });
   const runAutonomyDebugFix = useRunAutonomyDebugFix();
   const { data: autonomyDebugScheduler } = useAutonomyDebugSchedulerStatus({ refetchInterval: 10_000 });
@@ -2516,6 +2670,11 @@ function BrainPageComponent() {
     stopProductionWatchdog.isPending ||
     runProductionWatchdogCycle.isPending ||
     resetProductionWatchdog.isPending;
+  const executionSafetySupervisorBusy =
+    startExecutionSafetySupervisor.isPending ||
+    stopExecutionSafetySupervisor.isPending ||
+    runExecutionSafetySupervisorCycle.isPending ||
+    resetExecutionSafetySupervisor.isPending;
   const debugFixBusy = runAutonomyDebugFix.isPending;
   const debugSchedulerBusy =
     startAutonomyDebugScheduler.isPending ||
@@ -2575,6 +2734,22 @@ function BrainPageComponent() {
   const handleWatchdogReset = useCallback(() => {
     resetProductionWatchdog.mutate();
   }, [resetProductionWatchdog]);
+
+  const handleExecutionSafetySupervisorStart = useCallback(() => {
+    startExecutionSafetySupervisor.mutate({ run_immediate: true });
+  }, [startExecutionSafetySupervisor]);
+
+  const handleExecutionSafetySupervisorStop = useCallback(() => {
+    stopExecutionSafetySupervisor.mutate();
+  }, [stopExecutionSafetySupervisor]);
+
+  const handleExecutionSafetySupervisorRun = useCallback(() => {
+    runExecutionSafetySupervisorCycle.mutate();
+  }, [runExecutionSafetySupervisorCycle]);
+
+  const handleExecutionSafetySupervisorReset = useCallback(() => {
+    resetExecutionSafetySupervisor.mutate();
+  }, [resetExecutionSafetySupervisor]);
 
   const handleAutonomyDebugFix = useCallback(() => {
     runAutonomyDebugFix.mutate({ force_refresh: true });
@@ -2784,6 +2959,14 @@ function BrainPageComponent() {
           autonomyGuard={executionAutonomyGuard}
           busy={executionAutonomyGuardBusy}
           onReset={handleExecutionAutonomyGuardReset}
+        />
+        <ExecutionSafetySupervisorPanel
+          supervisor={executionSafetySupervisor}
+          busy={executionSafetySupervisorBusy}
+          onStart={handleExecutionSafetySupervisorStart}
+          onStop={handleExecutionSafetySupervisorStop}
+          onRun={handleExecutionSafetySupervisorRun}
+          onReset={handleExecutionSafetySupervisorReset}
         />
         <StrategyGovernorPanel
           governor={strategyGovernor}
