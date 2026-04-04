@@ -105,6 +105,21 @@ vi.mock("../lib/execution_market_guard", async (importOriginal) => {
   };
 });
 
+vi.mock("../lib/execution_autonomy_guard", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../lib/execution_autonomy_guard")>();
+  return {
+    ...original,
+    evaluateExecutionAutonomyGuard: vi.fn(async () => ({
+      allowed: true,
+      level: "NORMAL" as const,
+      action: "ALLOW" as const,
+      reasons: [],
+      snapshot: original.getExecutionAutonomyGuardSnapshot(),
+    })),
+    resetExecutionAutonomyGuard: vi.fn(() => original.getExecutionAutonomyGuardSnapshot()),
+  };
+});
+
 vi.mock("../lib/alpaca", () => ({
   getAccount: vi.fn(async () => ({ equity: "100000" })),
   getBars: vi.fn(async () => [
@@ -268,6 +283,7 @@ describe("GET /api/execution/execution-status", () => {
     expect(d).toHaveProperty("positions");
     expect(d).toHaveProperty("gate_stats");
     expect(d).toHaveProperty("risk");
+    expect(d).toHaveProperty("autonomy_guard");
     expect(typeof d.kill_switch).toBe("boolean");
     expect(Array.isArray(d.positions)).toBe(true);
     expect(typeof d.managed_positions).toBe("number");
@@ -462,6 +478,7 @@ describe("POST /api/execution/execute", () => {
     const sig = d.signal as Record<string, unknown>;
     expect(typeof sig.win_probability).toBe("number");
     expect(typeof sig.edge_score).toBe("number");
+    expect(d).toHaveProperty("autonomy_guard");
   });
 
   it("returns 429 when breaker size multiplier is 0 (HALT state)", async () => {
@@ -545,5 +562,74 @@ describe("POST /api/execution/execute", () => {
     expect(d.executed).toBe(false);
     expect(d.gate_action).toBe("BLOCK");
     expect(Array.isArray(d.block_reasons)).toBe(true);
+  });
+
+  it("returns 429 when autonomy guard blocks execution", async () => {
+    const { evaluateExecutionAutonomyGuard, getExecutionAutonomyGuardSnapshot } = await import("../lib/execution_autonomy_guard");
+    vi.mocked(evaluateExecutionAutonomyGuard).mockResolvedValueOnce({
+      allowed: false,
+      level: "WATCH",
+      action: "BLOCK",
+      reasons: ["watchdog_status_not_ready"],
+      snapshot: {
+        ...getExecutionAutonomyGuardSnapshot(),
+        level: "WATCH",
+        halt_active: false,
+        last_halt_reason: null,
+      },
+    });
+
+    const { status, data } = await post(
+      "/api/execution/execute",
+      {
+        symbol: "BTCUSD",
+        direction: "long",
+        entry_price: 50000,
+        stop_loss: 49000,
+        take_profit: 52000,
+      },
+      opHeaders,
+    );
+    expect(status).toBe(429);
+    const d = data as Record<string, unknown>;
+    expect(d.error).toBe("execution_autonomy_blocked");
+    expect(d).toHaveProperty("autonomy_guard");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/execution/autonomy-guard  (no auth required)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("GET /api/execution/autonomy-guard", () => {
+  it("returns 200 with autonomy guard snapshot", async () => {
+    const { status, data } = await get("/api/execution/autonomy-guard");
+    expect(status).toBe(200);
+    const d = data as Record<string, unknown>;
+    expect(d).toHaveProperty("level");
+    expect(d).toHaveProperty("halt_active");
+    expect(d).toHaveProperty("policy");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/execution/autonomy-guard/reset  (operator auth required)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("POST /api/execution/autonomy-guard/reset", () => {
+  it("resets autonomy guard without operator token", async () => {
+    const { status } = await post("/api/execution/autonomy-guard/reset", {});
+    expect(status).toBe(200);
+  });
+
+  it("resets autonomy guard with explicit reason payload", async () => {
+    const { status, data } = await post(
+      "/api/execution/autonomy-guard/reset",
+      { reason: "test_reset" },
+    );
+    expect(status).toBe(200);
+    const d = data as Record<string, unknown>;
+    expect(d).toHaveProperty("level");
+    expect(d).toHaveProperty("halt_active");
   });
 });

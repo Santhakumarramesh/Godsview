@@ -60,6 +60,9 @@ import {
   type AutonomyDebugSchedulerSnapshot,
   useExecutionIncidentGuard,
   type ExecutionIncidentSnapshot,
+  useExecutionAutonomyGuard,
+  useResetExecutionAutonomyGuard,
+  type ExecutionAutonomyGuardSnapshot,
   useExecutionMarketGuard,
   type ExecutionMarketGuardSnapshot,
 } from "@/lib/api";
@@ -1535,6 +1538,94 @@ function AutonomyDebugPanel({
   );
 }
 
+function ExecutionAutonomyGuardPanel({
+  autonomyGuard,
+  busy,
+  onReset,
+}: {
+  autonomyGuard?: ExecutionAutonomyGuardSnapshot;
+  busy: boolean;
+  onReset: () => void;
+}) {
+  const level = autonomyGuard?.level ?? "NORMAL";
+  const levelColor =
+    level === "HALT" ? "#ff4444" :
+    level === "WATCH" ? "#ffcc00" : "#00ffcc";
+  const status = autonomyGuard?.last_evaluation?.status;
+  const recentEvents = autonomyGuard?.recent_events?.slice(0, 4) ?? [];
+
+  return (
+    <div style={panelStyle}>
+      <div style={{ ...labelStyle, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span>Autonomy Guard</span>
+        <span style={{ color: levelColor, fontFamily: "JetBrains Mono", fontSize: "9px", letterSpacing: "0.1em" }}>
+          {level}
+        </span>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "8px" }}>
+        <div style={{ padding: "6px", borderRadius: "6px", backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(72,72,73,0.14)" }}>
+          <div style={{ fontSize: "7px", color: "#484849", letterSpacing: "0.1em", textTransform: "uppercase" }}>Scheduler</div>
+          <div style={{ fontSize: "11px", color: status?.scheduler_running ? "#00ffcc" : "#ff7162", fontFamily: "JetBrains Mono", fontWeight: 700 }}>
+            {status?.scheduler_running ? (status.scheduler_last_status ?? "HEALTHY") : "STOPPED"}
+          </div>
+        </div>
+        <div style={{ padding: "6px", borderRadius: "6px", backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(72,72,73,0.14)" }}>
+          <div style={{ fontSize: "7px", color: "#484849", letterSpacing: "0.1em", textTransform: "uppercase" }}>Watchdog</div>
+          <div style={{ fontSize: "11px", color: status?.watchdog_running ? "#00ffcc" : "#ff7162", fontFamily: "JetBrains Mono", fontWeight: 700 }}>
+            {status?.watchdog_running ? (status.watchdog_last_status ?? "READY") : "STOPPED"}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ fontSize: "8px", color: "#767576", fontFamily: "JetBrains Mono", marginBottom: "6px" }}>
+        blocks {autonomyGuard?.window_blocks ?? 0} · warn {autonomyGuard?.window_warn ?? 0} · streak {autonomyGuard?.consecutive_blocks ?? 0}
+      </div>
+      <div style={{ fontSize: "8px", color: status?.watchdog_escalation_active ? "#ff7162" : "#767576", fontFamily: "JetBrains Mono", marginBottom: "6px" }}>
+        supervisor {status?.supervisor_running ? "RUNNING" : "STOPPED"} · escalation {status?.watchdog_escalation_active ? "ON" : "OFF"}
+      </div>
+
+      <button
+        type="button"
+        disabled={busy}
+        onClick={onReset}
+        style={{
+          width: "100%",
+          fontSize: "9px",
+          borderRadius: "6px",
+          border: "1px solid rgba(130,130,140,0.2)",
+          backgroundColor: "rgba(130,130,140,0.06)",
+          color: "#adaaab",
+          padding: "6px 8px",
+          cursor: busy ? "not-allowed" : "pointer",
+          opacity: busy ? 0.65 : 1,
+          marginBottom: "8px",
+        }}
+      >
+        {busy ? "RESETTING..." : "RESET AUTONOMY GUARD"}
+      </button>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: "4px", maxHeight: "86px", overflowY: "auto" }}>
+        {recentEvents.map((event, idx) => {
+          const color =
+            event.severity === "critical" ? "#ff4444" :
+            event.severity === "warn" ? "#ffcc00" : "#00ffcc";
+          return (
+            <div key={`${event.at}-${idx}`} style={{ fontSize: "8px", lineHeight: 1.3 }}>
+              <div style={{ color, fontFamily: "JetBrains Mono" }}>
+                {event.type}
+              </div>
+              <div style={{ color: "#adaaab", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {event.detail}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ExecutionIncidentPanel({
   incident,
 }: {
@@ -2317,6 +2408,8 @@ function BrainPageComponent() {
   const stopAutonomyDebugScheduler = useStopAutonomyDebugScheduler();
   const runAutonomyDebugSchedulerCycle = useRunAutonomyDebugSchedulerCycle();
   const resetAutonomyDebugScheduler = useResetAutonomyDebugScheduler();
+  const { data: executionAutonomyGuard } = useExecutionAutonomyGuard({ refetchInterval: 10_000 });
+  const resetExecutionAutonomyGuard = useResetExecutionAutonomyGuard();
   const { data: executionIncidentGuard } = useExecutionIncidentGuard({ refetchInterval: 10_000 });
   const { data: executionMarketGuard } = useExecutionMarketGuard({ refetchInterval: 10_000 });
 
@@ -2429,6 +2522,7 @@ function BrainPageComponent() {
     stopAutonomyDebugScheduler.isPending ||
     runAutonomyDebugSchedulerCycle.isPending ||
     resetAutonomyDebugScheduler.isPending;
+  const executionAutonomyGuardBusy = resetExecutionAutonomyGuard.isPending;
 
   const handleSupervisorStart = useCallback(() => {
     startAutonomySupervisor.mutate({ run_immediate: true });
@@ -2501,6 +2595,10 @@ function BrainPageComponent() {
   const handleAutonomyDebugSchedulerReset = useCallback(() => {
     resetAutonomyDebugScheduler.mutate();
   }, [resetAutonomyDebugScheduler]);
+
+  const handleExecutionAutonomyGuardReset = useCallback(() => {
+    resetExecutionAutonomyGuard.mutate({ reason: "brain_panel_reset" });
+  }, [resetExecutionAutonomyGuard]);
 
   useEffect(() => {
     if (!selectedStock) {
@@ -2681,6 +2779,11 @@ function BrainPageComponent() {
           onSchedulerStop={handleAutonomyDebugSchedulerStop}
           onSchedulerRun={handleAutonomyDebugSchedulerRun}
           onSchedulerReset={handleAutonomyDebugSchedulerReset}
+        />
+        <ExecutionAutonomyGuardPanel
+          autonomyGuard={executionAutonomyGuard}
+          busy={executionAutonomyGuardBusy}
+          onReset={handleExecutionAutonomyGuardReset}
         />
         <StrategyGovernorPanel
           governor={strategyGovernor}

@@ -15,6 +15,7 @@ import { getStrategyEvolutionSnapshot } from "./strategy_evolution_scheduler";
 import { getProductionWatchdogSnapshot } from "./production_watchdog";
 import { getExecutionIncidentSnapshot } from "./execution_incident_guard";
 import { getExecutionMarketGuardSnapshot } from "./execution_market_guard";
+import { getExecutionAutonomyGuardSnapshot } from "./execution_autonomy_guard";
 import { getExecutionIdempotencySnapshot } from "./execution_idempotency";
 
 export type DeploymentReadinessStatus = "READY" | "DEGRADED" | "NOT_READY";
@@ -48,6 +49,8 @@ export interface DeploymentReadinessReport {
     portfolio_risk_state: string | null;
     incident_guard_level: string;
     incident_guard_halt: boolean;
+    autonomy_guard_level: string;
+    autonomy_guard_halt: boolean;
     market_guard_level: string;
     market_guard_halt: boolean;
     idempotency_entries: number;
@@ -268,6 +271,8 @@ function runtimeChecks(checks: DeploymentReadinessCheck[]): {
   productionWatchdogLastError: string | null;
   incidentGuardLevel: string;
   incidentGuardHalt: boolean;
+  autonomyGuardLevel: string;
+  autonomyGuardHalt: boolean;
   marketGuardLevel: string;
   marketGuardHalt: boolean;
   idempotencyEntries: number;
@@ -348,6 +353,20 @@ function runtimeChecks(checks: DeploymentReadinessCheck[]): {
   );
 
   const marketGuard = getExecutionMarketGuardSnapshot();
+  const autonomyGuard = getExecutionAutonomyGuardSnapshot();
+  const startedAutonomyGuard = nowMs();
+  timedCheck(
+    checks,
+    {
+      name: "Execution autonomy guard not halted",
+      category: "runtime",
+      passed: !autonomyGuard.halt_active,
+      critical: true,
+      detail: `level=${autonomyGuard.level}, blocks=${autonomyGuard.window_blocks}, warns=${autonomyGuard.window_warn}`,
+    },
+    startedAutonomyGuard,
+  );
+
   const startedMarketGuard = nowMs();
   timedCheck(
     checks,
@@ -481,6 +500,8 @@ function runtimeChecks(checks: DeploymentReadinessCheck[]): {
     productionWatchdogLastError: watchdog.last_error,
     incidentGuardLevel: incidentGuard.level,
     incidentGuardHalt: incidentGuard.halt_active,
+    autonomyGuardLevel: autonomyGuard.level,
+    autonomyGuardHalt: autonomyGuard.halt_active,
     marketGuardLevel: marketGuard.level,
     marketGuardHalt: marketGuard.halt_active,
     idempotencyEntries: idempotency.entries,
@@ -578,6 +599,8 @@ export async function getDeploymentReadinessReport(options?: {
       portfolio_risk_state: runtime.portfolioRiskState,
       incident_guard_level: runtime.incidentGuardLevel,
       incident_guard_halt: runtime.incidentGuardHalt,
+      autonomy_guard_level: runtime.autonomyGuardLevel,
+      autonomy_guard_halt: runtime.autonomyGuardHalt,
       market_guard_level: runtime.marketGuardLevel,
       market_guard_halt: runtime.marketGuardHalt,
       idempotency_entries: runtime.idempotencyEntries,

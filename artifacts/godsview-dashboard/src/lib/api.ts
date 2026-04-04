@@ -1338,6 +1338,90 @@ export function useExecutionMarketGuard(options?: Omit<UseQueryOptions<Execution
   });
 }
 
+export interface ExecutionAutonomyGuardEvent {
+  at: string;
+  symbol: string;
+  type: "EVAL_ALLOW" | "EVAL_WARN" | "EVAL_BLOCK" | "GUARD_HALT" | "GUARD_RESET" | "AUTO_HEAL_ATTEMPT" | "AUTO_HEAL_RECOVERED";
+  severity: "info" | "warn" | "critical";
+  detail: string;
+  reasons: string[];
+}
+
+export interface ExecutionAutonomyGuardSnapshot {
+  level: "NORMAL" | "WATCH" | "HALT";
+  halt_active: boolean;
+  running_window_ms: number;
+  consecutive_blocks: number;
+  window_blocks: number;
+  window_warn: number;
+  total_events: number;
+  last_event_at: string | null;
+  last_halt_reason: string | null;
+  policy: {
+    window_ms: number;
+    max_blocks_window: number;
+    max_warn_window: number;
+    max_consecutive_blocks: number;
+    auto_halt: boolean;
+    sync_kill_switch_on_halt: boolean;
+    require_autonomy_supervisor_running: boolean;
+    require_scheduler_running: boolean;
+    require_watchdog_running: boolean;
+    block_on_scheduler_critical: boolean;
+    block_on_scheduler_degraded: boolean;
+    scheduler_critical_streak_threshold: number;
+    warn_on_scheduler_degraded: boolean;
+    block_on_watchdog_not_ready: boolean;
+    block_on_watchdog_degraded: boolean;
+    warn_on_watchdog_degraded: boolean;
+    block_on_watchdog_escalation: boolean;
+    auto_run_scheduler_cycle_on_block: boolean;
+  };
+  last_evaluation: {
+    at: string | null;
+    symbol: string | null;
+    action: "ALLOW" | "WARN" | "BLOCK";
+    allowed: boolean;
+    reasons: string[];
+    status: {
+      supervisor_running: boolean;
+      scheduler_running: boolean;
+      scheduler_cycle_in_flight: boolean;
+      scheduler_last_status: "HEALTHY" | "DEGRADED" | "CRITICAL" | null;
+      scheduler_consecutive_critical: number;
+      watchdog_running: boolean;
+      watchdog_last_status: "READY" | "DEGRADED" | "NOT_READY" | null;
+      watchdog_escalation_active: boolean;
+    } | null;
+  };
+  recent_events: ExecutionAutonomyGuardEvent[];
+}
+
+export function useExecutionAutonomyGuard(options?: Omit<UseQueryOptions<ExecutionAutonomyGuardSnapshot>, "queryKey" | "queryFn">) {
+  return useQuery({
+    queryKey: ["execution", "autonomy-guard"],
+    queryFn: () => apiFetch<ExecutionAutonomyGuardSnapshot>("/execution/autonomy-guard"),
+    refetchInterval: 10_000,
+    ...options,
+  });
+}
+
+export function useResetExecutionAutonomyGuard() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params?: { reason?: string; clear_kill_switch?: boolean }) =>
+      apiFetch<ExecutionAutonomyGuardSnapshot>("/execution/autonomy-guard/reset", {
+        method: "POST",
+        body: JSON.stringify(params ?? {}),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["execution", "autonomy-guard"] });
+      qc.invalidateQueries({ queryKey: ["execution", "incident-guard"] });
+      qc.invalidateQueries({ queryKey: ["execution", "market-guard"] });
+    },
+  });
+}
+
 export function useAccuracy() {
   return useQuery({ queryKey: ["alpaca", "accuracy"], queryFn: () => apiFetch<any>("/alpaca/accuracy"), staleTime: 120_000 });
 }

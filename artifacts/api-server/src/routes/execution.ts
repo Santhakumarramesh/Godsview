@@ -35,6 +35,11 @@ import {
   resetExecutionMarketGuard,
 } from "../lib/execution_market_guard";
 import {
+  evaluateExecutionAutonomyGuard,
+  getExecutionAutonomyGuardSnapshot,
+  resetExecutionAutonomyGuard,
+} from "../lib/execution_autonomy_guard";
+import {
   beginExecutionIdempotency,
   buildExecutionFingerprint,
   finalizeExecutionIdempotency,
@@ -196,6 +201,33 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
       return;
     }
 
+    const autonomyGuard = await evaluateExecutionAutonomyGuard({ symbol });
+    if (!autonomyGuard.allowed) {
+      const isHalt = autonomyGuard.snapshot.halt_active || autonomyGuard.level === "HALT";
+      emitLifecycleAudit(
+        "execution_gate_blocked",
+        `autonomy_guard_${String(autonomyGuard.action).toLowerCase()}`,
+        autonomyGuard.reasons[0] ?? "autonomy_guard_blocked",
+        { gate: "autonomy_guard", action: autonomyGuard.action, reasons: autonomyGuard.reasons },
+      );
+      recordExecutionAttempt({
+        symbol,
+        outcome: "BLOCKED",
+        detail: `autonomy_guard_block:${autonomyGuard.action}`,
+        reason: autonomyGuard.reasons[0],
+      });
+      sendTracked(isHalt ? 423 : 429, {
+        error: "execution_autonomy_blocked",
+        message: `Execution blocked by autonomy guard (${autonomyGuard.reasons.join(", ") || autonomyGuard.action})`,
+        action: autonomyGuard.action,
+        reasons: autonomyGuard.reasons,
+        autonomy_guard: autonomyGuard.snapshot,
+        incident_guard: getExecutionIncidentSnapshot(),
+        market_guard: getExecutionMarketGuardSnapshot(),
+      });
+      return;
+    }
+
     const incidentGate = canExecuteByIncidentGuard();
     if (!incidentGate.allowed) {
       emitLifecycleAudit(
@@ -213,6 +245,7 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
       sendTracked(423, {
         error: "execution_incident_halt",
         message: `Execution halted by incident guard (${incidentGate.reason ?? "halt"})`,
+        autonomy_guard: getExecutionAutonomyGuardSnapshot(),
         incident_guard: incidentGate.snapshot,
         market_guard: getExecutionMarketGuardSnapshot(),
       });
@@ -231,6 +264,7 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
         error: "cooldown_active",
         message: "Trading paused: consecutive loss cooldown active",
         breaker: getBreakerSnapshot(),
+        autonomy_guard: getExecutionAutonomyGuardSnapshot(),
         incident_guard: getExecutionIncidentSnapshot(),
         market_guard: getExecutionMarketGuardSnapshot(),
       });
@@ -249,6 +283,7 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
         error: "breaker_halt",
         message: "Trading halted by drawdown circuit breaker",
         breaker: getBreakerSnapshot(),
+        autonomy_guard: getExecutionAutonomyGuardSnapshot(),
         incident_guard: getExecutionIncidentSnapshot(),
         market_guard: getExecutionMarketGuardSnapshot(),
       });
@@ -271,6 +306,7 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
         action: portfolioRiskGate.action,
         reasons: portfolioRiskGate.reasons,
         portfolio_risk: portfolioRiskGate.snapshot,
+        autonomy_guard: getExecutionAutonomyGuardSnapshot(),
         incident_guard: getExecutionIncidentSnapshot(),
         market_guard: getExecutionMarketGuardSnapshot(),
       });
@@ -298,6 +334,7 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
         message: `Execution blocked by market guard (${marketGuard.reasons.join(", ") || marketGuard.action})`,
         action: marketGuard.action,
         reasons: marketGuard.reasons,
+        autonomy_guard: getExecutionAutonomyGuardSnapshot(),
         market_guard: marketGuard.snapshot,
         incident_guard: getExecutionIncidentSnapshot(),
         portfolio_risk: portfolioRiskGate.snapshot,
@@ -360,6 +397,7 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
         },
         meta: decision.meta,
         portfolio_risk: portfolioRiskGate.snapshot,
+        autonomy_guard: getExecutionAutonomyGuardSnapshot(),
         incident_guard: getExecutionIncidentSnapshot(),
         market_guard: marketGuard.snapshot,
       });
@@ -466,6 +504,7 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
       portfolio_risk_reasons: portfolioRiskGate.reasons,
       portfolio_risk_multiplier: portfolioRiskGate.size_multiplier,
       portfolio_risk: portfolioRiskGate.snapshot,
+      autonomy_guard: getExecutionAutonomyGuardSnapshot(),
       adjusted_qty: adjustedQty,
       original_qty: decision.quantity,
       incident_guard: getExecutionIncidentSnapshot(),
@@ -493,6 +532,7 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
     const body = {
       error: "execution_error",
       message: String(err),
+      autonomy_guard: getExecutionAutonomyGuardSnapshot(),
       incident_guard: getExecutionIncidentSnapshot(),
       market_guard: getExecutionMarketGuardSnapshot(),
       idempotency_key: idempotencyKey,
@@ -585,6 +625,7 @@ executionRouter.get("/execution-status", async (_req: Request, res: Response) =>
     const risk = getRiskEngineSnapshot();
     const lastLiquidation = getLastLiquidation();
     const portfolioRisk = await evaluatePortfolioRisk({ forceRefresh: false });
+    const autonomyGuard = getExecutionAutonomyGuardSnapshot();
     const incidentGuard = getExecutionIncidentSnapshot();
     const marketGuard = getExecutionMarketGuardSnapshot();
     const idempotency = getExecutionIdempotencySnapshot();
@@ -608,6 +649,7 @@ executionRouter.get("/execution-status", async (_req: Request, res: Response) =>
       gate_stats: gateStats,
       risk,
       portfolio_risk: portfolioRisk,
+      autonomy_guard: autonomyGuard,
       incident_guard: incidentGuard,
       market_guard: marketGuard,
       idempotency,
@@ -664,6 +706,35 @@ executionRouter.get("/incident-guard", (_req: Request, res: Response) => {
   }
 });
 
+// ── GET /autonomy-guard — Autonomy control-plane safety state ───
+
+executionRouter.get("/autonomy-guard", async (req: Request, res: Response) => {
+  try {
+    const symbol = String(req.query.symbol ?? "").trim().toUpperCase();
+    const refresh = ["1", "true", "yes", "on"].includes(String(req.query.refresh ?? "").toLowerCase());
+    if (symbol || refresh) {
+      const decision = await evaluateExecutionAutonomyGuard({
+        symbol: symbol || "SYSTEM",
+        autoHeal: refresh,
+      });
+      res.json({
+        ...decision.snapshot,
+        decision: {
+          symbol: symbol || "SYSTEM",
+          allowed: decision.allowed,
+          action: decision.action,
+          reasons: decision.reasons,
+          level: decision.level,
+        },
+      });
+      return;
+    }
+    res.json(getExecutionAutonomyGuardSnapshot());
+  } catch {
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
 // ── GET /market-guard — Market quality safety state ─────────────
 
 executionRouter.get("/market-guard", async (req: Request, res: Response) => {
@@ -715,6 +786,24 @@ executionRouter.post("/incident-guard/reset", requireOperator, (req: Request, re
     });
     res.json(snapshot);
   } catch (err) {
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+// ── POST /autonomy-guard/reset — Manual autonomy guard reset ────
+
+executionRouter.post("/autonomy-guard/reset", (req: Request, res: Response) => {
+  try {
+    const clearKillSwitch =
+      String(req.body?.clear_kill_switch ?? "")
+        .trim()
+        .toLowerCase();
+    const snapshot = resetExecutionAutonomyGuard({
+      reason: String(req.body?.reason ?? "manual_reset"),
+      clearKillSwitch: clearKillSwitch === "1" || clearKillSwitch === "true" || clearKillSwitch === "yes" || clearKillSwitch === "on",
+    });
+    res.json(snapshot);
+  } catch {
     res.status(500).json({ error: "internal_error" });
   }
 });
