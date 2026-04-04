@@ -1004,6 +1004,88 @@ export function useResetProductionWatchdog() {
   });
 }
 
+export interface AutonomyDebugServiceState {
+  name: "autonomy_supervisor" | "strategy_governor" | "strategy_allocator" | "strategy_evolution" | "production_watchdog";
+  expected: boolean;
+  running: boolean;
+  last_error: string | null;
+  last_cycle_at: string | null;
+  detail: string;
+}
+
+export interface AutonomyDebugIssue {
+  code: string;
+  severity: "warn" | "critical";
+  summary: string;
+  detail: string;
+  recommendation: string;
+}
+
+export interface AutonomyDebugSnapshot {
+  generated_at: string;
+  overall_status: "HEALTHY" | "DEGRADED" | "CRITICAL";
+  readiness_status: "READY" | "DEGRADED" | "NOT_READY";
+  readiness_summary: {
+    failed_critical: number;
+    failed_non_critical: number;
+  };
+  kill_switch_active: boolean;
+  supervisor_health: {
+    expected_services: number;
+    healthy_services: number;
+    ratio: number;
+  };
+  services: AutonomyDebugServiceState[];
+  issues: AutonomyDebugIssue[];
+  recommendations: string[];
+}
+
+export interface AutonomyDebugFixAction {
+  service: "autonomy_supervisor" | "strategy_governor" | "strategy_allocator" | "strategy_evolution" | "production_watchdog";
+  attempted: boolean;
+  success: boolean;
+  detail: string;
+}
+
+export function useAutonomyDebugSnapshot(
+  params?: { include_preflight?: boolean; refresh?: boolean },
+  options?: Omit<UseQueryOptions<AutonomyDebugSnapshot>, "queryKey" | "queryFn">,
+) {
+  const query = new URLSearchParams();
+  if (params?.include_preflight) query.set("include_preflight", "true");
+  if (params?.refresh) query.set("refresh", "true");
+  const qs = query.toString();
+  return useQuery({
+    queryKey: ["brain", "autonomy", "debug", qs],
+    queryFn: () => apiFetch<AutonomyDebugSnapshot>(`/brain/autonomy/debug${qs ? `?${qs}` : ""}`),
+    refetchInterval: 10_000,
+    ...options,
+  });
+}
+
+export function useRunAutonomyDebugFix() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params?: { include_preflight?: boolean; force_refresh?: boolean }) =>
+      apiFetch<{
+        ok: boolean;
+        fixes: AutonomyDebugFixAction[];
+        snapshot: AutonomyDebugSnapshot;
+      }>("/brain/autonomy/debug/fix", {
+        method: "POST",
+        body: JSON.stringify(params ?? {}),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["brain", "autonomy", "debug"] });
+      qc.invalidateQueries({ queryKey: ["brain", "autonomy", "supervisor"] });
+      qc.invalidateQueries({ queryKey: ["brain", "strategy", "governor"] });
+      qc.invalidateQueries({ queryKey: ["brain", "strategy", "allocator"] });
+      qc.invalidateQueries({ queryKey: ["brain", "strategy", "evolution"] });
+      qc.invalidateQueries({ queryKey: ["brain", "production", "watchdog"] });
+    },
+  });
+}
+
 export function useStrategyAllocationLookup(
   input: { setup_type?: string; regime?: string; symbol?: string },
   options?: Omit<UseQueryOptions<StrategyAllocationMatch>, "queryKey" | "queryFn">,

@@ -49,6 +49,9 @@ import {
   useRunProductionWatchdogCycle,
   useResetProductionWatchdog,
   type ProductionWatchdogSnapshot,
+  useAutonomyDebugSnapshot,
+  useRunAutonomyDebugFix,
+  type AutonomyDebugSnapshot,
   useExecutionIncidentGuard,
   type ExecutionIncidentSnapshot,
   useExecutionMarketGuard,
@@ -1328,6 +1331,108 @@ function ProductionWatchdogPanel({
   );
 }
 
+function AutonomyDebugPanel({
+  debugSnapshot,
+  busy,
+  onFix,
+}: {
+  debugSnapshot?: AutonomyDebugSnapshot;
+  busy: boolean;
+  onFix: () => void;
+}) {
+  const status = debugSnapshot?.overall_status ?? "HEALTHY";
+  const statusColor =
+    status === "HEALTHY" ? "#00ffcc" :
+    status === "DEGRADED" ? "#ffcc00" : "#ff4444";
+  const readinessColor =
+    debugSnapshot?.readiness_status === "READY" ? "#00ffcc" :
+    debugSnapshot?.readiness_status === "DEGRADED" ? "#ffcc00" : "#ff4444";
+  const criticalCount = (debugSnapshot?.issues ?? []).filter((issue) => issue.severity === "critical").length;
+  const warnCount = (debugSnapshot?.issues ?? []).filter((issue) => issue.severity === "warn").length;
+  const topIssues = (debugSnapshot?.issues ?? []).slice(0, 4);
+
+  return (
+    <div style={panelStyle}>
+      <div style={{ ...labelStyle, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span>Autonomy Debugger</span>
+        <span style={{ color: statusColor, fontFamily: "JetBrains Mono", fontSize: "9px", letterSpacing: "0.1em" }}>
+          {status}
+        </span>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "8px" }}>
+        <div style={{ padding: "6px", borderRadius: "6px", backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(72,72,73,0.14)" }}>
+          <div style={{ fontSize: "7px", color: "#484849", letterSpacing: "0.1em", textTransform: "uppercase" }}>Readiness</div>
+          <div style={{ fontSize: "11px", color: readinessColor, fontFamily: "JetBrains Mono", fontWeight: 700 }}>
+            {debugSnapshot?.readiness_status ?? "READY"}
+          </div>
+        </div>
+        <div style={{ padding: "6px", borderRadius: "6px", backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(72,72,73,0.14)" }}>
+          <div style={{ fontSize: "7px", color: "#484849", letterSpacing: "0.1em", textTransform: "uppercase" }}>Kill Switch</div>
+          <div style={{ fontSize: "11px", color: debugSnapshot?.kill_switch_active ? "#ff4444" : "#00ffcc", fontFamily: "JetBrains Mono", fontWeight: 700 }}>
+            {debugSnapshot?.kill_switch_active ? "ACTIVE" : "CLEAR"}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "8px" }}>
+        <div style={{ padding: "6px", borderRadius: "6px", backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(72,72,73,0.14)" }}>
+          <div style={{ fontSize: "7px", color: "#484849", letterSpacing: "0.1em", textTransform: "uppercase" }}>Critical</div>
+          <div style={{ fontSize: "11px", color: criticalCount > 0 ? "#ff4444" : "#00ffcc", fontFamily: "JetBrains Mono", fontWeight: 700 }}>
+            {criticalCount}
+          </div>
+        </div>
+        <div style={{ padding: "6px", borderRadius: "6px", backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(72,72,73,0.14)" }}>
+          <div style={{ fontSize: "7px", color: "#484849", letterSpacing: "0.1em", textTransform: "uppercase" }}>Warnings</div>
+          <div style={{ fontSize: "11px", color: warnCount > 0 ? "#ffcc00" : "#adaaab", fontFamily: "JetBrains Mono", fontWeight: 700 }}>
+            {warnCount}
+          </div>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        disabled={busy}
+        onClick={onFix}
+        style={{
+          width: "100%",
+          fontSize: "9px",
+          borderRadius: "6px",
+          border: "1px solid rgba(0,255,204,0.3)",
+          backgroundColor: "rgba(0,255,204,0.12)",
+          color: "#00ffcc",
+          padding: "6px 8px",
+          cursor: busy ? "not-allowed" : "pointer",
+          opacity: busy ? 0.65 : 1,
+          marginBottom: "8px",
+        }}
+      >
+        {busy ? "RUNNING AUTO-FIX..." : "RUN DEBUG AUTO-FIX"}
+      </button>
+
+      <div style={{ fontSize: "8px", color: "#767576", fontFamily: "JetBrains Mono", marginBottom: "6px" }}>
+        supervisor {(debugSnapshot?.supervisor_health.healthy_services ?? 0)}/{(debugSnapshot?.supervisor_health.expected_services ?? 0)}
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: "4px", maxHeight: "86px", overflowY: "auto" }}>
+        {topIssues.map((issue, idx) => (
+          <div key={`${issue.code}-${idx}`} style={{ fontSize: "8px", lineHeight: 1.3 }}>
+            <div style={{ color: issue.severity === "critical" ? "#ff4444" : "#ffcc00", fontFamily: "JetBrains Mono" }}>
+              {issue.code}
+            </div>
+            <div style={{ color: "#adaaab", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {issue.summary}
+            </div>
+          </div>
+        ))}
+        {topIssues.length === 0 ? (
+          <div style={{ fontSize: "8px", color: "#00ffcc" }}>No active debug issues</div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function ExecutionIncidentPanel({
   incident,
 }: {
@@ -2103,6 +2208,8 @@ function BrainPageComponent() {
   const stopProductionWatchdog = useStopProductionWatchdog();
   const runProductionWatchdogCycle = useRunProductionWatchdogCycle();
   const resetProductionWatchdog = useResetProductionWatchdog();
+  const { data: autonomyDebugSnapshot } = useAutonomyDebugSnapshot(undefined, { refetchInterval: 10_000 });
+  const runAutonomyDebugFix = useRunAutonomyDebugFix();
   const { data: executionIncidentGuard } = useExecutionIncidentGuard({ refetchInterval: 10_000 });
   const { data: executionMarketGuard } = useExecutionMarketGuard({ refetchInterval: 10_000 });
 
@@ -2209,6 +2316,7 @@ function BrainPageComponent() {
     stopProductionWatchdog.isPending ||
     runProductionWatchdogCycle.isPending ||
     resetProductionWatchdog.isPending;
+  const debugFixBusy = runAutonomyDebugFix.isPending;
 
   const handleSupervisorStart = useCallback(() => {
     startAutonomySupervisor.mutate({ run_immediate: true });
@@ -2261,6 +2369,10 @@ function BrainPageComponent() {
   const handleWatchdogReset = useCallback(() => {
     resetProductionWatchdog.mutate();
   }, [resetProductionWatchdog]);
+
+  const handleAutonomyDebugFix = useCallback(() => {
+    runAutonomyDebugFix.mutate({ force_refresh: true });
+  }, [runAutonomyDebugFix]);
 
   useEffect(() => {
     if (!selectedStock) {
@@ -2430,6 +2542,11 @@ function BrainPageComponent() {
           onStop={handleWatchdogStop}
           onRun={handleWatchdogRun}
           onReset={handleWatchdogReset}
+        />
+        <AutonomyDebugPanel
+          debugSnapshot={autonomyDebugSnapshot}
+          busy={debugFixBusy}
+          onFix={handleAutonomyDebugFix}
         />
         <StrategyGovernorPanel
           governor={strategyGovernor}

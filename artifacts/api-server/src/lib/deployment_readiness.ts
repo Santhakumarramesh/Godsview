@@ -11,6 +11,8 @@ import { getStartupSnapshot } from "./startup_state";
 import { getAutonomySupervisorSnapshot } from "./autonomy_supervisor";
 import { getStrategyGovernorSnapshot } from "./strategy_governor";
 import { getStrategyAllocatorSnapshot } from "./strategy_allocator";
+import { getStrategyEvolutionSnapshot } from "./strategy_evolution_scheduler";
+import { getProductionWatchdogSnapshot } from "./production_watchdog";
 import { getExecutionIncidentSnapshot } from "./execution_incident_guard";
 import { getExecutionMarketGuardSnapshot } from "./execution_market_guard";
 import { getExecutionIdempotencySnapshot } from "./execution_idempotency";
@@ -66,6 +68,10 @@ export interface DeploymentReadinessReport {
     strategy_governor_last_error: string | null;
     strategy_allocator_running: boolean;
     strategy_allocator_last_error: string | null;
+    strategy_evolution_running: boolean;
+    strategy_evolution_last_error: string | null;
+    production_watchdog_running: boolean;
+    production_watchdog_last_error: string | null;
   };
   config: {
     system_mode: string;
@@ -256,6 +262,10 @@ function runtimeChecks(checks: DeploymentReadinessCheck[]): {
   strategyGovernorLastError: string | null;
   strategyAllocatorRunning: boolean;
   strategyAllocatorLastError: string | null;
+  strategyEvolutionRunning: boolean;
+  strategyEvolutionLastError: string | null;
+  productionWatchdogRunning: boolean;
+  productionWatchdogLastError: string | null;
   incidentGuardLevel: string;
   incidentGuardHalt: boolean;
   marketGuardLevel: string;
@@ -424,6 +434,34 @@ function runtimeChecks(checks: DeploymentReadinessCheck[]): {
     startedAllocator,
   );
 
+  const evolution = getStrategyEvolutionSnapshot();
+  const startedEvolution = nowMs();
+  timedCheck(
+    checks,
+    {
+      name: "Strategy evolution scheduler running",
+      category: "runtime",
+      passed: evolution.running,
+      critical: false,
+      detail: `running=${evolution.running}, cycles=${evolution.total_cycles}, last_error=${evolution.last_error ?? "none"}`,
+    },
+    startedEvolution,
+  );
+
+  const watchdog = getProductionWatchdogSnapshot();
+  const startedWatchdog = nowMs();
+  timedCheck(
+    checks,
+    {
+      name: "Production watchdog running",
+      category: "runtime",
+      passed: watchdog.running,
+      critical: false,
+      detail: `running=${watchdog.running}, status=${watchdog.last_status ?? "UNKNOWN"}, last_error=${watchdog.last_error ?? "none"}`,
+    },
+    startedWatchdog,
+  );
+
   return {
     killSwitch,
     breakerLevel: breaker.level,
@@ -437,6 +475,10 @@ function runtimeChecks(checks: DeploymentReadinessCheck[]): {
     strategyGovernorLastError: governor.last_error,
     strategyAllocatorRunning: allocator.running,
     strategyAllocatorLastError: allocator.last_error,
+    strategyEvolutionRunning: evolution.running,
+    strategyEvolutionLastError: evolution.last_error,
+    productionWatchdogRunning: watchdog.running,
+    productionWatchdogLastError: watchdog.last_error,
     incidentGuardLevel: incidentGuard.level,
     incidentGuardHalt: incidentGuard.halt_active,
     marketGuardLevel: marketGuard.level,
@@ -556,6 +598,10 @@ export async function getDeploymentReadinessReport(options?: {
       strategy_governor_last_error: runtime.strategyGovernorLastError,
       strategy_allocator_running: runtime.strategyAllocatorRunning,
       strategy_allocator_last_error: runtime.strategyAllocatorLastError,
+      strategy_evolution_running: runtime.strategyEvolutionRunning,
+      strategy_evolution_last_error: runtime.strategyEvolutionLastError,
+      production_watchdog_running: runtime.productionWatchdogRunning,
+      production_watchdog_last_error: runtime.productionWatchdogLastError,
     },
     config: {
       system_mode: runtimeConfig.systemMode,
