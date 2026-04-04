@@ -8,12 +8,15 @@ import { getLatestPortfolioRiskSnapshot } from "./portfolio_risk_guard";
 import { getRiskEngineSnapshot, isKillSwitchActive } from "./risk_engine";
 import { runtimeConfig } from "./runtime_config";
 import { getStartupSnapshot } from "./startup_state";
-import { getAutonomySupervisorSnapshot } from "./autonomy_supervisor";
+import { getAutonomySupervisorSnapshot, shouldAutonomySupervisorAutoStart } from "./autonomy_supervisor";
 import { getStrategyGovernorSnapshot } from "./strategy_governor";
 import { getStrategyAllocatorSnapshot } from "./strategy_allocator";
 import { getStrategyEvolutionSnapshot } from "./strategy_evolution_scheduler";
-import { getProductionWatchdogSnapshot } from "./production_watchdog";
-import { getExecutionSafetySupervisorSnapshot } from "./execution_safety_supervisor";
+import { getProductionWatchdogSnapshot, shouldProductionWatchdogAutoStart } from "./production_watchdog";
+import {
+  getExecutionSafetySupervisorSnapshot,
+  shouldExecutionSafetySupervisorAutoStart,
+} from "./execution_safety_supervisor";
 import { getExecutionIncidentSnapshot } from "./execution_incident_guard";
 import { getExecutionMarketGuardSnapshot } from "./execution_market_guard";
 import { getExecutionAutonomyGuardSnapshot } from "./execution_autonomy_guard";
@@ -82,10 +85,14 @@ export interface DeploymentReadinessReport {
     production_watchdog_last_error: string | null;
     execution_safety_supervisor_running: boolean;
     execution_safety_supervisor_last_error: string | null;
+    autonomy_supervisor_heartbeat_fresh: boolean;
+    production_watchdog_heartbeat_fresh: boolean;
+    execution_safety_supervisor_heartbeat_fresh: boolean;
     autonomy_debug_scheduler_expected: boolean;
     autonomy_debug_scheduler_running: boolean;
     autonomy_debug_scheduler_last_error: string | null;
     autonomy_debug_scheduler_last_status: string | null;
+    autonomy_debug_scheduler_heartbeat_fresh: boolean;
   };
   config: {
     system_mode: string;
@@ -110,8 +117,63 @@ function boolFromEnv(name: string, fallback: boolean): boolean {
   return v === "1" || v === "true" || v === "yes" || v === "on";
 }
 
+function intFromEnv(name: string, fallback: number, min: number, max: number): number {
+  const n = Number.parseInt(String(process.env[name] ?? ""), 10);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, n));
+}
+
 function nowMs(): number {
   return Date.now();
+}
+
+function parseIsoMs(value: string | null): number | null {
+  if (!value) return null;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function serviceHeartbeatFresh(input: {
+  expected: boolean;
+  running: boolean;
+  startedAt: string | null;
+  lastCycleAt: string | null;
+  totalCycles: number;
+  thresholdMs: number;
+}): { passed: boolean; detail: string } {
+  if (!input.expected) return { passed: true, detail: "expected=false" };
+  if (!input.running) return { passed: true, detail: "running=false (covered by running gate)" };
+
+  const safeThresholdMs = Math.max(10_000, input.thresholdMs);
+  const lastCycleMs = parseIsoMs(input.lastCycleAt);
+  if (lastCycleMs !== null) {
+    const ageMs = Math.max(0, nowMs() - lastCycleMs);
+    return {
+      passed: ageMs <= safeThresholdMs,
+      detail: `age_ms=${ageMs},threshold_ms=${safeThresholdMs}`,
+    };
+  }
+
+  const startedMs = parseIsoMs(input.startedAt);
+  if (input.totalCycles > 0) {
+    return {
+      passed: false,
+      detail: `missing_last_cycle_at_with_total_cycles=${input.totalCycles}`,
+    };
+  }
+
+  if (startedMs !== null) {
+    const warmupAgeMs = Math.max(0, nowMs() - startedMs);
+    return {
+      passed: warmupAgeMs <= safeThresholdMs,
+      detail: `warmup_age_ms=${warmupAgeMs},threshold_ms=${safeThresholdMs}`,
+    };
+  }
+
+  return {
+    passed: false,
+    detail: "missing_cycle_timestamps",
+  };
 }
 
 function timedCheck(
@@ -292,10 +354,14 @@ function runtimeChecks(checks: DeploymentReadinessCheck[]): {
   productionWatchdogLastError: string | null;
   executionSafetySupervisorRunning: boolean;
   executionSafetySupervisorLastError: string | null;
+  autonomySupervisorHeartbeatFresh: boolean;
+  productionWatchdogHeartbeatFresh: boolean;
+  executionSafetySupervisorHeartbeatFresh: boolean;
   autonomyDebugSchedulerExpected: boolean;
   autonomyDebugSchedulerRunning: boolean;
   autonomyDebugSchedulerLastError: string | null;
   autonomyDebugSchedulerLastStatus: string | null;
+  autonomyDebugSchedulerHeartbeatFresh: boolean;
   incidentGuardLevel: string;
   incidentGuardHalt: boolean;
   autonomyGuardLevel: string;
@@ -423,9 +489,25 @@ function runtimeChecks(checks: DeploymentReadinessCheck[]): {
   );
 
   const supervisor = getAutonomySupervisorSnapshot();
+  const supervisorExpected = shouldAutonomySupervisorAutoStart();
   const expectedServices = supervisor.services.filter((svc) => svc.expected).length;
   const healthyServices = supervisor.services.filter((svc) => svc.expected && svc.health === "HEALTHY").length;
   const healthRatio = expectedServices > 0 ? healthyServices / expectedServices : 1;
+  const supervisorHeartbeatThresholdMs = intFromEnv(
+    "DEPLOYMENT_READINESS_STALE_AUTONOMY_SUPERVISOR_MS",
+    5 * 60_000,
+    10_000,
+    60 * 60_000,
+  );
+  const supervisorHeartbeat = serviceHeartbeatFresh({
+    expected: supervisorExpected,
+    running: supervisor.running,
+    startedAt: supervisor.started_at,
+    lastCycleAt: supervisor.last_tick_at,
+    totalCycles: supervisor.total_ticks,
+    thresholdMs: supervisorHeartbeatThresholdMs,
+  });
+  const supervisorHeartbeatCritical = supervisorExpected && runtimeConfig.systemMode === "live_enabled";
 
   const startedSupervisor = nowMs();
   timedCheck(
@@ -451,6 +533,21 @@ function runtimeChecks(checks: DeploymentReadinessCheck[]): {
       detail: `${healthyServices}/${expectedServices} healthy (${Math.round(healthRatio * 100)}%)`,
     },
     startedSupervisorHealth,
+  );
+
+  const startedSupervisorHeartbeat = nowMs();
+  timedCheck(
+    checks,
+    {
+      name: "Autonomy supervisor heartbeat fresh",
+      category: "runtime",
+      passed: supervisorHeartbeat.passed,
+      critical: supervisorHeartbeatCritical,
+      detail:
+        `expected=${supervisorExpected},running=${supervisor.running},` +
+        supervisorHeartbeat.detail,
+    },
+    startedSupervisorHeartbeat,
   );
 
   const governor = getStrategyGovernorSnapshot();
@@ -496,6 +593,22 @@ function runtimeChecks(checks: DeploymentReadinessCheck[]): {
   );
 
   const watchdog = getProductionWatchdogSnapshot();
+  const watchdogExpected = shouldProductionWatchdogAutoStart();
+  const watchdogHeartbeatThresholdMs = intFromEnv(
+    "DEPLOYMENT_READINESS_STALE_PRODUCTION_WATCHDOG_MS",
+    3 * 60_000,
+    10_000,
+    60 * 60_000,
+  );
+  const watchdogHeartbeat = serviceHeartbeatFresh({
+    expected: watchdogExpected,
+    running: watchdog.running,
+    startedAt: watchdog.started_at,
+    lastCycleAt: watchdog.last_cycle_at,
+    totalCycles: watchdog.total_cycles,
+    thresholdMs: watchdogHeartbeatThresholdMs,
+  });
+  const watchdogHeartbeatCritical = watchdogExpected && runtimeConfig.systemMode === "live_enabled";
   const startedWatchdog = nowMs();
   timedCheck(
     checks,
@@ -509,7 +622,36 @@ function runtimeChecks(checks: DeploymentReadinessCheck[]): {
     startedWatchdog,
   );
 
+  const startedWatchdogHeartbeat = nowMs();
+  timedCheck(
+    checks,
+    {
+      name: "Production watchdog heartbeat fresh",
+      category: "runtime",
+      passed: watchdogHeartbeat.passed,
+      critical: watchdogHeartbeatCritical,
+      detail: `expected=${watchdogExpected},running=${watchdog.running},` + watchdogHeartbeat.detail,
+    },
+    startedWatchdogHeartbeat,
+  );
+
   const executionSafety = getExecutionSafetySupervisorSnapshot();
+  const executionSafetyExpected = shouldExecutionSafetySupervisorAutoStart();
+  const executionSafetyHeartbeatThresholdMs = intFromEnv(
+    "DEPLOYMENT_READINESS_STALE_EXECUTION_SAFETY_MS",
+    3 * 60_000,
+    10_000,
+    60 * 60_000,
+  );
+  const executionSafetyHeartbeat = serviceHeartbeatFresh({
+    expected: executionSafetyExpected,
+    running: executionSafety.running,
+    startedAt: executionSafety.started_at,
+    lastCycleAt: executionSafety.last_cycle_at,
+    totalCycles: executionSafety.total_cycles,
+    thresholdMs: executionSafetyHeartbeatThresholdMs,
+  });
+  const executionSafetyHeartbeatCritical = executionSafetyExpected && runtimeConfig.systemMode === "live_enabled";
   const startedExecutionSafety = nowMs();
   timedCheck(
     checks,
@@ -525,8 +667,37 @@ function runtimeChecks(checks: DeploymentReadinessCheck[]): {
     startedExecutionSafety,
   );
 
+  const startedExecutionSafetyHeartbeat = nowMs();
+  timedCheck(
+    checks,
+    {
+      name: "Execution safety supervisor heartbeat fresh",
+      category: "runtime",
+      passed: executionSafetyHeartbeat.passed,
+      critical: executionSafetyHeartbeatCritical,
+      detail:
+        `expected=${executionSafetyExpected},running=${executionSafety.running},` +
+        executionSafetyHeartbeat.detail,
+    },
+    startedExecutionSafetyHeartbeat,
+  );
+
   const debugScheduler = getAutonomyDebugSchedulerSnapshot();
   const debugSchedulerExpected = shouldAutonomyDebugSchedulerAutoStart();
+  const debugSchedulerHeartbeatThresholdMs = intFromEnv(
+    "DEPLOYMENT_READINESS_STALE_AUTONOMY_DEBUG_SCHEDULER_MS",
+    3 * 60_000,
+    10_000,
+    60 * 60_000,
+  );
+  const debugSchedulerHeartbeat = serviceHeartbeatFresh({
+    expected: debugSchedulerExpected,
+    running: debugScheduler.running,
+    startedAt: debugScheduler.started_at,
+    lastCycleAt: debugScheduler.last_cycle_at,
+    totalCycles: debugScheduler.total_cycles,
+    thresholdMs: debugSchedulerHeartbeatThresholdMs,
+  });
   const debugSchedulerCritical = debugSchedulerExpected && runtimeConfig.systemMode === "live_enabled";
   const startedDebugScheduler = nowMs();
   timedCheck(
@@ -541,6 +712,21 @@ function runtimeChecks(checks: DeploymentReadinessCheck[]): {
         `,status=${debugScheduler.last_status ?? "UNKNOWN"},last_error=${debugScheduler.last_error ?? "none"}`,
     },
     startedDebugScheduler,
+  );
+
+  const startedDebugSchedulerHeartbeat = nowMs();
+  timedCheck(
+    checks,
+    {
+      name: "Autonomy debug scheduler heartbeat fresh",
+      category: "runtime",
+      passed: debugSchedulerHeartbeat.passed,
+      critical: debugSchedulerCritical,
+      detail:
+        `expected=${debugSchedulerExpected},running=${debugScheduler.running},` +
+        debugSchedulerHeartbeat.detail,
+    },
+    startedDebugSchedulerHeartbeat,
   );
 
   return {
@@ -562,10 +748,14 @@ function runtimeChecks(checks: DeploymentReadinessCheck[]): {
     productionWatchdogLastError: watchdog.last_error,
     executionSafetySupervisorRunning: executionSafety.running,
     executionSafetySupervisorLastError: executionSafety.last_error,
+    autonomySupervisorHeartbeatFresh: supervisorHeartbeat.passed,
+    productionWatchdogHeartbeatFresh: watchdogHeartbeat.passed,
+    executionSafetySupervisorHeartbeatFresh: executionSafetyHeartbeat.passed,
     autonomyDebugSchedulerExpected: debugSchedulerExpected,
     autonomyDebugSchedulerRunning: debugScheduler.running,
     autonomyDebugSchedulerLastError: debugScheduler.last_error,
     autonomyDebugSchedulerLastStatus: debugScheduler.last_status,
+    autonomyDebugSchedulerHeartbeatFresh: debugSchedulerHeartbeat.passed,
     incidentGuardLevel: incidentGuard.level,
     incidentGuardHalt: incidentGuard.halt_active,
     autonomyGuardLevel: autonomyGuard.level,
@@ -695,10 +885,14 @@ export async function getDeploymentReadinessReport(options?: {
       production_watchdog_last_error: runtime.productionWatchdogLastError,
       execution_safety_supervisor_running: runtime.executionSafetySupervisorRunning,
       execution_safety_supervisor_last_error: runtime.executionSafetySupervisorLastError,
+      autonomy_supervisor_heartbeat_fresh: runtime.autonomySupervisorHeartbeatFresh,
+      production_watchdog_heartbeat_fresh: runtime.productionWatchdogHeartbeatFresh,
+      execution_safety_supervisor_heartbeat_fresh: runtime.executionSafetySupervisorHeartbeatFresh,
       autonomy_debug_scheduler_expected: runtime.autonomyDebugSchedulerExpected,
       autonomy_debug_scheduler_running: runtime.autonomyDebugSchedulerRunning,
       autonomy_debug_scheduler_last_error: runtime.autonomyDebugSchedulerLastError,
       autonomy_debug_scheduler_last_status: runtime.autonomyDebugSchedulerLastStatus,
+      autonomy_debug_scheduler_heartbeat_fresh: runtime.autonomyDebugSchedulerHeartbeatFresh,
     },
     config: {
       system_mode: runtimeConfig.systemMode,
