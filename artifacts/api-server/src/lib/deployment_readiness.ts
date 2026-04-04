@@ -9,6 +9,8 @@ import { getRiskEngineSnapshot, isKillSwitchActive } from "./risk_engine";
 import { runtimeConfig } from "./runtime_config";
 import { getStartupSnapshot } from "./startup_state";
 import { getAutonomySupervisorSnapshot } from "./autonomy_supervisor";
+import { getStrategyGovernorSnapshot } from "./strategy_governor";
+import { getStrategyAllocatorSnapshot } from "./strategy_allocator";
 
 export type DeploymentReadinessStatus = "READY" | "DEGRADED" | "NOT_READY";
 
@@ -51,6 +53,10 @@ export interface DeploymentReadinessReport {
     expected_services: number;
     healthy_services: number;
     total_heal_actions: number;
+    strategy_governor_running: boolean;
+    strategy_governor_last_error: string | null;
+    strategy_allocator_running: boolean;
+    strategy_allocator_last_error: string | null;
   };
   config: {
     system_mode: string;
@@ -237,6 +243,10 @@ function runtimeChecks(checks: DeploymentReadinessCheck[]): {
   expectedServices: number;
   healthyServices: number;
   totalHealActions: number;
+  strategyGovernorRunning: boolean;
+  strategyGovernorLastError: string | null;
+  strategyAllocatorRunning: boolean;
+  strategyAllocatorLastError: string | null;
 } {
   const startedKillSwitch = nowMs();
   const killSwitch = isKillSwitchActive();
@@ -329,6 +339,34 @@ function runtimeChecks(checks: DeploymentReadinessCheck[]): {
     startedSupervisorHealth,
   );
 
+  const governor = getStrategyGovernorSnapshot();
+  const startedGovernor = nowMs();
+  timedCheck(
+    checks,
+    {
+      name: "Strategy governor running",
+      category: "runtime",
+      passed: governor.running,
+      critical: false,
+      detail: `running=${governor.running}, cycles=${governor.total_cycles}, last_error=${governor.last_error ?? "none"}`,
+    },
+    startedGovernor,
+  );
+
+  const allocator = getStrategyAllocatorSnapshot();
+  const startedAllocator = nowMs();
+  timedCheck(
+    checks,
+    {
+      name: "Strategy allocator running",
+      category: "runtime",
+      passed: allocator.running,
+      critical: false,
+      detail: `running=${allocator.running}, cycles=${allocator.total_cycles}, allocations=${allocator.allocation_count}`,
+    },
+    startedAllocator,
+  );
+
   return {
     killSwitch,
     breakerLevel: breaker.level,
@@ -338,6 +376,10 @@ function runtimeChecks(checks: DeploymentReadinessCheck[]): {
     expectedServices,
     healthyServices,
     totalHealActions: supervisor.total_heal_actions,
+    strategyGovernorRunning: governor.running,
+    strategyGovernorLastError: governor.last_error,
+    strategyAllocatorRunning: allocator.running,
+    strategyAllocatorLastError: allocator.last_error,
   };
 }
 
@@ -441,6 +483,10 @@ export async function getDeploymentReadinessReport(options?: {
       expected_services: runtime.expectedServices,
       healthy_services: runtime.healthyServices,
       total_heal_actions: runtime.totalHealActions,
+      strategy_governor_running: runtime.strategyGovernorRunning,
+      strategy_governor_last_error: runtime.strategyGovernorLastError,
+      strategy_allocator_running: runtime.strategyAllocatorRunning,
+      strategy_allocator_last_error: runtime.strategyAllocatorLastError,
     },
     config: {
       system_mode: runtimeConfig.systemMode,

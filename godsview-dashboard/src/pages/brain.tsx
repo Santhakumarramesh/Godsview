@@ -31,6 +31,18 @@ import {
   useStopAutonomySupervisor,
   useRunAutonomySupervisorTick,
   type AutonomySupervisorSnapshot,
+  useStrategyGovernorStatus,
+  useStartStrategyGovernor,
+  useStopStrategyGovernor,
+  useRunStrategyGovernorCycle,
+  type StrategyGovernorSnapshot,
+  useStrategyAllocatorStatus,
+  useStartStrategyAllocator,
+  useStopStrategyAllocator,
+  useRunStrategyAllocatorCycle,
+  useStrategyAllocationLookup,
+  type StrategyAllocatorSnapshot,
+  type StrategyAllocationMatch,
 } from "@/lib/api";
 import { useLivePrices } from "@/lib/market-store";
 import BrainFocusMode from "@/components/BrainFocusMode";
@@ -927,6 +939,237 @@ function AutonomySupervisorPanel({
   );
 }
 
+function StrategyGovernorPanel({
+  governor,
+  busy,
+  onStart,
+  onStop,
+  onRun,
+}: {
+  governor?: StrategyGovernorSnapshot;
+  busy: boolean;
+  onStart: () => void;
+  onStop: () => void;
+  onRun: () => void;
+}) {
+  const running = !!governor?.running;
+  const validation = governor?.last_validation_status ?? "INSUFFICIENT";
+  const validationColor =
+    validation === "HEALTHY" ? "#00ffcc" :
+    validation === "WATCH" ? "#ffcc00" :
+    validation === "DRIFT" ? "#ff8844" :
+    validation === "CRITICAL" ? "#ff4444" : "#767576";
+  const supervisorRatio = governor?.last_supervisor_health_ratio ?? 0;
+  const ratioColor =
+    supervisorRatio >= 0.8 ? "#00ffcc" :
+    supervisorRatio >= 0.55 ? "#ffcc00" : "#ff7162";
+
+  return (
+    <div style={panelStyle}>
+      <div style={{ ...labelStyle, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span>Strategy Governor</span>
+        <span style={{ color: running ? "#00ffcc" : "#767576", fontFamily: "JetBrains Mono", fontSize: "9px", letterSpacing: "0.1em" }}>
+          {running ? "ACTIVE" : "IDLE"}
+        </span>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "8px" }}>
+        <div style={{ padding: "6px", borderRadius: "6px", backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(72,72,73,0.14)" }}>
+          <div style={{ fontSize: "7px", color: "#484849", letterSpacing: "0.1em", textTransform: "uppercase" }}>Validation</div>
+          <div style={{ fontSize: "11px", color: validationColor, fontFamily: "JetBrains Mono", fontWeight: 700 }}>
+            {validation}
+          </div>
+        </div>
+        <div style={{ padding: "6px", borderRadius: "6px", backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(72,72,73,0.14)" }}>
+          <div style={{ fontSize: "7px", color: "#484849", letterSpacing: "0.1em", textTransform: "uppercase" }}>Supervisor</div>
+          <div style={{ fontSize: "11px", color: ratioColor, fontFamily: "JetBrains Mono", fontWeight: 700 }}>
+            {Math.round(supervisorRatio * 100)}%
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: "6px", marginBottom: "8px" }}>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={running ? onStop : onStart}
+          style={{
+            flex: 1,
+            fontSize: "9px",
+            borderRadius: "6px",
+            border: `1px solid ${running ? "rgba(255,113,98,0.3)" : "rgba(0,255,204,0.3)"}`,
+            backgroundColor: running ? "rgba(255,113,98,0.12)" : "rgba(0,255,204,0.12)",
+            color: running ? "#ff7162" : "#00ffcc",
+            padding: "6px 8px",
+            cursor: busy ? "not-allowed" : "pointer",
+            opacity: busy ? 0.65 : 1,
+          }}
+        >
+          {running ? "Stop" : "Start"}
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onRun}
+          style={{
+            flex: 1,
+            fontSize: "9px",
+            borderRadius: "6px",
+            border: "1px solid rgba(255,204,0,0.3)",
+            backgroundColor: "rgba(255,204,0,0.1)",
+            color: "#ffcc00",
+            padding: "6px 8px",
+            cursor: busy ? "not-allowed" : "pointer",
+            opacity: busy ? 0.65 : 1,
+          }}
+        >
+          Run Cycle
+        </button>
+      </div>
+
+      <div style={{ fontSize: "8px", color: "#767576", fontFamily: "JetBrains Mono", marginBottom: "6px" }}>
+        every {Math.max(1, Math.round((governor?.interval_ms ?? 0) / 1000))}s · cycles {governor?.total_cycles ?? 0}
+      </div>
+
+      <div style={{ fontSize: "8px", color: "#adaaab", marginBottom: "6px" }}>
+        Tracking {governor?.evaluated_strategies?.length ?? 0} strategies · actions {governor?.total_actions ?? 0}
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: "4px", maxHeight: "90px", overflowY: "auto" }}>
+        {(governor?.recent_actions ?? []).slice(0, 5).map((action, idx) => {
+          const color =
+            action.action === "OVERRIDE_TIER" ? "#ffcc00" :
+            action.final_tier === "SUSPENDED" ? "#ff4444" : "#00ffcc";
+          return (
+            <div key={`${action.at}-${idx}`} style={{ fontSize: "8px", lineHeight: 1.3 }}>
+              <div style={{ color: "#adaaab", fontFamily: "JetBrains Mono", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {action.strategy_id}
+              </div>
+              <div style={{ color }}>
+                {action.action} · {action.before_tier}→{action.final_tier}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function StrategyAllocatorPanel({
+  allocator,
+  lookup,
+  busy,
+  onStart,
+  onStop,
+  onRun,
+}: {
+  allocator?: StrategyAllocatorSnapshot;
+  lookup?: StrategyAllocationMatch;
+  busy: boolean;
+  onStart: () => void;
+  onStop: () => void;
+  onRun: () => void;
+}) {
+  const running = !!allocator?.running;
+  const status = allocator?.last_validation_status ?? "INSUFFICIENT";
+  const statusColor =
+    status === "HEALTHY" ? "#00ffcc" :
+    status === "WATCH" ? "#ffcc00" :
+    status === "DRIFT" ? "#ff8844" :
+    status === "CRITICAL" ? "#ff4444" : "#767576";
+  const activeMultiplier = lookup?.multiplier ?? 1;
+  const activeMultiplierColor =
+    activeMultiplier >= 1 ? "#00ffcc" :
+    activeMultiplier >= 0.6 ? "#ffcc00" : "#ff7162";
+  const top = allocator?.top_allocations?.slice(0, 4) ?? [];
+
+  return (
+    <div style={panelStyle}>
+      <div style={{ ...labelStyle, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span>Strategy Allocator</span>
+        <span style={{ color: running ? "#00ffcc" : "#767576", fontFamily: "JetBrains Mono", fontSize: "9px", letterSpacing: "0.1em" }}>
+          {running ? "ACTIVE" : "IDLE"}
+        </span>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "8px" }}>
+        <div style={{ padding: "6px", borderRadius: "6px", backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(72,72,73,0.14)" }}>
+          <div style={{ fontSize: "7px", color: "#484849", letterSpacing: "0.1em", textTransform: "uppercase" }}>Validation</div>
+          <div style={{ fontSize: "11px", color: statusColor, fontFamily: "JetBrains Mono", fontWeight: 700 }}>
+            {status}
+          </div>
+        </div>
+        <div style={{ padding: "6px", borderRadius: "6px", backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(72,72,73,0.14)" }}>
+          <div style={{ fontSize: "7px", color: "#484849", letterSpacing: "0.1em", textTransform: "uppercase" }}>Active Mult</div>
+          <div style={{ fontSize: "11px", color: activeMultiplierColor, fontFamily: "JetBrains Mono", fontWeight: 700 }}>
+            {activeMultiplier.toFixed(2)}x
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: "6px", marginBottom: "8px" }}>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={running ? onStop : onStart}
+          style={{
+            flex: 1,
+            fontSize: "9px",
+            borderRadius: "6px",
+            border: `1px solid ${running ? "rgba(255,113,98,0.3)" : "rgba(0,255,204,0.3)"}`,
+            backgroundColor: running ? "rgba(255,113,98,0.12)" : "rgba(0,255,204,0.12)",
+            color: running ? "#ff7162" : "#00ffcc",
+            padding: "6px 8px",
+            cursor: busy ? "not-allowed" : "pointer",
+            opacity: busy ? 0.65 : 1,
+          }}
+        >
+          {running ? "Stop" : "Start"}
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onRun}
+          style={{
+            flex: 1,
+            fontSize: "9px",
+            borderRadius: "6px",
+            border: "1px solid rgba(255,204,0,0.3)",
+            backgroundColor: "rgba(255,204,0,0.1)",
+            color: "#ffcc00",
+            padding: "6px 8px",
+            cursor: busy ? "not-allowed" : "pointer",
+            opacity: busy ? 0.65 : 1,
+          }}
+        >
+          Run Cycle
+        </button>
+      </div>
+
+      <div style={{ fontSize: "8px", color: "#767576", fontFamily: "JetBrains Mono", marginBottom: "6px" }}>
+        every {Math.max(1, Math.round((allocator?.interval_ms ?? 0) / 1000))}s · allocations {allocator?.allocation_count ?? 0}
+      </div>
+      <div style={{ fontSize: "8px", color: "#adaaab", marginBottom: "6px" }}>
+        base risk {((allocator?.policy.base_risk_pct ?? 0) * 100).toFixed(2)}% · cycles {allocator?.total_cycles ?? 0}
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: "4px", maxHeight: "92px", overflowY: "auto" }}>
+        {top.map((entry) => (
+          <div key={entry.strategy_id} style={{ fontSize: "8px", lineHeight: 1.3 }}>
+            <div style={{ color: "#adaaab", fontFamily: "JetBrains Mono", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {entry.strategy_id}
+            </div>
+            <div style={{ color: entry.multiplier >= 1 ? "#00ffcc" : entry.multiplier >= 0.6 ? "#ffcc00" : "#ff7162" }}>
+              {entry.tier} · {entry.multiplier.toFixed(2)}x · S{Math.round(entry.score * 100)}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function WalkForwardPanel({
   strategyId,
   walkForward,
@@ -1554,6 +1797,14 @@ function BrainPageComponent() {
   const startAutonomySupervisor = useStartAutonomySupervisor();
   const stopAutonomySupervisor = useStopAutonomySupervisor();
   const runAutonomySupervisorTick = useRunAutonomySupervisorTick();
+  const { data: strategyGovernor } = useStrategyGovernorStatus({ refetchInterval: 10_000 });
+  const startStrategyGovernor = useStartStrategyGovernor();
+  const stopStrategyGovernor = useStopStrategyGovernor();
+  const runStrategyGovernorCycle = useRunStrategyGovernorCycle();
+  const { data: strategyAllocator } = useStrategyAllocatorStatus({ refetchInterval: 10_000 });
+  const startStrategyAllocator = useStartStrategyAllocator();
+  const stopStrategyAllocator = useStopStrategyAllocator();
+  const runStrategyAllocatorCycle = useRunStrategyAllocatorCycle();
 
   const stocks = useMemo(() => {
     if (!brainEntities?.length) return MOCK_STOCKS;
@@ -1607,6 +1858,22 @@ function BrainPageComponent() {
       .replace(/[\s-]+/g, "_") || "ranging";
     return `${setup}::${regime}`;
   }, [selectedStock, stocks]);
+  const allocationLookupInput = useMemo<{ setup_type?: string; regime?: string; symbol?: string }>(() => {
+    const anchor = selectedStock ?? stocks[0];
+    if (!anchor) return {};
+    return {
+      setup_type: normalizeSetupFamily(anchor.setupFamily ?? "absorption_reversal"),
+      regime: String(anchor.regime ?? "ranging")
+        .trim()
+        .toLowerCase()
+        .replace(/[\s-]+/g, "_") || "ranging",
+      symbol: anchor.symbol,
+    };
+  }, [selectedStock, stocks]);
+  const { data: strategyAllocationLookup } = useStrategyAllocationLookup(allocationLookupInput, {
+    enabled: Boolean(allocationLookupInput.setup_type || allocationLookupInput.regime || allocationLookupInput.symbol),
+    refetchInterval: 15_000,
+  });
 
   const { data: walkForward } = useWalkForwardBacktest(activeStrategyId, {
     lookback_days: 240,
@@ -1629,6 +1896,14 @@ function BrainPageComponent() {
     startAutonomySupervisor.isPending ||
     stopAutonomySupervisor.isPending ||
     runAutonomySupervisorTick.isPending;
+  const governorBusy =
+    startStrategyGovernor.isPending ||
+    stopStrategyGovernor.isPending ||
+    runStrategyGovernorCycle.isPending;
+  const allocatorBusy =
+    startStrategyAllocator.isPending ||
+    stopStrategyAllocator.isPending ||
+    runStrategyAllocatorCycle.isPending;
 
   const handleSupervisorStart = useCallback(() => {
     startAutonomySupervisor.mutate({ run_immediate: true });
@@ -1641,6 +1916,30 @@ function BrainPageComponent() {
   const handleSupervisorTick = useCallback(() => {
     runAutonomySupervisorTick.mutate();
   }, [runAutonomySupervisorTick]);
+
+  const handleGovernorStart = useCallback(() => {
+    startStrategyGovernor.mutate({ run_immediate: true });
+  }, [startStrategyGovernor]);
+
+  const handleGovernorStop = useCallback(() => {
+    stopStrategyGovernor.mutate();
+  }, [stopStrategyGovernor]);
+
+  const handleGovernorRun = useCallback(() => {
+    runStrategyGovernorCycle.mutate();
+  }, [runStrategyGovernorCycle]);
+
+  const handleAllocatorStart = useCallback(() => {
+    startStrategyAllocator.mutate({ run_immediate: true });
+  }, [startStrategyAllocator]);
+
+  const handleAllocatorStop = useCallback(() => {
+    stopStrategyAllocator.mutate();
+  }, [stopStrategyAllocator]);
+
+  const handleAllocatorRun = useCallback(() => {
+    runStrategyAllocatorCycle.mutate();
+  }, [runStrategyAllocatorCycle]);
 
   useEffect(() => {
     if (!selectedStock) {
@@ -1802,6 +2101,21 @@ function BrainPageComponent() {
           onStart={handleSupervisorStart}
           onStop={handleSupervisorStop}
           onTick={handleSupervisorTick}
+        />
+        <StrategyGovernorPanel
+          governor={strategyGovernor}
+          busy={governorBusy}
+          onStart={handleGovernorStart}
+          onStop={handleGovernorStop}
+          onRun={handleGovernorRun}
+        />
+        <StrategyAllocatorPanel
+          allocator={strategyAllocator}
+          lookup={strategyAllocationLookup}
+          busy={allocatorBusy}
+          onStart={handleAllocatorStart}
+          onStop={handleAllocatorStop}
+          onRun={handleAllocatorRun}
         />
         <WalkForwardPanel strategyId={activeStrategyId} walkForward={walkForward} tierRegistry={tierRegistry} />
         <LiveSIFeed decisions={siDecisions} />

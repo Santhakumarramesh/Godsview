@@ -21,6 +21,16 @@ import {
   startAutonomySupervisor,
   stopAutonomySupervisor,
 } from "./lib/autonomy_supervisor";
+import {
+  shouldStrategyGovernorAutoStart,
+  startStrategyGovernor,
+  stopStrategyGovernor,
+} from "./lib/strategy_governor";
+import {
+  shouldStrategyAllocatorAutoStart,
+  startStrategyAllocator,
+  stopStrategyAllocator,
+} from "./lib/strategy_allocator";
 
 // ── Validate environment before anything else ───────────────────
 validateEnv();
@@ -135,6 +145,22 @@ const server = app.listen(port, (err) => {
   } else {
     logger.info("Autonomy supervisor auto-start disabled");
   }
+
+  if (shouldStrategyGovernorAutoStart()) {
+    startStrategyGovernor({ runImmediate: true })
+      .then((result) => logger.info({ intervalMs: result.interval_ms }, "Strategy governor started"))
+      .catch((err) => logger.error({ err }, "Strategy governor failed to start"));
+  } else {
+    logger.info("Strategy governor auto-start disabled");
+  }
+
+  if (shouldStrategyAllocatorAutoStart()) {
+    startStrategyAllocator({ runImmediate: true })
+      .then((result) => logger.info({ intervalMs: result.interval_ms }, "Strategy allocator started"))
+      .catch((err) => logger.error({ err }, "Strategy allocator failed to start"));
+  } else {
+    logger.info("Strategy allocator auto-start disabled");
+  }
 });
 
 // ── Graceful shutdown with connection draining ──────────────────
@@ -181,6 +207,18 @@ onShutdown(async () => {
 onShutdown(async () => {
   logger.info("Stopping autonomy supervisor...");
   stopAutonomySupervisor();
+});
+
+// Register cleanup: stop strategy governor
+onShutdown(async () => {
+  logger.info("Stopping strategy governor...");
+  stopStrategyGovernor();
+});
+
+// Register cleanup: stop strategy allocator
+onShutdown(async () => {
+  logger.info("Stopping strategy allocator...");
+  stopStrategyAllocator();
 });
 
 // Register cleanup: end trading session

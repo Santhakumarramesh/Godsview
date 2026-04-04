@@ -1543,3 +1543,57 @@ export function getLatestWalkForward(strategyId?: string): WalkForwardResult | W
   const all = Array.from(_latestWalkForwardByStrategy.values()).sort((a, b) => b.generated_at.localeCompare(a.generated_at));
   return all;
 }
+
+function emptyAggregateOos(): WalkForwardResult["aggregate_oos"] {
+  return {
+    trades: 0,
+    wins: 0,
+    losses: 0,
+    win_rate: 0,
+    profit_factor: 0,
+    sharpe_ratio: 0,
+    expectancy_r: 0,
+    max_drawdown_pct: 0,
+    avg_rr: 0,
+    avg_quality: 0,
+    pass_rate: 0,
+    windows_passed: 0,
+    windows_total: 0,
+  };
+}
+
+export function getWalkForwardTier(strategyId: string): {
+  strategy_id: string;
+  tier: StrategyTier;
+  updated_at: string;
+  notes: string[];
+  aggregate_oos: WalkForwardResult["aggregate_oos"];
+} | null {
+  const canonical = parseStrategyFilter(strategyId).canonical_id;
+  return _strategyTierRegistry.get(canonical) ?? null;
+}
+
+export function setWalkForwardTier(input: {
+  strategy_id: string;
+  tier: StrategyTier;
+  notes?: string[];
+  aggregate_oos?: WalkForwardResult["aggregate_oos"];
+}): {
+  strategy_id: string;
+  tier: StrategyTier;
+  updated_at: string;
+  notes: string[];
+  aggregate_oos: WalkForwardResult["aggregate_oos"];
+} {
+  const canonical = parseStrategyFilter(input.strategy_id).canonical_id;
+  const existing = _strategyTierRegistry.get(canonical);
+  const next = {
+    strategy_id: canonical,
+    tier: input.tier,
+    updated_at: new Date().toISOString(),
+    notes: input.notes?.length ? input.notes : existing?.notes ?? [],
+    aggregate_oos: input.aggregate_oos ?? existing?.aggregate_oos ?? emptyAggregateOos(),
+  };
+  _strategyTierRegistry.set(canonical, next);
+  return next;
+}

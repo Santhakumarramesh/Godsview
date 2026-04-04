@@ -466,6 +466,233 @@ export function useRunAutonomySupervisorTick() {
   });
 }
 
+export interface StrategyGovernorAction {
+  at: string;
+  strategy_id: string;
+  action: "WALK_FORWARD" | "OVERRIDE_TIER" | "SKIP";
+  before_tier: string;
+  proposed_tier: string;
+  final_tier: string;
+  reason: string;
+}
+
+export interface StrategyGovernorSnapshot {
+  running: boolean;
+  cycle_in_flight: boolean;
+  started_at: string | null;
+  last_cycle_at: string | null;
+  last_cycle_duration_ms: number | null;
+  last_error: string | null;
+  total_cycles: number;
+  total_actions: number;
+  interval_ms: number;
+  last_validation_status: "INSUFFICIENT" | "HEALTHY" | "WATCH" | "DRIFT" | "CRITICAL" | null;
+  last_validation_generated_at: string | null;
+  last_supervisor_health_ratio: number;
+  policy: {
+    auto_enforce: boolean;
+    interval_ms: number;
+    max_strategies_per_cycle: number;
+    min_group_samples: number;
+    max_validation_staleness_ms: number;
+  };
+  evaluated_strategies: string[];
+  recent_actions: StrategyGovernorAction[];
+}
+
+export function useStrategyGovernorStatus(options?: Omit<UseQueryOptions<StrategyGovernorSnapshot>, "queryKey" | "queryFn">) {
+  return useQuery({
+    queryKey: ["brain", "strategy", "governor", "status"],
+    queryFn: () => apiFetch<StrategyGovernorSnapshot>("/brain/strategy/governor/status"),
+    refetchInterval: 10_000,
+    ...options,
+  });
+}
+
+export function useStartStrategyGovernor() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params?: { interval_ms?: number; run_immediate?: boolean }) =>
+      apiFetch<{
+        success: boolean;
+        message: string;
+        interval_ms: number;
+        snapshot: StrategyGovernorSnapshot;
+      }>("/brain/strategy/governor/start", {
+        method: "POST",
+        body: JSON.stringify(params ?? {}),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["brain", "strategy", "governor"] });
+    },
+  });
+}
+
+export function useStopStrategyGovernor() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{
+        success: boolean;
+        message: string;
+        snapshot: StrategyGovernorSnapshot;
+      }>("/brain/strategy/governor/stop", {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["brain", "strategy", "governor"] });
+    },
+  });
+}
+
+export function useRunStrategyGovernorCycle() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{
+        ok: boolean;
+        snapshot: StrategyGovernorSnapshot;
+      }>("/brain/strategy/governor/run-once", {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["brain", "strategy", "governor"] });
+    },
+  });
+}
+
+export interface StrategyAllocationEntry {
+  strategy_id: string;
+  setup_type: string | null;
+  regime: string | null;
+  symbol: string | null;
+  tier: "SEED" | "LEARNING" | "PROVEN" | "ELITE" | "DEGRADING" | "SUSPENDED";
+  validation_status: "INSUFFICIENT" | "HEALTHY" | "WATCH" | "DRIFT" | "CRITICAL";
+  sample_count: number;
+  score: number;
+  multiplier: number;
+  risk_budget_pct: number;
+  source: "TIER" | "VALIDATION" | "HYBRID" | "FALLBACK";
+  notes: string[];
+  updated_at: string;
+}
+
+export interface StrategyAllocatorSnapshot {
+  running: boolean;
+  cycle_in_flight: boolean;
+  started_at: string | null;
+  last_cycle_at: string | null;
+  last_cycle_duration_ms: number | null;
+  last_error: string | null;
+  total_cycles: number;
+  interval_ms: number;
+  last_validation_status: "INSUFFICIENT" | "HEALTHY" | "WATCH" | "DRIFT" | "CRITICAL" | null;
+  last_validation_generated_at: string | null;
+  policy: {
+    auto_enforce: boolean;
+    interval_ms: number;
+    max_validation_staleness_ms: number;
+    min_validation_samples: number;
+    base_risk_pct: number;
+    min_multiplier: number;
+    max_multiplier: number;
+    suspend_multiplier: number;
+  };
+  allocation_count: number;
+  top_allocations: StrategyAllocationEntry[];
+  allocations: StrategyAllocationEntry[];
+}
+
+export interface StrategyAllocationMatch {
+  matched: boolean;
+  match_level: "EXACT" | "SETUP_REGIME" | "SETUP_ONLY" | "REGIME_ONLY" | "GLOBAL" | "NONE";
+  strategy_id: string | null;
+  multiplier: number;
+  score: number;
+  tier: "SEED" | "LEARNING" | "PROVEN" | "ELITE" | "DEGRADING" | "SUSPENDED" | null;
+  risk_budget_pct: number;
+  source: "TIER" | "VALIDATION" | "HYBRID" | "FALLBACK" | "DEFAULT";
+}
+
+export function useStrategyAllocatorStatus(options?: Omit<UseQueryOptions<StrategyAllocatorSnapshot>, "queryKey" | "queryFn">) {
+  return useQuery({
+    queryKey: ["brain", "strategy", "allocator", "status"],
+    queryFn: () => apiFetch<StrategyAllocatorSnapshot>("/brain/strategy/allocator/status"),
+    refetchInterval: 10_000,
+    ...options,
+  });
+}
+
+export function useStartStrategyAllocator() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params?: { interval_ms?: number; run_immediate?: boolean }) =>
+      apiFetch<{
+        success: boolean;
+        message: string;
+        interval_ms: number;
+        snapshot: StrategyAllocatorSnapshot;
+      }>("/brain/strategy/allocator/start", {
+        method: "POST",
+        body: JSON.stringify(params ?? {}),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["brain", "strategy", "allocator"] });
+    },
+  });
+}
+
+export function useStopStrategyAllocator() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{
+        success: boolean;
+        message: string;
+        snapshot: StrategyAllocatorSnapshot;
+      }>("/brain/strategy/allocator/stop", {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["brain", "strategy", "allocator"] });
+    },
+  });
+}
+
+export function useRunStrategyAllocatorCycle() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{
+        ok: boolean;
+        snapshot: StrategyAllocatorSnapshot;
+      }>("/brain/strategy/allocator/run-once", {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["brain", "strategy", "allocator"] });
+    },
+  });
+}
+
+export function useStrategyAllocationLookup(
+  input: { setup_type?: string; regime?: string; symbol?: string },
+  options?: Omit<UseQueryOptions<StrategyAllocationMatch>, "queryKey" | "queryFn">,
+) {
+  const params = new URLSearchParams();
+  if (input.setup_type) params.set("setup_type", input.setup_type);
+  if (input.regime) params.set("regime", input.regime);
+  if (input.symbol) params.set("symbol", input.symbol);
+  const query = params.toString();
+  return useQuery({
+    queryKey: ["brain", "strategy", "allocator", "lookup", query],
+    queryFn: () => apiFetch<StrategyAllocationMatch>(`/brain/strategy/allocator/lookup${query ? `?${query}` : ""}`),
+    enabled: Boolean(input.setup_type || input.regime || input.symbol),
+    refetchInterval: 15_000,
+    ...options,
+  });
+}
+
 export function useAccuracy() {
   return useQuery({ queryKey: ["alpaca", "accuracy"], queryFn: () => apiFetch<any>("/alpaca/accuracy"), staleTime: 120_000 });
 }

@@ -50,6 +50,7 @@ import { checkAutoTradeGate, recordAutoTradeAttempt } from "./auto_trade_config"
 import { computePositionSize } from "./position_sizer";
 import { placeOrder, getAccount } from "./alpaca";
 import { logger as _logger } from "./logger";
+import { getStrategyAllocationForSignal } from "./strategy_allocator";
 
 const logger = _logger.child({ module: "scanner" });
 
@@ -329,11 +330,20 @@ async function scanSymbol(
               method:        "fixed_fractional",
             });
 
-            if (sizing.qty <= 0) throw new Error(`zero_qty (${sizing.capReason})`);
+            const allocation = getStrategyAllocationForSignal({
+              setup_type: setup,
+              regime,
+              symbol,
+            });
+
+            const qty = Math.max(0, Math.floor(sizing.qty * allocation.multiplier));
+            if (qty <= 0) {
+              throw new Error(`strategy_allocation_zero_qty (${allocation.match_level})`);
+            }
 
             const order = await placeOrder({
               symbol,
-              qty:               sizing.qty,
+              qty,
               side:              direction === "long" ? "buy" : "sell",
               type:              "market",
               time_in_force:     "gtc",
@@ -343,9 +353,28 @@ async function scanSymbol(
 
             orderId  = order.id;
             accepted = true;
-            logger.info({ symbol, direction, orderId, qty: sizing.qty }, "[auto_trade] Order placed");
+            logger.info(
+              {
+                symbol,
+                direction,
+                orderId,
+                qty,
+                allocationMultiplier: allocation.multiplier,
+                allocationStrategy: allocation.strategy_id,
+              },
+              "[auto_trade] Order placed",
+            );
 
-            publishAlert({ type: "auto_trade_executed", symbol, direction, orderId, quality: finalQuality, qty: sizing.qty });
+            publishAlert({
+              type: "auto_trade_executed",
+              symbol,
+              direction,
+              orderId,
+              quality: finalQuality,
+              qty,
+              allocation_multiplier: allocation.multiplier,
+              allocation_strategy: allocation.strategy_id,
+            });
           } catch (err: any) {
             rejectReason = err?.message ?? String(err);
             logger.warn({ symbol, err: rejectReason }, "[auto_trade] Execution failed");

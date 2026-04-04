@@ -416,6 +416,30 @@ async function main(): Promise<void> {
 
     results.push(
       await checkHttp(
+        "GET /api/brain/strategy/governor/status",
+        false,
+        `${runtimeBase}/api/brain/strategy/governor/status`,
+        (status, body) => ({
+          ok: status === 200 && typeof body?.running === "boolean",
+          detail: `status=${status}, running=${String(body?.running ?? "unknown")}, cycles=${String(body?.total_cycles ?? 0)}`,
+        }),
+      ),
+    );
+
+    results.push(
+      await checkHttp(
+        "GET /api/brain/strategy/allocator/status",
+        false,
+        `${runtimeBase}/api/brain/strategy/allocator/status`,
+        (status, body) => ({
+          ok: status === 200 && typeof body?.running === "boolean",
+          detail: `status=${status}, running=${String(body?.running ?? "unknown")}, allocations=${String(body?.allocation_count ?? 0)}`,
+        }),
+      ),
+    );
+
+    results.push(
+      await checkHttp(
         "GET /api/execution/risk-guard",
         false,
         `${runtimeBase}/api/execution/risk-guard`,
