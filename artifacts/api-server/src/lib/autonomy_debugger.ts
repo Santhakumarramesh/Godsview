@@ -27,6 +27,11 @@ import {
   shouldProductionWatchdogAutoStart,
   startProductionWatchdog,
 } from "./production_watchdog";
+import {
+  getExecutionSafetySupervisorSnapshot,
+  shouldExecutionSafetySupervisorAutoStart,
+  startExecutionSafetySupervisor,
+} from "./execution_safety_supervisor";
 import { isKillSwitchActive } from "./risk_engine";
 import { addOpsAlert } from "./ops_monitor";
 import { logger } from "./logger";
@@ -38,7 +43,8 @@ export type AutonomyDebugServiceName =
   | "strategy_governor"
   | "strategy_allocator"
   | "strategy_evolution"
-  | "production_watchdog";
+  | "production_watchdog"
+  | "execution_safety_supervisor";
 
 export interface AutonomyDebugServiceState {
   name: AutonomyDebugServiceName;
@@ -94,6 +100,7 @@ function buildServices(): AutonomyDebugServiceState[] {
   const allocator = getStrategyAllocatorSnapshot();
   const evolution = getStrategyEvolutionSnapshot();
   const watchdog = getProductionWatchdogSnapshot();
+  const executionSafety = getExecutionSafetySupervisorSnapshot();
 
   return [
     {
@@ -135,6 +142,16 @@ function buildServices(): AutonomyDebugServiceState[] {
       last_error: watchdog.last_error,
       last_cycle_at: watchdog.last_cycle_at,
       detail: `status=${watchdog.last_status ?? "UNKNOWN"},escalation=${watchdog.escalation_active ? "on" : "off"}`,
+    },
+    {
+      name: "execution_safety_supervisor",
+      expected: shouldExecutionSafetySupervisorAutoStart(),
+      running: executionSafety.running,
+      last_error: executionSafety.last_error,
+      last_cycle_at: executionSafety.last_cycle_at,
+      detail:
+        `blocked=${executionSafety.consecutive_blocked},warn=${executionSafety.consecutive_warn}` +
+        `,incident=${executionSafety.last_summary?.incident_level ?? "NORMAL"}`,
     },
   ];
 }
@@ -196,7 +213,12 @@ function buildIssues(input: {
     if (service.expected && !service.running) {
       issues.push({
         code: `${service.name.toUpperCase()}_STOPPED`,
-        severity: service.name === "production_watchdog" || service.name === "autonomy_supervisor" ? "critical" : "warn",
+        severity:
+          service.name === "production_watchdog" ||
+          service.name === "autonomy_supervisor" ||
+          service.name === "execution_safety_supervisor"
+            ? "critical"
+            : "warn",
         summary: `${service.name.replaceAll("_", " ")} is stopped`,
         detail: service.detail,
         recommendation: "Run debug auto-fix to start this service.",
@@ -297,6 +319,10 @@ async function startServiceForFix(service: AutonomyDebugServiceName): Promise<Au
       const result = await startStrategyEvolutionScheduler({ runImmediate: false });
       return { service, attempted: true, success: result.success, detail: result.message };
     }
+    if (service === "execution_safety_supervisor") {
+      const result = await startExecutionSafetySupervisor({ runImmediate: false });
+      return { service, attempted: true, success: result.success, detail: result.message };
+    }
     const result = await startProductionWatchdog({ runImmediate: false });
     return { service, attempted: true, success: result.success, detail: result.message };
   } catch (err) {
@@ -357,4 +383,3 @@ export function parseAutonomyDebugQuery(query: Record<string, unknown>): {
     forceReadiness: boolFromUnknown(query.refresh) || boolFromUnknown(query.force),
   };
 }
-

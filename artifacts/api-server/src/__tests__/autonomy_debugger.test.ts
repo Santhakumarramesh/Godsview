@@ -8,6 +8,7 @@ const runtime = vi.hoisted(() => ({
   allocatorRunning: false,
   evolutionRunning: false,
   watchdogRunning: false,
+  executionSafetyRunning: false,
 }));
 
 function resetRuntime(): void {
@@ -18,6 +19,7 @@ function resetRuntime(): void {
   runtime.allocatorRunning = false;
   runtime.evolutionRunning = false;
   runtime.watchdogRunning = false;
+  runtime.executionSafetyRunning = false;
 }
 
 vi.mock("../lib/deployment_readiness", () => ({
@@ -109,6 +111,30 @@ vi.mock("../lib/production_watchdog", () => ({
   }),
 }));
 
+vi.mock("../lib/execution_safety_supervisor", () => ({
+  shouldExecutionSafetySupervisorAutoStart: vi.fn(() => true),
+  getExecutionSafetySupervisorSnapshot: vi.fn(() => ({
+    running: runtime.executionSafetyRunning,
+    last_error: null,
+    last_cycle_at: null,
+    consecutive_warn: 0,
+    consecutive_blocked: 0,
+    last_summary: {
+      autonomy_action: "ALLOW",
+      market_action: "ALLOW",
+      portfolio_state: "NORMAL",
+      incident_level: "NORMAL",
+      incident_halt: false,
+      blocked_reasons: [],
+      warning_reasons: [],
+    },
+  })),
+  startExecutionSafetySupervisor: vi.fn(async () => {
+    runtime.executionSafetyRunning = true;
+    return { success: true, message: "Execution safety supervisor started", interval_ms: 45_000, heartbeat_symbol: "BTCUSD" };
+  }),
+}));
+
 vi.mock("../lib/risk_engine", () => ({
   isKillSwitchActive: vi.fn(() => runtime.killSwitch),
 }));
@@ -132,6 +158,7 @@ describe("autonomy_debugger", () => {
     expect(snapshot.issues.some((issue) => issue.code === "READINESS_NOT_READY")).toBe(true);
     expect(snapshot.issues.some((issue) => issue.code === "AUTONOMY_SUPERVISOR_STOPPED")).toBe(true);
     expect(snapshot.issues.some((issue) => issue.code === "PRODUCTION_WATCHDOG_STOPPED")).toBe(true);
+    expect(snapshot.issues.some((issue) => issue.code === "EXECUTION_SAFETY_SUPERVISOR_STOPPED")).toBe(true);
   });
 
   it("auto-fix starts expected stopped services", async () => {
@@ -139,13 +166,13 @@ describe("autonomy_debugger", () => {
     const mod = await import("../lib/autonomy_debugger");
     const result = await mod.runAutonomyDebugAutoFix({ forceReadiness: true });
 
-    expect(result.fixes.length).toBeGreaterThanOrEqual(5);
+    expect(result.fixes.length).toBeGreaterThanOrEqual(6);
     expect(result.fixes.every((fix) => fix.success)).toBe(true);
     expect(runtime.supervisorRunning).toBe(true);
     expect(runtime.governorRunning).toBe(true);
     expect(runtime.allocatorRunning).toBe(true);
     expect(runtime.evolutionRunning).toBe(true);
     expect(runtime.watchdogRunning).toBe(true);
+    expect(runtime.executionSafetyRunning).toBe(true);
   });
 });
-

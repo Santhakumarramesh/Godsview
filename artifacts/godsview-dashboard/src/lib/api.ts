@@ -1132,7 +1132,13 @@ export function useResetProductionWatchdog() {
 }
 
 export interface AutonomyDebugServiceState {
-  name: "autonomy_supervisor" | "strategy_governor" | "strategy_allocator" | "strategy_evolution" | "production_watchdog";
+  name:
+    | "autonomy_supervisor"
+    | "strategy_governor"
+    | "strategy_allocator"
+    | "strategy_evolution"
+    | "production_watchdog"
+    | "execution_safety_supervisor";
   expected: boolean;
   running: boolean;
   last_error: string | null;
@@ -1168,7 +1174,13 @@ export interface AutonomyDebugSnapshot {
 }
 
 export interface AutonomyDebugFixAction {
-  service: "autonomy_supervisor" | "strategy_governor" | "strategy_allocator" | "strategy_evolution" | "production_watchdog";
+  service:
+    | "autonomy_supervisor"
+    | "strategy_governor"
+    | "strategy_allocator"
+    | "strategy_evolution"
+    | "production_watchdog"
+    | "execution_safety_supervisor";
   attempted: boolean;
   success: boolean;
   detail: string;
