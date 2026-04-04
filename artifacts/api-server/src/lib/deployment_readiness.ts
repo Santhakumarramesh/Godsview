@@ -96,6 +96,12 @@ function boolFromQuery(value: unknown): boolean {
   return v === "1" || v === "true" || v === "yes" || v === "on";
 }
 
+function boolFromEnv(name: string, fallback: boolean): boolean {
+  const v = String(process.env[name] ?? "").trim().toLowerCase();
+  if (!v) return fallback;
+  return v === "1" || v === "true" || v === "yes" || v === "on";
+}
+
 function nowMs(): number {
   return Date.now();
 }
@@ -130,6 +136,10 @@ function summarize(checks: DeploymentReadinessCheck[]): DeploymentReadinessRepor
     failed_critical: failedCritical,
     failed_non_critical: failedNonCritical,
   };
+}
+
+function isKillSwitchCriticalGate(): boolean {
+  return boolFromEnv("DEPLOYMENT_READINESS_KILL_SWITCH_CRITICAL", true);
 }
 
 function buildArtifactChecks(checks: DeploymentReadinessCheck[]): void {
@@ -285,14 +295,15 @@ function runtimeChecks(checks: DeploymentReadinessCheck[]): {
 } {
   const startedKillSwitch = nowMs();
   const killSwitch = isKillSwitchActive();
+  const killSwitchCritical = isKillSwitchCriticalGate();
   timedCheck(
     checks,
     {
       name: "Kill switch is inactive",
       category: "runtime",
       passed: !killSwitch,
-      critical: false,
-      detail: killSwitch ? "Kill switch active" : "Inactive",
+      critical: killSwitchCritical,
+      detail: killSwitch ? `Kill switch active (critical_gate=${killSwitchCritical})` : "Inactive",
     },
     startedKillSwitch,
   );

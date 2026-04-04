@@ -3,11 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const runtime = vi.hoisted(() => ({
   executionSafetyRunning: true,
   executionSafetyLastError: null as string | null,
+  killSwitchActive: false,
 }));
 
 function resetRuntime(): void {
   runtime.executionSafetyRunning = true;
   runtime.executionSafetyLastError = null;
+  runtime.killSwitchActive = false;
 }
 
 vi.mock("node:fs", () => ({
@@ -45,7 +47,7 @@ vi.mock("../lib/portfolio_risk_guard", () => ({
 }));
 
 vi.mock("../lib/risk_engine", () => ({
-  isKillSwitchActive: vi.fn(() => false),
+  isKillSwitchActive: vi.fn(() => runtime.killSwitchActive),
   getRiskEngineSnapshot: vi.fn(() => ({
     config: {
       maxRiskPerTradePct: 0.01,
@@ -166,6 +168,7 @@ describe("deployment_readiness execution safety integration", () => {
   beforeEach(() => {
     vi.resetModules();
     resetRuntime();
+    delete process.env.DEPLOYMENT_READINESS_KILL_SWITCH_CRITICAL;
   });
 
   it("includes execution safety supervisor health in readiness payload", async () => {
@@ -200,5 +203,39 @@ describe("deployment_readiness execution safety integration", () => {
     expect(report.autonomy.execution_safety_supervisor_running).toBe(false);
     expect(report.autonomy.execution_safety_supervisor_last_error).toBe("stopped");
   });
-});
 
+  it("fails readiness as NOT_READY when kill switch is active with critical gate enabled", async () => {
+    runtime.killSwitchActive = true;
+    process.env.DEPLOYMENT_READINESS_KILL_SWITCH_CRITICAL = "true";
+
+    const mod = await import("../lib/deployment_readiness");
+    mod.resetDeploymentReadinessCache();
+    const report = await mod.getDeploymentReadinessReport({ forceRefresh: true });
+
+    const check = report.checks.find((item) => item.name === "Kill switch is inactive");
+    expect(check).toBeDefined();
+    expect(check?.critical).toBe(true);
+    expect(check?.passed).toBe(false);
+    expect(report.status).toBe("NOT_READY");
+    expect(report.summary.failed_critical).toBeGreaterThanOrEqual(1);
+    expect(report.risk.kill_switch_active).toBe(true);
+  });
+
+  it("degrades readiness (not critical) when kill switch gate is configured non-critical", async () => {
+    runtime.killSwitchActive = true;
+    process.env.DEPLOYMENT_READINESS_KILL_SWITCH_CRITICAL = "false";
+
+    const mod = await import("../lib/deployment_readiness");
+    mod.resetDeploymentReadinessCache();
+    const report = await mod.getDeploymentReadinessReport({ forceRefresh: true });
+
+    const check = report.checks.find((item) => item.name === "Kill switch is inactive");
+    expect(check).toBeDefined();
+    expect(check?.critical).toBe(false);
+    expect(check?.passed).toBe(false);
+    expect(report.status).toBe("DEGRADED");
+    expect(report.summary.failed_critical).toBe(0);
+    expect(report.summary.failed_non_critical).toBeGreaterThanOrEqual(1);
+    expect(report.risk.kill_switch_active).toBe(true);
+  });
+});
