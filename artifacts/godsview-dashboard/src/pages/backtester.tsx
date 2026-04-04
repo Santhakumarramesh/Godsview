@@ -1,9 +1,19 @@
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   Area, AreaChart, CartesianGrid, ResponsiveContainer,
   Tooltip, XAxis, YAxis, Legend, Bar, BarChart,
 } from "recharts";
+import {
+  useContinuousBacktestStatus,
+  useStartContinuousBacktest,
+  useStopContinuousBacktest,
+  useStrategyLeaderboard,
+  useRunWalkForwardBacktest,
+  useOptimizeStrategy,
+  useStrategyTierRegistry,
+  type WalkForwardResult,
+} from "@/lib/api";
 
 // ── Design Tokens ──────────────────────────────────────────────────────────
 const C = {
@@ -79,6 +89,21 @@ type BacktestResult = {
   has_real_data: boolean;
   cached?: boolean;
 };
+type StrategyOptimizationResult = {
+  strategy_id: string;
+  evaluated_candidates: number;
+  best_config: WalkForwardResult["config"];
+  best_score: number;
+  top_candidates: Array<{
+    score: number;
+    config: WalkForwardResult["config"];
+    aggregate_oos: WalkForwardResult["aggregate_oos"];
+    stability: WalkForwardResult["stability"];
+    promotion: WalkForwardResult["promotion"];
+  }>;
+  applied_result: WalkForwardResult;
+  generated_at: string;
+};
 type TFOption = { value: string; label: string };
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -117,6 +142,11 @@ export default function BacktesterPage() {
   const [initialEquity, setInitialEquity] = useState(10_000);
   const [result, setResult] = useState<BacktestResult | null>(null);
   const [activeTab, setActiveTab] = useState<"chart" | "trades" | "setups">("chart");
+  const [strategySetup, setStrategySetup] = useState("sweep_reclaim");
+  const [strategyRegime, setStrategyRegime] = useState("*");
+  const [strategySymbol, setStrategySymbol] = useState("BTCUSD");
+  const [walkForwardResult, setWalkForwardResult] = useState<WalkForwardResult | null>(null);
+  const [optimizationResult, setOptimizationResult] = useState<StrategyOptimizationResult | null>(null);
 
   // Load available timeframes
   const { data: tfData } = useQuery({
@@ -130,6 +160,14 @@ export default function BacktesterPage() {
     { value: "2Hour", label: "2 Hour" }, { value: "4Hour", label: "4 Hour" },
     { value: "1Day", label: "Daily" },
   ];
+
+  const { data: continuousStatus } = useContinuousBacktestStatus();
+  const { data: leaderboardData } = useStrategyLeaderboard();
+  const { data: tierRegistry } = useStrategyTierRegistry();
+  const startContinuousMutation = useStartContinuousBacktest();
+  const stopContinuousMutation = useStopContinuousBacktest();
+  const runWalkForwardMutation = useRunWalkForwardBacktest();
+  const optimizeMutation = useOptimizeStrategy();
 
   const runMutation = useMutation({
     mutationFn: async () => {
@@ -149,6 +187,17 @@ export default function BacktesterPage() {
   });
 
   const effectiveSymbol = customSymbol.trim().toUpperCase() || symbol;
+  const strategyId = `${strategySetup.trim() || "*"}::${strategyRegime.trim() || "*"}::${strategySymbol.trim().toUpperCase() || "*"}`;
+  const currentTier =
+    walkForwardResult?.promotion?.next_tier
+    ?? tierRegistry?.tiers?.find((t) => t.strategy_id === strategyId)?.tier
+    ?? "SEED";
+  const tierColor =
+    currentTier === "ELITE" ? C.primary :
+    currentTier === "PROVEN" ? "#67e8f9" :
+    currentTier === "LEARNING" ? C.gold :
+    currentTier === "DEGRADING" ? "#fb923c" :
+    currentTier === "SUSPENDED" ? C.tertiary : C.muted;
 
   return (
     <div style={{ background: C.bg, minHeight: "100vh", padding: "24px", fontFamily: "Space Grotesk, sans-serif" }}>
@@ -272,6 +321,328 @@ export default function BacktesterPage() {
             ⚠ {String(runMutation.error)}
           </div>
         )}
+      </div>
+
+      {/* Strategy Evolution Control Plane */}
+      <div className="rounded-lg p-5 mb-6" style={{ background: C.card, border: `1px solid ${C.border}` }}>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <div style={{ fontFamily: "Bebas Neue", fontSize: "16px", color: "#fff", letterSpacing: "0.06em" }}>
+              STRATEGY EVOLUTION
+            </div>
+            <div style={{ fontSize: "10px", color: C.outline }}>
+              Walk-forward validation · auto-optimization · tier promotion
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span style={{ fontSize: "10px", color: C.outline }}>Tier:</span>
+            <span style={{ fontSize: "10px", color: tierColor, fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
+              {currentTier}
+            </span>
+          </div>
+        </div>
+
+        <div className="grid gap-4 mb-4" style={{ gridTemplateColumns: "1fr 1fr 1fr auto" }}>
+          <div>
+            <Label>Setup Filter</Label>
+            <input
+              value={strategySetup}
+              onChange={(e) => setStrategySetup(e.target.value)}
+              placeholder="sweep_reclaim or *"
+              style={{
+                marginTop: 6,
+                background: C.cardHigh,
+                border: `1px solid ${C.outlineVar}`,
+                borderRadius: 6,
+                padding: "6px 10px",
+                fontSize: "12px",
+                color: "#fff",
+                outline: "none",
+                fontFamily: "JetBrains Mono, monospace",
+                width: "100%",
+              }}
+            />
+          </div>
+          <div>
+            <Label>Regime Filter</Label>
+            <input
+              value={strategyRegime}
+              onChange={(e) => setStrategyRegime(e.target.value)}
+              placeholder="TRENDING or *"
+              style={{
+                marginTop: 6,
+                background: C.cardHigh,
+                border: `1px solid ${C.outlineVar}`,
+                borderRadius: 6,
+                padding: "6px 10px",
+                fontSize: "12px",
+                color: "#fff",
+                outline: "none",
+                fontFamily: "JetBrains Mono, monospace",
+                width: "100%",
+              }}
+            />
+          </div>
+          <div>
+            <Label>Symbol Filter</Label>
+            <input
+              value={strategySymbol}
+              onChange={(e) => setStrategySymbol(e.target.value.toUpperCase())}
+              placeholder="BTCUSD or *"
+              style={{
+                marginTop: 6,
+                background: C.cardHigh,
+                border: `1px solid ${C.outlineVar}`,
+                borderRadius: 6,
+                padding: "6px 10px",
+                fontSize: "12px",
+                color: "#fff",
+                outline: "none",
+                fontFamily: "JetBrains Mono, monospace",
+                width: "100%",
+              }}
+            />
+          </div>
+          <div className="flex items-end gap-2">
+            <button
+              onClick={() => {
+                runWalkForwardMutation.mutate(
+                  {
+                    strategy_id: strategyId,
+                    lookback_days: Math.max(120, lookback),
+                    train_days: 60,
+                    test_days: 20,
+                    step_days: 20,
+                    min_train_samples: 24,
+                    min_test_samples: 8,
+                    min_win_rate: 0.56,
+                    min_profit_factor: 1.15,
+                    max_drawdown_pct: 18,
+                  },
+                  { onSuccess: (data) => setWalkForwardResult(data) },
+                );
+              }}
+              disabled={runWalkForwardMutation.isPending}
+              style={{
+                background: runWalkForwardMutation.isPending ? C.outlineVar : C.secondary,
+                color: "#0e0e0f",
+                fontWeight: 700,
+                fontSize: "11px",
+                fontFamily: "Space Grotesk",
+                padding: "10px 14px",
+                borderRadius: 8,
+                border: "none",
+                cursor: runWalkForwardMutation.isPending ? "not-allowed" : "pointer",
+              }}
+            >
+              {runWalkForwardMutation.isPending ? "RUNNING..." : "RUN WF"}
+            </button>
+            <button
+              onClick={() => {
+                optimizeMutation.mutate(
+                  {
+                    strategy_id: strategyId,
+                    lookback_days: Math.max(180, lookback),
+                    min_train_samples: 24,
+                    min_test_samples: 8,
+                  },
+                  {
+                    onSuccess: (data) => {
+                      const typed = data as StrategyOptimizationResult;
+                      setOptimizationResult(typed);
+                      setWalkForwardResult(typed.applied_result);
+                    },
+                  },
+                );
+              }}
+              disabled={optimizeMutation.isPending}
+              style={{
+                background: optimizeMutation.isPending ? C.outlineVar : C.primary,
+                color: "#0e0e0f",
+                fontWeight: 700,
+                fontSize: "11px",
+                fontFamily: "Space Grotesk",
+                padding: "10px 14px",
+                borderRadius: 8,
+                border: "none",
+                cursor: optimizeMutation.isPending ? "not-allowed" : "pointer",
+              }}
+            >
+              {optimizeMutation.isPending ? "OPTIMIZING..." : "AUTO OPTIMIZE"}
+            </button>
+          </div>
+        </div>
+
+        <div style={{ fontSize: "10px", color: C.outline, fontFamily: "JetBrains Mono, monospace", marginBottom: "10px" }}>
+          Strategy ID: {strategyId}
+        </div>
+
+        <div className="grid gap-3 mb-4" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
+          <StatCard
+            label="Continuous"
+            value={continuousStatus?.running ? "ACTIVE" : "STOPPED"}
+            color={continuousStatus?.running ? C.primary : C.tertiary}
+            sub={continuousStatus?.last_result_timestamp ? new Date(continuousStatus.last_result_timestamp).toLocaleTimeString() : "no cycle yet"}
+          />
+          <StatCard
+            label="Strategies Tested"
+            value={continuousStatus?.strategies_tested ?? 0}
+            color={C.secondary}
+            sub={continuousStatus?.message ?? "status unavailable"}
+          />
+          <StatCard
+            label="WF Pass Rate"
+            value={walkForwardResult ? `${fmt((walkForwardResult.aggregate_oos.pass_rate ?? 0) * 100, 1)}%` : "—"}
+            color={walkForwardResult && walkForwardResult.aggregate_oos.pass_rate >= 0.6 ? C.primary : C.gold}
+            sub={walkForwardResult ? `${walkForwardResult.aggregate_oos.windows_passed}/${walkForwardResult.aggregate_oos.windows_total} windows` : "run walk-forward"}
+          />
+          <StatCard
+            label="Best Score"
+            value={optimizationResult ? fmt(optimizationResult.best_score, 3) : "—"}
+            color={optimizationResult ? C.primary : C.outline}
+            sub={optimizationResult ? `${optimizationResult.evaluated_candidates} candidates` : "run optimization"}
+          />
+        </div>
+
+        <div className="flex items-center gap-2 mb-4">
+          <button
+            onClick={() => startContinuousMutation.mutate()}
+            disabled={startContinuousMutation.isPending}
+            style={{
+              background: startContinuousMutation.isPending ? C.outlineVar : "rgba(156,255,147,0.22)",
+              color: C.primary,
+              border: `1px solid ${C.primary}55`,
+              borderRadius: 8,
+              padding: "7px 12px",
+              fontSize: "10px",
+              fontFamily: "Space Grotesk",
+              cursor: startContinuousMutation.isPending ? "not-allowed" : "pointer",
+            }}
+          >
+            {startContinuousMutation.isPending ? "STARTING..." : "START CONTINUOUS"}
+          </button>
+          <button
+            onClick={() => stopContinuousMutation.mutate()}
+            disabled={stopContinuousMutation.isPending}
+            style={{
+              background: stopContinuousMutation.isPending ? C.outlineVar : "rgba(255,113,98,0.15)",
+              color: C.tertiary,
+              border: `1px solid ${C.tertiary}55`,
+              borderRadius: 8,
+              padding: "7px 12px",
+              fontSize: "10px",
+              fontFamily: "Space Grotesk",
+              cursor: stopContinuousMutation.isPending ? "not-allowed" : "pointer",
+            }}
+          >
+            {stopContinuousMutation.isPending ? "STOPPING..." : "STOP CONTINUOUS"}
+          </button>
+          {(runWalkForwardMutation.error || optimizeMutation.error) && (
+            <span style={{ fontSize: "10px", color: C.tertiary }}>
+              {String(runWalkForwardMutation.error ?? optimizeMutation.error)}
+            </span>
+          )}
+        </div>
+
+        {walkForwardResult && (
+          <div className="grid gap-3 mb-4" style={{ gridTemplateColumns: "repeat(5, 1fr)" }}>
+            <StatCard
+              label="OOS Win"
+              value={`${fmt(walkForwardResult.aggregate_oos.win_rate * 100, 1)}%`}
+              color={walkForwardResult.aggregate_oos.win_rate >= 0.56 ? C.primary : C.tertiary}
+            />
+            <StatCard
+              label="Profit Factor"
+              value={fmt(walkForwardResult.aggregate_oos.profit_factor, 2)}
+              color={walkForwardResult.aggregate_oos.profit_factor >= 1.15 ? C.primary : C.tertiary}
+            />
+            <StatCard
+              label="Max DD"
+              value={`${fmt(walkForwardResult.aggregate_oos.max_drawdown_pct, 1)}%`}
+              color={walkForwardResult.aggregate_oos.max_drawdown_pct <= walkForwardResult.config.max_drawdown_pct ? C.primary : C.tertiary}
+            />
+            <StatCard
+              label="Stability"
+              value={`${fmt(walkForwardResult.stability.score * 100, 1)}%`}
+              color={walkForwardResult.stability.score >= 0.55 ? C.primary : C.gold}
+            />
+            <StatCard
+              label="Action"
+              value={walkForwardResult.promotion.action}
+              color={tierColor}
+              sub={walkForwardResult.promotion.next_tier}
+            />
+          </div>
+        )}
+
+        {optimizationResult && optimizationResult.top_candidates.length > 0 && (
+          <div className="mb-4">
+            <Label>Top Optimizer Candidates</Label>
+            <div className="mt-2 rounded-lg overflow-hidden" style={{ border: `1px solid ${C.border}` }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px" }}>
+                <thead>
+                  <tr style={{ borderBottom: `1px solid ${C.outlineVar}` }}>
+                    {["Rank", "Score", "Pass", "WR", "PF", "DD", "Tier"].map((h) => (
+                      <th key={h} style={{ padding: "7px 10px", textAlign: "left", color: C.outline }}>
+                        <Label>{h}</Label>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {optimizationResult.top_candidates.slice(0, 5).map((candidate, idx) => (
+                    <tr key={`${candidate.score}-${idx}`} style={{ borderBottom: `1px solid ${C.outlineVar}22` }}>
+                      <td style={{ padding: "7px 10px", color: C.muted }}>#{idx + 1}</td>
+                      <td style={{ padding: "7px 10px", color: C.primary, fontFamily: "JetBrains Mono, monospace" }}>{fmt(candidate.score, 3)}</td>
+                      <td style={{ padding: "7px 10px", color: C.muted }}>{fmt(candidate.aggregate_oos.pass_rate * 100, 1)}%</td>
+                      <td style={{ padding: "7px 10px", color: C.muted }}>{fmt(candidate.aggregate_oos.win_rate * 100, 1)}%</td>
+                      <td style={{ padding: "7px 10px", color: C.muted }}>{fmt(candidate.aggregate_oos.profit_factor, 2)}</td>
+                      <td style={{ padding: "7px 10px", color: C.muted }}>{fmt(candidate.aggregate_oos.max_drawdown_pct, 1)}%</td>
+                      <td style={{ padding: "7px 10px", color: C.secondary }}>{candidate.promotion.next_tier}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        <div>
+          <Label>Strategy Leaderboard</Label>
+          <div className="mt-2 rounded-lg overflow-hidden" style={{ border: `1px solid ${C.border}` }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px" }}>
+              <thead>
+                <tr style={{ borderBottom: `1px solid ${C.outlineVar}` }}>
+                  {["Strategy", "Stars", "Tier", "Win", "PF", "Sharpe", "Consistency"].map((h) => (
+                    <th key={h} style={{ padding: "7px 10px", textAlign: "left", color: C.outline }}>
+                      <Label>{h}</Label>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {(leaderboardData?.strategies ?? []).slice(0, 10).map((entry, idx) => (
+                  <tr key={`${entry.strategy_name}-${idx}`} style={{ borderBottom: `1px solid ${C.outlineVar}22` }}>
+                    <td style={{ padding: "7px 10px", color: "#fff", fontFamily: "JetBrains Mono, monospace" }}>{entry.strategy_name}</td>
+                    <td style={{ padding: "7px 10px", color: C.gold }}>{entry.stars}</td>
+                    <td style={{ padding: "7px 10px", color: entry.tier ? C.secondary : C.outline }}>{entry.tier ?? "—"}</td>
+                    <td style={{ padding: "7px 10px", color: entry.win_rate >= 0.56 ? C.primary : C.tertiary }}>{fmt(entry.win_rate * 100, 1)}%</td>
+                    <td style={{ padding: "7px 10px", color: entry.profit_factor >= 1.15 ? C.primary : C.tertiary }}>{fmt(entry.profit_factor, 2)}</td>
+                    <td style={{ padding: "7px 10px", color: C.muted }}>{fmt(entry.sharpe_ratio, 2)}</td>
+                    <td style={{ padding: "7px 10px", color: C.muted }}>{fmt(entry.consistency_score * 100, 1)}%</td>
+                  </tr>
+                ))}
+                {(leaderboardData?.strategies?.length ?? 0) === 0 && (
+                  <tr>
+                    <td colSpan={7} style={{ padding: "10px", color: C.outline, textAlign: "center" }}>
+                      No leaderboard entries yet. Start continuous backtesting to populate.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       {/* Results */}

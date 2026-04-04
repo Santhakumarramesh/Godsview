@@ -289,6 +289,102 @@ export function useOptimizeStrategy() {
   });
 }
 
+export interface ContinuousBacktestStatus {
+  running: boolean;
+  message: string;
+  last_result_timestamp?: string;
+  strategies_tested: number;
+}
+
+export interface StrategyLeaderboardEntry {
+  strategy_name: string;
+  setup_type: string;
+  regime: string;
+  tier?: StrategyTier;
+  stars: number;
+  win_rate: number;
+  profit_factor: number;
+  sharpe_ratio: number;
+  total_tests: number;
+  consistency_score: number;
+  last_tested: string;
+}
+
+export function useContinuousBacktestStatus(options?: Omit<UseQueryOptions<ContinuousBacktestStatus>, "queryKey" | "queryFn">) {
+  return useQuery({
+    queryKey: ["backtest", "continuous", "status"],
+    queryFn: () => apiFetch<ContinuousBacktestStatus>("/backtest/continuous/status"),
+    refetchInterval: 15_000,
+    ...options,
+  });
+}
+
+export function useStrategyLeaderboard(options?: Omit<UseQueryOptions<{ count: number; strategies: StrategyLeaderboardEntry[] }>, "queryKey" | "queryFn">) {
+  return useQuery({
+    queryKey: ["backtest", "strategy", "leaderboard"],
+    queryFn: () => apiFetch<{ count: number; strategies: StrategyLeaderboardEntry[] }>("/backtest/strategy-leaderboard"),
+    refetchInterval: 30_000,
+    ...options,
+  });
+}
+
+export function useStartContinuousBacktest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch<{ success: boolean; message: string }>("/backtest/continuous/start", { method: "POST" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["backtest", "continuous"] });
+      qc.invalidateQueries({ queryKey: ["backtest", "strategy", "leaderboard"] });
+    },
+  });
+}
+
+export function useStopContinuousBacktest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch<{ success: boolean; message: string }>("/backtest/continuous/stop", { method: "POST" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["backtest", "continuous"] });
+    },
+  });
+}
+
+export function useRunWalkForwardBacktest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: {
+      strategy_id: string;
+      lookback_days?: number;
+      train_days?: number;
+      test_days?: number;
+      step_days?: number;
+      min_train_samples?: number;
+      min_test_samples?: number;
+      min_win_rate?: number;
+      min_profit_factor?: number;
+      max_drawdown_pct?: number;
+    }) =>
+      apiFetch<WalkForwardResult>(`/backtest/walk-forward/${encodeURIComponent(params.strategy_id)}`, {
+        method: "POST",
+        body: JSON.stringify({
+          lookback_days: params.lookback_days,
+          train_days: params.train_days,
+          test_days: params.test_days,
+          step_days: params.step_days,
+          min_train_samples: params.min_train_samples,
+          min_test_samples: params.min_test_samples,
+          min_win_rate: params.min_win_rate,
+          min_profit_factor: params.min_profit_factor,
+          max_drawdown_pct: params.max_drawdown_pct,
+        }),
+      }),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ["backtest", "walk-forward", variables.strategy_id] });
+      qc.invalidateQueries({ queryKey: ["backtest", "walk-forward", "tiers"] });
+    },
+  });
+}
+
 export interface PaperValidationStatus {
   running: boolean;
   interval_ms: number;
