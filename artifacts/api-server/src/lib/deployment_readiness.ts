@@ -13,6 +13,7 @@ import { getStrategyGovernorSnapshot } from "./strategy_governor";
 import { getStrategyAllocatorSnapshot } from "./strategy_allocator";
 import { getStrategyEvolutionSnapshot } from "./strategy_evolution_scheduler";
 import { getProductionWatchdogSnapshot } from "./production_watchdog";
+import { getExecutionSafetySupervisorSnapshot } from "./execution_safety_supervisor";
 import { getExecutionIncidentSnapshot } from "./execution_incident_guard";
 import { getExecutionMarketGuardSnapshot } from "./execution_market_guard";
 import { getExecutionAutonomyGuardSnapshot } from "./execution_autonomy_guard";
@@ -75,6 +76,8 @@ export interface DeploymentReadinessReport {
     strategy_evolution_last_error: string | null;
     production_watchdog_running: boolean;
     production_watchdog_last_error: string | null;
+    execution_safety_supervisor_running: boolean;
+    execution_safety_supervisor_last_error: string | null;
   };
   config: {
     system_mode: string;
@@ -269,6 +272,8 @@ function runtimeChecks(checks: DeploymentReadinessCheck[]): {
   strategyEvolutionLastError: string | null;
   productionWatchdogRunning: boolean;
   productionWatchdogLastError: string | null;
+  executionSafetySupervisorRunning: boolean;
+  executionSafetySupervisorLastError: string | null;
   incidentGuardLevel: string;
   incidentGuardHalt: boolean;
   autonomyGuardLevel: string;
@@ -481,6 +486,22 @@ function runtimeChecks(checks: DeploymentReadinessCheck[]): {
     startedWatchdog,
   );
 
+  const executionSafety = getExecutionSafetySupervisorSnapshot();
+  const startedExecutionSafety = nowMs();
+  timedCheck(
+    checks,
+    {
+      name: "Execution safety supervisor running",
+      category: "runtime",
+      passed: executionSafety.running,
+      critical: true,
+      detail:
+        `running=${executionSafety.running},blocked=${executionSafety.consecutive_blocked}` +
+        `,warn=${executionSafety.consecutive_warn},last_error=${executionSafety.last_error ?? "none"}`,
+    },
+    startedExecutionSafety,
+  );
+
   return {
     killSwitch,
     breakerLevel: breaker.level,
@@ -498,6 +519,8 @@ function runtimeChecks(checks: DeploymentReadinessCheck[]): {
     strategyEvolutionLastError: evolution.last_error,
     productionWatchdogRunning: watchdog.running,
     productionWatchdogLastError: watchdog.last_error,
+    executionSafetySupervisorRunning: executionSafety.running,
+    executionSafetySupervisorLastError: executionSafety.last_error,
     incidentGuardLevel: incidentGuard.level,
     incidentGuardHalt: incidentGuard.halt_active,
     autonomyGuardLevel: autonomyGuard.level,
@@ -625,6 +648,8 @@ export async function getDeploymentReadinessReport(options?: {
       strategy_evolution_last_error: runtime.strategyEvolutionLastError,
       production_watchdog_running: runtime.productionWatchdogRunning,
       production_watchdog_last_error: runtime.productionWatchdogLastError,
+      execution_safety_supervisor_running: runtime.executionSafetySupervisorRunning,
+      execution_safety_supervisor_last_error: runtime.executionSafetySupervisorLastError,
     },
     config: {
       system_mode: runtimeConfig.systemMode,
