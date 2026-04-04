@@ -461,6 +461,18 @@ async function main(): Promise<void> {
         }),
       ),
     );
+
+    results.push(
+      await checkHttp(
+        "GET /api/execution/market-guard",
+        false,
+        `${runtimeBase}/api/execution/market-guard`,
+        (status, body) => ({
+          ok: status === 200 && typeof body?.halt_active === "boolean",
+          detail: `status=${status}, level=${String(body?.level ?? "unknown")}, halt=${String(body?.halt_active ?? "unknown")}`,
+        }),
+      ),
+    );
   } else {
     results.push({
       name: "Runtime probes",

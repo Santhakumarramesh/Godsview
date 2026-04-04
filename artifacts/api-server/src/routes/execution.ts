@@ -29,6 +29,11 @@ import {
   recordExecutionSlippage,
   resetExecutionIncidentGuard,
 } from "../lib/execution_incident_guard";
+import {
+  evaluateExecutionMarketGuard,
+  getExecutionMarketGuardSnapshot,
+  resetExecutionMarketGuard,
+} from "../lib/execution_market_guard";
 
 export const executionRouter = Router();
 
@@ -64,6 +69,7 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
         error: "execution_incident_halt",
         message: `Execution halted by incident guard (${incidentGate.reason ?? "halt"})`,
         incident_guard: incidentGate.snapshot,
+        market_guard: getExecutionMarketGuardSnapshot(),
       });
       return;
     }
@@ -74,6 +80,8 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
         error: "cooldown_active",
         message: "Trading paused: consecutive loss cooldown active",
         breaker: getBreakerSnapshot(),
+        incident_guard: getExecutionIncidentSnapshot(),
+        market_guard: getExecutionMarketGuardSnapshot(),
       });
       return;
     }
@@ -84,6 +92,8 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
         error: "breaker_halt",
         message: "Trading halted by drawdown circuit breaker",
         breaker: getBreakerSnapshot(),
+        incident_guard: getExecutionIncidentSnapshot(),
+        market_guard: getExecutionMarketGuardSnapshot(),
       });
       return;
     }
@@ -97,6 +107,30 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
         message: `Execution blocked by portfolio risk guard (${portfolioRiskGate.action})`,
         action: portfolioRiskGate.action,
         reasons: portfolioRiskGate.reasons,
+        portfolio_risk: portfolioRiskGate.snapshot,
+        incident_guard: getExecutionIncidentSnapshot(),
+        market_guard: getExecutionMarketGuardSnapshot(),
+      });
+      return;
+    }
+
+    // Phase 19: Market microstructure quality guard (spread/liquidity/freshness/volatility)
+    const marketGuard = await evaluateExecutionMarketGuard({ symbol });
+    if (!marketGuard.allowed) {
+      const isHalt = marketGuard.snapshot.halt_active || marketGuard.level === "HALT";
+      recordExecutionAttempt({
+        symbol,
+        outcome: "BLOCKED",
+        detail: `market_guard_block:${marketGuard.action}`,
+        reason: marketGuard.reasons[0],
+      });
+      res.status(isHalt ? 423 : 429).json({
+        error: "market_quality_blocked",
+        message: `Execution blocked by market guard (${marketGuard.reasons.join(", ") || marketGuard.action})`,
+        action: marketGuard.action,
+        reasons: marketGuard.reasons,
+        market_guard: marketGuard.snapshot,
+        incident_guard: getExecutionIncidentSnapshot(),
         portfolio_risk: portfolioRiskGate.snapshot,
       });
       return;
@@ -152,6 +186,7 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
         meta: decision.meta,
         portfolio_risk: portfolioRiskGate.snapshot,
         incident_guard: getExecutionIncidentSnapshot(),
+        market_guard: marketGuard.snapshot,
       });
       return;
     }
@@ -247,6 +282,7 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
       adjusted_qty: adjustedQty,
       original_qty: decision.quantity,
       incident_guard: getExecutionIncidentSnapshot(),
+      market_guard: marketGuard.snapshot,
     });
   } catch (err) {
     const symbol = String(req.body?.symbol ?? "UNKNOWN");
@@ -260,6 +296,7 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
       error: "execution_error",
       message: String(err),
       incident_guard: getExecutionIncidentSnapshot(),
+      market_guard: getExecutionMarketGuardSnapshot(),
     });
   }
 });
@@ -347,6 +384,7 @@ executionRouter.get("/execution-status", async (_req: Request, res: Response) =>
     const lastLiquidation = getLastLiquidation();
     const portfolioRisk = await evaluatePortfolioRisk({ forceRefresh: false });
     const incidentGuard = getExecutionIncidentSnapshot();
+    const marketGuard = getExecutionMarketGuardSnapshot();
 
     res.json({
       mode,
@@ -368,6 +406,7 @@ executionRouter.get("/execution-status", async (_req: Request, res: Response) =>
       risk,
       portfolio_risk: portfolioRisk,
       incident_guard: incidentGuard,
+      market_guard: marketGuard,
       last_liquidation: lastLiquidation,
     });
   } catch (err) {
@@ -421,6 +460,33 @@ executionRouter.get("/incident-guard", (_req: Request, res: Response) => {
   }
 });
 
+// ── GET /market-guard — Market quality safety state ─────────────
+
+executionRouter.get("/market-guard", async (req: Request, res: Response) => {
+  try {
+    const symbol = String(req.query.symbol ?? "").trim().toUpperCase();
+    const refresh = ["1", "true", "yes", "on"].includes(String(req.query.refresh ?? "").toLowerCase());
+    if (symbol || refresh) {
+      const targetSymbol = symbol || "BTCUSD";
+      const decision = await evaluateExecutionMarketGuard({ symbol: targetSymbol });
+      res.json({
+        ...decision.snapshot,
+        decision: {
+          symbol: targetSymbol,
+          allowed: decision.allowed,
+          action: decision.action,
+          reasons: decision.reasons,
+          level: decision.level,
+        },
+      });
+      return;
+    }
+    res.json(getExecutionMarketGuardSnapshot());
+  } catch (err) {
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
 // ── POST /incident-guard/reset — Manual incident guard reset ─────
 
 executionRouter.post("/incident-guard/reset", requireOperator, (req: Request, res: Response) => {
@@ -430,6 +496,24 @@ executionRouter.post("/incident-guard/reset", requireOperator, (req: Request, re
         .trim()
         .toLowerCase();
     const snapshot = resetExecutionIncidentGuard({
+      reason: String(req.body?.reason ?? "manual_reset"),
+      clearKillSwitch: clearKillSwitch === "1" || clearKillSwitch === "true" || clearKillSwitch === "yes" || clearKillSwitch === "on",
+    });
+    res.json(snapshot);
+  } catch (err) {
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+// ── POST /market-guard/reset — Manual market guard reset ─────────
+
+executionRouter.post("/market-guard/reset", requireOperator, (req: Request, res: Response) => {
+  try {
+    const clearKillSwitch =
+      String(req.body?.clear_kill_switch ?? "")
+        .trim()
+        .toLowerCase();
+    const snapshot = resetExecutionMarketGuard({
       reason: String(req.body?.reason ?? "manual_reset"),
       clearKillSwitch: clearKillSwitch === "1" || clearKillSwitch === "true" || clearKillSwitch === "yes" || clearKillSwitch === "on",
     });

@@ -58,6 +58,23 @@ type ExecutionStatus = {
     window_slippage_spikes: number;
     last_halt_reason: string | null;
   };
+  market_guard: {
+    level: "NORMAL" | "WATCH" | "HALT";
+    halt_active: boolean;
+    consecutive_critical: number;
+    window_critical: number;
+    window_warn: number;
+    last_halt_reason: string | null;
+    last_evaluation: {
+      symbol: string | null;
+      metrics: {
+        spread_bps: number | null;
+        top_book_notional_usd: number | null;
+        bar_age_ms: number | null;
+        rv_1m_pct: number | null;
+      } | null;
+    };
+  };
   last_liquidation: null | {
     triggered_by: string;
     timestamp: string;
@@ -171,9 +188,13 @@ export default function ExecutionPage() {
   const fills = fillsData?.fills ?? [];
   const levelColor = LEVEL_COLORS[breaker?.level ?? "NORMAL"];
   const incident = status?.incident_guard;
+  const market = status?.market_guard;
   const incidentColor =
     incident?.level === "HALT" ? "#ff7162" :
     incident?.level === "WATCH" ? "#fbbf24" : "#9cff93";
+  const marketColor =
+    market?.level === "HALT" ? "#ff7162" :
+    market?.level === "WATCH" ? "#fbbf24" : "#9cff93";
 
   return (
     <div className="space-y-6">
@@ -194,10 +215,11 @@ export default function ExecutionPage() {
       </div>
 
       {/* Status Cards Row */}
-      <div className="grid grid-cols-2 md:grid-cols-5 lg:grid-cols-9 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 lg:grid-cols-10 gap-3">
         <StatusBadge label="Mode" value={mode?.mode ?? "—"} color={mode?.isLive ? "#ff7162" : "#9cff93"} />
         <StatusBadge label="Breaker" value={breaker?.level ?? "—"} color={levelColor} />
         <StatusBadge label="Incident" value={incident?.level ?? "—"} color={incidentColor} />
+        <StatusBadge label="Market" value={market?.level ?? "—"} color={marketColor} />
         <StatusBadge label="Realized PnL" value={`$${(breaker?.realized_pnl_today ?? 0).toFixed(2)}`} color={(breaker?.realized_pnl_today ?? 0) >= 0 ? "#9cff93" : "#ff7162"} />
         <StatusBadge label="Unrealized" value={`$${(breaker?.unrealized_pnl ?? 0).toFixed(2)}`} color={(breaker?.unrealized_pnl ?? 0) >= 0 ? "#9cff93" : "#ff7162"} />
         <StatusBadge label="Trades" value={`${breaker?.trades_today ?? 0}`} color="#67e8f9" />
@@ -252,6 +274,9 @@ export default function ExecutionPage() {
             <div className="flex justify-between"><span style={{ color: "#767576" }}>Incident Level</span><span style={{ color: incidentColor }}>{incident?.level ?? "NORMAL"}</span></div>
             <div className="flex justify-between"><span style={{ color: "#767576" }}>Incident Window</span><span style={{ color: "#ffffff" }}>{incident?.window_failures ?? 0} fail · {incident?.window_rejections ?? 0} rej · {incident?.window_slippage_spikes ?? 0} slip</span></div>
             <div className="flex justify-between"><span style={{ color: "#767576" }}>Consecutive Failures</span><span style={{ color: (incident?.consecutive_failures ?? 0) >= 2 ? "#fb923c" : "#ffffff" }}>{incident?.consecutive_failures ?? 0}</span></div>
+            <div className="flex justify-between"><span style={{ color: "#767576" }}>Market Guard</span><span style={{ color: marketColor }}>{market?.level ?? "NORMAL"}</span></div>
+            <div className="flex justify-between"><span style={{ color: "#767576" }}>Market Window</span><span style={{ color: "#ffffff" }}>{market?.window_critical ?? 0} critical · {market?.window_warn ?? 0} warn</span></div>
+            <div className="flex justify-between"><span style={{ color: "#767576" }}>Spread / Bar Age</span><span style={{ color: "#ffffff" }}>{market?.last_evaluation?.metrics?.spread_bps !== null && market?.last_evaluation?.metrics?.spread_bps !== undefined ? `${market.last_evaluation.metrics.spread_bps.toFixed(1)}bps` : "n/a"} · {market?.last_evaluation?.metrics?.bar_age_ms !== null && market?.last_evaluation?.metrics?.bar_age_ms !== undefined ? `${Math.round(market.last_evaluation.metrics.bar_age_ms / 1000)}s` : "n/a"}</span></div>
           </div>
 
           {status?.last_liquidation && (

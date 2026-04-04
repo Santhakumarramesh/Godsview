@@ -45,6 +45,8 @@ import {
   type StrategyAllocationMatch,
   useExecutionIncidentGuard,
   type ExecutionIncidentSnapshot,
+  useExecutionMarketGuard,
+  type ExecutionMarketGuardSnapshot,
 } from "@/lib/api";
 import { useLivePrices } from "@/lib/market-store";
 import BrainFocusMode from "@/components/BrainFocusMode";
@@ -1237,6 +1239,76 @@ function ExecutionIncidentPanel({
   );
 }
 
+function ExecutionMarketGuardPanel({
+  marketGuard,
+}: {
+  marketGuard?: ExecutionMarketGuardSnapshot;
+}) {
+  const level = marketGuard?.level ?? "NORMAL";
+  const levelColor =
+    level === "HALT" ? "#ff4444" :
+    level === "WATCH" ? "#ffcc00" : "#00ffcc";
+  const evalMetrics = marketGuard?.last_evaluation?.metrics;
+  const spread = evalMetrics?.spread_bps;
+  const liquidity = evalMetrics?.top_book_notional_usd;
+  const barAge = evalMetrics?.bar_age_ms;
+  const events = marketGuard?.recent_events?.slice(0, 4) ?? [];
+
+  return (
+    <div style={panelStyle}>
+      <div style={{ ...labelStyle, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span>Market Guard</span>
+        <span style={{ color: levelColor, fontFamily: "JetBrains Mono", fontSize: "9px", letterSpacing: "0.1em" }}>
+          {level}
+        </span>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "8px" }}>
+        <div style={{ padding: "6px", borderRadius: "6px", backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(72,72,73,0.14)" }}>
+          <div style={{ fontSize: "7px", color: "#484849", letterSpacing: "0.1em", textTransform: "uppercase" }}>Critical Win</div>
+          <div style={{ fontSize: "11px", color: (marketGuard?.window_critical ?? 0) > 0 ? "#ff7162" : "#adaaab", fontFamily: "JetBrains Mono", fontWeight: 700 }}>
+            {marketGuard?.window_critical ?? 0}
+          </div>
+        </div>
+        <div style={{ padding: "6px", borderRadius: "6px", backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(72,72,73,0.14)" }}>
+          <div style={{ fontSize: "7px", color: "#484849", letterSpacing: "0.1em", textTransform: "uppercase" }}>Warnings</div>
+          <div style={{ fontSize: "11px", color: (marketGuard?.window_warn ?? 0) >= 2 ? "#ffcc00" : "#adaaab", fontFamily: "JetBrains Mono", fontWeight: 700 }}>
+            {marketGuard?.window_warn ?? 0}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ fontSize: "8px", color: "#767576", fontFamily: "JetBrains Mono", marginBottom: "6px" }}>
+        spread {spread !== undefined && spread !== null ? `${spread.toFixed(1)}bps` : "n/a"} · liq {liquidity ? `$${Math.round(liquidity / 1000)}k` : "n/a"}
+      </div>
+      <div style={{ fontSize: "8px", color: "#767576", fontFamily: "JetBrains Mono", marginBottom: "6px" }}>
+        bar age {barAge !== undefined && barAge !== null ? `${Math.round(barAge / 1000)}s` : "n/a"} · consec critical {marketGuard?.consecutive_critical ?? 0}
+      </div>
+      {marketGuard?.last_halt_reason ? (
+        <div style={{ fontSize: "8px", color: "#ff7162", marginBottom: "6px", lineHeight: 1.3 }}>
+          HALT: {marketGuard.last_halt_reason}
+        </div>
+      ) : null}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: "4px", maxHeight: "86px", overflowY: "auto" }}>
+        {events.map((event, idx) => {
+          const color =
+            event.severity === "critical" ? "#ff4444" :
+            event.severity === "warn" ? "#ffcc00" : "#00ffcc";
+          return (
+            <div key={`${event.at}-${idx}`} style={{ fontSize: "8px", lineHeight: 1.3 }}>
+              <div style={{ color, fontFamily: "JetBrains Mono" }}>{event.type}</div>
+              <div style={{ color: "#adaaab", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {event.symbol} · {event.detail}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function WalkForwardPanel({
   strategyId,
   walkForward,
@@ -1873,6 +1945,7 @@ function BrainPageComponent() {
   const stopStrategyAllocator = useStopStrategyAllocator();
   const runStrategyAllocatorCycle = useRunStrategyAllocatorCycle();
   const { data: executionIncidentGuard } = useExecutionIncidentGuard({ refetchInterval: 10_000 });
+  const { data: executionMarketGuard } = useExecutionMarketGuard({ refetchInterval: 10_000 });
 
   const stocks = useMemo(() => {
     if (!brainEntities?.length) return MOCK_STOCKS;
@@ -2185,6 +2258,7 @@ function BrainPageComponent() {
           onStop={handleAllocatorStop}
           onRun={handleAllocatorRun}
         />
+        <ExecutionMarketGuardPanel marketGuard={executionMarketGuard} />
         <ExecutionIncidentPanel incident={executionIncidentGuard} />
         <WalkForwardPanel strategyId={activeStrategyId} walkForward={walkForward} tierRegistry={tierRegistry} />
         <LiveSIFeed decisions={siDecisions} />

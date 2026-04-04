@@ -12,6 +12,7 @@ import { getAutonomySupervisorSnapshot } from "./autonomy_supervisor";
 import { getStrategyGovernorSnapshot } from "./strategy_governor";
 import { getStrategyAllocatorSnapshot } from "./strategy_allocator";
 import { getExecutionIncidentSnapshot } from "./execution_incident_guard";
+import { getExecutionMarketGuardSnapshot } from "./execution_market_guard";
 
 export type DeploymentReadinessStatus = "READY" | "DEGRADED" | "NOT_READY";
 
@@ -44,6 +45,8 @@ export interface DeploymentReadinessReport {
     portfolio_risk_state: string | null;
     incident_guard_level: string;
     incident_guard_halt: boolean;
+    market_guard_level: string;
+    market_guard_halt: boolean;
   };
   preflight: {
     included: boolean;
@@ -252,6 +255,8 @@ function runtimeChecks(checks: DeploymentReadinessCheck[]): {
   strategyAllocatorLastError: string | null;
   incidentGuardLevel: string;
   incidentGuardHalt: boolean;
+  marketGuardLevel: string;
+  marketGuardHalt: boolean;
 } {
   const startedKillSwitch = nowMs();
   const killSwitch = isKillSwitchActive();
@@ -325,6 +330,20 @@ function runtimeChecks(checks: DeploymentReadinessCheck[]): {
       detail: `level=${incidentGuard.level}, failures=${incidentGuard.window_failures}, rejections=${incidentGuard.window_rejections}`,
     },
     startedIncidentGuard,
+  );
+
+  const marketGuard = getExecutionMarketGuardSnapshot();
+  const startedMarketGuard = nowMs();
+  timedCheck(
+    checks,
+    {
+      name: "Execution market guard not halted",
+      category: "runtime",
+      passed: !marketGuard.halt_active,
+      critical: true,
+      detail: `level=${marketGuard.level}, critical=${marketGuard.window_critical}, warnings=${marketGuard.window_warn}`,
+    },
+    startedMarketGuard,
   );
 
   const supervisor = getAutonomySupervisorSnapshot();
@@ -401,6 +420,8 @@ function runtimeChecks(checks: DeploymentReadinessCheck[]): {
     strategyAllocatorLastError: allocator.last_error,
     incidentGuardLevel: incidentGuard.level,
     incidentGuardHalt: incidentGuard.halt_active,
+    marketGuardLevel: marketGuard.level,
+    marketGuardHalt: marketGuard.halt_active,
   };
 }
 
@@ -494,6 +515,8 @@ export async function getDeploymentReadinessReport(options?: {
       portfolio_risk_state: runtime.portfolioRiskState,
       incident_guard_level: runtime.incidentGuardLevel,
       incident_guard_halt: runtime.incidentGuardHalt,
+      market_guard_level: runtime.marketGuardLevel,
+      market_guard_halt: runtime.marketGuardHalt,
     },
     preflight: {
       included: includePreflight,

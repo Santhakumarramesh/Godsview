@@ -736,6 +736,80 @@ export function useExecutionIncidentGuard(options?: Omit<UseQueryOptions<Executi
   });
 }
 
+export interface ExecutionMarketGuardEvent {
+  at: string;
+  symbol: string;
+  asset_class: "equity" | "crypto" | "futures";
+  type: "EVAL_ALLOW" | "EVAL_WARN" | "EVAL_BLOCK" | "GUARD_HALT" | "GUARD_RESET";
+  severity: "info" | "warn" | "critical";
+  detail: string;
+  reasons: string[];
+  metrics?: {
+    spread_bps?: number | null;
+    top_book_notional_usd?: number | null;
+    bar_age_ms?: number | null;
+    rv_1m_pct?: number | null;
+  };
+}
+
+export interface ExecutionMarketGuardSnapshot {
+  level: "NORMAL" | "WATCH" | "HALT";
+  halt_active: boolean;
+  running_window_ms: number;
+  consecutive_critical: number;
+  window_critical: number;
+  window_warn: number;
+  total_events: number;
+  last_event_at: string | null;
+  last_halt_reason: string | null;
+  policy: {
+    window_ms: number;
+    max_critical_window: number;
+    max_warning_window: number;
+    max_consecutive_critical: number;
+    auto_halt: boolean;
+    sync_kill_switch_on_halt: boolean;
+    fetch_orderbook_on_demand: boolean;
+    require_orderbook_for_crypto: boolean;
+    require_orderbook_for_other_assets: boolean;
+    max_orderbook_age_ms: number;
+    max_bar_age_ms: number;
+    max_spread_bps: number;
+    hard_max_spread_bps: number;
+    min_top_book_notional_usd: number;
+    max_atr_pct_1m: number;
+    max_realized_vol_pct_1m: number;
+    bar_lookback: number;
+  };
+  last_evaluation: {
+    at: string | null;
+    symbol: string | null;
+    asset_class: "equity" | "crypto" | "futures" | null;
+    action: "ALLOW" | "WARN" | "BLOCK";
+    allowed: boolean;
+    reasons: string[];
+    metrics: {
+      orderbook_available: boolean;
+      orderbook_age_ms: number | null;
+      spread_bps: number | null;
+      top_book_notional_usd: number | null;
+      bar_age_ms: number | null;
+      atr_pct_1m: number | null;
+      rv_1m_pct: number | null;
+    } | null;
+  };
+  recent_events: ExecutionMarketGuardEvent[];
+}
+
+export function useExecutionMarketGuard(options?: Omit<UseQueryOptions<ExecutionMarketGuardSnapshot>, "queryKey" | "queryFn">) {
+  return useQuery({
+    queryKey: ["execution", "market-guard"],
+    queryFn: () => apiFetch<ExecutionMarketGuardSnapshot>("/execution/market-guard"),
+    refetchInterval: 10_000,
+    ...options,
+  });
+}
+
 export function useAccuracy() {
   return useQuery({ queryKey: ["alpaca", "accuracy"], queryFn: () => apiFetch<any>("/alpaca/accuracy"), staleTime: 120_000 });
 }
