@@ -1528,6 +1528,9 @@ function AutonomyDebugPanel({
       <div style={{ fontSize: "8px", color: schedulerStatusColor, fontFamily: "JetBrains Mono", marginBottom: "6px" }}>
         status {schedulerStatus} · cycles {scheduler?.total_cycles ?? 0} · fixes {scheduler?.total_fix_actions ?? 0}
       </div>
+      <div style={{ fontSize: "8px", color: scheduler?.kill_switch_active ? "#ff4444" : "#767576", fontFamily: "JetBrains Mono", marginBottom: "6px" }}>
+        scheduler-kill {scheduler?.policy.auto_kill_switch_on_critical_streak ? `ON@${scheduler?.policy.kill_switch_threshold}` : "OFF"} · active {scheduler?.kill_switch_active ? "YES" : "NO"}
+      </div>
       <div style={{ display: "flex", flexDirection: "column", gap: "3px", maxHeight: "62px", overflowY: "auto" }}>
         {schedulerActions.map((action, idx) => (
           <div key={`${action.at}-${idx}`} style={{ fontSize: "8px", lineHeight: 1.25 }}>

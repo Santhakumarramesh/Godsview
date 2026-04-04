@@ -19,6 +19,8 @@ const mocked = vi.hoisted(() => {
     last_issue_count: 0,
     last_critical_issues: 0,
     last_warn_issues: 0,
+    kill_switch_active: false,
+    kill_switch_engaged_by_scheduler: false,
     policy: {
       auto_enforce: true,
       interval_ms: 60_000,
@@ -26,6 +28,8 @@ const mocked = vi.hoisted(() => {
       auto_fix_on_degraded: true,
       auto_fix_on_critical: true,
       critical_alert_threshold: 2,
+      auto_kill_switch_on_critical_streak: false,
+      kill_switch_threshold: 4,
     },
     recent_actions: [],
   };

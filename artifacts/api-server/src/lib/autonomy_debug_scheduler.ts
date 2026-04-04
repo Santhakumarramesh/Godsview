@@ -4,6 +4,7 @@ import {
   type AutonomyDebugOverallStatus,
 } from "./autonomy_debugger";
 import { addOpsAlert } from "./ops_monitor";
+import { isKillSwitchActive, setKillSwitchActive } from "./risk_engine";
 import { logger as _logger } from "./logger";
 
 const logger = _logger.child({ module: "autonomy_debug_scheduler" });
@@ -12,6 +13,7 @@ const DEFAULT_INTERVAL_MS = 60_000;
 const MIN_INTERVAL_MS = 15_000;
 const MAX_INTERVAL_MS = 20 * 60_000;
 const DEFAULT_CRITICAL_ALERT_THRESHOLD = 2;
+const DEFAULT_CRITICAL_KILL_SWITCH_THRESHOLD = 4;
 const MAX_RECENT_ACTIONS = 120;
 
 export interface AutonomyDebugSchedulerPolicy {
@@ -21,12 +23,14 @@ export interface AutonomyDebugSchedulerPolicy {
   auto_fix_on_degraded: boolean;
   auto_fix_on_critical: boolean;
   critical_alert_threshold: number;
+  auto_kill_switch_on_critical_streak: boolean;
+  kill_switch_threshold: number;
 }
 
 export interface AutonomyDebugSchedulerAction {
   at: string;
   cycle_reason: string;
-  action: "EVALUATE" | "AUTO_FIX" | "ALERT_CRITICAL_STREAK" | "RECOVERED";
+  action: "EVALUATE" | "AUTO_FIX" | "ALERT_CRITICAL_STREAK" | "ENGAGE_KILL_SWITCH" | "RECOVERED";
   success: boolean;
   detail: string;
 }
@@ -47,6 +51,8 @@ export interface AutonomyDebugSchedulerSnapshot {
   last_issue_count: number;
   last_critical_issues: number;
   last_warn_issues: number;
+  kill_switch_active: boolean;
+  kill_switch_engaged_by_scheduler: boolean;
   policy: AutonomyDebugSchedulerPolicy;
   recent_actions: AutonomyDebugSchedulerAction[];
 }
@@ -67,6 +73,7 @@ let _lastStatus: AutonomyDebugOverallStatus | null = null;
 let _lastIssueCount = 0;
 let _lastCriticalIssues = 0;
 let _lastWarnIssues = 0;
+let _killSwitchEngagedByScheduler = false;
 const _recentActions: AutonomyDebugSchedulerAction[] = [];
 
 function boolEnv(raw: string | undefined, fallback: boolean): boolean {
@@ -102,6 +109,16 @@ function policy(): AutonomyDebugSchedulerPolicy {
       DEFAULT_CRITICAL_ALERT_THRESHOLD,
       1,
       10,
+    ),
+    auto_kill_switch_on_critical_streak: boolEnv(
+      process.env.AUTONOMY_DEBUG_SCHEDULER_AUTO_KILL_ON_CRITICAL_STREAK,
+      false,
+    ),
+    kill_switch_threshold: parseIntEnv(
+      process.env.AUTONOMY_DEBUG_SCHEDULER_KILL_SWITCH_THRESHOLD,
+      DEFAULT_CRITICAL_KILL_SWITCH_THRESHOLD,
+      1,
+      20,
     ),
   };
 }
@@ -164,6 +181,27 @@ async function runCycleInternal(reason: string): Promise<void> {
       action: "ALERT_CRITICAL_STREAK",
       success: true,
       detail: `critical_streak=${_consecutiveCritical}`,
+    });
+  }
+
+  if (
+    p.auto_enforce &&
+    p.auto_kill_switch_on_critical_streak &&
+    _consecutiveCritical >= p.kill_switch_threshold &&
+    !isKillSwitchActive()
+  ) {
+    setKillSwitchActive(true);
+    _killSwitchEngagedByScheduler = true;
+    addOpsAlert(
+      "critical",
+      `[autonomy-debug-scheduler] kill switch engaged after ${_consecutiveCritical} critical cycles`,
+    );
+    pushAction({
+      at: new Date().toISOString(),
+      cycle_reason: reason,
+      action: "ENGAGE_KILL_SWITCH",
+      success: true,
+      detail: `critical_streak=${_consecutiveCritical},threshold=${p.kill_switch_threshold}`,
     });
   }
 
@@ -274,6 +312,7 @@ export function resetAutonomyDebugSchedulerState(): AutonomyDebugSchedulerSnapsh
   _lastIssueCount = 0;
   _lastCriticalIssues = 0;
   _lastWarnIssues = 0;
+  _killSwitchEngagedByScheduler = false;
   _recentActions.length = 0;
   if (!_running) {
     _startedAtMs = null;
@@ -298,6 +337,8 @@ export function getAutonomyDebugSchedulerSnapshot(): AutonomyDebugSchedulerSnaps
     last_issue_count: _lastIssueCount,
     last_critical_issues: _lastCriticalIssues,
     last_warn_issues: _lastWarnIssues,
+    kill_switch_active: isKillSwitchActive(),
+    kill_switch_engaged_by_scheduler: _killSwitchEngagedByScheduler,
     policy: policy(),
     recent_actions: [..._recentActions],
   };
@@ -306,4 +347,3 @@ export function getAutonomyDebugSchedulerSnapshot(): AutonomyDebugSchedulerSnaps
 export function shouldAutonomyDebugSchedulerAutoStart(): boolean {
   return boolEnv(process.env.AUTONOMY_DEBUG_SCHEDULER_AUTO_START, true);
 }
-

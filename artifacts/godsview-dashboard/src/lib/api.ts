@@ -1189,7 +1189,7 @@ export interface AutonomyDebugFixAction {
 export interface AutonomyDebugSchedulerAction {
   at: string;
   cycle_reason: string;
-  action: "EVALUATE" | "AUTO_FIX" | "ALERT_CRITICAL_STREAK" | "RECOVERED";
+  action: "EVALUATE" | "AUTO_FIX" | "ALERT_CRITICAL_STREAK" | "ENGAGE_KILL_SWITCH" | "RECOVERED";
   success: boolean;
   detail: string;
 }
@@ -1210,6 +1210,8 @@ export interface AutonomyDebugSchedulerSnapshot {
   last_issue_count: number;
   last_critical_issues: number;
   last_warn_issues: number;
+  kill_switch_active: boolean;
+  kill_switch_engaged_by_scheduler: boolean;
   policy: {
     auto_enforce: boolean;
     interval_ms: number;
@@ -1217,6 +1219,8 @@ export interface AutonomyDebugSchedulerSnapshot {
     auto_fix_on_degraded: boolean;
     auto_fix_on_critical: boolean;
     critical_alert_threshold: number;
+    auto_kill_switch_on_critical_streak: boolean;
+    kill_switch_threshold: number;
   };
   recent_actions: AutonomyDebugSchedulerAction[];
 }

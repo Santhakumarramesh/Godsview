@@ -8,6 +8,7 @@ const runtime = vi.hoisted(() => ({
   warnCounts: [] as number[],
   fixSuccesses: 1,
   fixFailures: 0,
+  killSwitch: false,
   alerts: [] as Array<{ level: "info" | "warn" | "critical"; message: string }>,
 }));
 
@@ -17,6 +18,7 @@ function resetRuntime(): void {
   runtime.warnCounts = [];
   runtime.fixSuccesses = 1;
   runtime.fixFailures = 0;
+  runtime.killSwitch = false;
   runtime.alerts = [];
 }
 
@@ -85,6 +87,17 @@ vi.mock("../lib/ops_monitor", () => ({
   }),
 }));
 
+vi.mock("../lib/risk_engine", () => ({
+  isKillSwitchActive: vi.fn(() => runtime.killSwitch),
+  setKillSwitchActive: vi.fn((active: boolean) => {
+    runtime.killSwitch = Boolean(active);
+    return {
+      runtime: { killSwitchActive: runtime.killSwitch, updatedAt: new Date().toISOString() },
+      config: {},
+    };
+  }),
+}));
+
 describe("autonomy_debug_scheduler", () => {
   beforeEach(() => {
     vi.resetModules();
@@ -96,6 +109,8 @@ describe("autonomy_debug_scheduler", () => {
     delete process.env.AUTONOMY_DEBUG_SCHEDULER_AUTO_FIX_ON_DEGRADED;
     delete process.env.AUTONOMY_DEBUG_SCHEDULER_AUTO_FIX_ON_CRITICAL;
     delete process.env.AUTONOMY_DEBUG_SCHEDULER_CRITICAL_ALERT_THRESHOLD;
+    delete process.env.AUTONOMY_DEBUG_SCHEDULER_AUTO_KILL_ON_CRITICAL_STREAK;
+    delete process.env.AUTONOMY_DEBUG_SCHEDULER_KILL_SWITCH_THRESHOLD;
   });
 
   it("raises a critical streak alert and auto-fixes on repeated CRITICAL snapshots", async () => {
@@ -147,5 +162,26 @@ describe("autonomy_debug_scheduler", () => {
     const stopped = scheduler.stopAutonomyDebugScheduler();
     expect(stopped.success).toBe(true);
     expect(scheduler.getAutonomyDebugSchedulerSnapshot().running).toBe(false);
+  });
+
+  it("engages kill switch when critical streak crosses kill-switch threshold", async () => {
+    process.env.AUTONOMY_DEBUG_SCHEDULER_AUTO_KILL_ON_CRITICAL_STREAK = "true";
+    process.env.AUTONOMY_DEBUG_SCHEDULER_KILL_SWITCH_THRESHOLD = "2";
+    process.env.AUTONOMY_DEBUG_SCHEDULER_AUTO_FIX_ON_CRITICAL = "false";
+
+    runtime.statuses = ["CRITICAL", "CRITICAL"];
+    runtime.criticalCounts = [2, 2];
+    runtime.warnCounts = [0, 0];
+    runtime.killSwitch = false;
+
+    const scheduler = await import("../lib/autonomy_debug_scheduler");
+    await scheduler.runAutonomyDebugSchedulerCycle("critical-1");
+    await scheduler.runAutonomyDebugSchedulerCycle("critical-2");
+
+    const snapshot = scheduler.getAutonomyDebugSchedulerSnapshot();
+    expect(snapshot.kill_switch_active).toBe(true);
+    expect(snapshot.kill_switch_engaged_by_scheduler).toBe(true);
+    expect(snapshot.recent_actions.some((action) => action.action === "ENGAGE_KILL_SWITCH")).toBe(true);
+    expect(runtime.alerts.some((alert) => alert.message.includes("kill switch engaged"))).toBe(true);
   });
 });
