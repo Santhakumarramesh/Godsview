@@ -164,8 +164,13 @@ export function generateEquityReport(opts: {
   if (opts.from)   entries = entries.filter(e => e.decidedAt.slice(0, 10) >= opts.from!);
   if (opts.to)     entries = entries.filter(e => e.decidedAt.slice(0, 10) <= opts.to!);
 
-  // Sort oldest-first for time-series computation
-  entries = [...entries].sort((a, b) => a.decidedAt.localeCompare(b.decidedAt));
+  // Sort oldest-first for time-series computation.
+  // Tie-break by id so streak/order metrics are deterministic when timestamps match.
+  entries = [...entries].sort((a, b) => {
+    const byTime = a.decidedAt.localeCompare(b.decidedAt);
+    if (byTime !== 0) return byTime;
+    return a.id.localeCompare(b.id);
+  });
 
   if (!entries.length) {
     return {
