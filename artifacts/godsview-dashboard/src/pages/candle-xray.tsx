@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useLiveMicrostructureCurrent } from "@/lib/api";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface CandleData {
@@ -117,7 +118,7 @@ function formatVol(v: number): string {
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
-function XRayHeader() {
+function XRayHeader({ symbol, verdict }: { symbol: string; verdict: string }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "20px 24px", borderBottom: "1px solid rgba(72,72,73,0.12)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -133,7 +134,7 @@ function XRayHeader() {
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 20, fontWeight: 700, color: "#e6e1e5" }}>NVDA</span>
+          <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 20, fontWeight: 700, color: "#e6e1e5" }}>{symbol}</span>
           <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, padding: "3px 8px", background: "rgba(0,223,193,0.12)", color: "#00dfc1", borderRadius: 3, letterSpacing: "0.06em" }}>
             1M INTERVAL
           </span>
@@ -146,7 +147,7 @@ function XRayHeader() {
           border: "1px solid rgba(156,255,147,0.2)",
           borderRadius: 4, color: "#9cff93", letterSpacing: "0.06em",
         }}>
-          {SYNTHESIS.verdict.toUpperCase()}
+          {verdict.toUpperCase()}
         </div>
       </div>
     </div>
@@ -487,8 +488,15 @@ function SynthesisPanel({ synthesis }: { synthesis: AISynthesis }) {
 export default function CandleXRayPage() {
   const [symbol, setSymbol] = useState("BTCUSD");
   const [timeframe, setTimeframe] = useState("5Min");
-  const [tape] = useState<TapeEntry[]>(generateTape);
+  const fallbackTape = useMemo(() => generateTape(), []);
   const [tab, setTab] = useState<"analysis" | "book" | "tape">("analysis");
+
+  const { data: liveMicrostructure } = useLiveMicrostructureCurrent(symbol, {
+    depth: 40,
+    top_levels: 10,
+    window_sec: 180,
+    max_age_ms: 4_000,
+  });
 
   // Fetch real candle intelligence
   const { data: xrayData } = useQuery({
@@ -510,9 +518,119 @@ export default function CandleXRayPage() {
     timestamp: (latestBar.time ?? 0) * 1000,
   } : CANDLE;
 
+  const asks = useMemo<OrderBookLevel[]>(() => {
+    const levels = liveMicrostructure?.snapshot.orderbook.ask_levels;
+    if (!levels || levels.length === 0) return BOOK_ASKS;
+    return levels.slice(0, 12).map((level) => ({
+      price: level.price,
+      size: level.size,
+      total: level.cumulative_size,
+      side: "ask",
+    }));
+  }, [liveMicrostructure]);
+
+  const bids = useMemo<OrderBookLevel[]>(() => {
+    const levels = liveMicrostructure?.snapshot.orderbook.bid_levels;
+    if (!levels || levels.length === 0) return BOOK_BIDS;
+    return levels.slice(0, 12).map((level) => ({
+      price: level.price,
+      size: level.size,
+      total: level.cumulative_size,
+      side: "bid",
+    }));
+  }, [liveMicrostructure]);
+
+  const heatmapZones = useMemo<HeatmapZone[]>(() => {
+    const zones = liveMicrostructure?.snapshot.heatmap.zones;
+    if (!zones || zones.length === 0) return HEATMAP_ZONES;
+    return zones.slice(0, 20).map((zone) => ({
+      priceStart: zone.price_start,
+      priceEnd: zone.price_end,
+      intensity: zone.intensity,
+      type: zone.type,
+    }));
+  }, [liveMicrostructure]);
+
+  const tape = useMemo<TapeEntry[]>(() => {
+    const prints = liveMicrostructure?.snapshot.tape.prints;
+    if (!prints || prints.length === 0) return fallbackTape;
+    return prints.map((print) => ({
+      price: print.price,
+      size: print.size,
+      side: print.side,
+      timestamp: Date.parse(print.timestamp),
+      aggressor: print.aggressor,
+    }));
+  }, [fallbackTape, liveMicrostructure]);
+
+  const synthesis = useMemo<AISynthesis>(() => {
+    const snapshot = liveMicrostructure?.snapshot;
+    if (!snapshot) return SYNTHESIS;
+
+    const verdictLabel = snapshot.score.verdict
+      .replaceAll("_", " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+
+    const confidencePct = Math.round(snapshot.score.confidence * 100);
+    const scorePct = Math.round(snapshot.score.score * 100);
+    const winProxy = Math.max(confidencePct, scorePct);
+
+    return {
+      verdict: verdictLabel,
+      confidence: snapshot.score.confidence,
+      signals: [
+        { label: "Microstructure Score", value: `${scorePct}% (${snapshot.score.quality})`, sentiment: snapshot.score.direction === "long" ? "bullish" : snapshot.score.direction === "short" ? "bearish" : "neutral" },
+        { label: "Imbalance", value: `${(snapshot.imbalance.weighted_imbalance * 100).toFixed(1)}% (${snapshot.imbalance.bias})`, sentiment: snapshot.imbalance.bias === "buy" ? "bullish" : snapshot.imbalance.bias === "sell" ? "bearish" : "neutral" },
+        { label: "Absorption", value: `${snapshot.absorption.state.replaceAll("_", " ")} (${(snapshot.absorption.score * 100).toFixed(0)}%)`, sentiment: snapshot.absorption.state === "bid_absorption" ? "bullish" : snapshot.absorption.state === "ask_absorption" ? "bearish" : "neutral" },
+        { label: "Liquidity", value: `Heatmap score ${(snapshot.heatmap.zone_score * 100).toFixed(0)}%`, sentiment: snapshot.heatmap.zone_score >= 0.65 ? "bullish" : snapshot.heatmap.zone_score <= 0.35 ? "bearish" : "neutral" },
+        { label: "Tape", value: `Delta ${(snapshot.tape.normalized_delta * 100).toFixed(1)}%`, sentiment: snapshot.tape.bias === "buy" ? "bullish" : snapshot.tape.bias === "sell" ? "bearish" : "neutral" },
+        { label: "Execution", value: `Spread ${snapshot.orderbook.spread_bps?.toFixed(2) ?? "n/a"} bps`, sentiment: (snapshot.orderbook.spread_bps ?? 999) <= 4 ? "bullish" : "neutral" },
+      ],
+      narrative: `${snapshot.score.reasons.join(". ")}. ${snapshot.absorption.reason}.`,
+      predictionAccuracy: winProxy,
+    };
+  }, [liveMicrostructure]);
+
+  const headerVerdict = synthesis.verdict || SYNTHESIS.verdict;
+
   return (
     <div style={{ minHeight: "100vh", background: "#131314", color: "#e6e1e5" }}>
-      <XRayHeader />
+      <XRayHeader symbol={symbol} verdict={headerVerdict} />
+
+      <div style={{ display: "flex", gap: 8, padding: "12px 24px 0" }}>
+        <input
+          value={symbol}
+          onChange={(e) => setSymbol(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))}
+          style={{
+            background: "#1a191b",
+            border: "1px solid rgba(72,72,73,0.2)",
+            color: "#e6e1e5",
+            borderRadius: 4,
+            padding: "8px 10px",
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 12,
+            width: 130,
+          }}
+          placeholder="BTCUSD"
+        />
+        <select
+          value={timeframe}
+          onChange={(e) => setTimeframe(e.target.value)}
+          style={{
+            background: "#1a191b",
+            border: "1px solid rgba(72,72,73,0.2)",
+            color: "#e6e1e5",
+            borderRadius: 4,
+            padding: "8px 10px",
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 12,
+          }}
+        >
+          {["1Min", "5Min", "15Min", "1Hour"].map((tf) => (
+            <option key={tf} value={tf}>{tf}</option>
+          ))}
+        </select>
+      </div>
 
       {/* OHLCV Strip */}
       <div style={{ padding: "16px 24px 0" }}>
@@ -546,14 +664,14 @@ export default function CandleXRayPage() {
       <div style={{ padding: 24 }}>
         {tab === "analysis" && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-            <HeatmapPanel zones={HEATMAP_ZONES} candle={CANDLE} />
-            <SynthesisPanel synthesis={SYNTHESIS} />
+            <HeatmapPanel zones={heatmapZones} candle={candle} />
+            <SynthesisPanel synthesis={synthesis} />
           </div>
         )}
 
         {tab === "book" && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-            <OrderBookPanel asks={BOOK_ASKS} bids={BOOK_BIDS} />
+            <OrderBookPanel asks={asks} bids={bids} />
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
               {/* Book imbalance stats */}
               <div style={{
@@ -564,11 +682,11 @@ export default function CandleXRayPage() {
                   Book Analysis
                 </div>
                 {[
-                  { label: "Bid Total", value: formatVol(BOOK_BIDS.reduce((s, b) => s + b.size, 0)), color: "#9cff93" },
-                  { label: "Ask Total", value: formatVol(BOOK_ASKS.reduce((s, a) => s + a.size, 0)), color: "#ff7162" },
-                  { label: "Imbalance", value: ((BOOK_BIDS.reduce((s, b) => s + b.size, 0) / (BOOK_BIDS.reduce((s, b) => s + b.size, 0) + BOOK_ASKS.reduce((s, a) => s + a.size, 0))) * 100).toFixed(1) + "%", color: "#669dff" },
-                  { label: "Largest Bid", value: formatVol(Math.max(...BOOK_BIDS.map(b => b.size))) + " @ " + formatPrice(BOOK_BIDS.reduce((max, b) => b.size > max.size ? b : max).price), color: "#9cff93" },
-                  { label: "Largest Ask", value: formatVol(Math.max(...BOOK_ASKS.map(a => a.size))) + " @ " + formatPrice(BOOK_ASKS.reduce((max, a) => a.size > max.size ? a : max).price), color: "#ff7162" },
+                  { label: "Bid Total", value: formatVol(bids.reduce((s, b) => s + b.size, 0)), color: "#9cff93" },
+                  { label: "Ask Total", value: formatVol(asks.reduce((s, a) => s + a.size, 0)), color: "#ff7162" },
+                  { label: "Imbalance", value: ((bids.reduce((s, b) => s + b.size, 0) / Math.max(bids.reduce((s, b) => s + b.size, 0) + asks.reduce((s, a) => s + a.size, 0), 1)) * 100).toFixed(1) + "%", color: "#669dff" },
+                  { label: "Largest Bid", value: formatVol(Math.max(...bids.map(b => b.size))) + " @ " + formatPrice(bids.reduce((max, b) => b.size > max.size ? b : max).price), color: "#9cff93" },
+                  { label: "Largest Ask", value: formatVol(Math.max(...asks.map(a => a.size))) + " @ " + formatPrice(asks.reduce((max, a) => a.size > max.size ? a : max).price), color: "#ff7162" },
                 ].map((stat) => (
                   <div key={stat.label} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid rgba(72,72,73,0.08)" }}>
                     <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: "#8c909f" }}>{stat.label}</span>
@@ -576,7 +694,7 @@ export default function CandleXRayPage() {
                   </div>
                 ))}
               </div>
-              <SynthesisPanel synthesis={SYNTHESIS} />
+              <SynthesisPanel synthesis={synthesis} />
             </div>
           </div>
         )}
@@ -614,7 +732,7 @@ export default function CandleXRayPage() {
                   ));
                 })()}
               </div>
-              <SynthesisPanel synthesis={SYNTHESIS} />
+              <SynthesisPanel synthesis={synthesis} />
             </div>
           </div>
         )}
