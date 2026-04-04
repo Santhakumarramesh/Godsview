@@ -18,6 +18,8 @@ interface CommandResult {
   stderr: string;
 }
 
+type ReadinessStatus = "NOT_READY" | "DEGRADED" | "READY";
+
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(process.env.DEPLOY_READINESS_ROOT ?? path.resolve(SCRIPT_DIR, "..", ".."));
 const API_DIST_ENTRY = path.resolve(ROOT, "artifacts/api-server/dist/index.mjs");
@@ -29,6 +31,10 @@ const RUN_BUILD_CHECKS = boolEnv("RUN_BUILD_CHECKS", true);
 const RUN_SMOKE_TESTS = boolEnv("RUN_SMOKE_TESTS", true);
 const START_SERVER_LOCAL = boolEnv("START_SERVER_LOCAL", false);
 const READINESS_PORT = Number(process.env.DEPLOY_READINESS_PORT ?? 3310);
+const READINESS_MIN_STATUS = parseReadinessStatus(
+  process.env.DEPLOY_READINESS_MIN_STATUS,
+  REQUIRE_HTTP ? "DEGRADED" : "NOT_READY",
+);
 
 let localServer: ChildProcess | null = null;
 let localBaseUrl: string | null = null;
@@ -42,6 +48,25 @@ function boolEnv(name: string, fallback: boolean): boolean {
 function timeoutEnv(name: string, fallbackMs: number): number {
   const n = Number(process.env[name]);
   return Number.isFinite(n) && n > 0 ? n : fallbackMs;
+}
+
+function parseReadinessStatus(raw: string | undefined, fallback: ReadinessStatus): ReadinessStatus {
+  const normalized = String(raw ?? "").trim().toUpperCase();
+  if (normalized === "READY" || normalized === "DEGRADED" || normalized === "NOT_READY") {
+    return normalized;
+  }
+  return fallback;
+}
+
+function readinessRank(status: ReadinessStatus): number {
+  switch (status) {
+    case "READY":
+      return 3;
+    case "DEGRADED":
+      return 2;
+    default:
+      return 1;
+  }
 }
 
 function tail(text: string, lines = 6): string {
@@ -394,11 +419,13 @@ async function main(): Promise<void> {
         true,
         readinessPath,
         (status, body) => {
-          const reportStatus = String(body?.status ?? "unknown");
-          const ok = (status === 200 || status === 503) && ["READY", "DEGRADED", "NOT_READY"].includes(reportStatus);
+          const reportStatus = String(body?.status ?? "unknown").toUpperCase() as ReadinessStatus;
+          const validStatus = reportStatus === "READY" || reportStatus === "DEGRADED" || reportStatus === "NOT_READY";
+          const meetsThreshold = validStatus && readinessRank(reportStatus) >= readinessRank(READINESS_MIN_STATUS);
+          const ok = (status === 200 || status === 503) && meetsThreshold;
           return {
             ok,
-            detail: `status=${status}, report=${reportStatus}`,
+            detail: `status=${status}, report=${reportStatus}, min=${READINESS_MIN_STATUS}`,
           };
         },
       ),

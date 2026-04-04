@@ -136,7 +136,7 @@ This command enforces:
 - TypeScript typecheck for all workspaces
 - Full API-server Vitest suite
 - Production builds (API + dashboard)
-- Local runtime boot + HTTP deployment-readiness probes
+- Local runtime boot + HTTP deployment-readiness probes (must reach at least `DEGRADED`)
 - Post-check cleanup of generated artifacts to keep git clean
 
 ## Monitoring

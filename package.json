@@ -10,7 +10,7 @@
     "build": "corepack pnpm run typecheck && corepack pnpm -r --if-present run build && rm -rf artifacts/api-server/public/assets && cp -r artifacts/godsview-dashboard/dist/public/. artifacts/api-server/public",
     "clean:generated": "git restore artifacts/api-server/dist artifacts/api-server/public/index.html artifacts/api-server/public/assets && git clean -fd artifacts/api-server/public/assets",
     "verify:prod": "corepack pnpm run typecheck && corepack pnpm --filter @workspace/api-server run test && corepack pnpm run build && corepack pnpm run clean:generated",
-    "verify:release": "corepack pnpm run typecheck && corepack pnpm --filter @workspace/api-server run test && corepack pnpm run build && START_SERVER_LOCAL=1 REQUIRE_HTTP=1 RUN_BUILD_CHECKS=0 RUN_SMOKE_TESTS=0 INCLUDE_PREFLIGHT=0 corepack pnpm run deploy:readiness && corepack pnpm run clean:generated",
+    "verify:release": "corepack pnpm run typecheck && corepack pnpm --filter @workspace/api-server run test && corepack pnpm run build && START_SERVER_LOCAL=1 REQUIRE_HTTP=1 DEPLOY_READINESS_MIN_STATUS=DEGRADED RUN_BUILD_CHECKS=0 RUN_SMOKE_TESTS=0 INCLUDE_PREFLIGHT=0 corepack pnpm run deploy:readiness && corepack pnpm run clean:generated",
     "start": "corepack pnpm --filter @workspace/api-server run start",
     "typecheck:libs": "tsc --build",
     "typecheck": "corepack pnpm run typecheck:libs && corepack pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
