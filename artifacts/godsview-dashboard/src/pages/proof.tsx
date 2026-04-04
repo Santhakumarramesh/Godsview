@@ -212,7 +212,10 @@ const TradeProofCard = ({ trade }: { trade: Trade }) => {
                 <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
                 <Tooltip
                   contentStyle={{ backgroundColor: "#2a2a2d", border: "1px solid #444" }}
-                  formatter={(value) => `$${value.toFixed(2)}`}
+                  formatter={(value) => {
+                    const numeric = typeof value === "number" ? value : Number(value);
+                    return Number.isFinite(numeric) ? `$${numeric.toFixed(2)}` : `$${String(value)}`;
+                  }}
                 />
                 <Line
                   type="monotone"
@@ -376,7 +379,10 @@ export default function Proof() {
                       <YAxis stroke="#666" style={{ fontSize: "12px" }} />
                       <Tooltip
                         contentStyle={{ backgroundColor: "#2a2a2d", border: "1px solid #444" }}
-                        formatter={(value) => `$${value.toFixed(2)}`}
+                        formatter={(value) => {
+                          const numeric = typeof value === "number" ? value : Number(value);
+                          return Number.isFinite(numeric) ? `$${numeric.toFixed(2)}` : `$${String(value)}`;
+                        }}
                       />
                       <Line
                         type="monotone"

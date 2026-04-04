@@ -1535,7 +1535,7 @@ router.get("/market-readiness", async (req, res) => {
       );
 
     if (!approvedTrades.length) {
-      return res.json({
+      res.json({
         status: "CAUTION",
         color: "yellow",
         regime: "no_data",
@@ -1559,6 +1559,7 @@ router.get("/market-readiness", async (req, res) => {
         reasoning: "Insufficient trade history. Run backtest or live trades to establish metrics.",
         timestamp: new Date().toISOString(),
       });
+      return;
     }
 
     let wins = 0;
@@ -1603,8 +1604,8 @@ router.get("/market-readiness", async (req, res) => {
 
     const { positions } = await getCachedAlpacaData();
     const activePositions = positions.length;
-    dailyTrades = approvedTrades.filter((t) => {
-      const tradeDate = new Date(t.created_at);
+    dailyTrades = approvedTrades.filter((t: { created_at: Date | string | null }) => {
+      const tradeDate = new Date(t.created_at ?? 0);
       const today = new Date();
       return (
         tradeDate.getFullYear() === today.getFullYear() &&
@@ -1695,9 +1696,11 @@ router.get("/market-readiness", async (req, res) => {
       reasoning,
       timestamp: new Date().toISOString(),
     });
+    return;
   } catch (err) {
     req.log.error({ err }, "Failed to calculate market readiness");
     res.status(500).json({ error: "market_readiness_failed", message: "Failed to calculate market readiness assessment" });
+    return;
   }
 });
 

@@ -33,16 +33,27 @@ function generateSyntheticBars(basePrice: number, count: number, direction: "lon
     const close = price + change;
     const high = Math.max(open, close) + Math.random() * price * 0.001;
     const low = Math.min(open, close) - Math.random() * price * 0.001;
+    const timestamp = new Date(Date.now() - (count - i) * 60000).toISOString();
+    const volume = Math.floor(Math.random() * 1000 + 100);
+    const tradeCount = Math.floor(Math.random() * 50 + 5);
+    const vwap = (open + close + high + low) / 4;
     bars.push({
-      Timestamp: new Date(Date.now() - (count - i) * 60000).toISOString(),
+      t: timestamp,
+      o: open,
+      h: high,
+      l: low,
+      c: close,
+      v: volume,
+      vw: vwap,
+      n: tradeCount,
+      Timestamp: timestamp,
       Open: open,
       High: high,
       Low: low,
       Close: close,
-      Volume: Math.floor(Math.random() * 1000 + 100),
-      TradeCount: Math.floor(Math.random() * 50 + 5),
-      VWAP: (open + close + high + low) / 4,
-    } as AlpacaBar);
+      Volume: volume,
+      VWAP: vwap,
+    });
     price = close;
   }
   return bars;
@@ -666,7 +677,7 @@ export interface StrategyLeaderboardEntry {
 }
 
 let _continuousBacktestRunning = false;
-let _continuousBacktestInterval: NodeJS.Timer | null = null;
+let _continuousBacktestInterval: NodeJS.Timeout | null = null;
 let _strategyLeaderboard: Map<string, StrategyLeaderboardEntry> = new Map();
 let _lastBacktestResult: { result: BacktestResult; timestamp: string } | null = null;
 const _strategyTierRegistry: Map<string, {

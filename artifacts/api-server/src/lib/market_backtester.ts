@@ -287,7 +287,7 @@ export async function runMarketBacktest(config: MarketBacktestConfig): Promise<M
           structure_score: sig.structure_score, order_flow_score: sig.order_flow_score,
           recall_score: sig.recall_score, setup_type: sig.setup_type, regime: sig.regime,
           direction: sig.direction, entry_price: sig.entry, stop_loss: sig.stop,
-          take_profit: sig.target, atr: sig.atr, equity: initial_equity, final_quality: sig.final_quality,
+          take_profit: sig.target, atr: sig.atr, equity: initial_equity,
         });
         siApproved = siResult.approved ?? true; siWinProb = siResult.win_probability ?? 0.5;
       } catch { /* SI not ready */ }
