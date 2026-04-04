@@ -31,6 +31,7 @@ const RUN_BUILD_CHECKS = boolEnv("RUN_BUILD_CHECKS", true);
 const RUN_SMOKE_TESTS = boolEnv("RUN_SMOKE_TESTS", true);
 const START_SERVER_LOCAL = boolEnv("START_SERVER_LOCAL", false);
 const READINESS_PORT = Number(process.env.DEPLOY_READINESS_PORT ?? 3310);
+const EXPECTED_SYSTEM_MODE = String(process.env.DEPLOY_READINESS_EXPECT_SYSTEM_MODE ?? "").trim().toLowerCase();
 const READINESS_MIN_STATUS = parseReadinessStatus(
   process.env.DEPLOY_READINESS_MIN_STATUS,
   REQUIRE_HTTP ? "DEGRADED" : "NOT_READY",
@@ -236,7 +237,7 @@ async function ensureRuntimeBase(): Promise<string | null> {
     ...process.env,
     PORT: String(READINESS_PORT),
     NODE_ENV: process.env.NODE_ENV ?? "development",
-    GODSVIEW_SYSTEM_MODE: process.env.GODSVIEW_SYSTEM_MODE ?? "paper",
+    GODSVIEW_SYSTEM_MODE: process.env.GODSVIEW_SYSTEM_MODE ?? (EXPECTED_SYSTEM_MODE || "paper"),
   };
 
   localServer = spawn("node", ["--enable-source-maps", API_DIST_ENTRY], {
@@ -430,6 +431,23 @@ async function main(): Promise<void> {
         },
       ),
     );
+
+    if (EXPECTED_SYSTEM_MODE) {
+      results.push(
+        await checkHttp(
+          "Deployment mode matches expected",
+          true,
+          readinessPath,
+          (status, body) => {
+            const actualMode = String(body?.config?.system_mode ?? "unknown").trim().toLowerCase();
+            return {
+              ok: (status === 200 || status === 503) && actualMode === EXPECTED_SYSTEM_MODE,
+              detail: `status=${status}, actual_mode=${actualMode}, expected_mode=${EXPECTED_SYSTEM_MODE}`,
+            };
+          },
+        ),
+      );
+    }
 
     results.push(
       await checkHttp(

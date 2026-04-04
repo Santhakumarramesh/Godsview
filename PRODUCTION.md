@@ -139,6 +139,17 @@ This command enforces:
 - Local runtime boot + HTTP deployment-readiness probes (must reach at least `DEGRADED`)
 - Post-check cleanup of generated artifacts to keep git clean
 
+Additional market profiles:
+
+```bash
+# Paper deployment profile (includes preflight checks)
+pnpm verify:market:paper
+
+# Live deployment profile (strict: must be READY, mode must be live_enabled)
+# Requires: GODSVIEW_SYSTEM_MODE=live_enabled plus live secrets
+pnpm verify:market:live
+```
+
 ## Monitoring
 
 ### Prometheus + Grafana
