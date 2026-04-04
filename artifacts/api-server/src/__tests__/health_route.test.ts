@@ -13,7 +13,7 @@
  *   @workspace/db (checkDbHealth), ../lib/metrics, ../lib/degradation
  */
 
-import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import express from "express";
 import http from "http";
 
@@ -49,6 +49,22 @@ vi.mock("../lib/degradation", () => ({
   })),
 }));
 
+const alpacaMocks = vi.hoisted(() => ({
+  getAccount: vi.fn(async () => ({ account_number: "paper-123" })),
+  getAlpacaCredentialStatus: vi.fn(() => ({
+    keyConfigured: false,
+    secretConfigured: false,
+    keyPrefix: null,
+    keyKind: "missing",
+    hasValidTradingKey: false,
+  })),
+}));
+
+vi.mock("../lib/alpaca", () => ({
+  getAccount: alpacaMocks.getAccount,
+  getAlpacaCredentialStatus: alpacaMocks.getAlpacaCredentialStatus,
+}));
+
 // ── Import router AFTER mocks ─────────────────────────────────────────────────
 import healthRouter from "../routes/health";
 
@@ -67,6 +83,19 @@ beforeAll(async () => {
   });
   const addr = server.address() as { port: number };
   baseUrl = `http://127.0.0.1:${addr.port}`;
+});
+
+beforeEach(() => {
+  alpacaMocks.getAccount.mockReset();
+  alpacaMocks.getAccount.mockResolvedValue({ account_number: "paper-123" });
+  alpacaMocks.getAlpacaCredentialStatus.mockReset();
+  alpacaMocks.getAlpacaCredentialStatus.mockReturnValue({
+    keyConfigured: false,
+    secretConfigured: false,
+    keyPrefix: null,
+    keyKind: "missing",
+    hasValidTradingKey: false,
+  });
 });
 
 afterAll(async () => {
@@ -173,6 +202,42 @@ describe("GET /readyz", () => {
 
     const { status } = await get("/readyz");
     expect(status).toBe(503);
+  });
+
+  it("marks alpaca as degraded for unsupported key kind", async () => {
+    alpacaMocks.getAlpacaCredentialStatus.mockReturnValue({
+      keyConfigured: true,
+      secretConfigured: true,
+      keyPrefix: "CK",
+      keyKind: "broker",
+      hasValidTradingKey: false,
+    });
+
+    const { data } = await get("/readyz");
+    const checks = (data as Record<string, any>).checks;
+
+    expect(checks.alpaca.status).toBe("degraded");
+    expect(String(checks.alpaca.error)).toMatch(/broker/i);
+  });
+
+  it("marks alpaca as degraded when account call returns error payload", async () => {
+    alpacaMocks.getAlpacaCredentialStatus.mockReturnValue({
+      keyConfigured: true,
+      secretConfigured: true,
+      keyPrefix: "PK",
+      keyKind: "paper",
+      hasValidTradingKey: true,
+    });
+    alpacaMocks.getAccount.mockResolvedValue({
+      error: "unauthorized",
+      message: "bad credentials",
+    });
+
+    const { data } = await get("/readyz");
+    const checks = (data as Record<string, any>).checks;
+
+    expect(checks.alpaca.status).toBe("degraded");
+    expect(String(checks.alpaca.error)).toMatch(/unauthorized/i);
   });
 });
 

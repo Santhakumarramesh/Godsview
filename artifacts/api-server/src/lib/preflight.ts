@@ -14,6 +14,16 @@
 import { logger } from "./logger";
 import { runtimeConfig } from "./runtime_config";
 
+function extractPayloadError(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const rec = payload as Record<string, unknown>;
+  const error = typeof rec.error === "string" ? rec.error.trim() : "";
+  const message = typeof rec.message === "string" ? rec.message.trim() : "";
+  if (!error && !message) return null;
+  if (error && message) return `${error}: ${message}`;
+  return error || message;
+}
+
 export interface PreflightResult {
   passed: boolean;
   checks: Array<{
@@ -44,18 +54,35 @@ export async function runPreflight(): Promise<PreflightResult> {
   const alpacaSecret = (process.env.ALPACA_SECRET_KEY ?? "").trim();
   if (alpacaKey && alpacaSecret) {
     // Verify key format
-    const validPrefix = alpacaKey.startsWith("PK") || alpacaKey.startsWith("AK") || alpacaKey.startsWith("CK");
-    if (validPrefix) {
-      checks.push({ name: "alpaca_keys", passed: true, detail: `Key prefix: ${alpacaKey.substring(0, 2)}`, critical: false });
+    const prefix = alpacaKey.substring(0, 2).toUpperCase();
+    if (prefix === "PK" || prefix === "AK") {
+      checks.push({ name: "alpaca_keys", passed: true, detail: `Key prefix: ${prefix}`, critical: false });
+    } else if (prefix === "CK") {
+      checks.push({
+        name: "alpaca_keys",
+        passed: false,
+        detail: "Broker key prefix CK is not valid for Trading API account/market-data endpoints",
+        critical: false,
+      });
     } else {
-      checks.push({ name: "alpaca_keys", passed: false, detail: `Unknown key prefix: ${alpacaKey.substring(0, 2)}`, critical: false });
+      checks.push({
+        name: "alpaca_keys",
+        passed: false,
+        detail: `Unknown key prefix: ${prefix || "??"}`,
+        critical: false,
+      });
     }
 
     // Try a lightweight API call
     try {
       const { getAccount } = await import("./alpaca");
-      await getAccount();
-      checks.push({ name: "alpaca_connectivity", passed: true, detail: "Account accessible", critical: false });
+      const account = await getAccount();
+      const payloadError = extractPayloadError(account);
+      if (payloadError) {
+        checks.push({ name: "alpaca_connectivity", passed: false, detail: payloadError, critical: false });
+      } else {
+        checks.push({ name: "alpaca_connectivity", passed: true, detail: "Account accessible", critical: false });
+      }
     } catch (err: any) {
       checks.push({ name: "alpaca_connectivity", passed: false, detail: err.message?.substring(0, 100) ?? "Unreachable", critical: false });
     }

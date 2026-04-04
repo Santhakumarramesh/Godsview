@@ -13,6 +13,16 @@ import { getDegradationSnapshot } from "../lib/degradation";
 
 const router: IRouter = Router();
 
+function extractPayloadError(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const rec = payload as Record<string, unknown>;
+  const error = typeof rec.error === "string" ? rec.error.trim() : "";
+  const message = typeof rec.message === "string" ? rec.message.trim() : "";
+  if (!error && !message) return null;
+  if (error && message) return `${error}: ${message}`;
+  return error || message;
+}
+
 /* ── Startup timestamp ────────────────────────────────────────────── */
 const startedAt = new Date().toISOString();
 
@@ -55,13 +65,23 @@ router.get("/readyz", async (_req, res) => {
   // Check 2: Alpaca API connectivity
   try {
     const alpacaStart = Date.now();
-    const hasAlpacaKey = !!process.env["ALPACA_API_KEY"];
-    if (hasAlpacaKey) {
-      const { getAccount } = await import("../lib/alpaca");
-      await getAccount();
-      checks["alpaca"] = { status: "ok", latencyMs: Date.now() - alpacaStart };
+    const { getAccount, getAlpacaCredentialStatus } = await import("../lib/alpaca");
+    const creds = getAlpacaCredentialStatus();
+    if (!creds.keyConfigured || !creds.secretConfigured) {
+      checks["alpaca"] = { status: "skipped", error: "ALPACA_API_KEY/ALPACA_SECRET_KEY not configured" };
+    } else if (!creds.hasValidTradingKey) {
+      checks["alpaca"] = {
+        status: "degraded",
+        error: `Unsupported key type: ${creds.keyKind} (${creds.keyPrefix ?? "unknown"})`,
+      };
     } else {
-      checks["alpaca"] = { status: "skipped", error: "ALPACA_API_KEY not configured" };
+      const account = await getAccount();
+      const payloadError = extractPayloadError(account);
+      if (payloadError) {
+        checks["alpaca"] = { status: "degraded", error: payloadError };
+      } else {
+        checks["alpaca"] = { status: "ok", latencyMs: Date.now() - alpacaStart };
+      }
     }
   } catch (err: any) {
     checks["alpaca"] = { status: "degraded", error: err.message };

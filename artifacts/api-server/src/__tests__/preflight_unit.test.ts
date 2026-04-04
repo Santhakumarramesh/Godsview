@@ -35,6 +35,7 @@ vi.mock("../lib/logger", () => ({
 }));
 
 import { runPreflight, type PreflightResult } from "../lib/preflight";
+import { getAccount } from "../lib/alpaca";
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
@@ -108,9 +109,40 @@ describe("runPreflight — result shape", () => {
 });
 
 describe("runPreflight — alpaca_keys check", () => {
+  const getAccountMock = vi.mocked(getAccount);
+
+  beforeEach(() => {
+    getAccountMock.mockReset();
+    getAccountMock.mockResolvedValue({ account_blocked: false });
+  });
+
   it("check is non-critical when keys are missing", async () => {
     const result = await runPreflight();
     const alpacaCheck = result.checks.find(c => c.name === "alpaca_keys");
     expect(alpacaCheck?.critical).toBe(false);
+  });
+
+  it("marks connectivity as failed when Alpaca returns structured error payload", async () => {
+    getAccountMock.mockResolvedValueOnce({
+      error: "broker_key",
+      message: "Broker API keys do not have trading account access",
+    });
+
+    const prevKey = process.env.ALPACA_API_KEY;
+    const prevSecret = process.env.ALPACA_SECRET_KEY;
+    process.env.ALPACA_API_KEY = "CK_TEST_BROKER";
+    process.env.ALPACA_SECRET_KEY = "secret";
+
+    try {
+      const result = await runPreflight();
+      const connCheck = result.checks.find(c => c.name === "alpaca_connectivity");
+      expect(connCheck?.passed).toBe(false);
+      expect(connCheck?.detail).toMatch(/broker/i);
+    } finally {
+      if (prevKey === undefined) delete process.env.ALPACA_API_KEY;
+      else process.env.ALPACA_API_KEY = prevKey;
+      if (prevSecret === undefined) delete process.env.ALPACA_SECRET_KEY;
+      else process.env.ALPACA_SECRET_KEY = prevSecret;
+    }
   });
 });

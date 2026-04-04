@@ -15,10 +15,10 @@
  *   OI change      → approximated from volume acceleration (rising vol in up-trend = OI buildup)
  */
 
-import Alpaca from "@alpacahq/alpaca-trade-api";
 import { logger } from "./logger";
 import type { MacroBiasInput } from "./macro_bias_engine";
 import type { SentimentInput } from "./sentiment_engine";
+import { getBars } from "./alpaca";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -39,22 +39,28 @@ interface OhlcvBar {
   v: number;
 }
 
-// ─── Alpaca client factory (lazy, uses runtime config) ────────────────────────
-
-let _alpaca: InstanceType<typeof Alpaca> | null = null;
-
-function getAlpaca(): InstanceType<typeof Alpaca> | null {
-  try {
-    const key    = process.env.ALPACA_KEY_ID    ?? process.env.ALPACA_API_KEY ?? "";
-    const secret = process.env.ALPACA_SECRET_KEY ?? process.env.ALPACA_API_SECRET ?? "";
-    if (!key || !secret) return null;
-    if (!_alpaca) {
-      _alpaca = new Alpaca({ keyId: key, secretKey: secret, paper: true });
-    }
-    return _alpaca;
-  } catch {
-    return null;
-  }
+function toOhlcvBar(bar: {
+  t?: string;
+  Timestamp?: string;
+  o?: number;
+  Open?: number;
+  h?: number;
+  High?: number;
+  l?: number;
+  Low?: number;
+  c?: number;
+  Close?: number;
+  v?: number;
+  Volume?: number;
+}): OhlcvBar {
+  return {
+    t: String(bar.t ?? bar.Timestamp ?? new Date().toISOString()),
+    o: Number(bar.o ?? bar.Open ?? 0),
+    h: Number(bar.h ?? bar.High ?? 0),
+    l: Number(bar.l ?? bar.Low ?? 0),
+    c: Number(bar.c ?? bar.Close ?? 0),
+    v: Number(bar.v ?? bar.Volume ?? 0),
+  };
 }
 
 // ─── Bar fetching helpers ──────────────────────────────────────────────────────
@@ -64,23 +70,9 @@ function getAlpaca(): InstanceType<typeof Alpaca> | null {
  * Returns empty array on any failure (graceful degradation).
  */
 async function fetchBars(symbol: string, limit: number): Promise<OhlcvBar[]> {
-  const alpaca = getAlpaca();
-  if (!alpaca) return [];
   try {
-    const end   = new Date();
-    const start = new Date(end.getTime() - limit * 2 * 86400_000); // 2x buffer for weekends
-    const resp  = await (alpaca as unknown as {
-      getBarsV2: (sym: string, opts: Record<string, unknown>) => AsyncIterable<OhlcvBar>
-    }).getBarsV2(symbol, {
-      start: start.toISOString(),
-      end:   end.toISOString(),
-      timeframe: "1Day",
-      limit,
-      feed: "iex",
-    });
-    const bars: OhlcvBar[] = [];
-    for await (const bar of resp) bars.push(bar);
-    return bars.slice(-limit);
+    const bars = await getBars(symbol, "1Day", limit);
+    return bars.slice(-limit).map(toOhlcvBar);
   } catch (err) {
     logger.warn(`[macro_feed] fetchBars ${symbol} failed: ${String(err)}`);
     return [];
@@ -91,22 +83,9 @@ async function fetchBars(symbol: string, limit: number): Promise<OhlcvBar[]> {
  * Fetch last `limit` 1-minute crypto bars for a crypto symbol.
  */
 async function fetchCryptoBars(symbol: string, limit: number): Promise<OhlcvBar[]> {
-  const alpaca = getAlpaca();
-  if (!alpaca) return [];
   try {
-    const end   = new Date();
-    const start = new Date(end.getTime() - limit * 2 * 60_000);
-    const resp  = await (alpaca as unknown as {
-      getCryptoBarsV2: (sym: string, opts: Record<string, unknown>) => AsyncIterable<OhlcvBar>
-    }).getCryptoBarsV2(symbol, {
-      start: start.toISOString(),
-      end:   end.toISOString(),
-      timeframe: "1Min",
-      limit,
-    });
-    const bars: OhlcvBar[] = [];
-    for await (const bar of resp) bars.push(bar);
-    return bars.slice(-limit);
+    const bars = await getBars(symbol, "1Min", limit);
+    return bars.slice(-limit).map(toOhlcvBar);
   } catch (err) {
     logger.warn(`[macro_feed] fetchCryptoBars ${symbol} failed: ${String(err)}`);
     return [];

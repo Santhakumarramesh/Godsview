@@ -30,6 +30,40 @@ function parseLevels(raw: Array<{ p: number; s: number }>): PriceLevel[] {
   return raw.map((r) => ({ price: r.p, size: r.s }));
 }
 
+function compactBodySnippet(body: string, maxLen = 180): string {
+  const compact = body.replace(/\s+/g, " ").trim();
+  if (!compact) return "empty response";
+  return compact.length > maxLen ? `${compact.slice(0, maxLen)}...` : compact;
+}
+
+export function parseOrderbookRestResponse(symbol: string, statusCode: number, body: string): OrderBookSnapshot {
+  if (statusCode < 200 || statusCode >= 300) {
+    throw new Error(`Orderbook API ${statusCode}: ${compactBodySnippet(body)}`);
+  }
+
+  let json: any;
+  try {
+    json = JSON.parse(body);
+  } catch {
+    throw new Error(`Orderbook API invalid JSON for ${symbol}: ${compactBodySnippet(body)}`);
+  }
+
+  const alpacaSym = toAlpacaSlash(symbol);
+  const book = json?.orderbooks?.[alpacaSym];
+  if (!book) {
+    throw new Error(`No orderbook data for ${symbol}`);
+  }
+
+  return {
+    symbol,
+    asks: parseLevels(book.a ?? []).sort((a, b) => a.price - b.price),
+    bids: parseLevels(book.b ?? []).sort((a, b) => b.price - a.price),
+    timestamp: book.t ?? new Date().toISOString(),
+    receivedAt: Date.now(),
+    source: "rest",
+  };
+}
+
 // ── Manager class ──────────────────────────────────────────────────────────
 
 class OrderBookManager {
@@ -169,23 +203,11 @@ class OrderBookManager {
         { hostname: ALPACA_DATA_URL, path, headers: { "APCA-API-KEY-ID": KEY_ID, "APCA-API-SECRET-KEY": SECRET_KEY } },
         (res) => {
           let body = "";
+          const statusCode = Number(res.statusCode ?? 0);
           res.on("data", (chunk) => { body += chunk; });
           res.on("end", () => {
             try {
-              const json = JSON.parse(body);
-              const alpacaSym2 = toAlpacaSlash(symbol);
-              const book = json.orderbooks?.[alpacaSym2];
-              if (!book) { reject(new Error(`No orderbook data for ${symbol}`)); return; }
-
-              const snap: OrderBookSnapshot = {
-                symbol,
-                asks:       parseLevels(book.a ?? []).sort((a, b) => a.price - b.price),
-                bids:       parseLevels(book.b ?? []).sort((a, b) => b.price - a.price),
-                timestamp:  book.t ?? new Date().toISOString(),
-                receivedAt: Date.now(),
-                source:     "rest",
-              };
-              resolve(snap);
+              resolve(parseOrderbookRestResponse(symbol, statusCode, body));
             } catch (e) { reject(e); }
           });
         }
