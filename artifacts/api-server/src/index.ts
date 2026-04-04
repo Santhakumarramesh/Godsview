@@ -31,6 +31,11 @@ import {
   startStrategyAllocator,
   stopStrategyAllocator,
 } from "./lib/strategy_allocator";
+import {
+  shouldProductionWatchdogAutoStart,
+  startProductionWatchdog,
+  stopProductionWatchdog,
+} from "./lib/production_watchdog";
 
 // ── Validate environment before anything else ───────────────────
 validateEnv();
@@ -161,6 +166,14 @@ const server = app.listen(port, (err) => {
   } else {
     logger.info("Strategy allocator auto-start disabled");
   }
+
+  if (shouldProductionWatchdogAutoStart()) {
+    startProductionWatchdog({ runImmediate: true })
+      .then((result) => logger.info({ intervalMs: result.interval_ms }, "Production watchdog started"))
+      .catch((err) => logger.error({ err }, "Production watchdog failed to start"));
+  } else {
+    logger.info("Production watchdog auto-start disabled");
+  }
 });
 
 // ── Graceful shutdown with connection draining ──────────────────
@@ -219,6 +232,12 @@ onShutdown(async () => {
 onShutdown(async () => {
   logger.info("Stopping strategy allocator...");
   stopStrategyAllocator();
+});
+
+// Register cleanup: stop production watchdog
+onShutdown(async () => {
+  logger.info("Stopping production watchdog...");
+  stopProductionWatchdog();
 });
 
 // Register cleanup: end trading session

@@ -31,6 +31,7 @@ import deploymentReadinessRouter from "./deployment_readiness";
 import autonomySupervisorRouter from "./autonomy_supervisor";
 import strategyGovernorRouter from "./strategy_governor";
 import strategyAllocatorRouter from "./strategy_allocator";
+import productionWatchdogRouter from "./production_watchdog";
 import leaderboardRouter from "./leaderboard";
 import pythonV2Router from "./python_v2";
 
@@ -69,6 +70,7 @@ router.use(deploymentReadinessRouter);
 router.use(autonomySupervisorRouter);
 router.use(strategyGovernorRouter);
 router.use(strategyAllocatorRouter);
+router.use(productionWatchdogRouter);
 
 // Python v2 microservices proxy — shadow routes at /v2/*
 router.use(pythonV2Router);
