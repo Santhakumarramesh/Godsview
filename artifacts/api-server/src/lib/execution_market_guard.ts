@@ -4,6 +4,7 @@ import { orderBookManager } from "./market/orderbook";
 import type { OrderBookSnapshot } from "./market/types";
 import { setKillSwitchActive } from "./risk_engine";
 import { inferAssetClass, type AssetClass } from "./session_guard";
+import { loadGuardState, persistGuardState } from "./guard_state_persistence";
 
 export type ExecutionMarketGuardLevel = "NORMAL" | "WATCH" | "HALT";
 export type ExecutionMarketGuardAction = "ALLOW" | "WARN" | "BLOCK";
@@ -95,6 +96,7 @@ export interface ExecutionMarketGuardDecision {
 
 const logger = _logger.child({ module: "execution_market_guard" });
 const MAX_RECENT_EVENTS = 200;
+const STATE_FILE = "execution_market_guard_state.json";
 
 const DEFAULT_WINDOW_MS = 15 * 60_000;
 const DEFAULT_MAX_CRITICAL_WINDOW = 4;
@@ -129,6 +131,20 @@ let _lastEvaluation: ExecutionMarketGuardSnapshot["last_evaluation"] = {
   reasons: [],
   metrics: null,
 };
+
+interface PersistedExecutionMarketGuardState {
+  level: ExecutionMarketGuardLevel;
+  halt_active: boolean;
+  consecutive_critical: number;
+  total_events: number;
+  last_event_at: string | null;
+  last_halt_reason: string | null;
+  recent_events: ExecutionMarketGuardEvent[];
+  critical_times: number[];
+  warning_times: number[];
+  last_evaluation: ExecutionMarketGuardSnapshot["last_evaluation"];
+  persisted_at: string;
+}
 
 function clampInt(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return min;
@@ -206,6 +222,35 @@ function pushEvent(event: ExecutionMarketGuardEvent): void {
   if (_recentEvents.length > MAX_RECENT_EVENTS) _recentEvents.pop();
   _totalEvents += 1;
   _lastEventAt = event.at;
+}
+
+function numericTimes(input: unknown): number[] {
+  if (!Array.isArray(input)) return [];
+  return input
+    .map((v) => Number(v))
+    .filter((v) => Number.isFinite(v) && v > 0)
+    .map((v) => Math.round(v));
+}
+
+function persistState(): void {
+  const payload: PersistedExecutionMarketGuardState = {
+    level: _level,
+    halt_active: _haltActive,
+    consecutive_critical: _consecutiveCritical,
+    total_events: _totalEvents,
+    last_event_at: _lastEventAt,
+    last_halt_reason: _lastHaltReason,
+    recent_events: [..._recentEvents],
+    critical_times: [..._criticalTimes],
+    warning_times: [..._warningTimes],
+    last_evaluation: {
+      ..._lastEvaluation,
+      reasons: [..._lastEvaluation.reasons],
+      metrics: _lastEvaluation.metrics ? { ..._lastEvaluation.metrics } : null,
+    },
+    persisted_at: new Date().toISOString(),
+  };
+  persistGuardState(STATE_FILE, payload);
 }
 
 function pruneWindow(nowMs: number, p: ExecutionMarketGuardPolicy): void {
@@ -331,6 +376,7 @@ function maybeHalt(reason: string, p: ExecutionMarketGuardPolicy): void {
   if (p.sync_kill_switch_on_halt) {
     setKillSwitchActive(true);
   }
+  persistState();
 }
 
 function updateLastEvaluation(input: {
@@ -393,6 +439,7 @@ export async function evaluateExecutionMarketGuard(input: {
       detail: "guard_halted",
       reasons,
     });
+    persistState();
     return {
       allowed: false,
       level: "HALT",
@@ -569,6 +616,8 @@ export async function evaluateExecutionMarketGuard(input: {
     },
   });
 
+  persistState();
+
   return {
     allowed,
     level: _level,
@@ -615,7 +664,76 @@ export function resetExecutionMarketGuard(input?: {
   }
 
   logger.warn({ reason: input?.reason ?? "manual_reset" }, "[market-guard] reset");
+  persistState();
   return getExecutionMarketGuardSnapshot();
+}
+
+function loadState(): void {
+  const payload = loadGuardState<PersistedExecutionMarketGuardState>(STATE_FILE);
+  if (!payload) return;
+
+  const level = payload.level;
+  _level = level === "NORMAL" || level === "WATCH" || level === "HALT" ? level : "NORMAL";
+  _haltActive = Boolean(payload.halt_active);
+  _consecutiveCritical = clampInt(Number(payload.consecutive_critical ?? 0), 0, 10_000);
+  _totalEvents = clampInt(Number(payload.total_events ?? 0), 0, 10_000_000);
+  _lastEventAt = payload.last_event_at ?? null;
+  _lastHaltReason = payload.last_halt_reason ?? null;
+
+  _recentEvents.length = 0;
+  for (const event of Array.isArray(payload.recent_events) ? payload.recent_events.slice(0, MAX_RECENT_EVENTS) : []) {
+    if (!event || typeof event !== "object") continue;
+    if (typeof event.at !== "string" || typeof event.symbol !== "string" || typeof event.type !== "string") continue;
+    _recentEvents.push(event);
+  }
+
+  _criticalTimes.length = 0;
+  _criticalTimes.push(...numericTimes(payload.critical_times));
+  _warningTimes.length = 0;
+  _warningTimes.push(...numericTimes(payload.warning_times));
+
+  const evalPayload = payload.last_evaluation;
+  if (evalPayload && typeof evalPayload === "object") {
+    _lastEvaluation = {
+      at: typeof evalPayload.at === "string" ? evalPayload.at : null,
+      symbol: typeof evalPayload.symbol === "string" ? evalPayload.symbol : null,
+      asset_class:
+        evalPayload.asset_class === "equity" || evalPayload.asset_class === "crypto" || evalPayload.asset_class === "futures"
+          ? evalPayload.asset_class
+          : null,
+      action: evalPayload.action === "ALLOW" || evalPayload.action === "WARN" || evalPayload.action === "BLOCK" ? evalPayload.action : "ALLOW",
+      allowed: Boolean(evalPayload.allowed),
+      reasons: Array.isArray(evalPayload.reasons) ? evalPayload.reasons.filter((reason): reason is ExecutionMarketGuardReason => typeof reason === "string") : [],
+      metrics:
+        evalPayload.metrics && typeof evalPayload.metrics === "object"
+          ? {
+              orderbook_available: Boolean(evalPayload.metrics.orderbook_available),
+              orderbook_age_ms: Number.isFinite(Number(evalPayload.metrics.orderbook_age_ms)) ? Number(evalPayload.metrics.orderbook_age_ms) : null,
+              spread_bps: Number.isFinite(Number(evalPayload.metrics.spread_bps)) ? Number(evalPayload.metrics.spread_bps) : null,
+              top_book_notional_usd: Number.isFinite(Number(evalPayload.metrics.top_book_notional_usd))
+                ? Number(evalPayload.metrics.top_book_notional_usd)
+                : null,
+              bar_age_ms: Number.isFinite(Number(evalPayload.metrics.bar_age_ms)) ? Number(evalPayload.metrics.bar_age_ms) : null,
+              atr_pct_1m: Number.isFinite(Number(evalPayload.metrics.atr_pct_1m)) ? Number(evalPayload.metrics.atr_pct_1m) : null,
+              rv_1m_pct: Number.isFinite(Number(evalPayload.metrics.rv_1m_pct)) ? Number(evalPayload.metrics.rv_1m_pct) : null,
+            }
+          : null,
+    };
+  }
+
+  const nowMs = Date.now();
+  pruneWindow(nowMs, policy());
+
+  logger.info(
+    {
+      level: _level,
+      halt: _haltActive,
+      windowCritical: _criticalTimes.length,
+      windowWarn: _warningTimes.length,
+      consecutiveCritical: _consecutiveCritical,
+    },
+    "[market-guard] state restored from disk",
+  );
 }
 
 export function getExecutionMarketGuardSnapshot(): ExecutionMarketGuardSnapshot {
@@ -646,3 +764,5 @@ export function getExecutionMarketGuardSnapshot(): ExecutionMarketGuardSnapshot 
     recent_events: [..._recentEvents],
   };
 }
+
+loadState();

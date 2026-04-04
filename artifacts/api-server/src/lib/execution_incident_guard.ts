@@ -1,5 +1,6 @@
 import { setKillSwitchActive } from "./risk_engine";
 import { logger as _logger } from "./logger";
+import { loadGuardState, persistGuardState } from "./guard_state_persistence";
 
 export type ExecutionIncidentLevel = "NORMAL" | "WATCH" | "HALT";
 
@@ -41,6 +42,7 @@ export interface ExecutionIncidentSnapshot {
 
 const logger = _logger.child({ module: "execution_incident_guard" });
 const MAX_RECENT_EVENTS = 200;
+const STATE_FILE = "execution_incident_guard_state.json";
 
 const DEFAULT_WINDOW_MS = 20 * 60_000;
 const DEFAULT_MAX_FAILURES_WINDOW = 6;
@@ -60,6 +62,20 @@ const _recentEvents: ExecutionIncidentEvent[] = [];
 const _failureTimes: number[] = [];
 const _rejectionTimes: number[] = [];
 const _slippageSpikeTimes: number[] = [];
+
+interface PersistedExecutionIncidentState {
+  level: ExecutionIncidentLevel;
+  halt_active: boolean;
+  consecutive_failures: number;
+  total_events: number;
+  last_event_at: string | null;
+  last_halt_reason: string | null;
+  recent_events: ExecutionIncidentEvent[];
+  failure_times: number[];
+  rejection_times: number[];
+  slippage_spike_times: number[];
+  persisted_at: string;
+}
 
 function clampInt(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return min;
@@ -109,6 +125,31 @@ function pushEvent(event: ExecutionIncidentEvent): void {
   _lastEventAt = event.at;
 }
 
+function numericTimes(input: unknown): number[] {
+  if (!Array.isArray(input)) return [];
+  return input
+    .map((v) => Number(v))
+    .filter((v) => Number.isFinite(v) && v > 0)
+    .map((v) => Math.round(v));
+}
+
+function persistState(): void {
+  const payload: PersistedExecutionIncidentState = {
+    level: _level,
+    halt_active: _haltActive,
+    consecutive_failures: _consecutiveFailures,
+    total_events: _totalEvents,
+    last_event_at: _lastEventAt,
+    last_halt_reason: _lastHaltReason,
+    recent_events: [..._recentEvents],
+    failure_times: [..._failureTimes],
+    rejection_times: [..._rejectionTimes],
+    slippage_spike_times: [..._slippageSpikeTimes],
+    persisted_at: new Date().toISOString(),
+  };
+  persistGuardState(STATE_FILE, payload);
+}
+
 function pruneWindow(nowMs: number, p: ExecutionIncidentPolicy): void {
   const cutoff = nowMs - p.window_ms;
   while (_failureTimes.length > 0 && _failureTimes[0] < cutoff) _failureTimes.shift();
@@ -133,6 +174,7 @@ function maybeHalt(reason: string, p: ExecutionIncidentPolicy): void {
   if (p.auto_halt) {
     setKillSwitchActive(true);
   }
+  persistState();
 }
 
 function evaluateThresholds(nowMs: number, p: ExecutionIncidentPolicy): void {
@@ -216,6 +258,7 @@ export function recordExecutionAttempt(input: {
   }
 
   evaluateThresholds(nowMs, p);
+  persistState();
   return getExecutionIncidentSnapshot();
 }
 
@@ -246,6 +289,7 @@ export function recordExecutionSlippage(input: {
       reason: `limit=${p.max_slippage_bps}`,
     });
     evaluateThresholds(nowMs, p);
+    persistState();
   }
   return getExecutionIncidentSnapshot();
 }
@@ -288,7 +332,53 @@ export function resetExecutionIncidentGuard(input?: {
   }
 
   logger.warn({ reason: input?.reason ?? "manual_reset" }, "[incident-guard] reset");
+  persistState();
   return getExecutionIncidentSnapshot();
+}
+
+function loadState(): void {
+  const payload = loadGuardState<PersistedExecutionIncidentState>(STATE_FILE);
+  if (!payload) return;
+
+  const level = payload.level;
+  _level = level === "NORMAL" || level === "WATCH" || level === "HALT" ? level : "NORMAL";
+  _haltActive = Boolean(payload.halt_active);
+  _consecutiveFailures = clampInt(Number(payload.consecutive_failures ?? 0), 0, 10_000);
+  _totalEvents = clampInt(Number(payload.total_events ?? 0), 0, 10_000_000);
+  _lastEventAt = payload.last_event_at ?? null;
+  _lastHaltReason = payload.last_halt_reason ?? null;
+
+  _recentEvents.length = 0;
+  for (const event of Array.isArray(payload.recent_events) ? payload.recent_events.slice(0, MAX_RECENT_EVENTS) : []) {
+    if (!event || typeof event !== "object") continue;
+    if (typeof event.at !== "string" || typeof event.symbol !== "string" || typeof event.type !== "string") continue;
+    _recentEvents.push(event);
+  }
+
+  _failureTimes.length = 0;
+  _failureTimes.push(...numericTimes(payload.failure_times));
+  _rejectionTimes.length = 0;
+  _rejectionTimes.push(...numericTimes(payload.rejection_times));
+  _slippageSpikeTimes.length = 0;
+  _slippageSpikeTimes.push(...numericTimes(payload.slippage_spike_times));
+
+  const nowMs = Date.now();
+  const p = policy();
+  pruneWindow(nowMs, p);
+  if (!_haltActive) {
+    evaluateThresholds(nowMs, p);
+  }
+
+  logger.info(
+    {
+      level: _level,
+      halt: _haltActive,
+      failures: _failureTimes.length,
+      rejections: _rejectionTimes.length,
+      slippageSpikes: _slippageSpikeTimes.length,
+    },
+    "[incident-guard] state restored from disk",
+  );
 }
 
 export function getExecutionIncidentSnapshot(): ExecutionIncidentSnapshot {
@@ -310,3 +400,5 @@ export function getExecutionIncidentSnapshot(): ExecutionIncidentSnapshot {
     recent_events: [..._recentEvents],
   };
 }
+
+loadState();
