@@ -34,7 +34,7 @@ import {
   classifyMarketRegime,
   isCategoryAllowedInRegime,
 } from "@workspace/strategy-core";
-import { getBars } from "./alpaca";
+import { getBars, placeOrder, getAccount, isAlpacaAuthFailureError } from "./alpaca";
 import { publishAlert } from "./signal_stream";
 import { listEnabledSymbols, touchScanned } from "./watchlist";
 import { recordDecision } from "./trade_journal";
@@ -48,7 +48,6 @@ import { getRiskEngineSnapshot, getCurrentTradingSession, isSessionAllowed, isKi
 import { checkCircuitBreaker } from "./circuit_breaker";
 import { checkAutoTradeGate, recordAutoTradeAttempt } from "./auto_trade_config";
 import { computePositionSize } from "./position_sizer";
-import { placeOrder, getAccount } from "./alpaca";
 import { logger as _logger } from "./logger";
 import { getStrategyAllocationForSignal } from "./strategy_allocator";
 
@@ -61,6 +60,18 @@ const ALERT_COOLDOWN_MS    = parseInt(process.env.SCANNER_ALERT_COOLDOWN_MS ?? "
 const MAX_CONCURRENT       = parseInt(process.env.SCANNER_MAX_CONCURRENT    ?? "3",       10);
 const HISTORY_MAX          = 100;
 const QUALITY_FLOOR        = 0.55; // minimum quality score to emit an alert
+const AUTH_WARN_COOLDOWN_MS = 30_000;
+let _lastAuthWarnMs = 0;
+
+function logAuthDegraded(symbol: string, err: Error): void {
+  const now = Date.now();
+  if (now - _lastAuthWarnMs >= AUTH_WARN_COOLDOWN_MS) {
+    _lastAuthWarnMs = now;
+    logger.warn({ symbol, err: err.message }, "[scanner] Alpaca auth unavailable — scan degraded");
+    return;
+  }
+  logger.debug({ symbol, err: err.message }, "[scanner] Alpaca auth unavailable — scan degraded");
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -393,6 +404,11 @@ async function scanSymbol(
     touchScanned(symbol, run.signalsFound > 0);
     run.symbolsScanned++;
   } catch (err) {
+    if (isAlpacaAuthFailureError(err)) {
+      const normalizedErr = err instanceof Error ? err : new Error(String(err));
+      logAuthDegraded(symbol, normalizedErr);
+      return;
+    }
     logger.warn({ symbol, err }, "[scanner] Symbol scan failed");
   }
 }

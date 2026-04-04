@@ -4,6 +4,7 @@ import { getBars } from "../lib/alpaca";
 
 vi.mock("../lib/alpaca", () => ({
   getBars: vi.fn(),
+  isAlpacaAuthFailureError: vi.fn(() => false),
 }));
 
 function makeBars(limit: number, startPrice: number, step: number, volume = 1000) {

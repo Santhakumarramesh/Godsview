@@ -18,7 +18,7 @@
 import { logger } from "./logger";
 import type { MacroBiasInput } from "./macro_bias_engine";
 import type { SentimentInput } from "./sentiment_engine";
-import { getBars } from "./alpaca";
+import { getBars, isAlpacaAuthFailureError } from "./alpaca";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -74,7 +74,12 @@ async function fetchBars(symbol: string, limit: number): Promise<OhlcvBar[]> {
     const bars = await getBars(symbol, "1Day", limit);
     return bars.slice(-limit).map(toOhlcvBar);
   } catch (err) {
-    logger.warn(`[macro_feed] fetchBars ${symbol} failed: ${String(err)}`);
+    const errMsg = err instanceof Error ? err.message : String(err);
+    if (isAlpacaAuthFailureError(err)) {
+      logger.debug(`[macro_feed] fetchBars ${symbol} skipped: ${errMsg}`);
+      return [];
+    }
+    logger.warn(`[macro_feed] fetchBars ${symbol} failed: ${errMsg}`);
     return [];
   }
 }
@@ -87,7 +92,12 @@ async function fetchCryptoBars(symbol: string, limit: number): Promise<OhlcvBar[
     const bars = await getBars(symbol, "1Min", limit);
     return bars.slice(-limit).map(toOhlcvBar);
   } catch (err) {
-    logger.warn(`[macro_feed] fetchCryptoBars ${symbol} failed: ${String(err)}`);
+    const errMsg = err instanceof Error ? err.message : String(err);
+    if (isAlpacaAuthFailureError(err)) {
+      logger.debug(`[macro_feed] fetchCryptoBars ${symbol} skipped: ${errMsg}`);
+      return [];
+    }
+    logger.warn(`[macro_feed] fetchCryptoBars ${symbol} failed: ${errMsg}`);
     return [];
   }
 }

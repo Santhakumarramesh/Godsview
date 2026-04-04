@@ -1,4 +1,4 @@
-import { getAccount, getBars, getTypedPositions, type AlpacaPosition } from "./alpaca";
+import { getAccount, getBars, getTypedPositions, isAlpacaAuthFailureError, type AlpacaPosition } from "./alpaca";
 import { emergencyLiquidateAll, type LiquidationResult } from "./emergency_liquidator";
 import { logger } from "./logger";
 import { getRiskEngineSnapshot, isKillSwitchActive, setKillSwitchActive } from "./risk_engine";
@@ -62,10 +62,23 @@ export interface EmergencyStopResult {
 const CACHE_TTL_MS = 20_000;
 const LOOKBACK_BARS = Math.max(40, Math.min(300, Number(process.env.GODSVIEW_VAR_LOOKBACK_BARS ?? 120)));
 const VAR_CONFIDENCE = Math.max(0.90, Math.min(0.999, Number(process.env.GODSVIEW_VAR_CONFIDENCE ?? 0.95)));
+const AUTH_WARN_COOLDOWN_MS = 30_000;
 
 let _peakEquity = 0;
 let _lastSnapshot: PortfolioRiskSnapshot | null = null;
 let _lastSnapshotTs = 0;
+let _lastAuthWarnMs = 0;
+
+function logAuthDegraded(context: string, err: Error, symbol?: string): void {
+  const now = Date.now();
+  const payload = { err: err.message, ...(symbol ? { symbol } : {}) };
+  if (now - _lastAuthWarnMs >= AUTH_WARN_COOLDOWN_MS) {
+    _lastAuthWarnMs = now;
+    logger.warn(payload, `[risk-guard] Alpaca auth unavailable during ${context}`);
+    return;
+  }
+  logger.debug(payload, `[risk-guard] Alpaca auth unavailable during ${context}`);
+}
 
 function clamp01(value: number): number {
   if (!Number.isFinite(value)) return 0;
@@ -134,10 +147,20 @@ function pearson(a: number[], b: number[]): number {
 async function getEquity(): Promise<number> {
   try {
     const account = await getAccount();
+    if (typeof account === "object" && account !== null && "error" in account) {
+      const detail = String((account as Record<string, unknown>).message ?? (account as Record<string, unknown>).error ?? "unknown");
+      logAuthDegraded("getEquity", new Error(detail));
+      return 0;
+    }
     if (typeof account === "object" && account !== null && "equity" in account) {
       return Math.max(0, toFinite((account as Record<string, unknown>).equity, 0));
     }
   } catch (err) {
+    if (isAlpacaAuthFailureError(err)) {
+      const normalizedErr = err instanceof Error ? err : new Error(String(err));
+      logAuthDegraded("getEquity", normalizedErr);
+      return 0;
+    }
     logger.warn({ err }, "[risk-guard] failed to fetch account equity");
   }
   return 0;
@@ -154,6 +177,11 @@ async function loadReturns(symbols: string[]): Promise<Map<string, number[]>> {
         result.set(symbol, ret);
       }
     } catch (err) {
+      if (isAlpacaAuthFailureError(err)) {
+        const normalizedErr = err instanceof Error ? err : new Error(String(err));
+        logAuthDegraded("loadReturns", normalizedErr, symbol);
+        return;
+      }
       logger.warn({ err, symbol }, "[risk-guard] failed to load bars for symbol");
     }
   }));
