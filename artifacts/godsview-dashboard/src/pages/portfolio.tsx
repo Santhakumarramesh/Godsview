@@ -1,5 +1,11 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import {
+  usePortfolioAllocatorStatus,
+  usePortfolioAllocations,
+  useRunPortfolioAllocator,
+  useRebalancePortfolioAllocator,
+} from "@/lib/api";
 
 type PositionAlloc = {
   symbol: string;
@@ -76,6 +82,11 @@ function SectorBar({ sectors, total }: { sectors: Record<string, number>; total:
 }
 
 export default function PortfolioPage() {
+  const allocatorStatus = usePortfolioAllocatorStatus();
+  const allocatorAllocations = usePortfolioAllocations();
+  const runAllocator = useRunPortfolioAllocator();
+  const rebalanceAllocator = useRebalancePortfolioAllocator();
+
   const { data: current, isLoading } = useQuery({
     queryKey: ["portfolio-current"],
     queryFn: async () => {
@@ -108,6 +119,10 @@ export default function PortfolioPage() {
   });
 
   const pf = computeMut.data ?? current;
+  const liveAllocator = allocatorStatus.data;
+  const liveAllocations = allocatorAllocations.data;
+  const topOpportunities = liveAllocator?.opportunities?.slice(0, 8) ?? [];
+  const blocked = liveAllocator?.blocked?.slice(0, 8) ?? [];
 
   return (
     <div style={{ padding: "24px", maxWidth: "1100px" }}>
@@ -116,6 +131,108 @@ export default function PortfolioPage() {
           PORTFOLIO ENGINE
         </h1>
         <p style={{ fontSize: "11px", color: "#767576" }}>Vol-targeted position sizing — conviction × vol allocation with 4-stage constraints</p>
+      </div>
+
+      {/* Live allocator control plane */}
+      <div style={{ padding: "16px", borderRadius: "8px", backgroundColor: "#1a191b", border: "1px solid rgba(72,72,73,0.15)", marginBottom: "24px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap", marginBottom: "12px" }}>
+          <div>
+            <div style={{ fontSize: "10px", color: "#484849", fontFamily: "Space Grotesk", letterSpacing: "0.1em" }}>LIVE CAPITAL ROUTER</div>
+            <div style={{ fontSize: "11px", color: "#767576", marginTop: "4px" }}>
+              {liveAllocator
+                ? `Cycle: ${liveAllocator.cycle_reason} · ${new Date(liveAllocator.generated_at).toLocaleTimeString()}`
+                : "Allocator snapshot loading..."}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button
+              onClick={() => runAllocator.mutate("manual_allocator_cycle")}
+              disabled={runAllocator.isPending}
+              style={{
+                padding: "8px 14px",
+                borderRadius: "6px",
+                backgroundColor: "rgba(156,255,147,0.1)",
+                border: "1px solid rgba(156,255,147,0.3)",
+                color: "#9cff93",
+                fontSize: "10px",
+                fontFamily: "Space Grotesk",
+                fontWeight: 700,
+                letterSpacing: "0.12em",
+                cursor: runAllocator.isPending ? "wait" : "pointer",
+              }}
+            >
+              {runAllocator.isPending ? "RUNNING..." : "RUN CYCLE"}
+            </button>
+            <button
+              onClick={() => rebalanceAllocator.mutate("manual_rebalance")}
+              disabled={rebalanceAllocator.isPending}
+              style={{
+                padding: "8px 14px",
+                borderRadius: "6px",
+                backgroundColor: "rgba(102,157,255,0.10)",
+                border: "1px solid rgba(102,157,255,0.3)",
+                color: "#669dff",
+                fontSize: "10px",
+                fontFamily: "Space Grotesk",
+                fontWeight: 700,
+                letterSpacing: "0.12em",
+                cursor: rebalanceAllocator.isPending ? "wait" : "pointer",
+              }}
+            >
+              {rebalanceAllocator.isPending ? "REBALANCING..." : "REBALANCE"}
+            </button>
+          </div>
+        </div>
+
+        {liveAllocator && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(120px, 1fr))", gap: "10px", marginBottom: "14px" }}>
+            {[
+              { label: "OPEN POS", value: liveAllocator.exposure.open_positions.toString(), color: "#cc79a7" },
+              { label: "OPPORTUNITIES", value: liveAllocator.opportunities.length.toString(), color: "#56b4e9" },
+              { label: "ALLOCATIONS", value: liveAllocator.allocations.length.toString(), color: "#9cff93" },
+              { label: "AVAIL RISK", value: `${(liveAllocator.available_risk_pct * 100).toFixed(2)}%`, color: "#f0e442" },
+              { label: "OPEN RISK", value: `${(liveAllocator.exposure.open_risk_pct * 100).toFixed(2)}%`, color: "#ff7162" },
+            ].map((item) => (
+              <div key={item.label} style={{ padding: "10px", borderRadius: "6px", backgroundColor: "#0e0e0f", border: "1px solid rgba(72,72,73,0.2)" }}>
+                <div style={{ fontSize: "8px", color: "#484849", fontFamily: "Space Grotesk", letterSpacing: "0.12em", marginBottom: "6px" }}>{item.label}</div>
+                <div style={{ fontSize: "15px", fontWeight: 700, color: item.color, fontFamily: "JetBrains Mono, monospace" }}>{item.value}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+          <div style={{ border: "1px solid rgba(72,72,73,0.2)", borderRadius: "6px", padding: "10px", backgroundColor: "#0e0e0f" }}>
+            <div style={{ fontSize: "9px", color: "#484849", fontFamily: "Space Grotesk", letterSpacing: "0.12em", marginBottom: "8px" }}>TOP OPPORTUNITIES</div>
+            {topOpportunities.length === 0 && <div style={{ fontSize: "10px", color: "#767576" }}>No live opportunities yet.</div>}
+            {topOpportunities.map((op) => (
+              <div key={`${op.decision_id}-${op.symbol}`} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderTop: "1px solid rgba(72,72,73,0.12)" }}>
+                <span style={{ fontSize: "10px", color: "#adaaab", fontFamily: "JetBrains Mono, monospace" }}>
+                  {op.symbol} · {op.direction}
+                </span>
+                <span style={{ fontSize: "10px", color: "#9cff93", fontFamily: "JetBrains Mono, monospace" }}>
+                  score {(op.adjusted_score * 100).toFixed(1)} · EV {op.expected_value.toFixed(3)}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div style={{ border: "1px solid rgba(72,72,73,0.2)", borderRadius: "6px", padding: "10px", backgroundColor: "#0e0e0f" }}>
+            <div style={{ fontSize: "9px", color: "#484849", fontFamily: "Space Grotesk", letterSpacing: "0.12em", marginBottom: "8px" }}>BLOCKED CANDIDATES</div>
+            {blocked.length === 0 && <div style={{ fontSize: "10px", color: "#767576" }}>No blocked candidates in current cycle.</div>}
+            {blocked.map((entry) => (
+              <div key={`${entry.decision_id}-${entry.symbol}`} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderTop: "1px solid rgba(72,72,73,0.12)" }}>
+                <span style={{ fontSize: "10px", color: "#adaaab", fontFamily: "JetBrains Mono, monospace" }}>{entry.symbol}</span>
+                <span style={{ fontSize: "10px", color: "#ff7162", fontFamily: "JetBrains Mono, monospace" }}>{entry.reason}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {liveAllocations && (
+          <div style={{ marginTop: "10px", fontSize: "10px", color: "#767576" }}>
+            Active allocation rows: {liveAllocations.count} · blocked: {liveAllocations.blocked.length}
+          </div>
+        )}
       </div>
 
       {/* Compute panel */}
