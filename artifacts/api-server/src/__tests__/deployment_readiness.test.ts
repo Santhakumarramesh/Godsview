@@ -4,12 +4,22 @@ const runtime = vi.hoisted(() => ({
   executionSafetyRunning: true,
   executionSafetyLastError: null as string | null,
   killSwitchActive: false,
+  systemMode: "paper_enabled" as "dry_run" | "paper_enabled" | "live_enabled",
+  debugSchedulerExpected: true,
+  debugSchedulerRunning: true,
+  debugSchedulerLastError: null as string | null,
+  debugSchedulerLastStatus: "HEALTHY" as "HEALTHY" | "DEGRADED" | "CRITICAL",
 }));
 
 function resetRuntime(): void {
   runtime.executionSafetyRunning = true;
   runtime.executionSafetyLastError = null;
   runtime.killSwitchActive = false;
+  runtime.systemMode = "paper_enabled";
+  runtime.debugSchedulerExpected = true;
+  runtime.debugSchedulerRunning = true;
+  runtime.debugSchedulerLastError = null;
+  runtime.debugSchedulerLastStatus = "HEALTHY";
 }
 
 vi.mock("node:fs", () => ({
@@ -57,7 +67,9 @@ vi.mock("../lib/risk_engine", () => ({
 
 vi.mock("../lib/runtime_config", () => ({
   runtimeConfig: {
-    systemMode: "paper_enabled",
+    get systemMode() {
+      return runtime.systemMode;
+    },
     nodeEnv: "test",
     hasAlpacaKeys: true,
     hasOperatorToken: true,
@@ -164,6 +176,15 @@ vi.mock("../lib/execution_idempotency", () => ({
   })),
 }));
 
+vi.mock("../lib/autonomy_debug_scheduler", () => ({
+  shouldAutonomyDebugSchedulerAutoStart: vi.fn(() => runtime.debugSchedulerExpected),
+  getAutonomyDebugSchedulerSnapshot: vi.fn(() => ({
+    running: runtime.debugSchedulerRunning,
+    last_error: runtime.debugSchedulerLastError,
+    last_status: runtime.debugSchedulerLastStatus,
+  })),
+}));
+
 describe("deployment_readiness execution safety integration", () => {
   beforeEach(() => {
     vi.resetModules();
@@ -237,5 +258,61 @@ describe("deployment_readiness execution safety integration", () => {
     expect(report.summary.failed_critical).toBe(0);
     expect(report.summary.failed_non_critical).toBeGreaterThanOrEqual(1);
     expect(report.risk.kill_switch_active).toBe(true);
+  });
+
+  it("includes autonomy debug scheduler state in readiness payload", async () => {
+    runtime.debugSchedulerExpected = true;
+    runtime.debugSchedulerRunning = true;
+    runtime.debugSchedulerLastStatus = "HEALTHY";
+    runtime.debugSchedulerLastError = null;
+
+    const mod = await import("../lib/deployment_readiness");
+    mod.resetDeploymentReadinessCache();
+    const report = await mod.getDeploymentReadinessReport({ forceRefresh: true });
+
+    expect(report.autonomy.autonomy_debug_scheduler_expected).toBe(true);
+    expect(report.autonomy.autonomy_debug_scheduler_running).toBe(true);
+    expect(report.autonomy.autonomy_debug_scheduler_last_error).toBeNull();
+    expect(report.autonomy.autonomy_debug_scheduler_last_status).toBe("HEALTHY");
+
+    const check = report.checks.find((item) => item.name === "Autonomy debug scheduler running");
+    expect(check).toBeDefined();
+    expect(check?.passed).toBe(true);
+  });
+
+  it("marks NOT_READY in live mode when expected debug scheduler is down", async () => {
+    runtime.systemMode = "live_enabled";
+    runtime.debugSchedulerExpected = true;
+    runtime.debugSchedulerRunning = false;
+    runtime.debugSchedulerLastStatus = "CRITICAL";
+    runtime.debugSchedulerLastError = "stopped";
+
+    const mod = await import("../lib/deployment_readiness");
+    mod.resetDeploymentReadinessCache();
+    const report = await mod.getDeploymentReadinessReport({ forceRefresh: true });
+
+    const check = report.checks.find((item) => item.name === "Autonomy debug scheduler running");
+    expect(check).toBeDefined();
+    expect(check?.critical).toBe(true);
+    expect(check?.passed).toBe(false);
+    expect(report.status).toBe("NOT_READY");
+  });
+
+  it("marks DEGRADED in paper mode when expected debug scheduler is down", async () => {
+    runtime.systemMode = "paper_enabled";
+    runtime.debugSchedulerExpected = true;
+    runtime.debugSchedulerRunning = false;
+    runtime.debugSchedulerLastStatus = "CRITICAL";
+    runtime.debugSchedulerLastError = "stopped";
+
+    const mod = await import("../lib/deployment_readiness");
+    mod.resetDeploymentReadinessCache();
+    const report = await mod.getDeploymentReadinessReport({ forceRefresh: true });
+
+    const check = report.checks.find((item) => item.name === "Autonomy debug scheduler running");
+    expect(check).toBeDefined();
+    expect(check?.critical).toBe(false);
+    expect(check?.passed).toBe(false);
+    expect(report.status).toBe("DEGRADED");
   });
 });

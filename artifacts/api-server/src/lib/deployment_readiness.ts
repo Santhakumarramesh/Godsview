@@ -18,6 +18,10 @@ import { getExecutionIncidentSnapshot } from "./execution_incident_guard";
 import { getExecutionMarketGuardSnapshot } from "./execution_market_guard";
 import { getExecutionAutonomyGuardSnapshot } from "./execution_autonomy_guard";
 import { getExecutionIdempotencySnapshot } from "./execution_idempotency";
+import {
+  getAutonomyDebugSchedulerSnapshot,
+  shouldAutonomyDebugSchedulerAutoStart,
+} from "./autonomy_debug_scheduler";
 
 export type DeploymentReadinessStatus = "READY" | "DEGRADED" | "NOT_READY";
 
@@ -78,6 +82,10 @@ export interface DeploymentReadinessReport {
     production_watchdog_last_error: string | null;
     execution_safety_supervisor_running: boolean;
     execution_safety_supervisor_last_error: string | null;
+    autonomy_debug_scheduler_expected: boolean;
+    autonomy_debug_scheduler_running: boolean;
+    autonomy_debug_scheduler_last_error: string | null;
+    autonomy_debug_scheduler_last_status: string | null;
   };
   config: {
     system_mode: string;
@@ -284,6 +292,10 @@ function runtimeChecks(checks: DeploymentReadinessCheck[]): {
   productionWatchdogLastError: string | null;
   executionSafetySupervisorRunning: boolean;
   executionSafetySupervisorLastError: string | null;
+  autonomyDebugSchedulerExpected: boolean;
+  autonomyDebugSchedulerRunning: boolean;
+  autonomyDebugSchedulerLastError: string | null;
+  autonomyDebugSchedulerLastStatus: string | null;
   incidentGuardLevel: string;
   incidentGuardHalt: boolean;
   autonomyGuardLevel: string;
@@ -513,6 +525,24 @@ function runtimeChecks(checks: DeploymentReadinessCheck[]): {
     startedExecutionSafety,
   );
 
+  const debugScheduler = getAutonomyDebugSchedulerSnapshot();
+  const debugSchedulerExpected = shouldAutonomyDebugSchedulerAutoStart();
+  const debugSchedulerCritical = debugSchedulerExpected && runtimeConfig.systemMode === "live_enabled";
+  const startedDebugScheduler = nowMs();
+  timedCheck(
+    checks,
+    {
+      name: "Autonomy debug scheduler running",
+      category: "runtime",
+      passed: !debugSchedulerExpected || debugScheduler.running,
+      critical: debugSchedulerCritical,
+      detail:
+        `expected=${debugSchedulerExpected},running=${debugScheduler.running}` +
+        `,status=${debugScheduler.last_status ?? "UNKNOWN"},last_error=${debugScheduler.last_error ?? "none"}`,
+    },
+    startedDebugScheduler,
+  );
+
   return {
     killSwitch,
     breakerLevel: breaker.level,
@@ -532,6 +562,10 @@ function runtimeChecks(checks: DeploymentReadinessCheck[]): {
     productionWatchdogLastError: watchdog.last_error,
     executionSafetySupervisorRunning: executionSafety.running,
     executionSafetySupervisorLastError: executionSafety.last_error,
+    autonomyDebugSchedulerExpected: debugSchedulerExpected,
+    autonomyDebugSchedulerRunning: debugScheduler.running,
+    autonomyDebugSchedulerLastError: debugScheduler.last_error,
+    autonomyDebugSchedulerLastStatus: debugScheduler.last_status,
     incidentGuardLevel: incidentGuard.level,
     incidentGuardHalt: incidentGuard.halt_active,
     autonomyGuardLevel: autonomyGuard.level,
@@ -661,6 +695,10 @@ export async function getDeploymentReadinessReport(options?: {
       production_watchdog_last_error: runtime.productionWatchdogLastError,
       execution_safety_supervisor_running: runtime.executionSafetySupervisorRunning,
       execution_safety_supervisor_last_error: runtime.executionSafetySupervisorLastError,
+      autonomy_debug_scheduler_expected: runtime.autonomyDebugSchedulerExpected,
+      autonomy_debug_scheduler_running: runtime.autonomyDebugSchedulerRunning,
+      autonomy_debug_scheduler_last_error: runtime.autonomyDebugSchedulerLastError,
+      autonomy_debug_scheduler_last_status: runtime.autonomyDebugSchedulerLastStatus,
     },
     config: {
       system_mode: runtimeConfig.systemMode,
