@@ -36,6 +36,10 @@ const READINESS_MIN_STATUS = parseReadinessStatus(
   process.env.DEPLOY_READINESS_MIN_STATUS,
   REQUIRE_HTTP ? "DEGRADED" : "NOT_READY",
 );
+const READINESS_POLL_TIMEOUT_MS = timeoutEnv("READINESS_POLL_TIMEOUT_MS", REQUIRE_HTTP ? 90_000 : 45_000);
+const READINESS_POLL_INTERVAL_MS = timeoutEnv("READINESS_POLL_INTERVAL_MS", 2_500);
+const READINESS_POLL_HTTP_TIMEOUT_MS = timeoutEnv("READINESS_POLL_HTTP_TIMEOUT_MS", 4_000);
+const READINESS_REQUIRED_STREAK = Math.max(1, Number(process.env.READINESS_REQUIRED_STREAK ?? 1) || 1);
 
 let localServer: ChildProcess | null = null;
 let localBaseUrl: string | null = null;
@@ -192,6 +196,98 @@ async function checkHttp(
       durationMs: Date.now() - started,
     };
   }
+}
+
+interface DeploymentReadinessResult {
+  check: CheckResult;
+  statusCode: number | null;
+  body: any;
+}
+
+async function checkDeploymentReadinessThreshold(runtimeBase: string): Promise<DeploymentReadinessResult> {
+  const started = Date.now();
+  const deadline = started + READINESS_POLL_TIMEOUT_MS;
+  const readinessBase =
+    `${runtimeBase}/api/system/deployment/readiness` +
+    `?include_preflight=${INCLUDE_PREFLIGHT ? "1" : "0"}`;
+
+  let attempts = 0;
+  let streak = 0;
+  let lastStatus: number | null = null;
+  let lastReportStatus = "UNKNOWN";
+  let lastBody: any = null;
+  let lastError = "";
+
+  while (Date.now() < deadline) {
+    const attemptStarted = Date.now();
+    const remainingMs = Math.max(0, deadline - attemptStarted);
+    const requestTimeoutMs = Math.max(500, Math.min(READINESS_POLL_HTTP_TIMEOUT_MS, remainingMs));
+    attempts += 1;
+    const refresh = attempts === 1 ? "1" : "0";
+    const url = `${readinessBase}&refresh=${refresh}`;
+
+    try {
+      const { status, body } = await httpJson(url, requestTimeoutMs);
+      lastStatus = status;
+      lastBody = body;
+
+      const reportStatus = String(body?.status ?? "unknown").toUpperCase();
+      lastReportStatus = reportStatus;
+      const validStatus = reportStatus === "READY" || reportStatus === "DEGRADED" || reportStatus === "NOT_READY";
+      const meetsThreshold =
+        validStatus &&
+        readinessRank(reportStatus as ReadinessStatus) >= readinessRank(READINESS_MIN_STATUS);
+
+      if ((status === 200 || status === 503) && meetsThreshold) {
+        streak += 1;
+        if (streak >= READINESS_REQUIRED_STREAK) {
+          const elapsedMs = Date.now() - started;
+          return {
+            check: {
+              name: "GET /api/system/deployment/readiness",
+              critical: true,
+              passed: true,
+              detail:
+                `status=${status}, report=${reportStatus}, min=${READINESS_MIN_STATUS}, ` +
+                `attempts=${attempts}, streak=${streak}, elapsed_ms=${elapsedMs}`,
+              durationMs: elapsedMs,
+            },
+            statusCode: status,
+            body,
+          };
+        }
+      } else {
+        streak = 0;
+      }
+      lastError = "";
+    } catch (err) {
+      streak = 0;
+      lastError = err instanceof Error ? err.message : String(err);
+    }
+
+    const postAttemptRemainingMs = Math.max(0, deadline - Date.now());
+    if (postAttemptRemainingMs <= 0) {
+      break;
+    }
+    const sleepMs = Math.min(READINESS_POLL_INTERVAL_MS, postAttemptRemainingMs);
+    await new Promise((r) => setTimeout(r, sleepMs));
+  }
+
+  const elapsedMs = Date.now() - started;
+  const baseDetail = `status=${String(lastStatus ?? "error")}, report=${lastReportStatus}, min=${READINESS_MIN_STATUS}, attempts=${attempts}, timeout_ms=${READINESS_POLL_TIMEOUT_MS}`;
+  const detail = lastError ? `${baseDetail}, last_error=${lastError}` : baseDetail;
+
+  return {
+    check: {
+      name: "GET /api/system/deployment/readiness",
+      critical: true,
+      passed: false,
+      detail,
+      durationMs: elapsedMs,
+    },
+    statusCode: lastStatus,
+    body: lastBody,
+  };
 }
 
 function artifactFileChecks(): CheckResult[] {
@@ -389,6 +485,9 @@ async function main(): Promise<void> {
   }
 
   if (runtimeBase) {
+    let latestReadinessStatusCode: number | null = null;
+    let latestReadinessBody: any = null;
+
     results.push(
       await checkHttp(
         "GET /healthz",
@@ -413,40 +512,21 @@ async function main(): Promise<void> {
       ),
     );
 
-    const readinessPath = `${runtimeBase}/api/system/deployment/readiness?include_preflight=${INCLUDE_PREFLIGHT ? "1" : "0"}&refresh=1`;
-    results.push(
-      await checkHttp(
-        "GET /api/system/deployment/readiness",
-        true,
-        readinessPath,
-        (status, body) => {
-          const reportStatus = String(body?.status ?? "unknown").toUpperCase() as ReadinessStatus;
-          const validStatus = reportStatus === "READY" || reportStatus === "DEGRADED" || reportStatus === "NOT_READY";
-          const meetsThreshold = validStatus && readinessRank(reportStatus) >= readinessRank(READINESS_MIN_STATUS);
-          const ok = (status === 200 || status === 503) && meetsThreshold;
-          return {
-            ok,
-            detail: `status=${status}, report=${reportStatus}, min=${READINESS_MIN_STATUS}`,
-          };
-        },
-      ),
-    );
+    const readinessResult = await checkDeploymentReadinessThreshold(runtimeBase);
+    latestReadinessStatusCode = readinessResult.statusCode;
+    latestReadinessBody = readinessResult.body;
+    results.push(readinessResult.check);
 
     if (EXPECTED_SYSTEM_MODE) {
-      results.push(
-        await checkHttp(
-          "Deployment mode matches expected",
-          true,
-          readinessPath,
-          (status, body) => {
-            const actualMode = String(body?.config?.system_mode ?? "unknown").trim().toLowerCase();
-            return {
-              ok: (status === 200 || status === 503) && actualMode === EXPECTED_SYSTEM_MODE,
-              detail: `status=${status}, actual_mode=${actualMode}, expected_mode=${EXPECTED_SYSTEM_MODE}`,
-            };
-          },
-        ),
-      );
+      const actualMode = String(latestReadinessBody?.config?.system_mode ?? "unknown").trim().toLowerCase();
+      const status = latestReadinessStatusCode;
+      results.push({
+        name: "Deployment mode matches expected",
+        critical: true,
+        passed: (status === 200 || status === 503) && actualMode === EXPECTED_SYSTEM_MODE,
+        detail: `status=${String(status ?? "unknown")}, actual_mode=${actualMode}, expected_mode=${EXPECTED_SYSTEM_MODE}`,
+        durationMs: 0,
+      });
     }
 
     results.push(

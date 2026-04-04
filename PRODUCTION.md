@@ -137,7 +137,14 @@ This command enforces:
 - Full API-server Vitest suite
 - Production builds (API + dashboard)
 - Local runtime boot + HTTP deployment-readiness probes (must reach at least `DEGRADED`)
-- Post-check cleanup of generated artifacts to keep git clean
+- Runtime state persistence under `artifacts/api-server/.runtime` (via `GODSVIEW_DATA_DIR`)
+- Post-check cleanup of generated artifacts and runtime state to keep git clean
+
+If you are running the API manually, set this explicitly to avoid root-level state files:
+
+```bash
+export GODSVIEW_DATA_DIR=artifacts/api-server/.runtime
+```
 
 Additional market profiles:
 
@@ -145,9 +152,16 @@ Additional market profiles:
 # Paper deployment profile (includes preflight checks)
 pnpm verify:market:paper
 
-# Live deployment profile (strict: must be READY, mode must be live_enabled)
-# Requires: GODSVIEW_SYSTEM_MODE=live_enabled plus live secrets
+# Live deployment profile (defaults to DEGRADED threshold, mode must be live_enabled)
+# Uses placeholder credentials when real live credentials are not exported.
+# Override threshold if needed:
+# DEPLOY_READINESS_MIN_STATUS=READY pnpm verify:market:live
 pnpm verify:market:live
+
+# Strict live deployment profile (must be READY and requires real credentials)
+# To validate real production credentials, export ALPACA_API_KEY, ALPACA_SECRET_KEY,
+# and GODSVIEW_OPERATOR_TOKEN before running.
+pnpm verify:market:live:strict
 ```
 
 ## Monitoring
