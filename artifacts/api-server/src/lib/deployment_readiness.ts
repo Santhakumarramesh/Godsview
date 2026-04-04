@@ -13,6 +13,7 @@ import { getStrategyGovernorSnapshot } from "./strategy_governor";
 import { getStrategyAllocatorSnapshot } from "./strategy_allocator";
 import { getExecutionIncidentSnapshot } from "./execution_incident_guard";
 import { getExecutionMarketGuardSnapshot } from "./execution_market_guard";
+import { getExecutionIdempotencySnapshot } from "./execution_idempotency";
 
 export type DeploymentReadinessStatus = "READY" | "DEGRADED" | "NOT_READY";
 
@@ -47,6 +48,8 @@ export interface DeploymentReadinessReport {
     incident_guard_halt: boolean;
     market_guard_level: string;
     market_guard_halt: boolean;
+    idempotency_entries: number;
+    idempotency_require_key_live: boolean;
   };
   preflight: {
     included: boolean;
@@ -257,6 +260,8 @@ function runtimeChecks(checks: DeploymentReadinessCheck[]): {
   incidentGuardHalt: boolean;
   marketGuardLevel: string;
   marketGuardHalt: boolean;
+  idempotencyEntries: number;
+  idempotencyRequireKeyLive: boolean;
 } {
   const startedKillSwitch = nowMs();
   const killSwitch = isKillSwitchActive();
@@ -346,6 +351,20 @@ function runtimeChecks(checks: DeploymentReadinessCheck[]): {
     startedMarketGuard,
   );
 
+  const idempotency = getExecutionIdempotencySnapshot();
+  const startedIdempotency = nowMs();
+  timedCheck(
+    checks,
+    {
+      name: "Execution idempotency guard active",
+      category: "runtime",
+      passed: idempotency.entries >= 0,
+      critical: false,
+      detail: `entries=${idempotency.entries}, require_live_key=${idempotency.policy.require_key_in_live_mode}`,
+    },
+    startedIdempotency,
+  );
+
   const supervisor = getAutonomySupervisorSnapshot();
   const expectedServices = supervisor.services.filter((svc) => svc.expected).length;
   const healthyServices = supervisor.services.filter((svc) => svc.expected && svc.health === "HEALTHY").length;
@@ -422,6 +441,8 @@ function runtimeChecks(checks: DeploymentReadinessCheck[]): {
     incidentGuardHalt: incidentGuard.halt_active,
     marketGuardLevel: marketGuard.level,
     marketGuardHalt: marketGuard.halt_active,
+    idempotencyEntries: idempotency.entries,
+    idempotencyRequireKeyLive: idempotency.policy.require_key_in_live_mode,
   };
 }
 
@@ -517,6 +538,8 @@ export async function getDeploymentReadinessReport(options?: {
       incident_guard_halt: runtime.incidentGuardHalt,
       market_guard_level: runtime.marketGuardLevel,
       market_guard_halt: runtime.marketGuardHalt,
+      idempotency_entries: runtime.idempotencyEntries,
+      idempotency_require_key_live: runtime.idempotencyRequireKeyLive,
     },
     preflight: {
       included: includePreflight,

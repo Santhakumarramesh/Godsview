@@ -75,6 +75,17 @@ type ExecutionStatus = {
       } | null;
     };
   };
+  idempotency: {
+    entries: number;
+    hits: number;
+    misses: number;
+    conflicts: number;
+    replays: number;
+    policy: {
+      ttl_ms: number;
+      require_key_in_live_mode: boolean;
+    };
+  };
   last_liquidation: null | {
     triggered_by: string;
     timestamp: string;
@@ -189,6 +200,7 @@ export default function ExecutionPage() {
   const levelColor = LEVEL_COLORS[breaker?.level ?? "NORMAL"];
   const incident = status?.incident_guard;
   const market = status?.market_guard;
+  const idempotency = status?.idempotency;
   const incidentColor =
     incident?.level === "HALT" ? "#ff7162" :
     incident?.level === "WATCH" ? "#fbbf24" : "#9cff93";
@@ -277,6 +289,9 @@ export default function ExecutionPage() {
             <div className="flex justify-between"><span style={{ color: "#767576" }}>Market Guard</span><span style={{ color: marketColor }}>{market?.level ?? "NORMAL"}</span></div>
             <div className="flex justify-between"><span style={{ color: "#767576" }}>Market Window</span><span style={{ color: "#ffffff" }}>{market?.window_critical ?? 0} critical · {market?.window_warn ?? 0} warn</span></div>
             <div className="flex justify-between"><span style={{ color: "#767576" }}>Spread / Bar Age</span><span style={{ color: "#ffffff" }}>{market?.last_evaluation?.metrics?.spread_bps !== null && market?.last_evaluation?.metrics?.spread_bps !== undefined ? `${market.last_evaluation.metrics.spread_bps.toFixed(1)}bps` : "n/a"} · {market?.last_evaluation?.metrics?.bar_age_ms !== null && market?.last_evaluation?.metrics?.bar_age_ms !== undefined ? `${Math.round(market.last_evaluation.metrics.bar_age_ms / 1000)}s` : "n/a"}</span></div>
+            <div className="flex justify-between"><span style={{ color: "#767576" }}>Idempotency</span><span style={{ color: "#ffffff" }}>{idempotency?.entries ?? 0} keys · {idempotency?.replays ?? 0} replay</span></div>
+            <div className="flex justify-between"><span style={{ color: "#767576" }}>Hit/Miss/Conflict</span><span style={{ color: "#ffffff" }}>{idempotency?.hits ?? 0}/{idempotency?.misses ?? 0}/{idempotency?.conflicts ?? 0}</span></div>
+            <div className="flex justify-between"><span style={{ color: "#767576" }}>Live Key Req</span><span style={{ color: idempotency?.policy?.require_key_in_live_mode ? "#9cff93" : "#fbbf24" }}>{idempotency?.policy?.require_key_in_live_mode ? "ENFORCED" : "OPTIONAL"}</span></div>
           </div>
 
           {status?.last_liquidation && (

@@ -473,6 +473,18 @@ async function main(): Promise<void> {
         }),
       ),
     );
+
+    results.push(
+      await checkHttp(
+        "GET /api/execution/idempotency",
+        false,
+        `${runtimeBase}/api/execution/idempotency`,
+        (status, body) => ({
+          ok: status === 200 && typeof body?.entries === "number",
+          detail: `status=${status}, entries=${String(body?.entries ?? "unknown")}, require_live_key=${String(body?.policy?.require_key_in_live_mode ?? "unknown")}`,
+        }),
+      ),
+    );
   } else {
     results.push({
       name: "Runtime probes",

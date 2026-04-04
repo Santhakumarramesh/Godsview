@@ -34,12 +34,34 @@ import {
   getExecutionMarketGuardSnapshot,
   resetExecutionMarketGuard,
 } from "../lib/execution_market_guard";
+import {
+  beginExecutionIdempotency,
+  buildExecutionFingerprint,
+  finalizeExecutionIdempotency,
+  getExecutionIdempotencySnapshot,
+  requireExecutionIdempotencyKeyInLiveMode,
+  resetExecutionIdempotencyStore,
+} from "../lib/execution_idempotency";
 
 export const executionRouter = Router();
 
 // ── POST /execute — Full production pipeline ──────────
 
 executionRouter.post("/execute", requireOperator, async (req: Request, res: Response) => {
+  const idempotencyKeyRaw = String(req.body?.idempotency_key ?? req.header("x-idempotency-key") ?? "").trim();
+  const idempotencyKey = idempotencyKeyRaw.length > 0 ? idempotencyKeyRaw : null;
+  let idempotencyFingerprint: string | null = null;
+
+  const finalizeTracked = (status: number, payload: unknown): void => {
+    if (!idempotencyFingerprint) return;
+    finalizeExecutionIdempotency({
+      key: idempotencyKey,
+      fingerprint: idempotencyFingerprint,
+      status,
+      body: payload,
+    });
+  };
+
   try {
     const {
       symbol, direction, setup_type, regime,
@@ -49,10 +71,71 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
       operator_token,
     } = req.body;
 
+    const sendTracked = (status: number, payload: Record<string, unknown>): void => {
+      const body = {
+        ...payload,
+        idempotency_key: idempotencyKey,
+        idempotent_replay: false,
+      };
+      finalizeTracked(status, body);
+      res.status(status).json(body);
+    };
+
     if (!symbol || !direction || !entry_price || !stop_loss || !take_profit) {
-      res.status(400).json({
+      sendTracked(400, {
         error: "validation_error",
         message: "Required: symbol, direction, entry_price, stop_loss, take_profit",
+      });
+      return;
+    }
+
+    const mode = getExecutionMode();
+    if (mode.isLive && requireExecutionIdempotencyKeyInLiveMode() && !idempotencyKey) {
+      sendTracked(400, {
+        error: "idempotency_key_required",
+        message: "Idempotency key is required for live execution. Pass x-idempotency-key header or idempotency_key in body.",
+      });
+      return;
+    }
+
+    idempotencyFingerprint = buildExecutionFingerprint({
+      symbol,
+      direction,
+      setup_type: setup_type ?? "auto",
+      regime: regime ?? "normal",
+      entry_price,
+      stop_loss,
+      take_profit,
+    });
+    const idempotencyBegin = beginExecutionIdempotency({
+      key: idempotencyKey,
+      fingerprint: idempotencyFingerprint,
+    });
+
+    if (idempotencyBegin.action === "REPLAY") {
+      const replayBody = (idempotencyBegin.body && typeof idempotencyBegin.body === "object")
+        ? {
+            ...(idempotencyBegin.body as Record<string, unknown>),
+            idempotency_key: idempotencyBegin.key,
+            idempotent_replay: true,
+          }
+        : {
+            replayed: true,
+            idempotency_key: idempotencyBegin.key,
+            idempotent_replay: true,
+            response: idempotencyBegin.body ?? null,
+          };
+      res.status(idempotencyBegin.status).json(replayBody);
+      return;
+    }
+
+    if (idempotencyBegin.action === "CONFLICT") {
+      res.status(idempotencyBegin.status).json({
+        error: idempotencyBegin.error,
+        message: idempotencyBegin.message,
+        idempotency: getExecutionIdempotencySnapshot(),
+        idempotency_key: idempotencyBegin.key,
+        idempotent_replay: false,
       });
       return;
     }
@@ -65,7 +148,7 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
         detail: "incident_guard_halt",
         reason: incidentGate.reason ?? undefined,
       });
-      res.status(423).json({
+      sendTracked(423, {
         error: "execution_incident_halt",
         message: `Execution halted by incident guard (${incidentGate.reason ?? "halt"})`,
         incident_guard: incidentGate.snapshot,
@@ -76,7 +159,7 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
 
     // Check breaker state first
     if (isCooldownActive()) {
-      res.status(429).json({
+      sendTracked(429, {
         error: "cooldown_active",
         message: "Trading paused: consecutive loss cooldown active",
         breaker: getBreakerSnapshot(),
@@ -88,7 +171,7 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
 
     const sizeMultiplier = getPositionSizeMultiplier();
     if (sizeMultiplier <= 0) {
-      res.status(429).json({
+      sendTracked(429, {
         error: "breaker_halt",
         message: "Trading halted by drawdown circuit breaker",
         breaker: getBreakerSnapshot(),
@@ -102,7 +185,7 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
     const portfolioRiskGate = await evaluateExecutionRisk(symbol);
     if (!portfolioRiskGate.allowed) {
       const status = portfolioRiskGate.action === "HALT" ? 423 : 429;
-      res.status(status).json({
+      sendTracked(status, {
         error: "portfolio_risk_blocked",
         message: `Execution blocked by portfolio risk guard (${portfolioRiskGate.action})`,
         action: portfolioRiskGate.action,
@@ -124,7 +207,7 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
         detail: `market_guard_block:${marketGuard.action}`,
         reason: marketGuard.reasons[0],
       });
-      res.status(isHalt ? 423 : 429).json({
+      sendTracked(isHalt ? 423 : 429, {
         error: "market_quality_blocked",
         message: `Execution blocked by market guard (${marketGuard.reasons.join(", ") || marketGuard.action})`,
         action: marketGuard.action,
@@ -171,7 +254,7 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
         detail: `gate_block:${decision.action}`,
         reason: decision.block_reasons[0] ?? undefined,
       });
-      res.json({
+      sendTracked(200, {
         executed: false,
         gate_action: decision.action,
         block_reasons: decision.block_reasons,
@@ -264,7 +347,7 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
       registerCostBasis(symbol, direction, Number(entry_price), adjustedQty);
     }
 
-    res.json({
+    sendTracked(200, {
       ...executionResult,
       gate_action: decision.action,
       signal: {
@@ -292,12 +375,16 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
       detail: err instanceof Error ? err.message : String(err),
     });
     logger.error({ err }, "Execution pipeline error");
-    res.status(500).json({
+    const body = {
       error: "execution_error",
       message: String(err),
       incident_guard: getExecutionIncidentSnapshot(),
       market_guard: getExecutionMarketGuardSnapshot(),
-    });
+      idempotency_key: idempotencyKey,
+      idempotent_replay: false,
+    };
+    finalizeTracked(500, body);
+    res.status(500).json(body);
   }
 });
 
@@ -385,6 +472,7 @@ executionRouter.get("/execution-status", async (_req: Request, res: Response) =>
     const portfolioRisk = await evaluatePortfolioRisk({ forceRefresh: false });
     const incidentGuard = getExecutionIncidentSnapshot();
     const marketGuard = getExecutionMarketGuardSnapshot();
+    const idempotency = getExecutionIdempotencySnapshot();
 
     res.json({
       mode,
@@ -407,6 +495,7 @@ executionRouter.get("/execution-status", async (_req: Request, res: Response) =>
       portfolio_risk: portfolioRisk,
       incident_guard: incidentGuard,
       market_guard: marketGuard,
+      idempotency,
       last_liquidation: lastLiquidation,
     });
   } catch (err) {
@@ -487,6 +576,16 @@ executionRouter.get("/market-guard", async (req: Request, res: Response) => {
   }
 });
 
+// ── GET /idempotency — Execution request idempotency state ───────
+
+executionRouter.get("/idempotency", (_req: Request, res: Response) => {
+  try {
+    res.json(getExecutionIdempotencySnapshot());
+  } catch {
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
 // ── POST /incident-guard/reset — Manual incident guard reset ─────
 
 executionRouter.post("/incident-guard/reset", requireOperator, (req: Request, res: Response) => {
@@ -519,6 +618,17 @@ executionRouter.post("/market-guard/reset", requireOperator, (req: Request, res:
     });
     res.json(snapshot);
   } catch (err) {
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+// ── POST /idempotency/reset — Clear idempotency cache/state ─────
+
+executionRouter.post("/idempotency/reset", requireOperator, (_req: Request, res: Response) => {
+  try {
+    const snapshot = resetExecutionIdempotencyStore();
+    res.json(snapshot);
+  } catch {
     res.status(500).json({ error: "internal_error" });
   }
 });
