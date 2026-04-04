@@ -657,6 +657,121 @@ export function useRunStrategyGovernorCycle() {
   });
 }
 
+export interface StrategyEvolutionAction {
+  at: string;
+  strategy_id: string;
+  action: "START_CONTINUOUS" | "WALK_FORWARD" | "OPTIMIZE" | "SKIP";
+  success: boolean;
+  detail: string;
+}
+
+export interface StrategyEvolutionSnapshot {
+  running: boolean;
+  cycle_in_flight: boolean;
+  started_at: string | null;
+  last_cycle_at: string | null;
+  last_cycle_duration_ms: number | null;
+  last_error: string | null;
+  total_cycles: number;
+  total_actions: number;
+  interval_ms: number;
+  policy: {
+    auto_enforce: boolean;
+    interval_ms: number;
+    auto_start_continuous_backtest: boolean;
+    max_strategies_per_cycle: number;
+    max_optimizations_per_cycle: number;
+    min_pass_rate: number;
+    min_stability: number;
+    optimization_cooldown_ms: number;
+  };
+  evaluated_strategies: string[];
+  optimized_strategies: string[];
+  last_candidates: Array<{
+    strategy_id: string;
+    score: number;
+    source: string;
+  }>;
+  recent_actions: StrategyEvolutionAction[];
+}
+
+export function useStrategyEvolutionStatus(options?: Omit<UseQueryOptions<StrategyEvolutionSnapshot>, "queryKey" | "queryFn">) {
+  return useQuery({
+    queryKey: ["brain", "strategy", "evolution", "status"],
+    queryFn: () => apiFetch<StrategyEvolutionSnapshot>("/brain/strategy/evolution/status"),
+    refetchInterval: 10_000,
+    ...options,
+  });
+}
+
+export function useStartStrategyEvolutionScheduler() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params?: { interval_ms?: number; run_immediate?: boolean }) =>
+      apiFetch<{
+        success: boolean;
+        message: string;
+        interval_ms: number;
+        snapshot: StrategyEvolutionSnapshot;
+      }>("/brain/strategy/evolution/start", {
+        method: "POST",
+        body: JSON.stringify(params ?? {}),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["brain", "strategy", "evolution"] });
+    },
+  });
+}
+
+export function useStopStrategyEvolutionScheduler() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{
+        success: boolean;
+        message: string;
+        snapshot: StrategyEvolutionSnapshot;
+      }>("/brain/strategy/evolution/stop", {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["brain", "strategy", "evolution"] });
+    },
+  });
+}
+
+export function useRunStrategyEvolutionCycle() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{
+        ok: boolean;
+        snapshot: StrategyEvolutionSnapshot;
+      }>("/brain/strategy/evolution/run-once", {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["brain", "strategy", "evolution"] });
+    },
+  });
+}
+
+export function useResetStrategyEvolutionScheduler() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{
+        ok: boolean;
+        snapshot: StrategyEvolutionSnapshot;
+      }>("/brain/strategy/evolution/reset", {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["brain", "strategy", "evolution"] });
+    },
+  });
+}
+
 export interface StrategyAllocationEntry {
   strategy_id: string;
   setup_type: string | null;

@@ -12,6 +12,11 @@ import {
   useRunWalkForwardBacktest,
   useOptimizeStrategy,
   useStrategyTierRegistry,
+  useStrategyEvolutionStatus,
+  useStartStrategyEvolutionScheduler,
+  useStopStrategyEvolutionScheduler,
+  useRunStrategyEvolutionCycle,
+  useResetStrategyEvolutionScheduler,
   type WalkForwardResult,
 } from "@/lib/api";
 
@@ -110,6 +115,12 @@ type TFOption = { value: string; label: string };
 const fmt = (n: number, d = 2) => Number.isFinite(n) ? n.toFixed(d) : "–";
 const fmtPct = (n: number) => `${n >= 0 ? "+" : ""}${fmt(n, 1)}%`;
 const fmtColor = (n: number, zero = 0) => n > zero ? C.primary : n < zero ? C.tertiary : C.muted;
+const fmtDuration = (ms?: number | null) => {
+  if (!Number.isFinite(ms as number) || ms == null) return "—";
+  if (ms < 1_000) return `${Math.round(ms)}ms`;
+  if (ms < 60_000) return `${(ms / 1_000).toFixed(1)}s`;
+  return `${(ms / 60_000).toFixed(1)}m`;
+};
 
 const SYMBOLS = [
   "BTCUSD", "ETHUSD", "SOLUSD", "EURUSD", "GBPUSD",
@@ -164,10 +175,15 @@ export default function BacktesterPage() {
   const { data: continuousStatus } = useContinuousBacktestStatus();
   const { data: leaderboardData } = useStrategyLeaderboard();
   const { data: tierRegistry } = useStrategyTierRegistry();
+  const { data: evolutionStatus } = useStrategyEvolutionStatus();
   const startContinuousMutation = useStartContinuousBacktest();
   const stopContinuousMutation = useStopContinuousBacktest();
   const runWalkForwardMutation = useRunWalkForwardBacktest();
   const optimizeMutation = useOptimizeStrategy();
+  const startEvolutionMutation = useStartStrategyEvolutionScheduler();
+  const stopEvolutionMutation = useStopStrategyEvolutionScheduler();
+  const runEvolutionMutation = useRunStrategyEvolutionCycle();
+  const resetEvolutionMutation = useResetStrategyEvolutionScheduler();
 
   const runMutation = useMutation({
     mutationFn: async () => {
@@ -192,6 +208,8 @@ export default function BacktesterPage() {
     walkForwardResult?.promotion?.next_tier
     ?? tierRegistry?.tiers?.find((t) => t.strategy_id === strategyId)?.tier
     ?? "SEED";
+  const evolutionCandidates = evolutionStatus?.last_candidates ?? [];
+  const evolutionActions = evolutionStatus?.recent_actions ?? [];
   const tierColor =
     currentTier === "ELITE" ? C.primary :
     currentTier === "PROVEN" ? "#67e8f9" :
@@ -504,6 +522,33 @@ export default function BacktesterPage() {
           />
         </div>
 
+        <div className="grid gap-3 mb-4" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
+          <StatCard
+            label="Evolution Scheduler"
+            value={evolutionStatus?.running ? "ACTIVE" : "STOPPED"}
+            color={evolutionStatus?.running ? C.primary : C.tertiary}
+            sub={`interval ${fmtDuration(evolutionStatus?.interval_ms)}`}
+          />
+          <StatCard
+            label="Evolution Cycles"
+            value={evolutionStatus?.total_cycles ?? 0}
+            color={C.secondary}
+            sub={evolutionStatus?.last_cycle_at ? new Date(evolutionStatus.last_cycle_at).toLocaleTimeString() : "no cycle yet"}
+          />
+          <StatCard
+            label="Strategies Evaluated"
+            value={evolutionStatus?.evaluated_strategies?.length ?? 0}
+            color={C.gold}
+            sub={(evolutionStatus?.evaluated_strategies ?? []).slice(0, 1)[0] ?? "no candidates yet"}
+          />
+          <StatCard
+            label="Optimized This Cycle"
+            value={evolutionStatus?.optimized_strategies?.length ?? 0}
+            color={C.primary}
+            sub={fmtDuration(evolutionStatus?.last_cycle_duration_ms)}
+          />
+        </div>
+
         <div className="flex items-center gap-2 mb-4">
           <button
             onClick={() => startContinuousMutation.mutate()}
@@ -543,6 +588,144 @@ export default function BacktesterPage() {
             </span>
           )}
         </div>
+
+        <div className="flex items-center gap-2 mb-4">
+          <button
+            onClick={() => startEvolutionMutation.mutate({ run_immediate: true })}
+            disabled={startEvolutionMutation.isPending}
+            style={{
+              background: startEvolutionMutation.isPending ? C.outlineVar : "rgba(102,157,255,0.18)",
+              color: C.secondary,
+              border: `1px solid ${C.secondary}55`,
+              borderRadius: 8,
+              padding: "7px 12px",
+              fontSize: "10px",
+              fontFamily: "Space Grotesk",
+              cursor: startEvolutionMutation.isPending ? "not-allowed" : "pointer",
+            }}
+          >
+            {startEvolutionMutation.isPending ? "STARTING..." : "START EVOLUTION"}
+          </button>
+          <button
+            onClick={() => stopEvolutionMutation.mutate()}
+            disabled={stopEvolutionMutation.isPending}
+            style={{
+              background: stopEvolutionMutation.isPending ? C.outlineVar : "rgba(255,113,98,0.15)",
+              color: C.tertiary,
+              border: `1px solid ${C.tertiary}55`,
+              borderRadius: 8,
+              padding: "7px 12px",
+              fontSize: "10px",
+              fontFamily: "Space Grotesk",
+              cursor: stopEvolutionMutation.isPending ? "not-allowed" : "pointer",
+            }}
+          >
+            {stopEvolutionMutation.isPending ? "STOPPING..." : "STOP EVOLUTION"}
+          </button>
+          <button
+            onClick={() => runEvolutionMutation.mutate()}
+            disabled={runEvolutionMutation.isPending}
+            style={{
+              background: runEvolutionMutation.isPending ? C.outlineVar : "rgba(156,255,147,0.22)",
+              color: C.primary,
+              border: `1px solid ${C.primary}55`,
+              borderRadius: 8,
+              padding: "7px 12px",
+              fontSize: "10px",
+              fontFamily: "Space Grotesk",
+              cursor: runEvolutionMutation.isPending ? "not-allowed" : "pointer",
+            }}
+          >
+            {runEvolutionMutation.isPending ? "RUNNING..." : "RUN EVOLUTION CYCLE"}
+          </button>
+          <button
+            onClick={() => resetEvolutionMutation.mutate()}
+            disabled={resetEvolutionMutation.isPending}
+            style={{
+              background: resetEvolutionMutation.isPending ? C.outlineVar : "rgba(173,170,171,0.15)",
+              color: C.muted,
+              border: `1px solid ${C.outline}55`,
+              borderRadius: 8,
+              padding: "7px 12px",
+              fontSize: "10px",
+              fontFamily: "Space Grotesk",
+              cursor: resetEvolutionMutation.isPending ? "not-allowed" : "pointer",
+            }}
+          >
+            {resetEvolutionMutation.isPending ? "RESETTING..." : "RESET EVOLUTION"}
+          </button>
+          {(startEvolutionMutation.error || stopEvolutionMutation.error || runEvolutionMutation.error || resetEvolutionMutation.error) && (
+            <span style={{ fontSize: "10px", color: C.tertiary }}>
+              {String(startEvolutionMutation.error ?? stopEvolutionMutation.error ?? runEvolutionMutation.error ?? resetEvolutionMutation.error)}
+            </span>
+          )}
+        </div>
+
+        {!!evolutionStatus?.last_error && (
+          <div style={{ marginBottom: 10, fontSize: "10px", color: C.tertiary }}>
+            Evolution error: {evolutionStatus.last_error}
+          </div>
+        )}
+
+        {evolutionCandidates.length > 0 && (
+          <div className="mb-4">
+            <Label>Scheduler Candidates</Label>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {evolutionCandidates.slice(0, 8).map((candidate) => (
+                <div
+                  key={`${candidate.strategy_id}-${candidate.source}`}
+                  style={{
+                    background: C.cardHigh,
+                    border: `1px solid ${C.outlineVar}`,
+                    borderRadius: 999,
+                    padding: "4px 10px",
+                    fontSize: "10px",
+                    color: C.muted,
+                    fontFamily: "JetBrains Mono, monospace",
+                  }}
+                >
+                  {candidate.strategy_id} · {fmt(candidate.score, 1)} · {candidate.source}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {evolutionActions.length > 0 && (
+          <div className="mb-4">
+            <Label>Evolution Action Log</Label>
+            <div className="mt-2 rounded-lg overflow-hidden" style={{ border: `1px solid ${C.border}` }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px" }}>
+                <thead>
+                  <tr style={{ borderBottom: `1px solid ${C.outlineVar}` }}>
+                    {["Time", "Strategy", "Action", "Status", "Detail"].map((h) => (
+                      <th key={h} style={{ padding: "7px 10px", textAlign: "left", color: C.outline }}>
+                        <Label>{h}</Label>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {evolutionActions.slice(0, 10).map((action, idx) => (
+                    <tr key={`${action.at}-${action.strategy_id}-${idx}`} style={{ borderBottom: `1px solid ${C.outlineVar}22` }}>
+                      <td style={{ padding: "7px 10px", color: C.muted, whiteSpace: "nowrap" }}>
+                        {new Date(action.at).toLocaleTimeString()}
+                      </td>
+                      <td style={{ padding: "7px 10px", color: "#fff", fontFamily: "JetBrains Mono, monospace" }}>
+                        {action.strategy_id}
+                      </td>
+                      <td style={{ padding: "7px 10px", color: C.secondary }}>{action.action}</td>
+                      <td style={{ padding: "7px 10px", color: action.success ? C.primary : C.tertiary }}>
+                        {action.success ? "OK" : "FAIL"}
+                      </td>
+                      <td style={{ padding: "7px 10px", color: C.outline }}>{action.detail}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {walkForwardResult && (
           <div className="grid gap-3 mb-4" style={{ gridTemplateColumns: "repeat(5, 1fr)" }}>

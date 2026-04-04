@@ -32,6 +32,11 @@ import {
   stopStrategyAllocator,
 } from "./lib/strategy_allocator";
 import {
+  shouldStrategyEvolutionAutoStart,
+  startStrategyEvolutionScheduler,
+  stopStrategyEvolutionScheduler,
+} from "./lib/strategy_evolution_scheduler";
+import {
   shouldProductionWatchdogAutoStart,
   startProductionWatchdog,
   stopProductionWatchdog,
@@ -167,6 +172,14 @@ const server = app.listen(port, (err) => {
     logger.info("Strategy allocator auto-start disabled");
   }
 
+  if (shouldStrategyEvolutionAutoStart()) {
+    startStrategyEvolutionScheduler({ runImmediate: true })
+      .then((result) => logger.info({ intervalMs: result.interval_ms }, "Strategy evolution scheduler started"))
+      .catch((err) => logger.error({ err }, "Strategy evolution scheduler failed to start"));
+  } else {
+    logger.info("Strategy evolution scheduler auto-start disabled");
+  }
+
   if (shouldProductionWatchdogAutoStart()) {
     startProductionWatchdog({ runImmediate: true })
       .then((result) => logger.info({ intervalMs: result.interval_ms }, "Production watchdog started"))
@@ -232,6 +245,12 @@ onShutdown(async () => {
 onShutdown(async () => {
   logger.info("Stopping strategy allocator...");
   stopStrategyAllocator();
+});
+
+// Register cleanup: stop strategy evolution scheduler
+onShutdown(async () => {
+  logger.info("Stopping strategy evolution scheduler...");
+  stopStrategyEvolutionScheduler();
 });
 
 // Register cleanup: stop production watchdog
