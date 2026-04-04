@@ -49,6 +49,15 @@ type ExecutionStatus = {
     daily_trades: number;
     max_daily_trades: number;
   };
+  incident_guard: {
+    level: "NORMAL" | "WATCH" | "HALT";
+    halt_active: boolean;
+    consecutive_failures: number;
+    window_failures: number;
+    window_rejections: number;
+    window_slippage_spikes: number;
+    last_halt_reason: string | null;
+  };
   last_liquidation: null | {
     triggered_by: string;
     timestamp: string;
@@ -161,6 +170,10 @@ export default function ExecutionPage() {
   const positions = status?.positions ?? [];
   const fills = fillsData?.fills ?? [];
   const levelColor = LEVEL_COLORS[breaker?.level ?? "NORMAL"];
+  const incident = status?.incident_guard;
+  const incidentColor =
+    incident?.level === "HALT" ? "#ff7162" :
+    incident?.level === "WATCH" ? "#fbbf24" : "#9cff93";
 
   return (
     <div className="space-y-6">
@@ -181,9 +194,10 @@ export default function ExecutionPage() {
       </div>
 
       {/* Status Cards Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 lg:grid-cols-9 gap-3">
         <StatusBadge label="Mode" value={mode?.mode ?? "—"} color={mode?.isLive ? "#ff7162" : "#9cff93"} />
         <StatusBadge label="Breaker" value={breaker?.level ?? "—"} color={levelColor} />
+        <StatusBadge label="Incident" value={incident?.level ?? "—"} color={incidentColor} />
         <StatusBadge label="Realized PnL" value={`$${(breaker?.realized_pnl_today ?? 0).toFixed(2)}`} color={(breaker?.realized_pnl_today ?? 0) >= 0 ? "#9cff93" : "#ff7162"} />
         <StatusBadge label="Unrealized" value={`$${(breaker?.unrealized_pnl ?? 0).toFixed(2)}`} color={(breaker?.unrealized_pnl ?? 0) >= 0 ? "#9cff93" : "#ff7162"} />
         <StatusBadge label="Trades" value={`${breaker?.trades_today ?? 0}`} color="#67e8f9" />
@@ -235,6 +249,9 @@ export default function ExecutionPage() {
             <div className="flex justify-between"><span style={{ color: "#767576" }}>Fills Today</span><span style={{ color: "#ffffff" }}>{status?.reconciliation?.fills_today ?? 0}</span></div>
             <div className="flex justify-between"><span style={{ color: "#767576" }}>Unmatched</span><span style={{ color: (status?.reconciliation?.unmatched_fills ?? 0) > 0 ? "#fbbf24" : "#9cff93" }}>{status?.reconciliation?.unmatched_fills ?? 0}</span></div>
             <div className="flex justify-between"><span style={{ color: "#767576" }}>Gate Trades</span><span style={{ color: "#ffffff" }}>{status?.gate_stats?.daily_trades ?? 0} / {status?.gate_stats?.max_daily_trades ?? 15}</span></div>
+            <div className="flex justify-between"><span style={{ color: "#767576" }}>Incident Level</span><span style={{ color: incidentColor }}>{incident?.level ?? "NORMAL"}</span></div>
+            <div className="flex justify-between"><span style={{ color: "#767576" }}>Incident Window</span><span style={{ color: "#ffffff" }}>{incident?.window_failures ?? 0} fail · {incident?.window_rejections ?? 0} rej · {incident?.window_slippage_spikes ?? 0} slip</span></div>
+            <div className="flex justify-between"><span style={{ color: "#767576" }}>Consecutive Failures</span><span style={{ color: (incident?.consecutive_failures ?? 0) >= 2 ? "#fb923c" : "#ffffff" }}>{incident?.consecutive_failures ?? 0}</span></div>
           </div>
 
           {status?.last_liquidation && (

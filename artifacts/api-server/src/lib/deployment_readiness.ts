@@ -11,6 +11,7 @@ import { getStartupSnapshot } from "./startup_state";
 import { getAutonomySupervisorSnapshot } from "./autonomy_supervisor";
 import { getStrategyGovernorSnapshot } from "./strategy_governor";
 import { getStrategyAllocatorSnapshot } from "./strategy_allocator";
+import { getExecutionIncidentSnapshot } from "./execution_incident_guard";
 
 export type DeploymentReadinessStatus = "READY" | "DEGRADED" | "NOT_READY";
 
@@ -41,6 +42,8 @@ export interface DeploymentReadinessReport {
     breaker_level: string;
     breaker_position_multiplier: number;
     portfolio_risk_state: string | null;
+    incident_guard_level: string;
+    incident_guard_halt: boolean;
   };
   preflight: {
     included: boolean;
@@ -247,6 +250,8 @@ function runtimeChecks(checks: DeploymentReadinessCheck[]): {
   strategyGovernorLastError: string | null;
   strategyAllocatorRunning: boolean;
   strategyAllocatorLastError: string | null;
+  incidentGuardLevel: string;
+  incidentGuardHalt: boolean;
 } {
   const startedKillSwitch = nowMs();
   const killSwitch = isKillSwitchActive();
@@ -306,6 +311,20 @@ function runtimeChecks(checks: DeploymentReadinessCheck[]): {
         : "No cached risk snapshot yet",
     },
     startedPortfolio,
+  );
+
+  const incidentGuard = getExecutionIncidentSnapshot();
+  const startedIncidentGuard = nowMs();
+  timedCheck(
+    checks,
+    {
+      name: "Execution incident guard not halted",
+      category: "runtime",
+      passed: !incidentGuard.halt_active,
+      critical: true,
+      detail: `level=${incidentGuard.level}, failures=${incidentGuard.window_failures}, rejections=${incidentGuard.window_rejections}`,
+    },
+    startedIncidentGuard,
   );
 
   const supervisor = getAutonomySupervisorSnapshot();
@@ -380,6 +399,8 @@ function runtimeChecks(checks: DeploymentReadinessCheck[]): {
     strategyGovernorLastError: governor.last_error,
     strategyAllocatorRunning: allocator.running,
     strategyAllocatorLastError: allocator.last_error,
+    incidentGuardLevel: incidentGuard.level,
+    incidentGuardHalt: incidentGuard.halt_active,
   };
 }
 
@@ -471,6 +492,8 @@ export async function getDeploymentReadinessReport(options?: {
       breaker_level: runtime.breakerLevel,
       breaker_position_multiplier: runtime.breakerMultiplier,
       portfolio_risk_state: runtime.portfolioRiskState,
+      incident_guard_level: runtime.incidentGuardLevel,
+      incident_guard_halt: runtime.incidentGuardHalt,
     },
     preflight: {
       included: includePreflight,

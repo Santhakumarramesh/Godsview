@@ -22,6 +22,13 @@ import { emergencyLiquidateAll, getLastLiquidation, isLiquidationInProgress } fr
 import { evaluateExecutionRisk, evaluatePortfolioRisk, triggerEmergencyStopAll } from "../lib/portfolio_risk_guard";
 import { computeATR } from "../lib/strategy_engine";
 import { getBars } from "../lib/alpaca";
+import {
+  canExecuteByIncidentGuard,
+  getExecutionIncidentSnapshot,
+  recordExecutionAttempt,
+  recordExecutionSlippage,
+  resetExecutionIncidentGuard,
+} from "../lib/execution_incident_guard";
 
 export const executionRouter = Router();
 
@@ -41,6 +48,22 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
       res.status(400).json({
         error: "validation_error",
         message: "Required: symbol, direction, entry_price, stop_loss, take_profit",
+      });
+      return;
+    }
+
+    const incidentGate = canExecuteByIncidentGuard();
+    if (!incidentGate.allowed) {
+      recordExecutionAttempt({
+        symbol,
+        outcome: "BLOCKED",
+        detail: "incident_guard_halt",
+        reason: incidentGate.reason ?? undefined,
+      });
+      res.status(423).json({
+        error: "execution_incident_halt",
+        message: `Execution halted by incident guard (${incidentGate.reason ?? "halt"})`,
+        incident_guard: incidentGate.snapshot,
       });
       return;
     }
@@ -108,6 +131,12 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
     const decision = await evaluateForProduction(siInput);
 
     if (decision.action !== "EXECUTE") {
+      recordExecutionAttempt({
+        symbol,
+        outcome: "BLOCKED",
+        detail: `gate_block:${decision.action}`,
+        reason: decision.block_reasons[0] ?? undefined,
+      });
       res.json({
         executed: false,
         gate_action: decision.action,
@@ -122,6 +151,7 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
         },
         meta: decision.meta,
         portfolio_risk: portfolioRiskGate.snapshot,
+        incident_guard: getExecutionIncidentSnapshot(),
       });
       return;
     }
@@ -146,6 +176,38 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
       decision,
       operator_token,
     });
+
+    if (executionResult.executed) {
+      recordExecutionAttempt({
+        symbol,
+        outcome: "EXECUTED",
+        detail: executionResult.order_id ? `order_id:${executionResult.order_id}` : "order_executed",
+        mode: executionResult.mode,
+      });
+      const filledAvgPrice = Number((executionResult.details as Record<string, unknown>)?.filled_avg_price ?? Number.NaN);
+      if (Number.isFinite(filledAvgPrice) && filledAvgPrice > 0) {
+        recordExecutionSlippage({
+          symbol,
+          expected_price: Number(entry_price),
+          executed_price: filledAvgPrice,
+          side: direction === "long" ? "buy" : "sell",
+        });
+      }
+    } else {
+      const errLower = String(executionResult.error ?? "").toLowerCase();
+      const isRejected =
+        errLower.includes("invalid") ||
+        errLower.includes("required") ||
+        errLower.includes("exceeds") ||
+        errLower.includes("blocked") ||
+        errLower.includes("validation");
+      recordExecutionAttempt({
+        symbol,
+        outcome: isRejected ? "REJECTED" : "ERROR",
+        detail: executionResult.error ?? "execution_failed",
+        mode: executionResult.mode,
+      });
+    }
 
     // 3. If executed, register with position monitor + fill reconciler
     if (executionResult.executed && decision.signal.trailing_stop && decision.signal.profit_targets) {
@@ -184,10 +246,21 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
       portfolio_risk: portfolioRiskGate.snapshot,
       adjusted_qty: adjustedQty,
       original_qty: decision.quantity,
+      incident_guard: getExecutionIncidentSnapshot(),
     });
   } catch (err) {
+    const symbol = String(req.body?.symbol ?? "UNKNOWN");
+    recordExecutionAttempt({
+      symbol,
+      outcome: "ERROR",
+      detail: err instanceof Error ? err.message : String(err),
+    });
     logger.error({ err }, "Execution pipeline error");
-    res.status(500).json({ error: "execution_error", message: String(err) });
+    res.status(500).json({
+      error: "execution_error",
+      message: String(err),
+      incident_guard: getExecutionIncidentSnapshot(),
+    });
   }
 });
 
@@ -273,6 +346,7 @@ executionRouter.get("/execution-status", async (_req: Request, res: Response) =>
     const risk = getRiskEngineSnapshot();
     const lastLiquidation = getLastLiquidation();
     const portfolioRisk = await evaluatePortfolioRisk({ forceRefresh: false });
+    const incidentGuard = getExecutionIncidentSnapshot();
 
     res.json({
       mode,
@@ -293,6 +367,7 @@ executionRouter.get("/execution-status", async (_req: Request, res: Response) =>
       gate_stats: gateStats,
       risk,
       portfolio_risk: portfolioRisk,
+      incident_guard: incidentGuard,
       last_liquidation: lastLiquidation,
     });
   } catch (err) {
@@ -333,6 +408,34 @@ executionRouter.post("/risk-guard/evaluate", requireOperator, async (req: Reques
   } catch (err) {
     logger.error({ err }, "Risk guard evaluation error");
     res.status(500).json({ error: "internal_error", message: String(err) });
+  }
+});
+
+// ── GET /incident-guard — Execution incident safety state ────────
+
+executionRouter.get("/incident-guard", (_req: Request, res: Response) => {
+  try {
+    res.json(getExecutionIncidentSnapshot());
+  } catch (err) {
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+// ── POST /incident-guard/reset — Manual incident guard reset ─────
+
+executionRouter.post("/incident-guard/reset", requireOperator, (req: Request, res: Response) => {
+  try {
+    const clearKillSwitch =
+      String(req.body?.clear_kill_switch ?? "")
+        .trim()
+        .toLowerCase();
+    const snapshot = resetExecutionIncidentGuard({
+      reason: String(req.body?.reason ?? "manual_reset"),
+      clearKillSwitch: clearKillSwitch === "1" || clearKillSwitch === "true" || clearKillSwitch === "yes" || clearKillSwitch === "on",
+    });
+    res.json(snapshot);
+  } catch (err) {
+    res.status(500).json({ error: "internal_error" });
   }
 });
 

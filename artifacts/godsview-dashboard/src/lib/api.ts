@@ -693,6 +693,49 @@ export function useStrategyAllocationLookup(
   });
 }
 
+export interface ExecutionIncidentEvent {
+  at: string;
+  symbol: string;
+  type: "EXECUTION_OK" | "ORDER_REJECTED" | "ORDER_ERROR" | "EXECUTION_BLOCKED" | "SLIPPAGE_SPIKE" | "GUARD_RESET" | "GUARD_HALT";
+  severity: "info" | "warn" | "critical";
+  detail: string;
+  mode?: string;
+  reason?: string;
+  slippage_bps?: number;
+}
+
+export interface ExecutionIncidentSnapshot {
+  level: "NORMAL" | "WATCH" | "HALT";
+  halt_active: boolean;
+  running_window_ms: number;
+  consecutive_failures: number;
+  window_failures: number;
+  window_rejections: number;
+  window_slippage_spikes: number;
+  total_events: number;
+  last_event_at: string | null;
+  last_halt_reason: string | null;
+  policy: {
+    window_ms: number;
+    max_failures_window: number;
+    max_rejections_window: number;
+    max_consecutive_failures: number;
+    max_slippage_bps: number;
+    max_slippage_spikes_window: number;
+    auto_halt: boolean;
+  };
+  recent_events: ExecutionIncidentEvent[];
+}
+
+export function useExecutionIncidentGuard(options?: Omit<UseQueryOptions<ExecutionIncidentSnapshot>, "queryKey" | "queryFn">) {
+  return useQuery({
+    queryKey: ["execution", "incident-guard"],
+    queryFn: () => apiFetch<ExecutionIncidentSnapshot>("/execution/incident-guard"),
+    refetchInterval: 10_000,
+    ...options,
+  });
+}
+
 export function useAccuracy() {
   return useQuery({ queryKey: ["alpaca", "accuracy"], queryFn: () => apiFetch<any>("/alpaca/accuracy"), staleTime: 120_000 });
 }

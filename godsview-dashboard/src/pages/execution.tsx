@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 
 type BreakerLevel = "NORMAL" | "WARNING" | "THROTTLE" | "HALT";
 
@@ -49,6 +49,15 @@ type ExecutionStatus = {
     daily_trades: number;
     max_daily_trades: number;
   };
+  incident_guard: {
+    level: "NORMAL" | "WATCH" | "HALT";
+    halt_active: boolean;
+    consecutive_failures: number;
+    window_failures: number;
+    window_rejections: number;
+    window_slippage_spikes: number;
+    last_halt_reason: string | null;
+  };
   last_liquidation: null | {
     triggered_by: string;
     timestamp: string;
@@ -66,38 +75,6 @@ type ReconciledFill = {
   timestamp: string;
   matched_position: boolean;
   realized_pnl: number | null;
-};
-
-type AutoTradeConfig = {
-  enabled: boolean;
-  qualityFloor: number;
-  maxExecutionsPerSession: number;
-  cooldownPerSymbolSec: number;
-  globalCooldownSec: number;
-  sizingMethod: "fixed_fractional" | "half_kelly";
-  allowedSetups: string[];
-};
-
-type AutoTradeStatus = {
-  config: AutoTradeConfig;
-  executionsThisSession: number;
-  lastExecutedAt: string | null;
-  lastSymbol: string | null;
-  globalCooldownActive: boolean;
-  globalCooldownRemainingMs: number;
-};
-
-type AutoTradeExecution = {
-  id: string;
-  symbol: string;
-  setupType: string;
-  direction: "long" | "short";
-  quality: number;
-  entryPrice: number;
-  orderId: string | null;
-  accepted: boolean;
-  rejectReason: string | null;
-  executedAt: string;
 };
 
 const LEVEL_COLORS: Record<BreakerLevel, string> = {
@@ -155,162 +132,6 @@ function KillSwitchButton({ active, onToggle }: { active: boolean; onToggle: (v:
   );
 }
 
-// ── Auto-Trade Panel ──────────────────────────────────────────────────────────
-
-function AutoTradePanel() {
-  const qc = useQueryClient();
-
-  const { data: atStatus } = useQuery<AutoTradeStatus>({
-    queryKey: ["auto-trade-status"],
-    queryFn: () => fetch("/api/watchlist/auto-trade/status").then(r => r.json()),
-    refetchInterval: 5000,
-  });
-
-  const { data: atLogData } = useQuery<{ log: AutoTradeExecution[]; count: number }>({
-    queryKey: ["auto-trade-log"],
-    queryFn: () => fetch("/api/watchlist/auto-trade/log?limit=10").then(r => r.json()),
-    refetchInterval: 10000,
-  });
-
-  const enableMutation = useMutation({
-    mutationFn: (enabled: boolean) =>
-      fetch(`/api/watchlist/auto-trade/${enabled ? "enable" : "disable"}`, { method: "POST" }).then(r => r.json()),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["auto-trade-status"] }),
-  });
-
-  const configMutation = useMutation({
-    mutationFn: (patch: Partial<AutoTradeConfig>) =>
-      fetch("/api/watchlist/auto-trade/config", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(patch),
-      }).then(r => r.json()),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["auto-trade-status"] }),
-  });
-
-  const resetMutation = useMutation({
-    mutationFn: () => fetch("/api/watchlist/auto-trade/reset-session", { method: "POST" }).then(r => r.json()),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["auto-trade-status"] }),
-  });
-
-  const cfg    = atStatus?.config;
-  const isOn   = cfg?.enabled ?? false;
-  const executions = atStatus?.executionsThisSession ?? 0;
-  const log    = atLogData?.log ?? [];
-
-  return (
-    <div className="rounded-lg p-4" style={{ backgroundColor: "rgba(255,255,255,0.02)", border: `1px solid ${isOn ? "rgba(156,255,147,0.25)" : "rgba(72,72,73,0.2)"}` }}>
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <span className="material-symbols-outlined" style={{ color: isOn ? "#9cff93" : "#767576", fontSize: "18px" }}>smart_toy</span>
-          <span className="font-headline font-bold text-sm" style={{ color: "#ffffff" }}>Autonomous Execution</span>
-          {isOn && (
-            <span className="rounded px-2 py-0.5" style={{ backgroundColor: "rgba(156,255,147,0.12)", border: "1px solid rgba(156,255,147,0.3)", fontSize: "8px", color: "#9cff93", fontFamily: "Space Grotesk", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 700 }}>
-              ACTIVE
-            </span>
-          )}
-          {atStatus?.globalCooldownActive && (
-            <span className="rounded px-2 py-0.5" style={{ backgroundColor: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.3)", fontSize: "8px", color: "#fbbf24", fontFamily: "Space Grotesk" }}>
-              cooldown {Math.ceil((atStatus.globalCooldownRemainingMs ?? 0) / 1000)}s
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => resetMutation.mutate()}
-            style={{ fontSize: "9px", color: "#484849", fontFamily: "Space Grotesk", background: "none", border: "none", cursor: "pointer" }}
-          >
-            Reset Session
-          </button>
-          <button
-            onClick={() => enableMutation.mutate(!isOn)}
-            disabled={enableMutation.isPending}
-            className="rounded px-3 py-1.5 font-headline font-bold"
-            style={{
-              fontSize: "10px",
-              backgroundColor: isOn ? "rgba(255,113,98,0.15)" : "rgba(156,255,147,0.1)",
-              border: `1px solid ${isOn ? "rgba(255,113,98,0.4)" : "rgba(156,255,147,0.3)"}`,
-              color: isOn ? "#ff7162" : "#9cff93",
-            }}
-          >
-            {isOn ? "DISABLE" : "ENABLE"}
-          </button>
-        </div>
-      </div>
-
-      {/* Config Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-        {[
-          { label: "Quality Floor", value: cfg ? `${(cfg.qualityFloor * 100).toFixed(0)}%` : "—", color: "#fbbf24" },
-          { label: "Max / Session",  value: cfg ? `${executions} / ${cfg.maxExecutionsPerSession}` : "—", color: "#67e8f9" },
-          { label: "Symbol CD",  value: cfg ? `${cfg.cooldownPerSymbolSec}s` : "—", color: "#adaaab" },
-          { label: "Sizing",     value: cfg?.sizingMethod === "half_kelly" ? "½ Kelly" : "Fixed-Frac", color: "#9cff93" },
-        ].map(item => (
-          <div key={item.label} className="rounded px-3 py-2" style={{ backgroundColor: "rgba(255,255,255,0.025)", border: "1px solid rgba(72,72,73,0.15)" }}>
-            <div style={{ fontSize: "8px", color: "#484849", fontFamily: "Space Grotesk", letterSpacing: "0.1em", textTransform: "uppercase" }}>{item.label}</div>
-            <div className="font-bold font-headline mt-1" style={{ fontSize: "14px", color: item.color }}>{item.value}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Quality Floor slider */}
-      <div className="mb-4 flex items-center gap-3">
-        <span style={{ fontSize: "9px", color: "#767576", fontFamily: "Space Grotesk", width: "80px" }}>Quality Floor</span>
-        <input
-          type="range" min="50" max="95" step="5"
-          value={cfg ? cfg.qualityFloor * 100 : 70}
-          onChange={e => configMutation.mutate({ qualityFloor: parseInt(e.target.value, 10) / 100 })}
-          style={{ flex: 1, accentColor: "#9cff93", height: "3px" }}
-        />
-        <span style={{ fontSize: "9px", color: "#9cff93", fontFamily: "JetBrains Mono, monospace", width: "32px" }}>
-          {cfg ? `${(cfg.qualityFloor * 100).toFixed(0)}%` : "70%"}
-        </span>
-        <select
-          value={cfg?.sizingMethod ?? "fixed_fractional"}
-          onChange={e => configMutation.mutate({ sizingMethod: e.target.value as AutoTradeConfig["sizingMethod"] })}
-          style={{ backgroundColor: "rgba(255,255,255,0.05)", border: "1px solid rgba(72,72,73,0.3)", color: "#adaaab", fontSize: "9px", borderRadius: "4px", padding: "2px 6px", fontFamily: "Space Grotesk" }}
-        >
-          <option value="fixed_fractional">Fixed-Frac</option>
-          <option value="half_kelly">½ Kelly</option>
-        </select>
-      </div>
-
-      {/* Execution Log */}
-      {log.length > 0 && (
-        <div>
-          <div style={{ fontSize: "8px", color: "#484849", fontFamily: "Space Grotesk", letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: "8px" }}>Recent Auto-Executions</div>
-          <div className="space-y-1">
-            {log.map(e => (
-              <div key={e.id} className="flex items-center gap-3 rounded px-3 py-1.5" style={{ backgroundColor: "rgba(255,255,255,0.02)", border: `1px solid ${e.accepted ? "rgba(156,255,147,0.12)" : "rgba(255,113,98,0.12)"}` }}>
-                <span style={{ fontSize: "8px", color: e.accepted ? "#9cff93" : "#ff7162", fontFamily: "Space Grotesk", fontWeight: 700, width: "44px" }}>
-                  {e.accepted ? "FILLED" : "SKIP"}
-                </span>
-                <span className="font-bold" style={{ fontSize: "9px", color: "#ffffff", width: "60px" }}>{e.symbol}</span>
-                <span style={{ fontSize: "9px", color: e.direction === "long" ? "#9cff93" : "#ff7162", width: "36px" }}>{e.direction.toUpperCase()}</span>
-                <span style={{ fontSize: "9px", color: "#adaaab", fontFamily: "Space Grotesk" }}>{e.setupType.replace(/_/g, " ")}</span>
-                <span style={{ fontSize: "9px", color: "#fbbf24", fontFamily: "JetBrains Mono, monospace", marginLeft: "auto" }}>{(e.quality * 100).toFixed(0)}%</span>
-                {!e.accepted && e.rejectReason && (
-                  <span style={{ fontSize: "8px", color: "#767576", fontFamily: "JetBrains Mono, monospace", maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {e.rejectReason}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {!isOn && (
-        <div className="mt-2 rounded p-3" style={{ backgroundColor: "rgba(251,191,36,0.05)", border: "1px solid rgba(251,191,36,0.15)" }}>
-          <p style={{ fontSize: "10px", color: "#767576", fontFamily: "Space Grotesk", lineHeight: 1.5 }}>
-            Autonomous execution is <strong style={{ color: "#fbbf24" }}>disabled</strong>. Scanner alerts are emitted but no orders are placed automatically. Enable only when Alpaca paper/live keys are configured and the circuit breaker is disarmed.
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function ExecutionPage() {
   const { data: status, refetch: refetchStatus } = useQuery<ExecutionStatus>({
     queryKey: ["execution-status"],
@@ -349,6 +170,10 @@ export default function ExecutionPage() {
   const positions = status?.positions ?? [];
   const fills = fillsData?.fills ?? [];
   const levelColor = LEVEL_COLORS[breaker?.level ?? "NORMAL"];
+  const incident = status?.incident_guard;
+  const incidentColor =
+    incident?.level === "HALT" ? "#ff7162" :
+    incident?.level === "WATCH" ? "#fbbf24" : "#9cff93";
 
   return (
     <div className="space-y-6">
@@ -369,9 +194,10 @@ export default function ExecutionPage() {
       </div>
 
       {/* Status Cards Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 lg:grid-cols-9 gap-3">
         <StatusBadge label="Mode" value={mode?.mode ?? "—"} color={mode?.isLive ? "#ff7162" : "#9cff93"} />
         <StatusBadge label="Breaker" value={breaker?.level ?? "—"} color={levelColor} />
+        <StatusBadge label="Incident" value={incident?.level ?? "—"} color={incidentColor} />
         <StatusBadge label="Realized PnL" value={`$${(breaker?.realized_pnl_today ?? 0).toFixed(2)}`} color={(breaker?.realized_pnl_today ?? 0) >= 0 ? "#9cff93" : "#ff7162"} />
         <StatusBadge label="Unrealized" value={`$${(breaker?.unrealized_pnl ?? 0).toFixed(2)}`} color={(breaker?.unrealized_pnl ?? 0) >= 0 ? "#9cff93" : "#ff7162"} />
         <StatusBadge label="Trades" value={`${breaker?.trades_today ?? 0}`} color="#67e8f9" />
@@ -423,6 +249,9 @@ export default function ExecutionPage() {
             <div className="flex justify-between"><span style={{ color: "#767576" }}>Fills Today</span><span style={{ color: "#ffffff" }}>{status?.reconciliation?.fills_today ?? 0}</span></div>
             <div className="flex justify-between"><span style={{ color: "#767576" }}>Unmatched</span><span style={{ color: (status?.reconciliation?.unmatched_fills ?? 0) > 0 ? "#fbbf24" : "#9cff93" }}>{status?.reconciliation?.unmatched_fills ?? 0}</span></div>
             <div className="flex justify-between"><span style={{ color: "#767576" }}>Gate Trades</span><span style={{ color: "#ffffff" }}>{status?.gate_stats?.daily_trades ?? 0} / {status?.gate_stats?.max_daily_trades ?? 15}</span></div>
+            <div className="flex justify-between"><span style={{ color: "#767576" }}>Incident Level</span><span style={{ color: incidentColor }}>{incident?.level ?? "NORMAL"}</span></div>
+            <div className="flex justify-between"><span style={{ color: "#767576" }}>Incident Window</span><span style={{ color: "#ffffff" }}>{incident?.window_failures ?? 0} fail · {incident?.window_rejections ?? 0} rej · {incident?.window_slippage_spikes ?? 0} slip</span></div>
+            <div className="flex justify-between"><span style={{ color: "#767576" }}>Consecutive Failures</span><span style={{ color: (incident?.consecutive_failures ?? 0) >= 2 ? "#fb923c" : "#ffffff" }}>{incident?.consecutive_failures ?? 0}</span></div>
           </div>
 
           {status?.last_liquidation && (
@@ -445,9 +274,6 @@ export default function ExecutionPage() {
           </button>
         </div>
       </div>
-
-      {/* Autonomous Execution Panel */}
-      <AutoTradePanel />
 
       {/* Managed Positions */}
       {positions.length > 0 && (
