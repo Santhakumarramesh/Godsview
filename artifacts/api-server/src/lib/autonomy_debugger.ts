@@ -4,31 +4,37 @@ import {
 } from "./deployment_readiness";
 import {
   getAutonomySupervisorSnapshot,
+  runAutonomySupervisorTick,
   shouldAutonomySupervisorAutoStart,
   startAutonomySupervisor,
 } from "./autonomy_supervisor";
 import {
   getStrategyGovernorSnapshot,
+  runStrategyGovernorCycle,
   shouldStrategyGovernorAutoStart,
   startStrategyGovernor,
 } from "./strategy_governor";
 import {
   getStrategyAllocatorSnapshot,
+  runStrategyAllocatorCycle,
   shouldStrategyAllocatorAutoStart,
   startStrategyAllocator,
 } from "./strategy_allocator";
 import {
   getStrategyEvolutionSnapshot,
+  runStrategyEvolutionCycle,
   shouldStrategyEvolutionAutoStart,
   startStrategyEvolutionScheduler,
 } from "./strategy_evolution_scheduler";
 import {
   getProductionWatchdogSnapshot,
+  runProductionWatchdogCycle,
   shouldProductionWatchdogAutoStart,
   startProductionWatchdog,
 } from "./production_watchdog";
 import {
   getExecutionSafetySupervisorSnapshot,
+  runExecutionSafetySupervisorCycle,
   shouldExecutionSafetySupervisorAutoStart,
   startExecutionSafetySupervisor,
 } from "./execution_safety_supervisor";
@@ -89,9 +95,34 @@ export interface AutonomyDebugFixAction {
   detail: string;
 }
 
+const SERVICE_STALE_MS: Record<AutonomyDebugServiceName, number> = {
+  autonomy_supervisor: 5 * 60_000,
+  strategy_governor: 30 * 60_000,
+  strategy_allocator: 25 * 60_000,
+  strategy_evolution: 45 * 60_000,
+  production_watchdog: 3 * 60_000,
+  execution_safety_supervisor: 3 * 60_000,
+};
+
 function boolFromUnknown(value: unknown): boolean {
   const normalized = String(value ?? "").trim().toLowerCase();
   return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
+
+function parseIsoMs(value: string | null): number | null {
+  if (!value) return null;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function staleAgeMs(service: AutonomyDebugServiceState): number | null {
+  if (!service.expected || !service.running) return null;
+  const lastCycleMs = parseIsoMs(service.last_cycle_at);
+  if (!lastCycleMs) return null;
+  const thresholdMs = SERVICE_STALE_MS[service.name];
+  if (!Number.isFinite(thresholdMs) || thresholdMs <= 0) return null;
+  const ageMs = Date.now() - lastCycleMs;
+  return ageMs > thresholdMs ? ageMs : null;
 }
 
 function buildServices(): AutonomyDebugServiceState[] {
@@ -210,6 +241,8 @@ function buildIssues(input: {
   }
 
   for (const service of input.services) {
+    const staleMs = staleAgeMs(service);
+
     if (service.expected && !service.running) {
       issues.push({
         code: `${service.name.toUpperCase()}_STOPPED`,
@@ -232,6 +265,24 @@ function buildIssues(input: {
         summary: `${service.name.replaceAll("_", " ")} has a recent error`,
         detail: service.last_error,
         recommendation: "Inspect service logs and run the service cycle manually from brain controls.",
+      });
+    }
+
+    if (staleMs !== null) {
+      const thresholdMs = SERVICE_STALE_MS[service.name];
+      const staleSeconds = Math.round(staleMs / 1000);
+      const thresholdSeconds = Math.round(thresholdMs / 1000);
+      issues.push({
+        code: `${service.name.toUpperCase()}_STALE`,
+        severity:
+          service.name === "production_watchdog" ||
+          service.name === "autonomy_supervisor" ||
+          service.name === "execution_safety_supervisor"
+            ? "critical"
+            : "warn",
+        summary: `${service.name.replaceAll("_", " ")} heartbeat is stale`,
+        detail: `age=${staleSeconds}s threshold=${thresholdSeconds}s`,
+        recommendation: "Run debug auto-fix to trigger a manual service cycle.",
       });
     }
   }
@@ -335,6 +386,40 @@ async function startServiceForFix(service: AutonomyDebugServiceName): Promise<Au
   }
 }
 
+async function runServiceCycleForFix(service: AutonomyDebugServiceName): Promise<AutonomyDebugFixAction> {
+  try {
+    if (service === "autonomy_supervisor") {
+      await runAutonomySupervisorTick("autonomy_debug_fix_stale");
+      return { service, attempted: true, success: true, detail: "Autonomy supervisor cycle executed" };
+    }
+    if (service === "strategy_governor") {
+      await runStrategyGovernorCycle("autonomy_debug_fix_stale");
+      return { service, attempted: true, success: true, detail: "Strategy governor cycle executed" };
+    }
+    if (service === "strategy_allocator") {
+      await runStrategyAllocatorCycle("autonomy_debug_fix_stale");
+      return { service, attempted: true, success: true, detail: "Strategy allocator cycle executed" };
+    }
+    if (service === "strategy_evolution") {
+      await runStrategyEvolutionCycle("autonomy_debug_fix_stale");
+      return { service, attempted: true, success: true, detail: "Strategy evolution cycle executed" };
+    }
+    if (service === "production_watchdog") {
+      await runProductionWatchdogCycle("autonomy_debug_fix_stale");
+      return { service, attempted: true, success: true, detail: "Production watchdog cycle executed" };
+    }
+    await runExecutionSafetySupervisorCycle("autonomy_debug_fix_stale");
+    return { service, attempted: true, success: true, detail: "Execution safety supervisor cycle executed" };
+  } catch (err) {
+    return {
+      service,
+      attempted: true,
+      success: false,
+      detail: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
 export async function runAutonomyDebugAutoFix(options?: {
   includePreflight?: boolean;
   forceReadiness?: boolean;
@@ -346,8 +431,14 @@ export async function runAutonomyDebugAutoFix(options?: {
 
   const fixes: AutonomyDebugFixAction[] = [];
   for (const service of before.services) {
-    if (!service.expected || service.running) continue;
-    fixes.push(await startServiceForFix(service.name));
+    if (!service.expected) continue;
+    if (!service.running) {
+      fixes.push(await startServiceForFix(service.name));
+      continue;
+    }
+    if (staleAgeMs(service) !== null) {
+      fixes.push(await runServiceCycleForFix(service.name));
+    }
   }
 
   const fixed = fixes.filter((fix) => fix.success).length;
