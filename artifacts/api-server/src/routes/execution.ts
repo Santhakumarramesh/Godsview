@@ -42,6 +42,7 @@ import {
   requireExecutionIdempotencyKeyInLiveMode,
   resetExecutionIdempotencyStore,
 } from "../lib/execution_idempotency";
+import { auditExecutionLifecycle } from "../lib/audit_logger";
 
 export const executionRouter = Router();
 
@@ -50,6 +51,7 @@ export const executionRouter = Router();
 executionRouter.post("/execute", requireOperator, async (req: Request, res: Response) => {
   const idempotencyKeyRaw = String(req.body?.idempotency_key ?? req.header("x-idempotency-key") ?? "").trim();
   const idempotencyKey = idempotencyKeyRaw.length > 0 ? idempotencyKeyRaw : null;
+  const executionTraceId = `exec_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
   let idempotencyFingerprint: string | null = null;
 
   const finalizeTracked = (status: number, payload: unknown): void => {
@@ -70,6 +72,26 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
       spread, volume,
       operator_token,
     } = req.body;
+    const symbolText = typeof symbol === "string" ? symbol.trim().toUpperCase() : "";
+    const directionText = typeof direction === "string" ? direction.trim().toLowerCase() : "";
+    const emitLifecycleAudit = (
+      eventType: "execution_request_received" | "execution_idempotency" | "execution_gate_blocked" | "execution_result",
+      decisionState: string,
+      reason?: string,
+      payload?: Record<string, unknown>,
+    ): void => {
+      void auditExecutionLifecycle(eventType, {
+        symbol: symbolText || undefined,
+        decision_state: decisionState,
+        reason,
+        payload: {
+          trace_id: executionTraceId,
+          idempotency_key_present: Boolean(idempotencyKey),
+          idempotency_key: idempotencyKey,
+          ...payload,
+        },
+      });
+    };
 
     const sendTracked = (status: number, payload: Record<string, unknown>): void => {
       const body = {
@@ -81,7 +103,24 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
       res.status(status).json(body);
     };
 
+    const mode = getExecutionMode();
+    emitLifecycleAudit("execution_request_received", "received", undefined, {
+      mode: mode.mode,
+      direction: directionText || null,
+      setup_type: setup_type ?? null,
+      regime: regime ?? null,
+      entry_price: Number(entry_price ?? Number.NaN),
+      stop_loss: Number(stop_loss ?? Number.NaN),
+      take_profit: Number(take_profit ?? Number.NaN),
+    });
+
     if (!symbol || !direction || !entry_price || !stop_loss || !take_profit) {
+      emitLifecycleAudit(
+        "execution_gate_blocked",
+        "validation_error",
+        "required_fields_missing",
+        { gate: "validation" },
+      );
       sendTracked(400, {
         error: "validation_error",
         message: "Required: symbol, direction, entry_price, stop_loss, take_profit",
@@ -89,8 +128,13 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
       return;
     }
 
-    const mode = getExecutionMode();
     if (mode.isLive && requireExecutionIdempotencyKeyInLiveMode() && !idempotencyKey) {
+      emitLifecycleAudit(
+        "execution_gate_blocked",
+        "idempotency_key_required",
+        "idempotency_key_missing_live_mode",
+        { gate: "idempotency" },
+      );
       sendTracked(400, {
         error: "idempotency_key_required",
         message: "Idempotency key is required for live execution. Pass x-idempotency-key header or idempotency_key in body.",
@@ -111,8 +155,14 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
       key: idempotencyKey,
       fingerprint: idempotencyFingerprint,
     });
+    emitLifecycleAudit("execution_idempotency", idempotencyBegin.action.toLowerCase(), undefined, {
+      action: idempotencyBegin.action,
+    });
 
     if (idempotencyBegin.action === "REPLAY") {
+      emitLifecycleAudit("execution_result", "replay", "served_cached_response", {
+        status: idempotencyBegin.status,
+      });
       const replayBody = (idempotencyBegin.body && typeof idempotencyBegin.body === "object")
         ? {
             ...(idempotencyBegin.body as Record<string, unknown>),
@@ -130,6 +180,12 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
     }
 
     if (idempotencyBegin.action === "CONFLICT") {
+      emitLifecycleAudit(
+        "execution_gate_blocked",
+        "idempotency_conflict",
+        idempotencyBegin.message,
+        { gate: "idempotency", error: idempotencyBegin.error },
+      );
       res.status(idempotencyBegin.status).json({
         error: idempotencyBegin.error,
         message: idempotencyBegin.message,
@@ -142,6 +198,12 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
 
     const incidentGate = canExecuteByIncidentGuard();
     if (!incidentGate.allowed) {
+      emitLifecycleAudit(
+        "execution_gate_blocked",
+        "incident_guard_halt",
+        incidentGate.reason ?? "incident_guard_halt",
+        { gate: "incident_guard" },
+      );
       recordExecutionAttempt({
         symbol,
         outcome: "BLOCKED",
@@ -159,6 +221,12 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
 
     // Check breaker state first
     if (isCooldownActive()) {
+      emitLifecycleAudit(
+        "execution_gate_blocked",
+        "breaker_cooldown",
+        "cooldown_active",
+        { gate: "drawdown_breaker" },
+      );
       sendTracked(429, {
         error: "cooldown_active",
         message: "Trading paused: consecutive loss cooldown active",
@@ -171,6 +239,12 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
 
     const sizeMultiplier = getPositionSizeMultiplier();
     if (sizeMultiplier <= 0) {
+      emitLifecycleAudit(
+        "execution_gate_blocked",
+        "breaker_halt",
+        "drawdown_breaker_halt",
+        { gate: "drawdown_breaker" },
+      );
       sendTracked(429, {
         error: "breaker_halt",
         message: "Trading halted by drawdown circuit breaker",
@@ -185,6 +259,12 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
     const portfolioRiskGate = await evaluateExecutionRisk(symbol);
     if (!portfolioRiskGate.allowed) {
       const status = portfolioRiskGate.action === "HALT" ? 423 : 429;
+      emitLifecycleAudit(
+        "execution_gate_blocked",
+        `portfolio_risk_${String(portfolioRiskGate.action).toLowerCase()}`,
+        portfolioRiskGate.reasons[0] ?? "portfolio_risk_blocked",
+        { gate: "portfolio_risk", action: portfolioRiskGate.action, reasons: portfolioRiskGate.reasons },
+      );
       sendTracked(status, {
         error: "portfolio_risk_blocked",
         message: `Execution blocked by portfolio risk guard (${portfolioRiskGate.action})`,
@@ -201,6 +281,12 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
     const marketGuard = await evaluateExecutionMarketGuard({ symbol });
     if (!marketGuard.allowed) {
       const isHalt = marketGuard.snapshot.halt_active || marketGuard.level === "HALT";
+      emitLifecycleAudit(
+        "execution_gate_blocked",
+        `market_guard_${String(marketGuard.action).toLowerCase()}`,
+        marketGuard.reasons[0] ?? "market_quality_blocked",
+        { gate: "market_guard", action: marketGuard.action, reasons: marketGuard.reasons },
+      );
       recordExecutionAttempt({
         symbol,
         outcome: "BLOCKED",
@@ -248,6 +334,12 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
     const decision = await evaluateForProduction(siInput);
 
     if (decision.action !== "EXECUTE") {
+      emitLifecycleAudit(
+        "execution_gate_blocked",
+        `production_gate_${String(decision.action).toLowerCase()}`,
+        decision.block_reasons[0] ?? "production_gate_blocked",
+        { gate: "production_gate", action: decision.action, reasons: decision.block_reasons },
+      );
       recordExecutionAttempt({
         symbol,
         outcome: "BLOCKED",
@@ -294,6 +386,18 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
       decision,
       operator_token,
     });
+    emitLifecycleAudit(
+      "execution_result",
+      executionResult.executed ? "executed" : "failed",
+      executionResult.error,
+      {
+        mode: executionResult.mode,
+        order_id: executionResult.order_id ?? null,
+        adjusted_qty: adjustedQty,
+        original_qty: decision.quantity,
+        si_decision_id: executionResult.si_decision_id ?? null,
+      },
+    );
 
     if (executionResult.executed) {
       recordExecutionAttempt({
@@ -369,6 +473,17 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
     });
   } catch (err) {
     const symbol = String(req.body?.symbol ?? "UNKNOWN");
+    void auditExecutionLifecycle("execution_result", {
+      symbol: symbol !== "UNKNOWN" ? symbol : undefined,
+      decision_state: "error",
+      reason: err instanceof Error ? err.message : String(err),
+      actor: "execution_router",
+      payload: {
+        trace_id: executionTraceId,
+        idempotency_key_present: Boolean(idempotencyKey),
+        idempotency_key: idempotencyKey,
+      },
+    });
     recordExecutionAttempt({
       symbol,
       outcome: "ERROR",

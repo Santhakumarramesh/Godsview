@@ -49,6 +49,9 @@ __pycache__/
 # Replit
 .cache/
 .local/
+.bashrc
+.bash_logout
+.profile
 
 # Local secrets / accidental nested workspace copy
 .env
@@ -65,3 +68,6 @@ godsview-openbb/memory/
 # Brain sync transfer temp artifacts
 _brain_sync.b64
 _brain_sync.tar.gz
+
+# Build artifact duplication guard
+artifacts/api-server/public/public/

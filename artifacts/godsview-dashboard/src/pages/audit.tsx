@@ -81,6 +81,10 @@ const eventIcon: Record<string, string> = {
   session_started: "▶️",
   session_ended: "⏹️",
   config_changed: "⚙️",
+  execution_request_received: "🛰️",
+  execution_idempotency: "🧾",
+  execution_gate_blocked: "⛔",
+  execution_result: "✅",
   breaker: "🛡️",
 };
 
