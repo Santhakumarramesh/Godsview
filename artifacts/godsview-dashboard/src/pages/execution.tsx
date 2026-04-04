@@ -33,6 +33,44 @@ type ManagedPosition = {
   targets_hit: number;
 };
 
+type CorrelatedPair = {
+  symbol_a: string;
+  symbol_b: string;
+  correlation: number;
+};
+
+type PortfolioRiskPosition = {
+  symbol: string;
+  side: string;
+  qty: number;
+  market_value: number;
+  weight: number;
+};
+
+type PortfolioRiskSnapshot = {
+  generated_at: string;
+  account_equity: number;
+  peak_equity: number;
+  drawdown_pct: number;
+  one_day_var_usd: number;
+  one_day_var_pct: number;
+  var_confidence: number;
+  avg_pair_correlation: number;
+  max_pair_correlation: number;
+  correlated_pairs: CorrelatedPair[];
+  open_positions: PortfolioRiskPosition[];
+  limits: {
+    max_drawdown_pct: number;
+    max_var_pct: number;
+    max_avg_correlation: number;
+    max_pair_correlation: number;
+  };
+  breaches: string[];
+  risk_state: "NORMAL" | "ELEVATED" | "CRITICAL" | "HALT";
+  candidate_symbol: string | null;
+  candidate_max_correlation: number;
+};
+
 type ExecutionStatus = {
   mode: { mode: string; canWrite: boolean; isLive: boolean };
   kill_switch: boolean;
@@ -45,6 +83,7 @@ type ExecutionStatus = {
   };
   managed_positions: number;
   positions: ManagedPosition[];
+  portfolio_risk: PortfolioRiskSnapshot;
   gate_stats: {
     daily_trades: number;
     max_daily_trades: number;
@@ -109,6 +148,13 @@ const LEVEL_COLORS: Record<BreakerLevel, string> = {
   NORMAL: "#9cff93",
   WARNING: "#fbbf24",
   THROTTLE: "#fb923c",
+  HALT: "#ff7162",
+};
+
+const RISK_STATE_COLORS: Record<PortfolioRiskSnapshot["risk_state"], string> = {
+  NORMAL: "#9cff93",
+  ELEVATED: "#fbbf24",
+  CRITICAL: "#fb923c",
   HALT: "#ff7162",
 };
 
@@ -193,9 +239,20 @@ export default function ExecutionPage() {
     onSuccess: () => refetchStatus(),
   });
 
+  const riskEvalMutation = useMutation({
+    mutationFn: (autoHalt: boolean) =>
+      fetch("/api/execution/risk-guard/evaluate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ auto_halt: autoHalt }),
+      }).then((r) => r.json()),
+    onSuccess: () => refetchStatus(),
+  });
+
   const breaker = status?.breaker;
   const mode = status?.mode;
   const positions = status?.positions ?? [];
+  const portfolioRisk = status?.portfolio_risk;
   const fills = fillsData?.fills ?? [];
   const levelColor = LEVEL_COLORS[breaker?.level ?? "NORMAL"];
   const incident = status?.incident_guard;
@@ -239,6 +296,131 @@ export default function ExecutionPage() {
         <StatusBadge label="Size Multi" value={`${((breaker?.position_size_multiplier ?? 1) * 100).toFixed(0)}%`} color={(breaker?.position_size_multiplier ?? 1) >= 0.75 ? "#9cff93" : "#fb923c"} />
         <StatusBadge label="Positions" value={`${status?.managed_positions ?? 0}`} color="#67e8f9" />
       </div>
+
+      {/* Portfolio Risk Guard */}
+      {portfolioRisk && (
+        <div className="rounded-lg p-4" style={{ backgroundColor: "rgba(255,255,255,0.02)", border: "1px solid rgba(72,72,73,0.2)" }}>
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined" style={{ color: RISK_STATE_COLORS[portfolioRisk.risk_state], fontSize: "18px" }}>policy</span>
+              <span className="font-headline font-bold text-sm" style={{ color: "#ffffff" }}>Portfolio Risk Guard</span>
+              <span
+                className="rounded px-2 py-0.5"
+                style={{
+                  fontSize: "9px",
+                  fontFamily: "Space Grotesk",
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  color: RISK_STATE_COLORS[portfolioRisk.risk_state],
+                  border: `1px solid ${RISK_STATE_COLORS[portfolioRisk.risk_state]}55`,
+                  backgroundColor: `${RISK_STATE_COLORS[portfolioRisk.risk_state]}14`,
+                }}
+              >
+                {portfolioRisk.risk_state}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => riskEvalMutation.mutate(false)}
+                disabled={riskEvalMutation.isPending}
+                className="rounded px-3 py-1.5"
+                style={{ backgroundColor: "rgba(102,157,255,0.12)", border: "1px solid rgba(102,157,255,0.35)", color: "#669dff", fontSize: "10px", fontFamily: "Space Grotesk" }}
+              >
+                {riskEvalMutation.isPending ? "EVALUATING..." : "EVALUATE"}
+              </button>
+              <button
+                onClick={() => riskEvalMutation.mutate(true)}
+                disabled={riskEvalMutation.isPending}
+                className="rounded px-3 py-1.5"
+                style={{ backgroundColor: "rgba(255,113,98,0.12)", border: "1px solid rgba(255,113,98,0.35)", color: "#ff7162", fontSize: "10px", fontFamily: "Space Grotesk" }}
+              >
+                {riskEvalMutation.isPending ? "RUNNING..." : "EVAL + AUTO HALT"}
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+            <StatusBadge
+              label="Drawdown"
+              value={`${(portfolioRisk.drawdown_pct * 100).toFixed(2)}%`}
+              color={portfolioRisk.drawdown_pct >= portfolioRisk.limits.max_drawdown_pct ? "#ff7162" : "#9cff93"}
+            />
+            <StatusBadge
+              label="1D VaR"
+              value={`${(portfolioRisk.one_day_var_pct * 100).toFixed(2)}%`}
+              color={portfolioRisk.one_day_var_pct >= portfolioRisk.limits.max_var_pct ? "#ff7162" : "#9cff93"}
+            />
+            <StatusBadge
+              label="Avg Corr"
+              value={portfolioRisk.avg_pair_correlation.toFixed(2)}
+              color={portfolioRisk.avg_pair_correlation >= portfolioRisk.limits.max_avg_correlation ? "#fbbf24" : "#9cff93"}
+            />
+            <StatusBadge
+              label="Max Corr"
+              value={portfolioRisk.max_pair_correlation.toFixed(2)}
+              color={portfolioRisk.max_pair_correlation >= portfolioRisk.limits.max_pair_correlation ? "#ff7162" : "#9cff93"}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="rounded p-3" style={{ backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(72,72,73,0.2)" }}>
+              <div style={{ fontSize: "9px", color: "#767576", fontFamily: "Space Grotesk", letterSpacing: "0.09em", textTransform: "uppercase", marginBottom: "8px" }}>
+                Breach Reasons
+              </div>
+              {portfolioRisk.breaches.length === 0 ? (
+                <div style={{ fontSize: "11px", color: "#9cff93", fontFamily: "JetBrains Mono, monospace" }}>No active breaches</div>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {portfolioRisk.breaches.map((reason) => (
+                    <span
+                      key={reason}
+                      className="rounded px-2 py-1"
+                      style={{
+                        fontSize: "9px",
+                        fontFamily: "JetBrains Mono, monospace",
+                        color: "#ff7162",
+                        border: "1px solid rgba(255,113,98,0.35)",
+                        backgroundColor: "rgba(255,113,98,0.10)",
+                      }}
+                    >
+                      {reason}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div style={{ fontSize: "10px", color: "#767576", fontFamily: "JetBrains Mono, monospace", marginTop: "8px" }}>
+                VaR USD: ${portfolioRisk.one_day_var_usd.toFixed(2)} @ {(portfolioRisk.var_confidence * 100).toFixed(1)}%
+              </div>
+            </div>
+
+            <div className="rounded p-3" style={{ backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(72,72,73,0.2)" }}>
+              <div style={{ fontSize: "9px", color: "#767576", fontFamily: "Space Grotesk", letterSpacing: "0.09em", textTransform: "uppercase", marginBottom: "8px" }}>
+                Highest Correlated Pairs
+              </div>
+              {(portfolioRisk.correlated_pairs ?? []).length === 0 ? (
+                <div style={{ fontSize: "11px", color: "#767576", fontFamily: "JetBrains Mono, monospace" }}>Not enough open positions</div>
+              ) : (
+                <div className="space-y-1.5">
+                  {portfolioRisk.correlated_pairs
+                    .slice()
+                    .sort((a, b) => Math.abs(b.correlation) - Math.abs(a.correlation))
+                    .slice(0, 5)
+                    .map((pair) => {
+                      const absCorr = Math.abs(pair.correlation);
+                      const color = absCorr >= 0.9 ? "#ff7162" : absCorr >= 0.7 ? "#fbbf24" : "#9cff93";
+                      return (
+                        <div key={`${pair.symbol_a}-${pair.symbol_b}`} className="flex justify-between" style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace" }}>
+                          <span style={{ color: "#adaaab" }}>{pair.symbol_a}/{pair.symbol_b}</span>
+                          <span style={{ color }}>{pair.correlation.toFixed(2)}</span>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Breaker + Gate Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

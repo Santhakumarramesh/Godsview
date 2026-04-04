@@ -323,6 +323,7 @@ const navItems = [
   { href: "/portfolio", label: "Portfolio", icon: "account_balance", sub: "Allocation" },
   { href: "/execution", label: "Execution", icon: "bolt", sub: "Live Orders" },
   { href: "/audit", label: "Audit Trail", icon: "history", sub: "Event Log" },
+  { href: "/decision-replay", label: "Decision Replay", icon: "travel_explore", sub: "Explainability" },
   { href: "/alerts", label: "Alerts", icon: "bell", sub: "Live Alerts" },
   { href: "/reports", label: "Session Reports", icon: "summarize", sub: "Intelligence" },
   { href: "/risk", label: "Risk Command", icon: "shield", sub: "Safety Rails" },

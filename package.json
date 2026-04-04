@@ -8,6 +8,8 @@
     "setup": "corepack enable && corepack pnpm install && corepack pnpm run db:push && corepack pnpm run seed",
     "dev": "corepack pnpm -r --parallel --filter @workspace/api-server --filter @workspace/godsview-dashboard run dev",
     "build": "corepack pnpm run typecheck && corepack pnpm -r --if-present run build && rm -rf artifacts/api-server/public/assets && cp -r artifacts/godsview-dashboard/dist/public/. artifacts/api-server/public",
+    "clean:generated": "git restore artifacts/api-server/dist artifacts/api-server/public/index.html artifacts/api-server/public/assets && git clean -fd artifacts/api-server/public/assets",
+    "verify:prod": "corepack pnpm run typecheck && corepack pnpm --filter @workspace/api-server run test && corepack pnpm run build && corepack pnpm run clean:generated",
     "start": "corepack pnpm --filter @workspace/api-server run start",
     "typecheck:libs": "tsc --build",
     "typecheck": "corepack pnpm run typecheck:libs && corepack pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",

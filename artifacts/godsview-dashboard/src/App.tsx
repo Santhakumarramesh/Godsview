@@ -40,6 +40,7 @@ const QuantLabPage       = React.lazy(() => import("@/pages/quant-lab"));
 const PortfolioPage      = React.lazy(() => import("@/pages/portfolio"));
 const ExecutionPage      = React.lazy(() => import("@/pages/execution"));
 const AuditPage          = React.lazy(() => import("@/pages/audit"));
+const DecisionReplayPage = React.lazy(() => import("@/pages/decision-replay"));
 const AlertsPage         = React.lazy(() => import("@/pages/alerts"));
 const NotFound           = React.lazy(() => import("@/pages/not-found"));
 
@@ -169,6 +170,7 @@ function Router() {
         <RoutedPage path="/portfolio"         component={PortfolioPage}         scope="page:portfolio" />
         <RoutedPage path="/execution"         component={ExecutionPage}         scope="page:execution" />
         <RoutedPage path="/audit"             component={AuditPage}             scope="page:audit" />
+        <RoutedPage path="/decision-replay"   component={DecisionReplayPage}    scope="page:decision-replay" />
         <RoutedPage path="/alerts"            component={AlertsPage}            scope="page:alerts" />
 
         <Route>
