@@ -73,3 +73,7 @@ artifacts/api-server/public/public/
 
 # API-server runtime guard persistence (local only)
 artifacts/api-server/*_guard_state.json
+
+# Local scratch / one-off exports (do not version)
+attached_assets/
+godsview_engine_analysis_dashboard.html
