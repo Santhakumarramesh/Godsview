@@ -416,6 +416,20 @@ async function main(): Promise<void> {
 
     results.push(
       await checkHttp(
+        "GET /api/brain/production/watchdog/status",
+        false,
+        `${runtimeBase}/api/brain/production/watchdog/status`,
+        (status, body) => ({
+          ok: status === 200 && typeof body?.running === "boolean",
+          detail:
+            `status=${status}, running=${String(body?.running ?? "unknown")}, ` +
+            `readiness=${String(body?.last_status ?? "unknown")}, escalated=${String(body?.escalation_active ?? "unknown")}`,
+        }),
+      ),
+    );
+
+    results.push(
+      await checkHttp(
         "GET /api/brain/strategy/governor/status",
         false,
         `${runtimeBase}/api/brain/strategy/governor/status`,
