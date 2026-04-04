@@ -675,6 +675,124 @@ export function useRunStrategyAllocatorCycle() {
   });
 }
 
+export interface ProductionWatchdogAction {
+  at: string;
+  cycle_reason: string;
+  action: "WARN_DEGRADED" | "ESCALATE_NOT_READY" | "PAUSE_AUTONOMY" | "ENGAGE_KILL_SWITCH" | "RECOVERED";
+  success: boolean;
+  detail: string;
+}
+
+export interface ProductionWatchdogSnapshot {
+  running: boolean;
+  cycle_in_flight: boolean;
+  started_at: string | null;
+  last_cycle_at: string | null;
+  last_cycle_duration_ms: number | null;
+  last_error: string | null;
+  total_cycles: number;
+  total_actions: number;
+  interval_ms: number;
+  consecutive_not_ready: number;
+  consecutive_degraded: number;
+  escalation_active: boolean;
+  last_status: "READY" | "DEGRADED" | "NOT_READY" | null;
+  last_report_at: string | null;
+  last_report_summary: {
+    failed_critical: number;
+    failed_non_critical: number;
+  };
+  policy: {
+    auto_enforce: boolean;
+    interval_ms: number;
+    include_preflight: boolean;
+    not_ready_trip_count: number;
+    degraded_warn_count: number;
+    auto_pause_autonomy: boolean;
+    auto_kill_switch: boolean;
+  };
+  recent_actions: ProductionWatchdogAction[];
+}
+
+export function useProductionWatchdogStatus(
+  options?: Omit<UseQueryOptions<ProductionWatchdogSnapshot>, "queryKey" | "queryFn">,
+) {
+  return useQuery({
+    queryKey: ["brain", "production", "watchdog", "status"],
+    queryFn: () => apiFetch<ProductionWatchdogSnapshot>("/brain/production/watchdog/status"),
+    refetchInterval: 10_000,
+    ...options,
+  });
+}
+
+export function useStartProductionWatchdog() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params?: { interval_ms?: number; run_immediate?: boolean }) =>
+      apiFetch<{
+        success: boolean;
+        message: string;
+        interval_ms: number;
+        snapshot: ProductionWatchdogSnapshot;
+      }>("/brain/production/watchdog/start", {
+        method: "POST",
+        body: JSON.stringify(params ?? {}),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["brain", "production", "watchdog"] });
+    },
+  });
+}
+
+export function useStopProductionWatchdog() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{
+        success: boolean;
+        message: string;
+        snapshot: ProductionWatchdogSnapshot;
+      }>("/brain/production/watchdog/stop", {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["brain", "production", "watchdog"] });
+    },
+  });
+}
+
+export function useRunProductionWatchdogCycle() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{
+        ok: boolean;
+        snapshot: ProductionWatchdogSnapshot;
+      }>("/brain/production/watchdog/run-once", {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["brain", "production", "watchdog"] });
+    },
+  });
+}
+
+export function useResetProductionWatchdog() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{
+        ok: boolean;
+        snapshot: ProductionWatchdogSnapshot;
+      }>("/brain/production/watchdog/reset", {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["brain", "production", "watchdog"] });
+    },
+  });
+}
+
 export function useStrategyAllocationLookup(
   input: { setup_type?: string; regime?: string; symbol?: string },
   options?: Omit<UseQueryOptions<StrategyAllocationMatch>, "queryKey" | "queryFn">,

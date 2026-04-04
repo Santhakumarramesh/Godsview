@@ -43,6 +43,12 @@ import {
   useStrategyAllocationLookup,
   type StrategyAllocatorSnapshot,
   type StrategyAllocationMatch,
+  useProductionWatchdogStatus,
+  useStartProductionWatchdog,
+  useStopProductionWatchdog,
+  useRunProductionWatchdogCycle,
+  useResetProductionWatchdog,
+  type ProductionWatchdogSnapshot,
   useExecutionIncidentGuard,
   type ExecutionIncidentSnapshot,
   useExecutionMarketGuard,
@@ -1174,6 +1180,154 @@ function StrategyAllocatorPanel({
   );
 }
 
+function ProductionWatchdogPanel({
+  watchdog,
+  busy,
+  onStart,
+  onStop,
+  onRun,
+  onReset,
+}: {
+  watchdog?: ProductionWatchdogSnapshot;
+  busy: boolean;
+  onStart: () => void;
+  onStop: () => void;
+  onRun: () => void;
+  onReset: () => void;
+}) {
+  const running = !!watchdog?.running;
+  const status = watchdog?.last_status ?? "UNKNOWN";
+  const statusColor =
+    status === "READY" ? "#00ffcc" :
+    status === "DEGRADED" ? "#ffcc00" :
+    status === "NOT_READY" ? "#ff4444" : "#767576";
+  const escalation = !!watchdog?.escalation_active;
+  const intervalSeconds = Math.max(1, Math.round((watchdog?.interval_ms ?? 0) / 1000));
+
+  return (
+    <div style={panelStyle}>
+      <div style={{ ...labelStyle, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span>Production Watchdog</span>
+        <span style={{ color: running ? "#00ffcc" : "#767576", fontFamily: "JetBrains Mono", fontSize: "9px", letterSpacing: "0.1em" }}>
+          {running ? "ACTIVE" : "IDLE"}
+        </span>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "8px" }}>
+        <div style={{ padding: "6px", borderRadius: "6px", backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(72,72,73,0.14)" }}>
+          <div style={{ fontSize: "7px", color: "#484849", letterSpacing: "0.1em", textTransform: "uppercase" }}>Readiness</div>
+          <div style={{ fontSize: "11px", color: statusColor, fontFamily: "JetBrains Mono", fontWeight: 700 }}>
+            {status}
+          </div>
+        </div>
+        <div style={{ padding: "6px", borderRadius: "6px", backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(72,72,73,0.14)" }}>
+          <div style={{ fontSize: "7px", color: "#484849", letterSpacing: "0.1em", textTransform: "uppercase" }}>Escalation</div>
+          <div style={{ fontSize: "11px", color: escalation ? "#ff4444" : "#00ffcc", fontFamily: "JetBrains Mono", fontWeight: 700 }}>
+            {escalation ? "ACTIVE" : "CLEAR"}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "8px" }}>
+        <div style={{ padding: "6px", borderRadius: "6px", backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(72,72,73,0.14)" }}>
+          <div style={{ fontSize: "7px", color: "#484849", letterSpacing: "0.1em", textTransform: "uppercase" }}>Not Ready</div>
+          <div style={{ fontSize: "11px", color: (watchdog?.consecutive_not_ready ?? 0) > 0 ? "#ff7162" : "#adaaab", fontFamily: "JetBrains Mono", fontWeight: 700 }}>
+            {watchdog?.consecutive_not_ready ?? 0}
+          </div>
+        </div>
+        <div style={{ padding: "6px", borderRadius: "6px", backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(72,72,73,0.14)" }}>
+          <div style={{ fontSize: "7px", color: "#484849", letterSpacing: "0.1em", textTransform: "uppercase" }}>Degraded</div>
+          <div style={{ fontSize: "11px", color: (watchdog?.consecutive_degraded ?? 0) > 0 ? "#ffcc00" : "#adaaab", fontFamily: "JetBrains Mono", fontWeight: 700 }}>
+            {watchdog?.consecutive_degraded ?? 0}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: "6px", marginBottom: "6px" }}>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={running ? onStop : onStart}
+          style={{
+            flex: 1,
+            fontSize: "9px",
+            borderRadius: "6px",
+            border: `1px solid ${running ? "rgba(255,113,98,0.3)" : "rgba(0,255,204,0.3)"}`,
+            backgroundColor: running ? "rgba(255,113,98,0.12)" : "rgba(0,255,204,0.12)",
+            color: running ? "#ff7162" : "#00ffcc",
+            padding: "6px 8px",
+            cursor: busy ? "not-allowed" : "pointer",
+            opacity: busy ? 0.65 : 1,
+          }}
+        >
+          {running ? "Stop" : "Start"}
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onRun}
+          style={{
+            flex: 1,
+            fontSize: "9px",
+            borderRadius: "6px",
+            border: "1px solid rgba(255,204,0,0.3)",
+            backgroundColor: "rgba(255,204,0,0.1)",
+            color: "#ffcc00",
+            padding: "6px 8px",
+            cursor: busy ? "not-allowed" : "pointer",
+            opacity: busy ? 0.65 : 1,
+          }}
+        >
+          Run Cycle
+        </button>
+      </div>
+
+      <button
+        type="button"
+        disabled={busy}
+        onClick={onReset}
+        style={{
+          width: "100%",
+          fontSize: "9px",
+          borderRadius: "6px",
+          border: "1px solid rgba(130,130,140,0.25)",
+          backgroundColor: "rgba(130,130,140,0.08)",
+          color: "#adaaab",
+          padding: "6px 8px",
+          cursor: busy ? "not-allowed" : "pointer",
+          opacity: busy ? 0.65 : 1,
+          marginBottom: "8px",
+        }}
+      >
+        Reset Counters
+      </button>
+
+      <div style={{ fontSize: "8px", color: "#767576", fontFamily: "JetBrains Mono", marginBottom: "6px" }}>
+        every {intervalSeconds}s · cycles {watchdog?.total_cycles ?? 0} · actions {watchdog?.total_actions ?? 0}
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: "4px", maxHeight: "86px", overflowY: "auto" }}>
+        {(watchdog?.recent_actions ?? []).slice(0, 4).map((action, idx) => {
+          const color =
+            action.action === "ENGAGE_KILL_SWITCH" ? "#ff4444" :
+            action.action === "WARN_DEGRADED" ? "#ffcc00" :
+            action.action === "RECOVERED" ? "#00ffcc" : "#ff8844";
+          return (
+            <div key={`${action.at}-${idx}`} style={{ fontSize: "8px", lineHeight: 1.3 }}>
+              <div style={{ color, fontFamily: "JetBrains Mono" }}>
+                {action.action}
+              </div>
+              <div style={{ color: "#adaaab", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {action.detail}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ExecutionIncidentPanel({
   incident,
 }: {
@@ -1944,6 +2098,11 @@ function BrainPageComponent() {
   const startStrategyAllocator = useStartStrategyAllocator();
   const stopStrategyAllocator = useStopStrategyAllocator();
   const runStrategyAllocatorCycle = useRunStrategyAllocatorCycle();
+  const { data: productionWatchdog } = useProductionWatchdogStatus({ refetchInterval: 10_000 });
+  const startProductionWatchdog = useStartProductionWatchdog();
+  const stopProductionWatchdog = useStopProductionWatchdog();
+  const runProductionWatchdogCycle = useRunProductionWatchdogCycle();
+  const resetProductionWatchdog = useResetProductionWatchdog();
   const { data: executionIncidentGuard } = useExecutionIncidentGuard({ refetchInterval: 10_000 });
   const { data: executionMarketGuard } = useExecutionMarketGuard({ refetchInterval: 10_000 });
 
@@ -2045,6 +2204,11 @@ function BrainPageComponent() {
     startStrategyAllocator.isPending ||
     stopStrategyAllocator.isPending ||
     runStrategyAllocatorCycle.isPending;
+  const watchdogBusy =
+    startProductionWatchdog.isPending ||
+    stopProductionWatchdog.isPending ||
+    runProductionWatchdogCycle.isPending ||
+    resetProductionWatchdog.isPending;
 
   const handleSupervisorStart = useCallback(() => {
     startAutonomySupervisor.mutate({ run_immediate: true });
@@ -2081,6 +2245,22 @@ function BrainPageComponent() {
   const handleAllocatorRun = useCallback(() => {
     runStrategyAllocatorCycle.mutate();
   }, [runStrategyAllocatorCycle]);
+
+  const handleWatchdogStart = useCallback(() => {
+    startProductionWatchdog.mutate({ run_immediate: true });
+  }, [startProductionWatchdog]);
+
+  const handleWatchdogStop = useCallback(() => {
+    stopProductionWatchdog.mutate();
+  }, [stopProductionWatchdog]);
+
+  const handleWatchdogRun = useCallback(() => {
+    runProductionWatchdogCycle.mutate();
+  }, [runProductionWatchdogCycle]);
+
+  const handleWatchdogReset = useCallback(() => {
+    resetProductionWatchdog.mutate();
+  }, [resetProductionWatchdog]);
 
   useEffect(() => {
     if (!selectedStock) {
@@ -2242,6 +2422,14 @@ function BrainPageComponent() {
           onStart={handleSupervisorStart}
           onStop={handleSupervisorStop}
           onTick={handleSupervisorTick}
+        />
+        <ProductionWatchdogPanel
+          watchdog={productionWatchdog}
+          busy={watchdogBusy}
+          onStart={handleWatchdogStart}
+          onStop={handleWatchdogStop}
+          onRun={handleWatchdogRun}
+          onReset={handleWatchdogReset}
         />
         <StrategyGovernorPanel
           governor={strategyGovernor}
