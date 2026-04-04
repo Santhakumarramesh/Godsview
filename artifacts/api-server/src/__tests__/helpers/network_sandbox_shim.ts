@@ -22,6 +22,7 @@ import { PassThrough } from "stream";
 
 const SHIM_KEY = Symbol.for("godsview.networkSandboxShim");
 const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost"]);
+const TEST_MAX_PROCESS_LISTENERS = 50;
 
 type ResponseCallback = (res: IncomingMessage) => void;
 
@@ -382,3 +383,8 @@ function installNetworkSandboxShim(): void {
 
 installNetworkSandboxShim();
 
+// Test runs import many modules that attach process-level shutdown listeners.
+// Raise the limit for test workers so warning noise does not mask real failures.
+if (process.getMaxListeners() < TEST_MAX_PROCESS_LISTENERS) {
+  process.setMaxListeners(TEST_MAX_PROCESS_LISTENERS);
+}
