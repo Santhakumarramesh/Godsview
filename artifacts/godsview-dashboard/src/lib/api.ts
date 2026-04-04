@@ -1353,3 +1353,415 @@ export function useMarketStress(symbols: string[]) {
     enabled: symbols.length >= 2,
   });
 }
+
+// ─── Brain Nodes (Live Intelligence Core) ───────────────────────────────────
+export type BrainNodeStatus = "READY" | "WATCH" | "BLOCKED" | "STALE" | "SCANNING";
+
+export interface BrainNode {
+  symbol: string;
+  name: string | null;
+  sector: string | null;
+  regime: string | null;
+  status: BrainNodeStatus;
+  confidence_score: number;
+  opportunity_score: number;
+  urgency_score: number;
+  attention_score: number;
+  capital_priority_score: number;
+  node_health: "live" | "degraded" | "stale";
+  last_signal_at: string | null;
+  last_updated_at: string;
+  risk_flags: string[];
+  latest_signal: {
+    setup_type: string;
+    direction: string;
+    approved: boolean;
+    win_probability: number;
+    final_quality: number;
+    edge_score: number;
+    kelly_fraction: number;
+    confluence_score: number;
+    rejection_reason: string | null;
+    gate_action: string | null;
+    gate_block_reasons: string | null;
+  } | null;
+}
+
+export interface BrainNodeCluster {
+  key: string;
+  label: string;
+  count: number;
+  avg_opportunity: number;
+  avg_confidence: number;
+  symbols: string[];
+}
+
+export interface BrainNodeRelation {
+  id: number;
+  source_symbol: string;
+  target_symbol: string;
+  relation_type: string;
+  strength: number;
+  context_json: string | null;
+  created_at: string;
+}
+
+export interface BrainNodeDrilldown {
+  node: BrainNode;
+  memories: Array<{
+    id: number;
+    memory_type: string;
+    title: string;
+    content: string;
+    confidence: number;
+    outcome_score: number | null;
+    tags: string | null;
+    created_at: string;
+  }>;
+  relationships: BrainNodeRelation[];
+  recent_events: Array<{
+    id: number;
+    event_type: string;
+    decision_state: string | null;
+    reason: string | null;
+    payload: Record<string, unknown> | null;
+    created_at: string;
+  }>;
+  recent_decisions: Array<{
+    id: number;
+    setup_type: string;
+    direction: string;
+    regime: string;
+    approved: boolean;
+    win_probability: number;
+    final_quality: number;
+    edge_score: number;
+    kelly_fraction: number;
+    confluence_score: number;
+    gate_action: string | null;
+    gate_block_reasons: string | null;
+    rejection_reason: string | null;
+    created_at: string;
+  }>;
+  layer_scores: {
+    structure: number;
+    microstructure: number;
+    recall: number;
+    intelligence: number;
+    risk: number;
+  };
+}
+
+export function useBrainNodes(limit = 120) {
+  return useQuery({
+    queryKey: ["brain", "nodes", limit],
+    queryFn: () => apiFetch<{ count: number; nodes: BrainNode[]; generated_at: string }>(`/brain/nodes?limit=${limit}`),
+    staleTime: 20_000,
+    refetchInterval: 20_000,
+  });
+}
+
+export function useBrainNode(symbol: string) {
+  return useQuery({
+    queryKey: ["brain", "node", symbol],
+    queryFn: () => apiFetch<{ node: BrainNode }>(`/brain/nodes/${encodeURIComponent(symbol)}`),
+    enabled: !!symbol,
+    staleTime: 20_000,
+    refetchInterval: 20_000,
+  });
+}
+
+export function useBrainNodeDrilldown(symbol: string) {
+  return useQuery({
+    queryKey: ["brain", "node", symbol, "drilldown"],
+    queryFn: () => apiFetch<BrainNodeDrilldown>(`/brain/nodes/${encodeURIComponent(symbol)}/drilldown`),
+    enabled: !!symbol,
+    staleTime: 15_000,
+    refetchInterval: 20_000,
+  });
+}
+
+export function useBrainNodeClusters(limit = 120) {
+  return useQuery({
+    queryKey: ["brain", "clusters", limit],
+    queryFn: () => apiFetch<{ by_sector: BrainNodeCluster[]; by_regime: BrainNodeCluster[]; by_status: BrainNodeCluster[]; generated_at: string }>(`/brain/clusters?limit=${limit}`),
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  });
+}
+
+export function useBrainNodeRelationships(symbol?: string, limit = 250) {
+  const query = new URLSearchParams();
+  if (symbol) query.set("symbol", symbol);
+  if (limit) query.set("limit", String(limit));
+  const qs = query.toString();
+
+  return useQuery({
+    queryKey: ["brain", "relationships", symbol ?? "all", limit],
+    queryFn: () => apiFetch<{ count: number; relationships: BrainNodeRelation[]; generated_at: string }>(`/brain/relationships${qs ? `?${qs}` : ""}`),
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  });
+}
+
+// ─── Portfolio Allocator (Capital Routing) ──────────────────────────────────
+export interface PortfolioAllocatorPolicy {
+  account_equity: number;
+  max_total_risk_pct: number;
+  max_positions: number;
+  max_new_allocations: number;
+  max_symbol_exposure_pct: number;
+  min_expected_value: number;
+  min_risk_pct_per_trade: number;
+  max_risk_pct_per_trade: number;
+}
+
+export interface PortfolioOpportunity {
+  decision_id: number;
+  symbol: string;
+  setup_type: string;
+  regime: string;
+  direction: string;
+  strategy_id: string;
+  approved: boolean;
+  entry_price: number;
+  stop_loss: number;
+  take_profit: number;
+  suggested_qty: number;
+  win_probability: number;
+  final_quality: number;
+  edge_score: number;
+  kelly_fraction: number;
+  confluence_score: number;
+  expected_value: number;
+  rr_ratio: number;
+  recency_score: number;
+  base_score: number;
+  adjusted_score: number;
+  strategy_multiplier: number;
+  recommended_risk_pct: number;
+  created_at: string;
+}
+
+export interface PortfolioExposureSnapshot {
+  open_positions: number;
+  long_positions: number;
+  short_positions: number;
+  gross_notional_usd: number;
+  net_notional_usd: number;
+  open_risk_usd: number;
+  open_risk_pct: number;
+  by_symbol: Array<{ symbol: string; notional_usd: number; pct_of_equity: number }>;
+}
+
+export interface PortfolioAllocationEntry {
+  decision_id: number;
+  symbol: string;
+  setup_type: string;
+  regime: string;
+  direction: string;
+  strategy_id: string;
+  score: number;
+  expected_value: number;
+  risk_pct: number;
+  risk_usd: number;
+  notional_usd: number;
+  quantity: number;
+  rationale: string[];
+}
+
+export interface PortfolioAllocatorSnapshot {
+  generated_at: string;
+  cycle_reason: string;
+  policy: PortfolioAllocatorPolicy;
+  exposure: PortfolioExposureSnapshot;
+  opportunities: PortfolioOpportunity[];
+  allocations: PortfolioAllocationEntry[];
+  blocked: Array<{ decision_id: number; symbol: string; reason: string }>;
+  available_risk_pct: number;
+  available_risk_usd: number;
+}
+
+export function usePortfolioAllocatorStatus() {
+  return useQuery({
+    queryKey: ["portfolio", "allocator", "status"],
+    queryFn: () => apiFetch<PortfolioAllocatorSnapshot>("/portfolio/allocator/status"),
+    staleTime: 20_000,
+    refetchInterval: 20_000,
+  });
+}
+
+export function usePortfolioOpportunities() {
+  return useQuery({
+    queryKey: ["portfolio", "opportunities"],
+    queryFn: () => apiFetch<{ count: number; opportunities: PortfolioOpportunity[]; generated_at: string }>("/portfolio/opportunities"),
+    staleTime: 20_000,
+    refetchInterval: 20_000,
+  });
+}
+
+export function usePortfolioExposures() {
+  return useQuery({
+    queryKey: ["portfolio", "exposures"],
+    queryFn: () => apiFetch<{ exposure: PortfolioExposureSnapshot; available_risk_pct: number; available_risk_usd: number; generated_at: string }>("/portfolio/exposures"),
+    staleTime: 20_000,
+    refetchInterval: 20_000,
+  });
+}
+
+export function usePortfolioAllocations() {
+  return useQuery({
+    queryKey: ["portfolio", "allocations"],
+    queryFn: () => apiFetch<{ count: number; allocations: PortfolioAllocationEntry[]; blocked: Array<{ decision_id: number; symbol: string; reason: string }>; generated_at: string }>("/portfolio/allocations"),
+    staleTime: 20_000,
+    refetchInterval: 20_000,
+  });
+}
+
+export function useRunPortfolioAllocator() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (reason?: string) =>
+      apiFetch<{ ok: boolean; snapshot: PortfolioAllocatorSnapshot }>("/portfolio/allocate", {
+        method: "POST",
+        body: JSON.stringify(reason ? { reason } : {}),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["portfolio"] });
+    },
+  });
+}
+
+export function useRebalancePortfolioAllocator() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (reason?: string) =>
+      apiFetch<{ ok: boolean; snapshot: PortfolioAllocatorSnapshot }>("/portfolio/rebalance", {
+        method: "POST",
+        body: JSON.stringify(reason ? { reason } : {}),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["portfolio"] });
+    },
+  });
+}
+
+// ─── Decision Replay (Audit Timeline) ───────────────────────────────────────
+export interface DecisionReplay {
+  trade: {
+    id: number;
+    symbol: string;
+    setup_type: string;
+    direction: string;
+    entry_price: number;
+    exit_price: number;
+    stop_loss: number;
+    take_profit: number;
+    quantity: number;
+    pnl: number;
+    pnl_pct: number;
+    outcome: string;
+    created_at: string | null;
+    exit_time: string | null;
+    regime: string | null;
+  };
+  signal: {
+    id: number;
+    status: string;
+    final_quality: number;
+    structure_score: number;
+    order_flow_score: number;
+    recall_score: number;
+    ml_probability: number;
+    claude_score: number;
+    created_at: string | null;
+  } | null;
+  decision: {
+    id: number;
+    approved: boolean;
+    setup_type: string;
+    direction: string;
+    regime: string;
+    win_probability: number;
+    final_quality: number;
+    edge_score: number;
+    confluence_score: number;
+    kelly_fraction: number;
+    gate_action: string | null;
+    gate_block_reasons: string | null;
+    rejection_reason: string | null;
+    created_at: string | null;
+  } | null;
+  timeline: Array<{
+    stage: string;
+    at: string;
+    latency_ms_from_prev: number | null;
+    source: string;
+    details: Record<string, unknown>;
+  }>;
+}
+
+export function useDecisionReplay(tradeId: number | null) {
+  return useQuery({
+    queryKey: ["decision-replay", tradeId],
+    queryFn: () => apiFetch<DecisionReplay>(`/decision-replay/${tradeId}`),
+    enabled: !!tradeId,
+    staleTime: 30_000,
+  });
+}
+
+export function useDecisionReplayTimeline(tradeId: number | null) {
+  return useQuery({
+    queryKey: ["decision-replay", tradeId, "timeline"],
+    queryFn: () => apiFetch<{ trade_id: number; symbol: string; timeline: DecisionReplay["timeline"]; count: number }>(`/decision-replay/${tradeId}/timeline`),
+    enabled: !!tradeId,
+    staleTime: 30_000,
+  });
+}
+
+export function useDecisionReplayBlockReasons(hours = 24, limit = 500) {
+  return useQuery({
+    queryKey: ["decision-replay", "block-reasons", hours, limit],
+    queryFn: () => apiFetch<{
+      hours: number;
+      count: number;
+      block_reasons: Array<{
+        event_type: string;
+        reason: string;
+        count: number;
+        latest_at: string;
+        symbols: string[];
+      }>;
+      generated_at: string;
+    }>(`/decision-replay/block-reasons?hours=${hours}&limit=${limit}`),
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  });
+}
+
+export function useDecisionReplayLatency(hours = 24, limit = 2000) {
+  return useQuery({
+    queryKey: ["decision-replay", "latency", hours, limit],
+    queryFn: () => apiFetch<{
+      hours: number;
+      pairs: number;
+      latency_ms: {
+        min: number;
+        p50: number;
+        p95: number;
+        p99: number;
+        max: number;
+        avg: number;
+      };
+      by_bucket: {
+        under_1s: number;
+        s1_to_3: number;
+        s3_to_10: number;
+        over_10s: number;
+      };
+      generated_at: string;
+    }>(`/decision-replay/latency?hours=${hours}&limit=${limit}`),
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  });
+}

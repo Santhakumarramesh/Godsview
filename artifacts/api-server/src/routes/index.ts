@@ -34,6 +34,9 @@ import strategyAllocatorRouter from "./strategy_allocator";
 import productionWatchdogRouter from "./production_watchdog";
 import leaderboardRouter from "./leaderboard";
 import pythonV2Router from "./python_v2";
+import brainNodesRouter from "./brain_nodes";
+import portfolioAllocatorRouter from "./portfolio_allocator";
+import decisionReplayRouter from "./decision_replay";
 
 const router: IRouter = Router();
 
@@ -71,6 +74,9 @@ router.use(autonomySupervisorRouter);
 router.use(strategyGovernorRouter);
 router.use(strategyAllocatorRouter);
 router.use(productionWatchdogRouter);
+router.use(brainNodesRouter);
+router.use(portfolioAllocatorRouter);
+router.use(decisionReplayRouter);
 
 // Python v2 microservices proxy — shadow routes at /v2/*
 router.use(pythonV2Router);
