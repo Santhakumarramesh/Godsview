@@ -260,7 +260,16 @@ function envChecks(checks: DeploymentReadinessCheck[]): void {
 
   {
     const startedAt = nowMs();
-    const supportedMode = ["dry_run", "paper_enabled", "live_enabled"].includes(runtimeConfig.systemMode);
+    const supportedModes = new Set<string>([
+      "demo",
+      "paper",
+      "live_disabled",
+      "live_enabled",
+      // Backward-compat aliases for mixed deployments.
+      "dry_run",
+      "paper_enabled",
+    ]);
+    const supportedMode = supportedModes.has(String(runtimeConfig.systemMode));
     timedCheck(
       checks,
       {

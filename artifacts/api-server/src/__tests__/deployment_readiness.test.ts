@@ -8,7 +8,7 @@ const runtime = vi.hoisted(() => ({
   executionSafetyLastCycleAgeMs: 10_000 as number | null,
   executionSafetyTotalCycles: 3,
   killSwitchActive: false,
-  systemMode: "paper_enabled" as "dry_run" | "paper_enabled" | "live_enabled",
+  systemMode: "paper" as "demo" | "paper" | "live_disabled" | "live_enabled",
   supervisorExpected: true,
   supervisorRunning: true,
   supervisorStartedAgeMs: 20_000,
@@ -41,7 +41,7 @@ function resetRuntime(): void {
   runtime.executionSafetyLastCycleAgeMs = 10_000;
   runtime.executionSafetyTotalCycles = 3;
   runtime.killSwitchActive = false;
-  runtime.systemMode = "paper_enabled";
+  runtime.systemMode = "paper";
   runtime.supervisorExpected = true;
   runtime.supervisorRunning = true;
   runtime.supervisorStartedAgeMs = 20_000;
@@ -363,7 +363,7 @@ describe("deployment_readiness execution safety integration", () => {
   });
 
   it("marks DEGRADED in paper mode when execution safety supervisor heartbeat is stale", async () => {
-    runtime.systemMode = "paper_enabled";
+    runtime.systemMode = "paper";
     runtime.executionSafetyExpected = true;
     runtime.executionSafetyRunning = true;
     runtime.executionSafetyLastCycleAgeMs = 10 * 60_000;
@@ -418,7 +418,7 @@ describe("deployment_readiness execution safety integration", () => {
   });
 
   it("marks DEGRADED in paper mode when expected debug scheduler is down", async () => {
-    runtime.systemMode = "paper_enabled";
+    runtime.systemMode = "paper";
     runtime.debugSchedulerExpected = true;
     runtime.debugSchedulerRunning = false;
     runtime.debugSchedulerLastStatus = "CRITICAL";
