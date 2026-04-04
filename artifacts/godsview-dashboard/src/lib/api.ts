@@ -1009,6 +1009,348 @@ export function useMicrostructure(symbol: string, timeframe = "1Min") {
   });
 }
 
+export interface LiveMicrostructureOrderbookLevel {
+  price: number;
+  size: number;
+  cumulative_size: number;
+  notional_usd: number;
+}
+
+export interface LiveMicrostructureOrderbook {
+  symbol: string;
+  timestamp: string;
+  received_at: number;
+  source: "rest" | "ws";
+  depth: number;
+  best_bid: number | null;
+  best_ask: number | null;
+  mid_price: number | null;
+  spread: number | null;
+  spread_bps: number | null;
+  bid_levels: LiveMicrostructureOrderbookLevel[];
+  ask_levels: LiveMicrostructureOrderbookLevel[];
+  total_bid_size: number;
+  total_ask_size: number;
+  total_bid_notional: number;
+  total_ask_notional: number;
+}
+
+export interface LiveMicrostructureImbalance {
+  top_levels: number;
+  touch_imbalance: number;
+  depth_imbalance: number;
+  weighted_imbalance: number;
+  top_bid_volume: number;
+  top_ask_volume: number;
+  score: number;
+  bias: "buy" | "sell" | "neutral";
+}
+
+export interface LiveMicrostructureAbsorption {
+  state: "bid_absorption" | "ask_absorption" | "none";
+  score: number;
+  confidence: number;
+  persistence: number;
+  mid_drift_bps: number;
+  spread_bps: number;
+  reason: string;
+}
+
+export interface LiveMicrostructureHeatmapZone {
+  price_start: number;
+  price_end: number;
+  side: "bid" | "ask";
+  strength: number;
+  intensity: number;
+  distance_bps: number;
+  type: "absorption" | "aggression" | "vacuum" | "rotation";
+}
+
+export interface LiveMicrostructureHeatmap {
+  generated_at: string;
+  bucket_pct: number;
+  top_n: number;
+  zone_score: number;
+  zones: LiveMicrostructureHeatmapZone[];
+}
+
+export interface LiveMicrostructureTapePrint {
+  price: number;
+  size: number;
+  notional_usd: number;
+  timestamp: string;
+  side: "buy" | "sell";
+  aggressor: boolean;
+}
+
+export interface LiveMicrostructureTape {
+  generated_at: string;
+  window_sec: number;
+  print_count: number;
+  buy_volume: number;
+  sell_volume: number;
+  buy_notional: number;
+  sell_notional: number;
+  delta_volume: number;
+  delta_notional: number;
+  normalized_delta: number;
+  burst_score: number;
+  score: number;
+  bias: "buy" | "sell" | "neutral";
+  prints: LiveMicrostructureTapePrint[];
+}
+
+export interface LiveMicrostructureScore {
+  score: number;
+  confidence: number;
+  quality: "high" | "medium" | "low";
+  direction: "long" | "short" | "flat";
+  verdict:
+    | "high_conviction_long"
+    | "high_conviction_short"
+    | "tradable_long"
+    | "tradable_short"
+    | "neutral"
+    | "avoid";
+  reasons: string[];
+  components: {
+    imbalance: number;
+    absorption: number;
+    liquidity: number;
+    tape: number;
+    spread_quality: number;
+  };
+}
+
+export interface LiveMicrostructureEvent {
+  id: string;
+  symbol: string;
+  type: "imbalance_shift" | "bid_absorption" | "ask_absorption" | "liquidity_vacuum" | "aggressive_tape" | "score_spike";
+  direction: "long" | "short" | "neutral";
+  strength: number;
+  detail: string;
+  metadata: Record<string, unknown>;
+  timestamp: string;
+}
+
+export interface LiveMicrostructureSnapshot {
+  symbol: string;
+  generated_at: string;
+  orderbook: LiveMicrostructureOrderbook;
+  imbalance: LiveMicrostructureImbalance;
+  absorption: LiveMicrostructureAbsorption;
+  heatmap: LiveMicrostructureHeatmap;
+  tape: LiveMicrostructureTape;
+  score: LiveMicrostructureScore;
+}
+
+export interface LiveMicrostructureCurrentResponse {
+  symbol: string;
+  generated_at: string;
+  snapshot: LiveMicrostructureSnapshot;
+  emitted_events: LiveMicrostructureEvent[];
+  status: {
+    symbols: number;
+    snapshot_count: number;
+    event_count: number;
+    symbol?: string;
+  };
+}
+
+export interface LiveMicrostructureReplayResponse {
+  symbol: string;
+  replay_window: {
+    start: string;
+    end: string;
+    duration_ms: number;
+  };
+  replay: {
+    symbol: string;
+    start: string;
+    end: string;
+    durationMs: number;
+    stats: {
+      rawFrames: number;
+      rawTicks: number;
+      emittedFrames: number;
+      emittedTicks: number;
+      frameCompressionRatio: number;
+      tickCompressionRatio: number;
+      downsampleMs: number | null;
+    };
+    frames: Array<{
+      symbol: string;
+      timestamp: string;
+      receivedAt: number;
+      source: "rest" | "ws";
+      bestBid: number | null;
+      bestAsk: number | null;
+      spread: number | null;
+      bids: Array<{ price: number; size: number }>;
+      asks: Array<{ price: number; size: number }>;
+    }>;
+    ticks: Array<{
+      symbol: string;
+      price: number;
+      size: number;
+      timestamp: string;
+      receivedAt: number;
+      source: "ws_trade" | "poll_trade";
+    }>;
+  };
+  microstructure_events: LiveMicrostructureEvent[];
+  snapshots: LiveMicrostructureSnapshot[];
+  status: {
+    symbols: number;
+    snapshot_count: number;
+    event_count: number;
+    symbol?: string;
+  };
+}
+
+function toSearchParams(params: Record<string, string | number | boolean | undefined>): string {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined) continue;
+    query.set(key, String(value));
+  }
+  const raw = query.toString();
+  return raw ? `?${raw}` : "";
+}
+
+export function useLiveMicrostructureCurrent(
+  symbol: string,
+  options?: {
+    depth?: number;
+    top_levels?: number;
+    window_sec?: number;
+    force_fresh?: boolean;
+    max_age_ms?: number;
+  },
+  queryOptions?: Omit<UseQueryOptions<LiveMicrostructureCurrentResponse, Error>, "queryKey" | "queryFn">,
+) {
+  const params = toSearchParams(options ?? {});
+  return useQuery({
+    queryKey: ["microstructure", "current", symbol, params],
+    queryFn: () => apiFetch<LiveMicrostructureCurrentResponse>(`/microstructure/${encodeURIComponent(symbol)}/current${params}`),
+    enabled: !!symbol,
+    refetchInterval: 5_000,
+    staleTime: 2_500,
+    ...queryOptions,
+  });
+}
+
+export function useLiveMicrostructureOrderbook(
+  symbol: string,
+  options?: { depth?: number; top_levels?: number; force_fresh?: boolean; max_age_ms?: number },
+) {
+  const params = toSearchParams(options ?? {});
+  return useQuery({
+    queryKey: ["microstructure", "orderbook", symbol, params],
+    queryFn: () => apiFetch<{
+      symbol: string;
+      generated_at: string;
+      orderbook: LiveMicrostructureOrderbook;
+      imbalance: LiveMicrostructureImbalance;
+      absorption: LiveMicrostructureAbsorption;
+    }>(`/microstructure/${encodeURIComponent(symbol)}/orderbook${params}`),
+    enabled: !!symbol,
+    refetchInterval: 5_000,
+  });
+}
+
+export function useLiveMicrostructureHeatmap(
+  symbol: string,
+  options?: { depth?: number; bucket_pct?: number; top_n?: number; force_fresh?: boolean; max_age_ms?: number },
+) {
+  const params = toSearchParams(options ?? {});
+  return useQuery({
+    queryKey: ["microstructure", "heatmap", symbol, params],
+    queryFn: () => apiFetch<{
+      symbol: string;
+      generated_at: string;
+      heatmap: LiveMicrostructureHeatmap;
+      orderbook_mid_price: number | null;
+    }>(`/microstructure/${encodeURIComponent(symbol)}/heatmap${params}`),
+    enabled: !!symbol,
+    refetchInterval: 6_000,
+  });
+}
+
+export function useLiveMicrostructureTape(
+  symbol: string,
+  options?: { depth?: number; window_sec?: number; force_fresh?: boolean; max_age_ms?: number },
+) {
+  const params = toSearchParams(options ?? {});
+  return useQuery({
+    queryKey: ["microstructure", "tape", symbol, params],
+    queryFn: () => apiFetch<{ symbol: string; generated_at: string; tape: LiveMicrostructureTape }>(`/microstructure/${encodeURIComponent(symbol)}/tape${params}`),
+    enabled: !!symbol,
+    refetchInterval: 5_000,
+  });
+}
+
+export function useLiveMicrostructureEvents(symbol: string, limit = 150) {
+  return useQuery({
+    queryKey: ["microstructure", "events", symbol, limit],
+    queryFn: () => apiFetch<{
+      symbol: string;
+      count: number;
+      events: LiveMicrostructureEvent[];
+      status: { symbols: number; snapshot_count: number; event_count: number; symbol?: string };
+    }>(`/microstructure/${encodeURIComponent(symbol)}/events?limit=${limit}`),
+    enabled: !!symbol,
+    refetchInterval: 7_500,
+  });
+}
+
+export function useLiveMicrostructureScore(
+  symbol: string,
+  options?: { depth?: number; top_levels?: number; window_sec?: number; force_fresh?: boolean; max_age_ms?: number },
+) {
+  const params = toSearchParams(options ?? {});
+  return useQuery({
+    queryKey: ["microstructure", "score", symbol, params],
+    queryFn: () => apiFetch<{
+      symbol: string;
+      generated_at: string;
+      score: LiveMicrostructureScore;
+      imbalance: LiveMicrostructureImbalance;
+      absorption: LiveMicrostructureAbsorption;
+      tape_summary: { score: number; bias: "buy" | "sell" | "neutral"; normalized_delta: number };
+      heatmap_summary: { zone_score: number; zones: number };
+    }>(`/microstructure/${encodeURIComponent(symbol)}/score${params}`),
+    enabled: !!symbol,
+    refetchInterval: 5_000,
+  });
+}
+
+export function useMicrostructureReplay() {
+  return useMutation({
+    mutationFn: (params: {
+      symbol: string;
+      start?: string | number;
+      end?: string | number;
+      downsample_ms?: number;
+      max_frames?: number;
+      max_ticks?: number;
+      include_ticks?: boolean;
+      snapshot_limit?: number;
+    }) => apiFetch<LiveMicrostructureReplayResponse>(`/microstructure/${encodeURIComponent(params.symbol)}/replay`, {
+      method: "POST",
+      body: JSON.stringify({
+        start: params.start,
+        end: params.end,
+        downsample_ms: params.downsample_ms,
+        max_frames: params.max_frames,
+        max_ticks: params.max_ticks,
+        include_ticks: params.include_ticks,
+        snapshot_limit: params.snapshot_limit,
+      }),
+    }),
+  });
+}
+
 export function useLiquidityZones(symbol: string) {
   return useQuery({
     queryKey: ["market", "liquidity-zones", symbol],

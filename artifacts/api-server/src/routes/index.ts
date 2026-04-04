@@ -37,6 +37,7 @@ import pythonV2Router from "./python_v2";
 import brainNodesRouter from "./brain_nodes";
 import portfolioAllocatorRouter from "./portfolio_allocator";
 import decisionReplayRouter from "./decision_replay";
+import microstructureRouter from "./microstructure";
 
 const router: IRouter = Router();
 
@@ -77,6 +78,7 @@ router.use(productionWatchdogRouter);
 router.use(brainNodesRouter);
 router.use(portfolioAllocatorRouter);
 router.use(decisionReplayRouter);
+router.use(microstructureRouter);
 
 // Python v2 microservices proxy — shadow routes at /v2/*
 router.use(pythonV2Router);
