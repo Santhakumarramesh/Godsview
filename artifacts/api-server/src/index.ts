@@ -41,6 +41,11 @@ import {
   startProductionWatchdog,
   stopProductionWatchdog,
 } from "./lib/production_watchdog";
+import {
+  shouldAutonomyDebugSchedulerAutoStart,
+  startAutonomyDebugScheduler,
+  stopAutonomyDebugScheduler,
+} from "./lib/autonomy_debug_scheduler";
 
 // ── Validate environment before anything else ───────────────────
 validateEnv();
@@ -187,6 +192,14 @@ const server = app.listen(port, (err) => {
   } else {
     logger.info("Production watchdog auto-start disabled");
   }
+
+  if (shouldAutonomyDebugSchedulerAutoStart()) {
+    startAutonomyDebugScheduler({ runImmediate: true })
+      .then((result) => logger.info({ intervalMs: result.interval_ms }, "Autonomy debug scheduler started"))
+      .catch((err) => logger.error({ err }, "Autonomy debug scheduler failed to start"));
+  } else {
+    logger.info("Autonomy debug scheduler auto-start disabled");
+  }
 });
 
 // ── Graceful shutdown with connection draining ──────────────────
@@ -257,6 +270,12 @@ onShutdown(async () => {
 onShutdown(async () => {
   logger.info("Stopping production watchdog...");
   stopProductionWatchdog();
+});
+
+// Register cleanup: stop autonomy debug scheduler
+onShutdown(async () => {
+  logger.info("Stopping autonomy debug scheduler...");
+  stopAutonomyDebugScheduler();
 });
 
 // Register cleanup: end trading session

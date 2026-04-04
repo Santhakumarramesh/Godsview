@@ -1047,6 +1047,41 @@ export interface AutonomyDebugFixAction {
   detail: string;
 }
 
+export interface AutonomyDebugSchedulerAction {
+  at: string;
+  cycle_reason: string;
+  action: "EVALUATE" | "AUTO_FIX" | "ALERT_CRITICAL_STREAK" | "RECOVERED";
+  success: boolean;
+  detail: string;
+}
+
+export interface AutonomyDebugSchedulerSnapshot {
+  running: boolean;
+  cycle_in_flight: boolean;
+  started_at: string | null;
+  last_cycle_at: string | null;
+  last_cycle_duration_ms: number | null;
+  last_error: string | null;
+  total_cycles: number;
+  total_actions: number;
+  total_fix_actions: number;
+  interval_ms: number;
+  consecutive_critical: number;
+  last_status: "HEALTHY" | "DEGRADED" | "CRITICAL" | null;
+  last_issue_count: number;
+  last_critical_issues: number;
+  last_warn_issues: number;
+  policy: {
+    auto_enforce: boolean;
+    interval_ms: number;
+    include_preflight: boolean;
+    auto_fix_on_degraded: boolean;
+    auto_fix_on_critical: boolean;
+    critical_alert_threshold: number;
+  };
+  recent_actions: AutonomyDebugSchedulerAction[];
+}
+
 export function useAutonomyDebugSnapshot(
   params?: { include_preflight?: boolean; refresh?: boolean },
   options?: Omit<UseQueryOptions<AutonomyDebugSnapshot>, "queryKey" | "queryFn">,
@@ -1082,6 +1117,88 @@ export function useRunAutonomyDebugFix() {
       qc.invalidateQueries({ queryKey: ["brain", "strategy", "allocator"] });
       qc.invalidateQueries({ queryKey: ["brain", "strategy", "evolution"] });
       qc.invalidateQueries({ queryKey: ["brain", "production", "watchdog"] });
+    },
+  });
+}
+
+export function useAutonomyDebugSchedulerStatus(
+  options?: Omit<UseQueryOptions<AutonomyDebugSchedulerSnapshot>, "queryKey" | "queryFn">,
+) {
+  return useQuery({
+    queryKey: ["brain", "autonomy", "debug", "scheduler", "status"],
+    queryFn: () => apiFetch<AutonomyDebugSchedulerSnapshot>("/brain/autonomy/debug/scheduler/status"),
+    refetchInterval: 10_000,
+    ...options,
+  });
+}
+
+export function useStartAutonomyDebugScheduler() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params?: { interval_ms?: number; run_immediate?: boolean }) =>
+      apiFetch<{
+        success: boolean;
+        message: string;
+        interval_ms: number;
+        snapshot: AutonomyDebugSchedulerSnapshot;
+      }>("/brain/autonomy/debug/scheduler/start", {
+        method: "POST",
+        body: JSON.stringify(params ?? {}),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["brain", "autonomy", "debug", "scheduler"] });
+      qc.invalidateQueries({ queryKey: ["brain", "autonomy", "debug"] });
+    },
+  });
+}
+
+export function useStopAutonomyDebugScheduler() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{
+        success: boolean;
+        message: string;
+        snapshot: AutonomyDebugSchedulerSnapshot;
+      }>("/brain/autonomy/debug/scheduler/stop", {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["brain", "autonomy", "debug", "scheduler"] });
+    },
+  });
+}
+
+export function useRunAutonomyDebugSchedulerCycle() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{
+        ok: boolean;
+        snapshot: AutonomyDebugSchedulerSnapshot;
+      }>("/brain/autonomy/debug/scheduler/run-once", {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["brain", "autonomy", "debug", "scheduler"] });
+      qc.invalidateQueries({ queryKey: ["brain", "autonomy", "debug"] });
+    },
+  });
+}
+
+export function useResetAutonomyDebugScheduler() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{
+        ok: boolean;
+        snapshot: AutonomyDebugSchedulerSnapshot;
+      }>("/brain/autonomy/debug/scheduler/reset", {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["brain", "autonomy", "debug", "scheduler"] });
+      qc.invalidateQueries({ queryKey: ["brain", "autonomy", "debug"] });
     },
   });
 }

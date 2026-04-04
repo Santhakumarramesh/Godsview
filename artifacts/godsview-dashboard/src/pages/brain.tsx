@@ -51,7 +51,13 @@ import {
   type ProductionWatchdogSnapshot,
   useAutonomyDebugSnapshot,
   useRunAutonomyDebugFix,
+  useAutonomyDebugSchedulerStatus,
+  useStartAutonomyDebugScheduler,
+  useStopAutonomyDebugScheduler,
+  useRunAutonomyDebugSchedulerCycle,
+  useResetAutonomyDebugScheduler,
   type AutonomyDebugSnapshot,
+  type AutonomyDebugSchedulerSnapshot,
   useExecutionIncidentGuard,
   type ExecutionIncidentSnapshot,
   useExecutionMarketGuard,
@@ -1333,12 +1339,24 @@ function ProductionWatchdogPanel({
 
 function AutonomyDebugPanel({
   debugSnapshot,
+  scheduler,
   busy,
+  schedulerBusy,
   onFix,
+  onSchedulerStart,
+  onSchedulerStop,
+  onSchedulerRun,
+  onSchedulerReset,
 }: {
   debugSnapshot?: AutonomyDebugSnapshot;
+  scheduler?: AutonomyDebugSchedulerSnapshot;
   busy: boolean;
+  schedulerBusy: boolean;
   onFix: () => void;
+  onSchedulerStart: () => void;
+  onSchedulerStop: () => void;
+  onSchedulerRun: () => void;
+  onSchedulerReset: () => void;
 }) {
   const status = debugSnapshot?.overall_status ?? "HEALTHY";
   const statusColor =
@@ -1350,6 +1368,12 @@ function AutonomyDebugPanel({
   const criticalCount = (debugSnapshot?.issues ?? []).filter((issue) => issue.severity === "critical").length;
   const warnCount = (debugSnapshot?.issues ?? []).filter((issue) => issue.severity === "warn").length;
   const topIssues = (debugSnapshot?.issues ?? []).slice(0, 4);
+  const schedulerStatus = scheduler?.last_status ?? "HEALTHY";
+  const schedulerStatusColor =
+    schedulerStatus === "HEALTHY" ? "#00ffcc" :
+    schedulerStatus === "DEGRADED" ? "#ffcc00" : "#ff4444";
+  const schedulerIntervalSeconds = Math.max(1, Math.round((scheduler?.interval_ms ?? 60_000) / 1000));
+  const schedulerActions = (scheduler?.recent_actions ?? []).slice(0, 3);
 
   return (
     <div style={panelStyle}>
@@ -1410,6 +1434,65 @@ function AutonomyDebugPanel({
         {busy ? "RUNNING AUTO-FIX..." : "RUN DEBUG AUTO-FIX"}
       </button>
 
+      <div style={{ display: "flex", gap: "6px", marginBottom: "8px" }}>
+        <button
+          type="button"
+          disabled={schedulerBusy}
+          onClick={scheduler?.running ? onSchedulerStop : onSchedulerStart}
+          style={{
+            flex: 1,
+            fontSize: "9px",
+            borderRadius: "6px",
+            border: "1px solid rgba(130,130,140,0.25)",
+            backgroundColor: "rgba(130,130,140,0.08)",
+            color: "#ffffff",
+            padding: "6px 8px",
+            cursor: schedulerBusy ? "not-allowed" : "pointer",
+            opacity: schedulerBusy ? 0.65 : 1,
+          }}
+        >
+          {scheduler?.running ? "STOP SCHEDULER" : "START SCHEDULER"}
+        </button>
+        <button
+          type="button"
+          disabled={schedulerBusy}
+          onClick={onSchedulerRun}
+          style={{
+            flex: 1,
+            fontSize: "9px",
+            borderRadius: "6px",
+            border: "1px solid rgba(0,255,204,0.25)",
+            backgroundColor: "rgba(0,255,204,0.08)",
+            color: "#00ffcc",
+            padding: "6px 8px",
+            cursor: schedulerBusy ? "not-allowed" : "pointer",
+            opacity: schedulerBusy ? 0.65 : 1,
+          }}
+        >
+          RUN CYCLE
+        </button>
+      </div>
+
+      <button
+        type="button"
+        disabled={schedulerBusy}
+        onClick={onSchedulerReset}
+        style={{
+          width: "100%",
+          fontSize: "9px",
+          borderRadius: "6px",
+          border: "1px solid rgba(130,130,140,0.2)",
+          backgroundColor: "rgba(130,130,140,0.05)",
+          color: "#adaaab",
+          padding: "6px 8px",
+          cursor: schedulerBusy ? "not-allowed" : "pointer",
+          opacity: schedulerBusy ? 0.65 : 1,
+          marginBottom: "8px",
+        }}
+      >
+        RESET SCHEDULER
+      </button>
+
       <div style={{ fontSize: "8px", color: "#767576", fontFamily: "JetBrains Mono", marginBottom: "6px" }}>
         supervisor {(debugSnapshot?.supervisor_health.healthy_services ?? 0)}/{(debugSnapshot?.supervisor_health.expected_services ?? 0)}
       </div>
@@ -1428,6 +1511,25 @@ function AutonomyDebugPanel({
         {topIssues.length === 0 ? (
           <div style={{ fontSize: "8px", color: "#00ffcc" }}>No active debug issues</div>
         ) : null}
+      </div>
+
+      <div style={{ fontSize: "8px", color: "#767576", fontFamily: "JetBrains Mono", marginTop: "8px", marginBottom: "4px" }}>
+        scheduler {scheduler?.running ? "ON" : "OFF"} · every {schedulerIntervalSeconds}s · streak {scheduler?.consecutive_critical ?? 0}
+      </div>
+      <div style={{ fontSize: "8px", color: schedulerStatusColor, fontFamily: "JetBrains Mono", marginBottom: "6px" }}>
+        status {schedulerStatus} · cycles {scheduler?.total_cycles ?? 0} · fixes {scheduler?.total_fix_actions ?? 0}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: "3px", maxHeight: "62px", overflowY: "auto" }}>
+        {schedulerActions.map((action, idx) => (
+          <div key={`${action.at}-${idx}`} style={{ fontSize: "8px", lineHeight: 1.25 }}>
+            <div style={{ color: action.success ? "#00ffcc" : "#ffcc00", fontFamily: "JetBrains Mono" }}>
+              {action.action}
+            </div>
+            <div style={{ color: "#adaaab", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {action.detail}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -2210,6 +2312,11 @@ function BrainPageComponent() {
   const resetProductionWatchdog = useResetProductionWatchdog();
   const { data: autonomyDebugSnapshot } = useAutonomyDebugSnapshot(undefined, { refetchInterval: 10_000 });
   const runAutonomyDebugFix = useRunAutonomyDebugFix();
+  const { data: autonomyDebugScheduler } = useAutonomyDebugSchedulerStatus({ refetchInterval: 10_000 });
+  const startAutonomyDebugScheduler = useStartAutonomyDebugScheduler();
+  const stopAutonomyDebugScheduler = useStopAutonomyDebugScheduler();
+  const runAutonomyDebugSchedulerCycle = useRunAutonomyDebugSchedulerCycle();
+  const resetAutonomyDebugScheduler = useResetAutonomyDebugScheduler();
   const { data: executionIncidentGuard } = useExecutionIncidentGuard({ refetchInterval: 10_000 });
   const { data: executionMarketGuard } = useExecutionMarketGuard({ refetchInterval: 10_000 });
 
@@ -2317,6 +2424,11 @@ function BrainPageComponent() {
     runProductionWatchdogCycle.isPending ||
     resetProductionWatchdog.isPending;
   const debugFixBusy = runAutonomyDebugFix.isPending;
+  const debugSchedulerBusy =
+    startAutonomyDebugScheduler.isPending ||
+    stopAutonomyDebugScheduler.isPending ||
+    runAutonomyDebugSchedulerCycle.isPending ||
+    resetAutonomyDebugScheduler.isPending;
 
   const handleSupervisorStart = useCallback(() => {
     startAutonomySupervisor.mutate({ run_immediate: true });
@@ -2373,6 +2485,22 @@ function BrainPageComponent() {
   const handleAutonomyDebugFix = useCallback(() => {
     runAutonomyDebugFix.mutate({ force_refresh: true });
   }, [runAutonomyDebugFix]);
+
+  const handleAutonomyDebugSchedulerStart = useCallback(() => {
+    startAutonomyDebugScheduler.mutate({ run_immediate: true });
+  }, [startAutonomyDebugScheduler]);
+
+  const handleAutonomyDebugSchedulerStop = useCallback(() => {
+    stopAutonomyDebugScheduler.mutate();
+  }, [stopAutonomyDebugScheduler]);
+
+  const handleAutonomyDebugSchedulerRun = useCallback(() => {
+    runAutonomyDebugSchedulerCycle.mutate();
+  }, [runAutonomyDebugSchedulerCycle]);
+
+  const handleAutonomyDebugSchedulerReset = useCallback(() => {
+    resetAutonomyDebugScheduler.mutate();
+  }, [resetAutonomyDebugScheduler]);
 
   useEffect(() => {
     if (!selectedStock) {
@@ -2545,8 +2673,14 @@ function BrainPageComponent() {
         />
         <AutonomyDebugPanel
           debugSnapshot={autonomyDebugSnapshot}
+          scheduler={autonomyDebugScheduler}
           busy={debugFixBusy}
+          schedulerBusy={debugSchedulerBusy}
           onFix={handleAutonomyDebugFix}
+          onSchedulerStart={handleAutonomyDebugSchedulerStart}
+          onSchedulerStop={handleAutonomyDebugSchedulerStop}
+          onSchedulerRun={handleAutonomyDebugSchedulerRun}
+          onSchedulerReset={handleAutonomyDebugSchedulerReset}
         />
         <StrategyGovernorPanel
           governor={strategyGovernor}
