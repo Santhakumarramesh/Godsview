@@ -187,7 +187,8 @@ export function emitSIDecision(data: unknown): void {
  */
 export function broadcast(msg: { type: string; data: unknown }): void {
   const typeMap: Record<string, StreamEventType> = {
-    si_decision: "si_decision",
+    // legacy callers expect si_decision to flow through the generic signal channel
+    si_decision: "signal",
     alert: "alert",
     trade: "trade",
     breaker: "breaker",

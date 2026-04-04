@@ -9,6 +9,7 @@ import { getModelDiagnostics, getModelStatus, retrainModel } from "../lib/ml_mod
 import { resolveSystemMode, canWriteOrders, isLiveMode } from "@workspace/strategy-core";
 import { getCurrentTradingSession, getRiskEngineSnapshot, isKillSwitchActive, isSessionAllowed, resetRiskEngineRuntime, setKillSwitchActive, updateRiskConfig } from "../lib/risk_engine";
 import { runBrainCycle } from "../lib/brain_bridge";
+import { requireOperator } from "../lib/auth_guard";
 
 const router: IRouter = Router();
 const LEGACY_LIVE_TRADING_ENABLED = String(process.env.GODSVIEW_ENABLE_LIVE_TRADING ?? "").toLowerCase() === "true";
@@ -498,7 +499,7 @@ router.get("/system/status", async (req, res) => {
 });
 
 // ─── POST /api/system/recall/refresh — run replay cycle to refresh context ──
-router.post("/system/recall/refresh", async (req, res) => {
+router.post("/system/recall/refresh", requireOperator, async (req, res) => {
   try {
     const requestedSymbol = String(req.body?.symbol ?? "").trim().toUpperCase();
     const symbol = requestedSymbol.length > 0 ? requestedSymbol : "AAPL";
@@ -551,7 +552,7 @@ router.post("/system/recall/refresh", async (req, res) => {
 });
 
 // ─── POST /api/system/retrain — retrain ML model on demand ──────────────────
-router.post("/system/retrain", async (req, res) => {
+router.post("/system/retrain", requireOperator, async (req, res) => {
   try {
     const result = await retrainModel();
     res.json(result);
@@ -756,7 +757,7 @@ router.get("/system/risk", (_req, res) => {
 });
 
 // ─── PUT /api/system/risk — update runtime risk controls ────────────────────
-router.put("/system/risk", (req, res) => {
+router.put("/system/risk", requireOperator, (req, res) => {
   try {
     const body = (typeof req.body === "object" && req.body !== null ? req.body : {}) as Record<string, unknown>;
     const updated = updateRiskConfig({
@@ -784,7 +785,7 @@ router.put("/system/risk", (req, res) => {
 });
 
 // ─── POST /api/system/risk/reset — reset runtime risk state ─────────────────
-router.post("/system/risk/reset", (_req, res) => {
+router.post("/system/risk/reset", requireOperator, (_req, res) => {
   const state = resetRiskEngineRuntime();
   res.json({
     ...state,
@@ -793,7 +794,7 @@ router.post("/system/risk/reset", (_req, res) => {
 });
 
 // ─── POST /api/system/kill-switch — toggle runtime kill switch ──────────────
-router.post("/system/kill-switch", (req, res) => {
+router.post("/system/kill-switch", requireOperator, (req, res) => {
   const body = (typeof req.body === "object" && req.body !== null ? req.body : {}) as Record<string, unknown>;
   const active = Boolean(body.active);
   const state = setKillSwitchActive(active);

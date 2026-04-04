@@ -713,7 +713,12 @@ export function applyNoTradeFilters(
   // SK zone filter: relaxed in replay mode (0.55 instead of 0.35)
   // Equivalent to the SK zone miss being less strict during historical scan
   const skZoneCap = replayMode ? 0.55 : 0.35;
-  const setupDef = SETUP_CATALOG[setup];
+  const setupDef = SETUP_CATALOG[setup as SetupType] ?? {
+    requiresSkZone: false,
+    requiresBiasAlignment: false,
+    requiresCvdDivergence: false,
+    minFinalQuality: 0,
+  };
   if (setupDef.requiresSkZone && recall.sk.zone_distance_pct > skZoneCap) {
     return { blocked: true, reason: "sk_zone_miss" };
   }

@@ -21,6 +21,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import express, { type Express } from "express";
 import http from "http";
+import net from "net";
 
 // ── Set the operator token before importing routes ────────────────────────────
 const TEST_TOKEN = "test-operator-token-abc123";
@@ -74,49 +75,69 @@ function authHeader(token: string) {
 }
 
 async function makeRequest(
-  server: http.Server,
+  _server: http.Server | null,
   method: "GET" | "POST" | "PUT" | "DELETE",
   path: string,
   options: { headers?: Record<string, string>; body?: unknown } = {},
 ): Promise<{ status: number; body: unknown }> {
   return new Promise((resolve, reject) => {
-    const baseUrl = (server.address() as { port: number });
-    const url = new URL(`http://127.0.0.1:${baseUrl.port}${path}`);
+    if (!app) {
+      reject(new Error("Express app is not initialized"));
+      return;
+    }
     const bodyStr = options.body ? JSON.stringify(options.body) : undefined;
+    const socket = new net.Socket({ readable: true, writable: true });
+    const req = new http.IncomingMessage(socket);
 
-    const reqOptions: http.RequestOptions = {
-      hostname: "127.0.0.1",
-      port: baseUrl.port,
-      path: url.pathname,
-      method,
-      headers: {
-        "Content-Type": "application/json",
+    const normalizedHeaders = Object.fromEntries(
+      Object.entries({
+        "content-type": "application/json",
         ...(options.headers ?? {}),
-        ...(bodyStr ? { "Content-Length": Buffer.byteLength(bodyStr).toString() } : {}),
-      },
-    };
+      }).map(([k, v]) => [k.toLowerCase(), v]),
+    );
+    if (bodyStr) {
+      normalizedHeaders["content-length"] = Buffer.byteLength(bodyStr).toString();
+    }
 
-    const req = http.request(reqOptions, (res) => {
-      let data = "";
-      res.on("data", (chunk) => { data += chunk; });
-      res.on("end", () => {
-        try {
-          resolve({ status: res.statusCode ?? 0, body: JSON.parse(data) });
-        } catch {
-          resolve({ status: res.statusCode ?? 0, body: data });
-        }
-      });
-    });
-    req.on("error", reject);
-    if (bodyStr) req.write(bodyStr);
-    req.end();
+    req.method = method;
+    req.url = path;
+    req.headers = normalizedHeaders;
+    if (bodyStr) {
+      req.push(bodyStr);
+    }
+    req.push(null);
+
+    const res = new http.ServerResponse(req);
+    let data = "";
+    const origWrite = res.write.bind(res);
+    const origEnd = res.end.bind(res);
+    res.write = ((chunk: unknown, encoding?: BufferEncoding | ((err?: Error) => void), cb?: (err?: Error) => void) => {
+      if (chunk) {
+        data += Buffer.isBuffer(chunk) ? chunk.toString() : String(chunk);
+      }
+      return origWrite(chunk as any, encoding as any, cb as any);
+    }) as typeof res.write;
+    res.end = ((chunk?: unknown, encoding?: BufferEncoding | (() => void), cb?: () => void) => {
+      if (chunk) {
+        data += Buffer.isBuffer(chunk) ? chunk.toString() : String(chunk);
+      }
+      const ended = origEnd(chunk as any, encoding as any, cb as any);
+      try {
+        resolve({ status: res.statusCode ?? 0, body: JSON.parse(data) });
+      } catch {
+        resolve({ status: res.statusCode ?? 0, body: data });
+      }
+      return ended;
+    }) as typeof res.end;
+
+    app.handle(req, res, reject);
   });
 }
 
 // ── Test setup ────────────────────────────────────────────────────────────────
 
 let app: Express;
-let server: http.Server;
+let server: http.Server | null = null;
 
 beforeAll(async () => {
   app = express();
@@ -125,14 +146,11 @@ beforeAll(async () => {
   // Dynamically import the system router after mocks are set up
   const { default: systemRouter } = await import("../routes/system");
   app.use("/api", systemRouter);
-
-  await new Promise<void>((resolve) => {
-    server = app.listen(0, "127.0.0.1", resolve);
-  });
 });
 
 afterAll(async () => {
-  await new Promise<void>((resolve) => server.close(() => resolve()));
+  if (!server) return;
+  await new Promise<void>((resolve) => server!.close(() => resolve()));
 });
 
 // ═════════════════════════════════════════════════════════════════════════════

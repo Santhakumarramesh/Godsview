@@ -71,3 +71,6 @@ _brain_sync.tar.gz
 
 # Build artifact duplication guard
 artifacts/api-server/public/public/
+
+# API-server runtime guard persistence (local only)
+artifacts/api-server/*_guard_state.json

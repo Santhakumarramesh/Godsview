@@ -90,11 +90,28 @@ vi.mock("../lib/order_executor", async (importOriginal) => {
   };
 });
 
+vi.mock("../lib/execution_market_guard", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../lib/execution_market_guard")>();
+  return {
+    ...original,
+    evaluateExecutionMarketGuard: vi.fn(async () => ({
+      allowed: true,
+      level: "NORMAL" as const,
+      action: "ALLOW" as const,
+      reasons: [],
+      snapshot: original.getExecutionMarketGuardSnapshot(),
+    })),
+    resetExecutionMarketGuard: vi.fn(() => original.getExecutionMarketGuardSnapshot()),
+  };
+});
+
 vi.mock("../lib/alpaca", () => ({
+  getAccount: vi.fn(async () => ({ equity: "100000" })),
   getBars: vi.fn(async () => [
     { c: 100, h: 102, l: 98, o: 99, v: 5000 },
     { c: 101, h: 103, l: 99, o: 100, v: 4800 },
   ]),
+  getTypedPositions: vi.fn(async () => []),
   placeOrder: vi.fn(async () => ({ id: "mock-order", status: "accepted" })),
 }));
 

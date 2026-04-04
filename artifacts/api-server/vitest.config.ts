@@ -3,6 +3,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     include: ["src/**/*.test.ts"],
+    setupFiles: ["src/__tests__/helpers/network_sandbox_shim.ts"],
     environment: "node",
     testTimeout: 15000,
     hookTimeout: 10000,
