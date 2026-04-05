@@ -14,6 +14,16 @@
 import { logger } from "./logger";
 import { runtimeConfig } from "./runtime_config";
 
+const DEFAULT_PREFLIGHT_MAX_RSS_MB = 1200;
+const parsedPreflightMaxRssMb = Number.parseInt(
+  process.env.PREFLIGHT_MAX_RSS_MB ?? String(DEFAULT_PREFLIGHT_MAX_RSS_MB),
+  10,
+);
+const PREFLIGHT_MAX_RSS_MB =
+  Number.isFinite(parsedPreflightMaxRssMb) && parsedPreflightMaxRssMb > 0
+    ? parsedPreflightMaxRssMb
+    : DEFAULT_PREFLIGHT_MAX_RSS_MB;
+
 function extractPayloadError(payload: unknown): string | null {
   if (!payload || typeof payload !== "object") return null;
   const rec = payload as Record<string, unknown>;
@@ -124,8 +134,8 @@ export async function runPreflight(): Promise<PreflightResult> {
   const rssMB = Math.round(rssBytes / 1024 / 1024);
   checks.push({
     name: "memory",
-    passed: rssMB < 1024,
-    detail: `RSS: ${rssMB}MB`,
+    passed: rssMB <= PREFLIGHT_MAX_RSS_MB,
+    detail: `RSS: ${rssMB}MB (max ${PREFLIGHT_MAX_RSS_MB}MB)`,
     critical: false,
   });
 

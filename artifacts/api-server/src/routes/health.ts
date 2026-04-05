@@ -12,6 +12,15 @@ import { checkDbHealth } from "@workspace/db";
 import { getDegradationSnapshot } from "../lib/degradation";
 
 const router: IRouter = Router();
+const DEFAULT_HEALTH_MEMORY_WARN_MB = 1024;
+const parsedHealthMemoryWarnMb = Number.parseInt(
+  process.env.HEALTH_MEMORY_WARN_MB ?? String(DEFAULT_HEALTH_MEMORY_WARN_MB),
+  10,
+);
+const HEALTH_MEMORY_WARN_MB =
+  Number.isFinite(parsedHealthMemoryWarnMb) && parsedHealthMemoryWarnMb > 0
+    ? parsedHealthMemoryWarnMb
+    : DEFAULT_HEALTH_MEMORY_WARN_MB;
 
 function extractPayloadError(payload: unknown): string | null {
   if (!payload || typeof payload !== "object") return null;
@@ -99,9 +108,11 @@ router.get("/readyz", async (_req, res) => {
 
   // Check 4: Memory pressure
   const memMB = Math.round(process.memoryUsage.rss() / 1024 / 1024);
-  const memThresholdMB = 512;
-  if (memMB > memThresholdMB) {
-    checks["memory"] = { status: "warning", error: `RSS ${memMB}MB exceeds ${memThresholdMB}MB threshold` };
+  if (memMB > HEALTH_MEMORY_WARN_MB) {
+    checks["memory"] = {
+      status: "warning",
+      error: `RSS ${memMB}MB exceeds ${HEALTH_MEMORY_WARN_MB}MB threshold`,
+    };
   } else {
     checks["memory"] = { status: "ok", latencyMs: 0 };
   }
