@@ -72,12 +72,12 @@ _brain_sync.tar.gz
 artifacts/api-server/public/public/
 
 # API-server runtime guard persistence (local only)
-artifacts/api-server/*_guard_state.json
+artifacts/api-server/*_guard_state*.json
 artifacts/api-server/.runtime/
-execution_autonomy_guard_state.json
-execution_incident_guard_state.json
-execution_market_guard_state.json
-execution_idempotency_state.json
+execution_autonomy_guard_state*.json
+execution_incident_guard_state*.json
+execution_market_guard_state*.json
+execution_idempotency_state*.json
 
 # Local scratch / one-off exports (do not version)
 attached_assets/
