@@ -58,6 +58,7 @@ import apiGatewayRouter from "./api_gateway";
 import dailyReviewRouter from "./daily_review";
 import sideBySideRouter from "./side_by_side";
 import marketStructureRouter from "./market_structure";
+import persistenceRouter from "./persistence";
 
 const router: IRouter = Router();
 
@@ -118,6 +119,7 @@ router.use(systemOrchestratorRouter);
 router.use(apiGatewayRouter);
 router.use("/api", dailyReviewRouter);
 router.use("/api", sideBySideRouter);
+router.use(persistenceRouter);
 router.use("/api", marketStructureRouter);
 
 // Python v2 microservices proxy — shadow routes at /v2/*
