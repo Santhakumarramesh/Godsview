@@ -3344,3 +3344,94 @@ export function useGenerateOverlay() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["overlay"] }); },
   });
 }
+
+
+// ─── Live Intelligence Monitor Types (Phase 54) ────────────────────────────────
+
+export type AlertSeverity = "INFO" | "WARNING" | "CRITICAL" | "EMERGENCY";
+export type IntelMarketRegime = "TRENDING_UP" | "TRENDING_DOWN" | "RANGING" | "HIGH_VOLATILITY" | "LOW_VOLATILITY" | "CRISIS";
+
+export interface IntelligenceAlert {
+  id: string;
+  severity: AlertSeverity;
+  category: string;
+  title: string;
+  message: string;
+  symbol?: string;
+  acknowledged: boolean;
+  createdAt: string;
+}
+
+export interface RegimeState {
+  current: IntelMarketRegime;
+  confidence: number;
+  duration: number;
+  previousRegime: IntelMarketRegime | null;
+  changedAt: string;
+}
+
+export interface EngineHealthStatus {
+  engine: string;
+  status: "HEALTHY" | "DEGRADED" | "DOWN" | "UNKNOWN";
+  lastHeartbeat: string;
+  latencyMs: number;
+  errorRate: number;
+}
+
+export interface IntelligenceFeed {
+  timestamp: string;
+  regime: RegimeState;
+  newsLockout: { active: boolean; reason: string | null; until: string | null };
+  activeAlerts: IntelligenceAlert[];
+  engineHealth: EngineHealthStatus[];
+  tradingAllowed: boolean;
+  overallRisk: "LOW" | "MEDIUM" | "HIGH" | "EXTREME";
+}
+
+export interface LiveMonitorSnapshot {
+  totalAlerts: number;
+  activeAlerts: number;
+  newsLockouts: number;
+  regimeChanges: number;
+  currentRegime: IntelMarketRegime;
+  tradingAllowed: boolean;
+  overallRisk: string;
+  engineStatuses: EngineHealthStatus[];
+}
+
+export function useIntelligenceFeed() {
+  return useQuery({
+    queryKey: ["intelligence", "feed"],
+    queryFn: () => apiFetch<{ ok: boolean; feed: IntelligenceFeed }>("/intelligence/feed"),
+    staleTime: 3_000,
+    refetchInterval: 5_000,
+  });
+}
+
+export function useLiveMonitorSnapshot() {
+  return useQuery({
+    queryKey: ["intelligence", "snapshot"],
+    queryFn: () => apiFetch<{ ok: boolean; snapshot: LiveMonitorSnapshot }>("/intelligence/snapshot"),
+    staleTime: 5_000,
+    refetchInterval: 10_000,
+  });
+}
+
+export function useTriggerNewsLockout() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { title: string; impact?: string; lockoutMinutes?: number }) =>
+      apiFetch<{ ok: boolean }>("/intelligence/lockout", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(params),
+      }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["intelligence"] }); },
+  });
+}
+
+export function useResetLiveMonitor() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch<{ ok: boolean }>("/intelligence/reset", { method: "POST" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["intelligence"] }); },
+  });
+}
