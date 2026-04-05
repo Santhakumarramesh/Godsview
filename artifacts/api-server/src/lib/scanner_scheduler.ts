@@ -34,7 +34,13 @@ import {
   classifyMarketRegime,
   isCategoryAllowedInRegime,
 } from "@workspace/strategy-core";
-import { getBars, placeOrder, getAccount, isAlpacaAuthFailureError } from "./alpaca";
+import {
+  getBars,
+  placeOrder,
+  getAccount,
+  isAlpacaAuthFailureError,
+  getAlpacaAuthFailureState,
+} from "./alpaca";
 import { publishAlert } from "./signal_stream";
 import { listEnabledSymbols, touchScanned } from "./watchlist";
 import { recordDecision } from "./trade_journal";
@@ -62,6 +68,7 @@ const HISTORY_MAX          = 100;
 const QUALITY_FLOOR        = 0.55; // minimum quality score to emit an alert
 const AUTH_WARN_COOLDOWN_MS = 30_000;
 let _lastAuthWarnMs = 0;
+let _lastAuthCycleSkipWarnMs = 0;
 
 function logAuthDegraded(symbol: string, err: Error): void {
   const now = Date.now();
@@ -71,6 +78,17 @@ function logAuthDegraded(symbol: string, err: Error): void {
     return;
   }
   logger.debug({ symbol, err: err.message }, "[scanner] Alpaca auth unavailable — scan degraded");
+}
+
+function logAuthCycleSkipped(remainingMs: number, status: number | null): void {
+  const now = Date.now();
+  const payload = { remainingMs, status };
+  if (now - _lastAuthCycleSkipWarnMs >= AUTH_WARN_COOLDOWN_MS) {
+    _lastAuthCycleSkipWarnMs = now;
+    logger.warn(payload, "[scanner] Alpaca auth cooldown active — skipping symbol fetches for this cycle");
+    return;
+  }
+  logger.debug(payload, "[scanner] Alpaca auth cooldown active — skipping symbol fetches for this cycle");
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -512,6 +530,24 @@ export class ScannerScheduler {
       }
 
       logger.info({ count: symbols.length, runId: run.id }, "[scanner] Scan cycle started");
+
+      const authFailure = getAlpacaAuthFailureState();
+      if (authFailure.active) {
+        logAuthCycleSkipped(authFailure.remainingMs, authFailure.status);
+        for (const entry of symbols) {
+          touchScanned(entry.symbol, false);
+        }
+        run.symbolsScanned += symbols.length;
+        _finaliseRun(run);
+        logger.info({
+          runId: run.id,
+          symbolsScanned: run.symbolsScanned,
+          signalsFound: run.signalsFound,
+          alertsEmitted: run.alertsEmitted,
+          durationMs: run.durationMs,
+        }, "[scanner] Scan cycle completed (auth cooldown skip)");
+        return run;
+      }
 
       await runConcurrent(
         symbols,
