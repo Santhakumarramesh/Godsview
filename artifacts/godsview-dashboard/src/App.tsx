@@ -43,6 +43,9 @@ const AuditPage          = React.lazy(() => import("@/pages/audit"));
 const DecisionReplayPage = React.lazy(() => import("@/pages/decision-replay"));
 const AlertsPage         = React.lazy(() => import("@/pages/alerts"));
 const CommandCenterPage  = React.lazy(() => import("@/pages/command-center"));
+const MarketStructurePage = React.lazy(() => import("@/pages/market-structure"));
+const DailyReviewPage     = React.lazy(() => import("@/pages/daily-review"));
+const SideBySidePage      = React.lazy(() => import("@/pages/side-by-side"));
 const NotFound           = React.lazy(() => import("@/pages/not-found"));
 
 // ── QueryClient ─────────────────────────────────────────────────────────────
@@ -174,6 +177,9 @@ function Router() {
         <RoutedPage path="/decision-replay"   component={DecisionReplayPage}    scope="page:decision-replay" />
         <RoutedPage path="/alerts"            component={AlertsPage}            scope="page:alerts" />
         <RoutedPage path="/command-center"   component={CommandCenterPage}     scope="page:command-center" />
+        <RoutedPage path="/market-structure" component={MarketStructurePage}   scope="page:market-structure" />
+        <RoutedPage path="/daily-review"     component={DailyReviewPage}       scope="page:daily-review" />
+        <RoutedPage path="/side-by-side"     component={SideBySidePage}        scope="page:side-by-side" />
 
         <Route>
           <AppErrorBoundary scope="page:not-found">
