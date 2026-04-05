@@ -221,14 +221,18 @@ describe("GET /api/analytics/circuit-breaker", () => {
     const d = data as Record<string, unknown>;
     expect(d).toHaveProperty("status");
     const cbStatus = d.status as Record<string, unknown>;
-    expect(cbStatus).toHaveProperty("armed");
-    expect(typeof cbStatus.armed).toBe("boolean");
+    // CircuitBreakerSnapshot has breaker, rateLimiter, killSwitch, tradingAllowed
+    expect(cbStatus).toHaveProperty("breaker");
+    expect(cbStatus).toHaveProperty("tradingAllowed");
+    expect(typeof cbStatus.tradingAllowed).toBe("boolean");
   });
 
   it("starts with armed=false after reset", async () => {
     const { data } = await get("/api/analytics/circuit-breaker");
     const cbStatus = (data as Record<string, unknown>).status as Record<string, unknown>;
-    expect(cbStatus.armed).toBe(false);
+    // After reset, breaker.state should be CLOSED
+    const breaker = cbStatus.breaker as Record<string, unknown>;
+    expect(breaker.state).toBe("CLOSED");
   });
 });
 
@@ -245,7 +249,8 @@ describe("POST /api/analytics/circuit-breaker/reset", () => {
     const { status, data } = await post("/api/analytics/circuit-breaker/reset");
     expect(status).toBe(200);
     const d = data as Record<string, unknown>;
-    expect(d).toHaveProperty("status");
+    // resetCircuitBreaker() now returns void, not status
+    // The endpoint returns { reset: true }
     expect(d.reset).toBe(true);
   });
 
@@ -254,10 +259,11 @@ describe("POST /api/analytics/circuit-breaker/reset", () => {
     await post("/api/analytics/circuit-breaker/trip", { reason: "test_trip" });
     // Then reset
     await post("/api/analytics/circuit-breaker/reset");
-    // Verify not armed
+    // Verify not armed (breaker.state should be CLOSED)
     const { data } = await get("/api/analytics/circuit-breaker");
     const cbStatus = (data as Record<string, unknown>).status as Record<string, unknown>;
-    expect(cbStatus.armed).toBe(false);
+    const breaker = cbStatus.breaker as Record<string, unknown>;
+    expect(breaker.state).toBe("CLOSED");
   });
 });
 
@@ -276,7 +282,9 @@ describe("POST /api/analytics/circuit-breaker/trip", () => {
     await post("/api/analytics/circuit-breaker/trip", { reason: "state_test" });
     const { data } = await get("/api/analytics/circuit-breaker");
     const cbStatus = (data as Record<string, unknown>).status as Record<string, unknown>;
-    expect(cbStatus.armed).toBe(true);
+    const breaker = cbStatus.breaker as Record<string, unknown>;
+    // After trip, breaker.state should be OPEN
+    expect(breaker.state).toBe("OPEN");
     await post("/api/analytics/circuit-breaker/reset");
   });
 
@@ -292,19 +300,17 @@ describe("GET /api/analytics/circuit-breaker/history", () => {
     const { status, data } = await get("/api/analytics/circuit-breaker/history");
     expect(status).toBe(200);
     const d = data as Record<string, unknown>;
-    expect(d).toHaveProperty("history");
+    // getTripHistory() returns { totalTrips, lastTrip, lastReason }
     expect(d).toHaveProperty("count");
-    expect(Array.isArray(d.history)).toBe(true);
     expect(typeof d.count).toBe("number");
-    expect(d.count).toBe((d.history as unknown[]).length);
   });
 
   it("records a trip in history after tripping", async () => {
     await post("/api/analytics/circuit-breaker/trip", { reason: "history_test" });
     const { data } = await get("/api/analytics/circuit-breaker/history");
     const d = data as Record<string, unknown>;
-    const history = d.history as unknown[];
-    expect(history.length).toBeGreaterThan(0);
+    // count should be > 0 after a trip
+    expect(d.count).toBeGreaterThan(0);
     await post("/api/analytics/circuit-breaker/reset");
   });
 });

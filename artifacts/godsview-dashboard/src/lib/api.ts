@@ -2958,6 +2958,7 @@ export interface ExecutionPlan {
 export interface ExecutionQualityReport {
   tradeId: string;
   symbol: string;
+  direction: string;
   expectedEntry: number;
   actualEntry: number;
   entrySlippageBps: number;
@@ -3176,6 +3177,7 @@ export function useResetLab() {
 
 
 // ─── Walk-Forward + Stress Testing Types (Phase 52) ────────────────────────────
+// NOTE: WalkForwardResult is already declared above (merged via interface extension).
 
 export interface WalkForwardWindow {
   windowId: number;
@@ -3183,16 +3185,6 @@ export interface WalkForwardWindow {
   outOfSampleSharpe: number;
   degradation: number;
   passed: boolean;
-}
-
-export interface WalkForwardResult {
-  strategyId: string;
-  totalWindows: number;
-  passedWindows: number;
-  avgDegradation: number;
-  avgOosSharpe: number;
-  verdict: "PASS" | "FAIL" | "MARGINAL";
-  windows: WalkForwardWindow[];
 }
 
 export interface StressTestResult {

@@ -210,7 +210,8 @@ export function generateEquityReport(opts: {
   const sortedDays = Array.from(dailyMap.keys()).sort();
   const dailyReturns: number[] = sortedDays.map(day => {
     const pnls = dailyMap.get(day)!;
-    return pnls.reduce((s, v) => s + v, 0);
+    // pnlPct values are stored as percentages (e.g., 10 for +10%), so divide by 100 to get decimal form
+    return pnls.reduce((s, v) => s + v, 0) / 100;
   });
 
   // ── Equity curve & drawdown ────────────────────────────────────────────────

@@ -418,7 +418,15 @@ export function recordOutcome(id: string, update: JournalOutcomeUpdate): TradeJo
   if (update.exitPrice !== undefined) entry.exitPrice = update.exitPrice;
   if (update.exitReason !== undefined) entry.exitReason = update.exitReason;
   if (update.holdDurationMs !== undefined) entry.holdDurationMs = update.holdDurationMs;
-  entry.outcome = (entry.pnl ?? 0) > 0 ? "win" : (entry.pnl ?? 0) < 0 ? "loss" : "unknown";
+
+  // If exitPrice is provided but pnlPct is not, calculate it
+  if (entry.exitPrice !== undefined && entry.pnlPct === undefined) {
+    const dir = entry.direction === "long" ? 1 : -1;
+    entry.pnlPct = ((entry.exitPrice - entry.entryPrice) / entry.entryPrice) * dir * 100;
+  }
+  // If pnl is not set but we have pnlPct, we don't need to calculate pnl for outcome determination
+
+  entry.outcome = (entry.pnlPct ?? 0) > 0 ? "win" : (entry.pnlPct ?? 0) < 0 ? "loss" : "breakeven";
   entry.status = "closed";
   return entry;
 }

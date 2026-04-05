@@ -64,10 +64,16 @@ function addBlockedTrade(
     sentiment: sentiment(),
     signalPrice: 50_000,
   });
+  // Calculate exitPrice based on desired outcome and pnlPct
+  // pnlPct is passed as decimal (0.05 = +5%)
+  const exitPrice = outcome === "win"
+    ? 50_000 * (1 + pnlPct)
+    : outcome === "loss"
+    ? 50_000 * (1 - pnlPct)
+    : 50_000;
   recordOutcome(entry.id, {
     entryPrice: 50_000,
-    exitPrice: outcome === "win" ? 50_000 * (1 + pnlPct) : 50_000 * (1 - pnlPct),
-    outcome,
+    exitPrice,
   });
 }
 
@@ -98,12 +104,16 @@ function addPassedTrade(
     }),
     signalPrice: 50_000,
   });
+  // Calculate exitPrice based on desired outcome and pnlPct
+  // pnlPct is passed as decimal (0.05 = +5%)
+  const exitPrice = outcome === "win"
+    ? 50_000 * (1 + pnlPct)
+    : outcome === "loss"
+    ? 50_000 * (1 - Math.abs(pnlPct))
+    : 50_000;
   recordOutcome(entry.id, {
     entryPrice: 50_000,
-    exitPrice: outcome === "win"
-      ? 50_000 * (1 + pnlPct)
-      : 50_000 * (1 - pnlPct),
-    outcome,
+    exitPrice,
   });
 }
 

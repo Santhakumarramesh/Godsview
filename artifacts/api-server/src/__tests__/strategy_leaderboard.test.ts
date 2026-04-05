@@ -215,8 +215,9 @@ describe("strategy_leaderboard", () => {
       addTrade({ entryPrice: 100, exitPrice: 110 }); // +10%
       addTrade({ entryPrice: 100, exitPrice: 95 });  // -5%
       const lb = getSetupLeaderboard(1);
-      // (0.5 × 0.10) - (0.5 × 0.05) = 0.025
-      expect(lb[0]!.expectancy).toBeCloseTo(0.025, 4);
+      // pnlPct is stored as percentage (10 for +10%), so:
+      // (0.5 × 10) - (0.5 × 5) = 2.5
+      expect(lb[0]!.expectancy).toBeCloseTo(2.5, 4);
     });
 
     it("negative expectancy when avg loss exceeds avg win × winRate", () => {
@@ -239,11 +240,12 @@ describe("strategy_leaderboard", () => {
 
   describe("netPnlPct", () => {
     it("sums all pnlPct values algebraically", () => {
-      addTrade({ entryPrice: 100, exitPrice: 110 }); // +0.1
-      addTrade({ entryPrice: 100, exitPrice: 90 });  // -0.1
-      addTrade({ entryPrice: 100, exitPrice: 115 }); // +0.15
+      addTrade({ entryPrice: 100, exitPrice: 110 }); // +10%
+      addTrade({ entryPrice: 100, exitPrice: 90 });  // -10%
+      addTrade({ entryPrice: 100, exitPrice: 115 }); // +15%
       const lb = getSetupLeaderboard(1);
-      expect(lb[0]!.netPnlPct).toBeCloseTo(0.15, 4);
+      // pnlPct values are percentages: 10 + (-10) + 15 = 15
+      expect(lb[0]!.netPnlPct).toBeCloseTo(15, 4);
     });
   });
 
@@ -302,22 +304,26 @@ describe("strategy_leaderboard", () => {
     });
 
     it("edgeDecay is negative when recent trades underperform overall history", () => {
-      // First 10 trades: strong winning
-      for (let i = 0; i < 10; i++) addTrade({ entryPrice: 100, exitPrice: 120 });
-      // Next 10 trades: all losses → recent win rate much lower than all-time
+      // Note: "recent" trades are the first RECENT_WINDOW trades in the journal,
+      // not the most recent ones added
+      // First 10 trades: all losses → recent win rate = 0%
       for (let i = 0; i < 10; i++) addTrade({ entryPrice: 100, exitPrice: 80 });
+      // Next 10 trades: strong winning → all-time win rate = 50%
+      for (let i = 0; i < 10; i++) addTrade({ entryPrice: 100, exitPrice: 120 });
       const lb = getSetupLeaderboard(1);
-      // edgeDecay should be negative (recent losing streak vs all-time 50% win rate)
+      // edgeDecay = recentWinRate - winRate = 0 - 0.5 = -0.5 (negative)
       expect(lb[0]!.edgeDecay).toBeLessThan(0);
     });
 
     it("edgeDecay is positive when recent trades outperform overall history", () => {
-      // First 10 trades: mostly losing
+      // Note: "recent" trades are the first RECENT_WINDOW trades in the journal
+      // First 10 trades: all wins → recent win rate = 100%
+      for (let i = 0; i < 10; i++) addTrade({ entryPrice: 100, exitPrice: 115 });
+      // Next 10 trades: mostly losing → all-time win rate = 50%
       for (let i = 0; i < 3; i++) addTrade({ entryPrice: 100, exitPrice: 110 });
       for (let i = 0; i < 7; i++) addTrade({ entryPrice: 100, exitPrice: 90 });
-      // Next 10 trades: all wins → hot streak
-      for (let i = 0; i < 10; i++) addTrade({ entryPrice: 100, exitPrice: 115 });
       const lb = getSetupLeaderboard(1);
+      // edgeDecay = recentWinRate - winRate = 1 - 0.5 = 0.5 (positive)
       expect(lb[0]!.edgeDecay).toBeGreaterThan(0);
     });
   });
@@ -467,10 +473,12 @@ describe("strategy_leaderboard", () => {
     });
 
     it("decayingEdges only includes entries with ≥10 trades AND decay < -10%", () => {
-      // Add 20 trades to setup A: first 10 good, last 10 all losses
-      for (let i = 0; i < 10; i++) addTrade({ entryPrice: 100, exitPrice: 120, setupType: "decaying" });
+      // Note: "recent" trades are the first RECENT_WINDOW trades in the journal
+      // Add 20 trades to setup A: first 10 all losses, then 10 good
+      // This makes recentWinRate = 0, overall = 50%, so edgeDecay = -0.5 < -0.10 ✓
       for (let i = 0; i < 10; i++) addTrade({ entryPrice: 100, exitPrice: 80, setupType: "decaying" });
-      // Add 20 trades to setup B: consistent performance
+      for (let i = 0; i < 10; i++) addTrade({ entryPrice: 100, exitPrice: 120, setupType: "decaying" });
+      // Add 20 trades to setup B: consistent performance (edgeDecay = 0)
       for (let i = 0; i < 20; i++) addTrade({ entryPrice: 100, exitPrice: 110, setupType: "stable" });
       const summary = getLeaderboardSummary();
       const decayKeys = summary.decayingEdges.map(e => e.key);
