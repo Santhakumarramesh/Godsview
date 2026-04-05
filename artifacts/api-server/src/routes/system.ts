@@ -1705,4 +1705,55 @@ router.get("/market-readiness", async (req, res) => {
   }
 });
 
+// ─── System Manifest (Phase 62) ───────────────────────────────────────────────
+// Single endpoint that enumerates every registered engine/subsystem with status.
+
+const ENGINE_REGISTRY = [
+  { name: "risk_engine", module: "../lib/risk_engine" },
+  { name: "circuit_breaker", module: "../lib/circuit_breaker" },
+  { name: "context_fusion", module: "../engines/context_fusion_engine" },
+  { name: "adaptive_learning", module: "../engines/adaptive_learning_engine" },
+  { name: "execution_intelligence", module: "../engines/execution_intelligence" },
+  { name: "strategy_registry", module: "../engines/strategy_registry" },
+  { name: "godsview_lab", module: "../engines/godsview_lab" },
+  { name: "walk_forward_stress", module: "../engines/walk_forward_stress" },
+  { name: "live_intelligence_monitor", module: "../engines/live_intelligence_monitor" },
+  { name: "position_sizing", module: "../engines/position_sizing_oracle" },
+  { name: "trade_journal", module: "../lib/trade_journal" },
+  { name: "system_orchestrator", module: "../engines/system_orchestrator" },
+  { name: "api_gateway", module: "../engines/api_gateway" },
+  { name: "equity_engine", module: "../lib/equity_engine" },
+  { name: "attribution_engine", module: "../lib/attribution_engine" },
+] as const;
+
+router.get("/api/system/manifest", async (_req, res) => {
+  const engines: Array<{ name: string; loaded: boolean; error?: string }> = [];
+
+  for (const entry of ENGINE_REGISTRY) {
+    try {
+      await import(entry.module);
+      engines.push({ name: entry.name, loaded: true });
+    } catch (err: any) {
+      engines.push({ name: entry.name, loaded: false, error: err.message });
+    }
+  }
+
+  const totalRoutes = 57;
+  const loadedEngines = engines.filter((e) => e.loaded).length;
+
+  res.json({
+    version: "62.0.0",
+    phase: 62,
+    codename: "GodsView Production",
+    totalRoutes,
+    engines,
+    engineSummary: { total: engines.length, loaded: loadedEngines, failed: engines.length - loadedEngines },
+    systemMode: SYSTEM_MODE,
+    uptime: process.uptime(),
+    nodeVersion: process.version,
+    memoryMB: Math.round(process.memoryUsage.rss() / 1024 / 1024),
+    generatedAt: new Date().toISOString(),
+  });
+});
+
 export default router;
