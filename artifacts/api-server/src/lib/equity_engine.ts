@@ -158,7 +158,7 @@ export function generateEquityReport(opts: {
 
   // Fetch resolved entries only
   let entries = listJournalEntries({ limit: 0 }) // 0 = no limit
-    .filter(e => e.outcome !== "unknown" && e.pnlPct !== null);
+    .filter(e => e.outcome !== "unknown" && e.pnlPct != null);
 
   if (opts.symbol) entries = entries.filter(e => e.symbol === opts.symbol!.toUpperCase());
   if (opts.from)   entries = entries.filter(e => e.decidedAt.slice(0, 10) >= opts.from!);
@@ -294,7 +294,7 @@ function computeSetupBreakdown(entries: ReturnType<typeof listJournalEntries>): 
     b.trades++;
     if (e.outcome === "win")  b.wins++;
     if (e.outcome === "loss") b.losses++;
-    if (e.pnlPct !== null) b.pnls.push(e.pnlPct);
+    if (e.pnlPct != null) b.pnls.push(e.pnlPct);
   }
   return Array.from(map.entries())
     .map(([setupType, b]) => {
@@ -320,7 +320,7 @@ function computeSymbolBreakdown(entries: ReturnType<typeof listJournalEntries>):
     b.trades++;
     if (e.outcome === "win")  b.wins++;
     if (e.outcome === "loss") b.losses++;
-    if (e.pnlPct !== null) b.pnls.push(e.pnlPct);
+    if (e.pnlPct != null) b.pnls.push(e.pnlPct);
   }
   return Array.from(map.entries())
     .map(([symbol, b]) => ({
@@ -342,7 +342,7 @@ function computeRegimeBreakdown(entries: ReturnType<typeof listJournalEntries>):
     const b = map.get(k)!;
     b.trades++;
     if (e.outcome === "win") b.wins++;
-    if (e.pnlPct !== null) b.pnls.push(e.pnlPct);
+    if (e.pnlPct != null) b.pnls.push(e.pnlPct);
   }
   return Array.from(map.entries())
     .map(([regime, b]) => ({

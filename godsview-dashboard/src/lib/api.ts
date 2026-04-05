@@ -3435,3 +3435,103 @@ export function useResetLiveMonitor() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["intelligence"] }); },
   });
 }
+
+
+/* ── Phase 57: Trade Journal + Replay ── */
+
+export interface JournalEntry {
+  id: string;
+  tradeId: string;
+  symbol: string;
+  direction: "long" | "short";
+  strategyId: string;
+  strategyName: string;
+  entryPrice: number;
+  entryTime: string;
+  entryReason: string;
+  positionSize: number;
+  riskPct: number;
+  exitPrice?: number;
+  exitTime?: string;
+  exitReason?: string;
+  pnl?: number;
+  pnlPct?: number;
+  holdDurationMs?: number;
+  status: "open" | "closed";
+  tags: string[];
+  notes: string;
+}
+
+export interface ReplayResult {
+  entryId: string;
+  steps: { timestamp: string; action: string; price: number; detail: string }[];
+  summary: string;
+  lessonsLearned: string[];
+}
+
+export interface JournalAnalytics {
+  totalTrades: number;
+  winRate: number;
+  avgPnlPct: number;
+  profitFactor: number;
+  bestStrategy: string;
+  worstStrategy: string;
+}
+
+export interface TradeJournalSnapshot {
+  totalEntries: number;
+  openTrades: number;
+  closedTrades: number;
+  winRate: number;
+  totalPnl: number;
+  replaysGenerated: number;
+}
+
+export function useTradeJournalSnapshot() {
+  return useQuery({
+    queryKey: ["tradeJournal", "snapshot"],
+    queryFn: () => apiFetch<TradeJournalSnapshot>("/trade-journal/snapshot"),
+    staleTime: 5_000,
+    refetchInterval: 10_000,
+  });
+}
+
+export function useJournalEntries(filters?: { symbol?: string; status?: string }) {
+  return useQuery({
+    queryKey: ["tradeJournal", "entries", filters],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (filters?.symbol) params.set("symbol", filters.symbol);
+      if (filters?.status) params.set("status", filters.status);
+      const qs = params.toString();
+      return apiFetch<JournalEntry[]>(`/trade-journal/entries${qs ? `?${qs}` : ""}`);
+    },
+    staleTime: 5_000,
+  });
+}
+
+export function useJournalAnalytics() {
+  return useQuery({
+    queryKey: ["tradeJournal", "analytics"],
+    queryFn: () => apiFetch<JournalAnalytics>("/trade-journal/analytics"),
+    staleTime: 10_000,
+  });
+}
+
+export function useReplayTrade() {
+  return useMutation({
+    mutationFn: (tradeId: string) =>
+      apiFetch<ReplayResult>("/trade-journal/replay", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tradeId }),
+      }),
+  });
+}
+
+export function useResetTradeJournal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch<{ status: string }>("/trade-journal/reset", { method: "POST" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["tradeJournal"] }); },
+  });
+}

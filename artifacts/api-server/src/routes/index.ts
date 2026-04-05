@@ -52,6 +52,7 @@ import tradingviewOverlayRouter from "./tradingview_overlay";
 import liveIntelligenceMonitorRouter from "./live_intelligence_monitor";
 import circuitBreakerRouter from "./circuit_breaker";
 import positionSizingRouter from "./position_sizing";
+import tradeJournalRouter from "./trade_journal";
 
 const router: IRouter = Router();
 
@@ -107,6 +108,7 @@ router.use(tradingviewOverlayRouter);
 router.use(liveIntelligenceMonitorRouter);
 router.use(circuitBreakerRouter);
 router.use(positionSizingRouter);
+router.use(tradeJournalRouter);
 
 // Python v2 microservices proxy — shadow routes at /v2/*
 router.use(pythonV2Router);
