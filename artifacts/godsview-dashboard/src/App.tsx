@@ -42,6 +42,7 @@ const ExecutionPage      = React.lazy(() => import("@/pages/execution"));
 const AuditPage          = React.lazy(() => import("@/pages/audit"));
 const DecisionReplayPage = React.lazy(() => import("@/pages/decision-replay"));
 const AlertsPage         = React.lazy(() => import("@/pages/alerts"));
+const CommandCenterPage  = React.lazy(() => import("@/pages/command-center"));
 const NotFound           = React.lazy(() => import("@/pages/not-found"));
 
 // ── QueryClient ─────────────────────────────────────────────────────────────
@@ -172,6 +173,7 @@ function Router() {
         <RoutedPage path="/audit"             component={AuditPage}             scope="page:audit" />
         <RoutedPage path="/decision-replay"   component={DecisionReplayPage}    scope="page:decision-replay" />
         <RoutedPage path="/alerts"            component={AlertsPage}            scope="page:alerts" />
+        <RoutedPage path="/command-center"   component={CommandCenterPage}     scope="page:command-center" />
 
         <Route>
           <AppErrorBoundary scope="page:not-found">

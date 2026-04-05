@@ -27,6 +27,8 @@ const RiskPage           = React.lazy(() => import("@/pages/risk"));
 const SettingsPage       = React.lazy(() => import("@/pages/settings"));
 const SuperIntelligencePage = React.lazy(() => import("@/pages/super-intelligence"));
 const InstitutionalIntelligencePage = React.lazy(() => import("@/pages/institutional-intelligence"));
+const BacktesterPage        = React.lazy(() => import("@/pages/backtester"));
+const IntelligenceCenterPage = React.lazy(() => import("@/pages/intelligence-center"));
 const TradeJournalPage               = React.lazy(() => import("@/pages/trade-journal"));
 const WatchlistPage                  = React.lazy(() => import("@/pages/watchlist"));
 const AnalyticsPage                  = React.lazy(() => import("@/pages/analytics"));
@@ -38,7 +40,9 @@ const QuantLabPage       = React.lazy(() => import("@/pages/quant-lab"));
 const PortfolioPage      = React.lazy(() => import("@/pages/portfolio"));
 const ExecutionPage      = React.lazy(() => import("@/pages/execution"));
 const AuditPage          = React.lazy(() => import("@/pages/audit"));
+const DecisionReplayPage = React.lazy(() => import("@/pages/decision-replay"));
 const AlertsPage         = React.lazy(() => import("@/pages/alerts"));
+const CommandCenterPage  = React.lazy(() => import("@/pages/command-center"));
 const NotFound           = React.lazy(() => import("@/pages/not-found"));
 
 // ── QueryClient ─────────────────────────────────────────────────────────────
@@ -153,6 +157,8 @@ function Router() {
         <RoutedPage path="/risk"              component={RiskPage}              scope="page:risk" />
         <RoutedPage path="/super-intelligence"       component={SuperIntelligencePage}            scope="page:super-intelligence" />
         <RoutedPage path="/institutional-intelligence" component={InstitutionalIntelligencePage} scope="page:institutional-intelligence" />
+        <RoutedPage path="/backtester"            component={BacktesterPage}        scope="page:backtester" />
+        <RoutedPage path="/intelligence-center"   component={IntelligenceCenterPage} scope="page:intelligence-center" />
         <RoutedPage path="/trade-journal"     component={TradeJournalPage}      scope="page:trade-journal" />
         <RoutedPage path="/watchlist"         component={WatchlistPage}         scope="page:watchlist" />
         <RoutedPage path="/analytics"         component={AnalyticsPage}         scope="page:analytics" />
@@ -165,7 +171,9 @@ function Router() {
         <RoutedPage path="/portfolio"         component={PortfolioPage}         scope="page:portfolio" />
         <RoutedPage path="/execution"         component={ExecutionPage}         scope="page:execution" />
         <RoutedPage path="/audit"             component={AuditPage}             scope="page:audit" />
+        <RoutedPage path="/decision-replay"   component={DecisionReplayPage}    scope="page:decision-replay" />
         <RoutedPage path="/alerts"            component={AlertsPage}            scope="page:alerts" />
+        <RoutedPage path="/command-center"   component={CommandCenterPage}     scope="page:command-center" />
 
         <Route>
           <AppErrorBoundary scope="page:not-found">
