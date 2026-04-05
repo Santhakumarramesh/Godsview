@@ -3013,3 +3013,103 @@ export function useResetExecutionIntelligence() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["execution-intelligence"] }); },
   });
 }
+
+
+// ─── Strategy Registry Types (Phase 50) ────────────────────────────────────────
+
+export type StrategyState = "draft" | "parsed" | "backtested" | "stress_tested"
+  | "paper_approved" | "live_assisted_approved" | "autonomous_approved" | "retired";
+
+export interface StrategyVersion {
+  version: number;
+  parameters: Record<string, unknown>;
+  changelog: string;
+  createdAt: string;
+}
+
+export interface StrategyPerformanceMetrics {
+  sharpe: number;
+  winRate: number;
+  profitFactor: number;
+  maxDrawdown: number;
+  totalTrades: number;
+  netPnl: number;
+  lastUpdated: string;
+}
+
+export interface StrategyEntry {
+  id: string;
+  name: string;
+  description: string;
+  author: string;
+  state: StrategyState;
+  tags: string[];
+  currentVersion: number;
+  versions: StrategyVersion[];
+  parameters: Record<string, unknown>;
+  performance: StrategyPerformanceMetrics | null;
+  createdAt: string;
+  updatedAt: string;
+  promotedAt: string | null;
+  retiredAt: string | null;
+}
+
+export interface StrategyRegistrySnapshot {
+  totalStrategies: number;
+  byState: Record<StrategyState, number>;
+  recentPromotions: { id: string; name: string; from: StrategyState; to: StrategyState; at: string }[];
+  recentRetirements: { id: string; name: string; at: string }[];
+  topPerformers: { id: string; name: string; sharpe: number }[];
+}
+
+export function useStrategyRegistrySnapshot() {
+  return useQuery({
+    queryKey: ["strategy-registry", "snapshot"],
+    queryFn: () => apiFetch<{ ok: boolean; snapshot: StrategyRegistrySnapshot }>("/strategy-registry/snapshot"),
+    staleTime: 10_000,
+    refetchInterval: 15_000,
+  });
+}
+
+export function useStrategyRegistryList(filter?: { state?: StrategyState; tag?: string }) {
+  const params = new URLSearchParams();
+  if (filter?.state) params.set("state", filter.state);
+  if (filter?.tag) params.set("tag", filter.tag);
+  const qs = params.toString();
+  return useQuery({
+    queryKey: ["strategy-registry", "list", qs],
+    queryFn: () => apiFetch<{ ok: boolean; strategies: StrategyEntry[] }>(`/strategy-registry/list${qs ? `?${qs}` : ""}`),
+    staleTime: 10_000,
+  });
+}
+
+export function useRegisterStrategy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { name: string; description?: string; author?: string; tags?: string[]; parameters?: Record<string, unknown> }) =>
+      apiFetch<{ ok: boolean; strategy: StrategyEntry }>("/strategy-registry/register", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(params),
+      }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["strategy-registry"] }); },
+  });
+}
+
+export function usePromoteStrategy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { id: string; targetState: StrategyState; reason?: string }) =>
+      apiFetch<{ ok: boolean; strategy: StrategyEntry }>(`/strategy-registry/${params.id}/promote`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetState: params.targetState, reason: params.reason }),
+      }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["strategy-registry"] }); },
+  });
+}
+
+export function useResetStrategyRegistry() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch<{ ok: boolean }>("/strategy-registry/reset", { method: "POST" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["strategy-registry"] }); },
+  });
+}

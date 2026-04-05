@@ -45,6 +45,7 @@ import microstructureRouter from "./microstructure";
 import contextFusionRouter from "./context_fusion";
 import adaptiveLearningRouter from "./adaptive_learning";
 import executionIntelligenceRouter from "./execution_intelligence";
+import strategyRegistryRouter from "./strategy_registry";
 
 const router: IRouter = Router();
 
@@ -93,6 +94,7 @@ router.use(microstructureRouter);
 router.use(contextFusionRouter);
 router.use(adaptiveLearningRouter);
 router.use(executionIntelligenceRouter);
+router.use(strategyRegistryRouter);
 
 // Python v2 microservices proxy — shadow routes at /v2/*
 router.use(pythonV2Router);
