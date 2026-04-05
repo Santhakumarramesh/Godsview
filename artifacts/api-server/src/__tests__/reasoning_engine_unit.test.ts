@@ -14,7 +14,7 @@
  *   ./schemas          — DecisionContractSchema.parse forwarded
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
@@ -32,7 +32,12 @@ vi.mock("@anthropic-ai/sdk", () => {
 });
 
 // ── Import AFTER mocks ────────────────────────────────────────────────────────
-import { getHeuristicReasoning, reasonTradeDecision } from "../lib/reasoning_engine";
+import {
+  _resetReasoningFallbackStateForTests,
+  getHeuristicReasoning,
+  getReasoningFallbackState,
+  reasonTradeDecision,
+} from "../lib/reasoning_engine";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // getHeuristicReasoning — pure deterministic logic
@@ -147,6 +152,10 @@ describe("reasonTradeDecision (heuristic fallback path)", () => {
     recall_score:     0.65,
   };
 
+  beforeEach(() => {
+    _resetReasoningFallbackStateForTests();
+  });
+
   it("returns a DecisionContract with required fields", async () => {
     const result = await reasonTradeDecision(1, "BTCUSD", input);
     expect(result).toHaveProperty("approved");
@@ -173,5 +182,37 @@ describe("reasonTradeDecision (heuristic fallback path)", () => {
     const result = await reasonTradeDecision(1, "BTCUSD", input);
     expect(result.quality).toBeGreaterThanOrEqual(0);
     expect(result.quality).toBeLessThanOrEqual(1);
+  });
+
+  it("tracks fallback counters when Claude is unavailable", async () => {
+    const prev = process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+    try {
+      await reasonTradeDecision(1, "BTCUSD", input);
+      const state = getReasoningFallbackState();
+      expect(state.totalFallbacks).toBe(1);
+      expect(state.consecutiveFallbacks).toBe(1);
+      expect(state.lastSymbol).toBe("BTCUSD");
+      expect(typeof state.lastError).toBe("string");
+    } finally {
+      if (prev === undefined) delete process.env.ANTHROPIC_API_KEY;
+      else process.env.ANTHROPIC_API_KEY = prev;
+    }
+  });
+
+  it("resets consecutive fallback counter after Claude success", async () => {
+    const prev = process.env.ANTHROPIC_API_KEY;
+    try {
+      delete process.env.ANTHROPIC_API_KEY;
+      await reasonTradeDecision(1, "BTCUSD", input);
+      expect(getReasoningFallbackState().consecutiveFallbacks).toBe(1);
+
+      process.env.ANTHROPIC_API_KEY = "test-key";
+      await reasonTradeDecision(2, "ETHUSD", input);
+      expect(getReasoningFallbackState().consecutiveFallbacks).toBe(0);
+    } finally {
+      if (prev === undefined) delete process.env.ANTHROPIC_API_KEY;
+      else process.env.ANTHROPIC_API_KEY = prev;
+    }
   });
 });

@@ -171,6 +171,21 @@ router.get("/auth-failures", async (_req, res) => {
   }
 });
 
+/* ── Reasoning Fallback State ─────────────────────────────────────── */
+router.get("/reasoning-fallback", async (_req, res) => {
+  try {
+    const { getReasoningFallbackState } = await import("../lib/reasoning_engine");
+    res.json({
+      claudeConfigured: Boolean(process.env.ANTHROPIC_API_KEY),
+      reasoningFallback: getReasoningFallbackState(),
+      generatedAt: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    logger.error({ err }, "Failed to get reasoning fallback state");
+    res.status(500).json({ error: "Failed to get reasoning fallback state" });
+  }
+});
+
 /* ── DB Health (detailed) ─────────────────────────────────────────── */
 router.get("/db-health", async (_req, res) => {
   try {

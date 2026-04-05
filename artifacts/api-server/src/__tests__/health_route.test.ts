@@ -91,6 +91,25 @@ vi.mock("../lib/market/orderbook", () => ({
   getOrderbookAuthFailureState: orderbookMocks.getOrderbookAuthFailureState,
 }));
 
+const reasoningMocks = vi.hoisted(() => ({
+  getReasoningFallbackState: vi.fn(() => ({
+    totalFallbacks: 0,
+    consecutiveFallbacks: 0,
+    lastFallbackAt: null,
+    lastError: null,
+    lastSymbol: null,
+    warnCooldownMs: 30_000,
+  })),
+}));
+
+vi.mock("../lib/reasoning_engine", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../lib/reasoning_engine")>();
+  return {
+    ...original,
+    getReasoningFallbackState: reasoningMocks.getReasoningFallbackState,
+  };
+});
+
 // ── Import router AFTER mocks ─────────────────────────────────────────────────
 import healthRouter from "../routes/health";
 
@@ -141,6 +160,15 @@ beforeEach(() => {
     message: null,
     occurredAt: null,
     count: 0,
+  });
+  reasoningMocks.getReasoningFallbackState.mockReset();
+  reasoningMocks.getReasoningFallbackState.mockReturnValue({
+    totalFallbacks: 0,
+    consecutiveFallbacks: 0,
+    lastFallbackAt: null,
+    lastError: null,
+    lastSymbol: null,
+    warnCooldownMs: 30_000,
   });
 });
 
@@ -361,6 +389,39 @@ describe("GET /auth-failures", () => {
     expect(d.alpaca.authFailure.status).toBe(401);
     expect(d.orderbook.authFailure.active).toBe(true);
     expect(d.orderbook.authFailure.status).toBe(401);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /reasoning-fallback
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("GET /reasoning-fallback", () => {
+  it("returns 200 with reasoning fallback state", async () => {
+    const { status, data } = await get("/reasoning-fallback");
+    expect(status).toBe(200);
+    const d = data as Record<string, unknown>;
+    expect(d).toHaveProperty("claudeConfigured");
+    expect(d).toHaveProperty("reasoningFallback");
+    expect(d).toHaveProperty("generatedAt");
+  });
+
+  it("returns fallback counters and last error fields", async () => {
+    reasoningMocks.getReasoningFallbackState.mockReturnValueOnce({
+      totalFallbacks: 12,
+      consecutiveFallbacks: 3,
+      lastFallbackAt: "2026-04-04T00:00:00.000Z",
+      lastError: "Claude Timeout",
+      lastSymbol: "BTCUSD",
+      warnCooldownMs: 30_000,
+    });
+
+    const { data } = await get("/reasoning-fallback");
+    const d = data as Record<string, any>;
+    expect(d.reasoningFallback.totalFallbacks).toBe(12);
+    expect(d.reasoningFallback.consecutiveFallbacks).toBe(3);
+    expect(d.reasoningFallback.lastError).toMatch(/Timeout/);
+    expect(d.reasoningFallback.lastSymbol).toBe("BTCUSD");
   });
 });
 
