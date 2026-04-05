@@ -48,6 +48,7 @@ import executionIntelligenceRouter from "./execution_intelligence";
 import strategyRegistryRouter from "./strategy_registry";
 import godsviewLabRouter from "./godsview_lab";
 import walkForwardStressRouter from "./walk_forward_stress";
+import tradingviewOverlayRouter from "./tradingview_overlay";
 
 const router: IRouter = Router();
 
@@ -99,6 +100,7 @@ router.use(executionIntelligenceRouter);
 router.use(strategyRegistryRouter);
 router.use(godsviewLabRouter);
 router.use(walkForwardStressRouter);
+router.use(tradingviewOverlayRouter);
 
 // Python v2 microservices proxy — shadow routes at /v2/*
 router.use(pythonV2Router);

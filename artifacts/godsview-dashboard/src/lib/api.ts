@@ -3256,3 +3256,91 @@ export function useResetValidation() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["validation"] }); },
   });
 }
+
+
+// ─── TradingView Overlay Types (Phase 53) ──────────────────────────────────────
+
+export interface StructureLevel {
+  id: string;
+  type: "support" | "resistance";
+  price: number;
+  strength: number;
+  touches: number;
+  broken: boolean;
+}
+
+export interface OrderBlock {
+  id: string;
+  type: "supply" | "demand";
+  high: number;
+  low: number;
+  mitigated: boolean;
+}
+
+export interface PositionOverlay {
+  id: string;
+  symbol: string;
+  direction: "long" | "short";
+  entryPrice: number;
+  currentStop: number;
+  targets: { price: number; label: string; hit: boolean }[];
+  unrealizedPnl: number;
+}
+
+export interface SignalMarker {
+  id: string;
+  symbol: string;
+  type: "buy" | "sell" | "alert" | "info";
+  price: number;
+  timestamp: string;
+  label: string;
+  confidence: number;
+}
+
+export interface ChartOverlay {
+  symbol: string;
+  timeframe: string;
+  structures: StructureLevel[];
+  orderBlocks: OrderBlock[];
+  positions: PositionOverlay[];
+  signals: SignalMarker[];
+  generatedAt: string;
+}
+
+export interface OverlaySnapshot {
+  totalOverlaysGenerated: number;
+  activeSymbols: string[];
+  structureLevels: number;
+  orderBlocks: number;
+  activePositions: number;
+  recentSignals: number;
+}
+
+export function useOverlaySnapshot() {
+  return useQuery({
+    queryKey: ["overlay", "snapshot"],
+    queryFn: () => apiFetch<{ ok: boolean; snapshot: OverlaySnapshot }>("/overlay/snapshot"),
+    staleTime: 10_000,
+    refetchInterval: 15_000,
+  });
+}
+
+export function useChartOverlay(symbol: string) {
+  return useQuery({
+    queryKey: ["overlay", symbol],
+    queryFn: () => apiFetch<{ ok: boolean; overlay: ChartOverlay }>(`/overlay/${symbol}`),
+    staleTime: 5_000,
+    enabled: !!symbol,
+  });
+}
+
+export function useGenerateOverlay() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { symbol: string; currentPrice: number; timeframe?: string; position?: any; signals?: any[] }) =>
+      apiFetch<{ ok: boolean; overlay: ChartOverlay }>("/overlay/generate", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(params),
+      }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["overlay"] }); },
+  });
+}
