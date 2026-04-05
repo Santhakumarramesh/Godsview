@@ -366,9 +366,12 @@ describe("POST /api/signals", () => {
     expect(claude.verdict).toBe("VETOED");
   });
 
-  it("returns 500 on missing required fields", async () => {
-    const { status } = await post("/api/signals", { instrument: "BTCUSD" });
-    expect([400, 500]).toContain(status);
+  it("returns 400 on missing required fields", async () => {
+    const { status, data } = await post("/api/signals", { instrument: "BTCUSD" });
+    expect(status).toBe(400);
+    const d = data as Record<string, unknown>;
+    expect(d).toHaveProperty("error");
+    expect(d).toHaveProperty("issues");
   });
 
   it("war room rejection sets gates.blocked true", async () => {
