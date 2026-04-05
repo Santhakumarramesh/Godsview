@@ -58,11 +58,37 @@ const alpacaMocks = vi.hoisted(() => ({
     keyKind: "missing",
     hasValidTradingKey: false,
   })),
+  getAlpacaAuthFailureState: vi.fn(() => ({
+    active: false,
+    remainingMs: 0,
+    cooldownMs: 60_000,
+    status: null,
+    message: null,
+    occurredAt: null,
+    count: 0,
+  })),
 }));
 
 vi.mock("../lib/alpaca", () => ({
   getAccount: alpacaMocks.getAccount,
   getAlpacaCredentialStatus: alpacaMocks.getAlpacaCredentialStatus,
+  getAlpacaAuthFailureState: alpacaMocks.getAlpacaAuthFailureState,
+}));
+
+const orderbookMocks = vi.hoisted(() => ({
+  getOrderbookAuthFailureState: vi.fn(() => ({
+    active: false,
+    remainingMs: 0,
+    cooldownMs: 60_000,
+    status: null,
+    message: null,
+    occurredAt: null,
+    count: 0,
+  })),
+}));
+
+vi.mock("../lib/market/orderbook", () => ({
+  getOrderbookAuthFailureState: orderbookMocks.getOrderbookAuthFailureState,
 }));
 
 // ── Import router AFTER mocks ─────────────────────────────────────────────────
@@ -95,6 +121,26 @@ beforeEach(() => {
     keyPrefix: null,
     keyKind: "missing",
     hasValidTradingKey: false,
+  });
+  alpacaMocks.getAlpacaAuthFailureState.mockReset();
+  alpacaMocks.getAlpacaAuthFailureState.mockReturnValue({
+    active: false,
+    remainingMs: 0,
+    cooldownMs: 60_000,
+    status: null,
+    message: null,
+    occurredAt: null,
+    count: 0,
+  });
+  orderbookMocks.getOrderbookAuthFailureState.mockReset();
+  orderbookMocks.getOrderbookAuthFailureState.mockReturnValue({
+    active: false,
+    remainingMs: 0,
+    cooldownMs: 60_000,
+    status: null,
+    message: null,
+    occurredAt: null,
+    count: 0,
   });
 });
 
@@ -271,6 +317,50 @@ describe("GET /degradation", () => {
   it("response has expected shape", async () => {
     const { data } = await get("/degradation");
     expect(typeof data).toBe("object");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /auth-failures
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("GET /auth-failures", () => {
+  it("returns 200 with alpaca and orderbook auth states", async () => {
+    const { status, data } = await get("/auth-failures");
+    expect(status).toBe(200);
+    const d = data as Record<string, unknown>;
+    expect(d).toHaveProperty("alpaca");
+    expect(d).toHaveProperty("orderbook");
+    expect(d).toHaveProperty("generatedAt");
+  });
+
+  it("includes active cooldown details when auth failures are present", async () => {
+    alpacaMocks.getAlpacaAuthFailureState.mockReturnValueOnce({
+      active: true,
+      remainingMs: 41_000,
+      cooldownMs: 60_000,
+      status: 401,
+      message: "unauthorized",
+      occurredAt: "2026-04-04T00:00:00.000Z",
+      count: 3,
+    });
+    orderbookMocks.getOrderbookAuthFailureState.mockReturnValueOnce({
+      active: true,
+      remainingMs: 12_000,
+      cooldownMs: 60_000,
+      status: 401,
+      message: "auth failed",
+      occurredAt: "2026-04-04T00:00:01.000Z",
+      count: 2,
+    });
+
+    const { data } = await get("/auth-failures");
+    const d = data as Record<string, any>;
+
+    expect(d.alpaca.authFailure.active).toBe(true);
+    expect(d.alpaca.authFailure.status).toBe(401);
+    expect(d.orderbook.authFailure.active).toBe(true);
+    expect(d.orderbook.authFailure.status).toBe(401);
   });
 });
 

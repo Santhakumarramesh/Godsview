@@ -150,6 +150,27 @@ router.get("/degradation", (_req, res) => {
   }
 });
 
+/* ── Auth Failure State ───────────────────────────────────────────── */
+router.get("/auth-failures", async (_req, res) => {
+  try {
+    const { getAlpacaCredentialStatus, getAlpacaAuthFailureState } = await import("../lib/alpaca");
+    const { getOrderbookAuthFailureState } = await import("../lib/market/orderbook");
+    res.json({
+      alpaca: {
+        credentials: getAlpacaCredentialStatus(),
+        authFailure: getAlpacaAuthFailureState(),
+      },
+      orderbook: {
+        authFailure: getOrderbookAuthFailureState(),
+      },
+      generatedAt: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    logger.error({ err }, "Failed to get auth failure state");
+    res.status(500).json({ error: "Failed to get auth failure state" });
+  }
+});
+
 /* ── DB Health (detailed) ─────────────────────────────────────────── */
 router.get("/db-health", async (_req, res) => {
   try {

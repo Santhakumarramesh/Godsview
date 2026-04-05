@@ -1,11 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { parseOrderbookRestResponse } from "../lib/market/orderbook";
+import { isOrderbookAuthFailureError, parseOrderbookRestResponse } from "../lib/market/orderbook";
 
 describe("parseOrderbookRestResponse", () => {
   it("throws explicit status errors for non-2xx responses", () => {
+    let captured: unknown;
     expect(() =>
       parseOrderbookRestResponse("BTCUSD", 401, "<html><h1>401 Authorization Required</h1></html>"),
     ).toThrow(/Orderbook API 401/);
+    try {
+      parseOrderbookRestResponse("BTCUSD", 401, "<html><h1>401 Authorization Required</h1></html>");
+    } catch (err) {
+      captured = err;
+    }
+    expect(isOrderbookAuthFailureError(captured)).toBe(true);
   });
 
   it("throws explicit parse errors for invalid JSON on 2xx responses", () => {

@@ -1,6 +1,6 @@
-import { getBars, type AlpacaBar } from "./alpaca";
+import { getBars, isAlpacaAuthFailureError, type AlpacaBar } from "./alpaca";
 import { logger as _logger } from "./logger";
-import { orderBookManager } from "./market/orderbook";
+import { isOrderbookAuthFailureError, orderBookManager } from "./market/orderbook";
 import type { OrderBookSnapshot } from "./market/types";
 import { setKillSwitchActive } from "./risk_engine";
 import { inferAssetClass, type AssetClass } from "./session_guard";
@@ -110,6 +110,8 @@ const DEFAULT_MIN_TOP_BOOK_NOTIONAL_USD = 180_000;
 const DEFAULT_MAX_ATR_PCT_1M = 0.012;
 const DEFAULT_MAX_REALIZED_VOL_PCT_1M = 0.009;
 const DEFAULT_BAR_LOOKBACK = 40;
+const AUTH_WARN_COOLDOWN_MS = 30_000;
+let _lastAuthWarnMs = 0;
 
 let _level: ExecutionMarketGuardLevel = "NORMAL";
 let _haltActive = false;
@@ -166,6 +168,16 @@ function parseFloatEnv(value: string | undefined, fallback: number, min: number,
   const parsed = Number.parseFloat(String(value ?? ""));
   if (!Number.isFinite(parsed)) return fallback;
   return clampFloat(parsed, min, max);
+}
+
+function logAuthDegraded(stage: "orderbook" | "bars", symbol: string, err: Error): void {
+  const now = Date.now();
+  if (now - _lastAuthWarnMs >= AUTH_WARN_COOLDOWN_MS) {
+    _lastAuthWarnMs = now;
+    logger.warn({ symbol, stage, err: err.message }, "[market-guard] auth unavailable — market guard degraded");
+    return;
+  }
+  logger.debug({ symbol, stage, err: err.message }, "[market-guard] auth unavailable — market guard degraded");
 }
 
 function boolEnv(value: string | undefined, fallback: boolean): boolean {
@@ -460,7 +472,12 @@ export async function evaluateExecutionMarketGuard(input: {
       try {
         snapshot = await orderBookManager.fetchSnapshot(symbol);
       } catch (err) {
-        logger.warn({ err, symbol }, "[market-guard] failed to fetch orderbook snapshot on demand");
+        if (isOrderbookAuthFailureError(err)) {
+          const normalizedErr = err instanceof Error ? err : new Error(String(err));
+          logAuthDegraded("orderbook", symbol, normalizedErr);
+        } else {
+          logger.warn({ err, symbol }, "[market-guard] failed to fetch orderbook snapshot on demand");
+        }
       }
     }
   }
@@ -471,7 +488,12 @@ export async function evaluateExecutionMarketGuard(input: {
     bars = await getBars(symbol, "1Min", p.bar_lookback);
   } catch (err) {
     barsErr = true;
-    logger.warn({ err, symbol }, "[market-guard] failed to fetch bars");
+    if (isAlpacaAuthFailureError(err)) {
+      const normalizedErr = err instanceof Error ? err : new Error(String(err));
+      logAuthDegraded("bars", symbol, normalizedErr);
+    } else {
+      logger.warn({ err, symbol }, "[market-guard] failed to fetch bars");
+    }
   }
 
   const obMetrics = computeOrderbookMetrics(snapshot);
