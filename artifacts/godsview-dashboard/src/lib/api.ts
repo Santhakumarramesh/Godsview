@@ -2816,3 +2816,95 @@ export function useResetContextFusion() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["context-fusion"] }); },
   });
 }
+
+// ─── Phase 48: Adaptive Learning types & hooks ────────────────────────────────
+
+export interface StrategyPerformanceRecord {
+  strategyId: string;
+  version: number;
+  regime: string;
+  totalTrades: number;
+  winRate: number;
+  profitFactor: number;
+  sharpeRatio: number;
+  maxDrawdownPct: number;
+  expectancy: number;
+  avgWin: number;
+  avgLoss: number;
+  lastTradeAt: string;
+  updatedAt: string;
+}
+
+export interface ChampionChallengerResult {
+  championId: string;
+  challengerId: string;
+  regime: string;
+  verdict: "CHAMPION_WINS" | "CHALLENGER_WINS" | "INCONCLUSIVE";
+  confidence: number;
+  reasons: string[];
+  evaluatedAt: string;
+}
+
+export interface RetrainTrigger {
+  strategyId: string;
+  triggerType: string;
+  severity: string;
+  currentValue: number;
+  threshold: number;
+  message: string;
+  triggeredAt: string;
+}
+
+export interface PostTradeAttribution {
+  tradeId: string;
+  strategyId: string;
+  symbol: string;
+  direction: string;
+  outcome: string;
+  pnl: number;
+  factors: { name: string; impact: string; weight: number; description: string }[];
+  summary: string;
+  attributedAt: string;
+}
+
+export interface AdaptiveLearningSnapshot {
+  enabled: boolean;
+  strategies: Record<string, StrategyPerformanceRecord[]>;
+  recentTriggers: RetrainTrigger[];
+  recentAttributions: PostTradeAttribution[];
+  challengerResults: ChampionChallengerResult[];
+  retirementCandidates: string[];
+  totalTradesAttributed: number;
+  totalRetrainTriggersRaised: number;
+  lastEvaluatedAt: string | null;
+}
+
+export function useAdaptiveLearningSnapshot() {
+  return useQuery({
+    queryKey: ["adaptive-learning", "snapshot"],
+    queryFn: () => apiFetch<{ ok: boolean; snapshot: AdaptiveLearningSnapshot }>("/learning/snapshot"),
+    staleTime: 10_000,
+    refetchInterval: 15_000,
+  });
+}
+
+export function useCompareStrategies() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { champion_id: string; challenger_id: string; regime?: string }) =>
+      apiFetch<{ ok: boolean; result: ChampionChallengerResult }>("/learning/compare", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["adaptive-learning"] }); },
+  });
+}
+
+export function useResetAdaptiveLearning() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch<{ ok: boolean }>("/learning/reset", { method: "POST" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["adaptive-learning"] }); },
+  });
+}
