@@ -7,9 +7,20 @@
  *   - Position overlays (entry, stops, targets)
  *   - Signal markers (buy/sell arrows)
  *   - Indicator overlays (custom lines/zones)
+ *   - HTF market structure integration
  */
 
 import { logger } from "./logger.js";
+import {
+  analyzeTimeframe,
+  analyzeMultiTimeframe,
+  type Bar as HTFBar,
+  type Timeframe as HTFTimeframe,
+  type OrderBlockHTF,
+  type ABCDPattern,
+  type MultiTimeframeStructure,
+  type SupplyDemandZone,
+} from "../engines/market_structure_htf.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -265,4 +276,85 @@ export function resetOverlays(): void {
   overlayCache.clear();
   totalGenerated = 0;
   logger.info("TradingView overlay cache reset");
+}
+
+// ─── HTF Market Structure Integration ──────────────────────────────────────
+
+// Enhanced overlay that includes HTF market structure data
+export interface EnhancedChartOverlay extends ChartOverlay {
+  htfBias: "bullish" | "bearish" | "ranging";
+  tradeProbability: { long: number; short: number; neutral: number };
+  htfOrderBlocks: OrderBlockHTF[];
+  abcdPatterns: ABCDPattern[];
+  supplyDemandZones: SupplyDemandZone[];
+  keyLevels: { price: number; type: string; timeframe: string; strength: number }[];
+}
+
+export function generateEnhancedOverlay(
+  symbol: string,
+  timeframe: string,
+  bars: HTFBar[],
+  barsByTf?: Partial<Record<HTFTimeframe, HTFBar[]>>,
+): EnhancedChartOverlay {
+  // Generate base overlay
+  const base = generateChartOverlay({
+    symbol,
+    currentPrice: bars.length > 0 ? bars[bars.length - 1].c : 0,
+    timeframe,
+  });
+
+  // Single timeframe analysis
+  const tf = (timeframe || "1H") as HTFTimeframe;
+  const tfAnalysis = analyzeTimeframe(bars, tf);
+
+  // Multi-timeframe if available
+  let mtf: MultiTimeframeStructure | null = null;
+  if (barsByTf && Object.keys(barsByTf).length > 0) {
+    // Fill missing timeframes with empty arrays
+    const fullBars: Record<HTFTimeframe, HTFBar[]> = {
+      "15min": barsByTf["15min"] || [],
+      "1H": barsByTf["1H"] || bars,
+      "4H": barsByTf["4H"] || [],
+      "1D": barsByTf["1D"] || [],
+      "1W": barsByTf["1W"] || [],
+    };
+    mtf = analyzeMultiTimeframe(fullBars, symbol);
+  }
+
+  // Convert HTF order blocks to base overlay format
+  const htfStructures: StructureLevel[] = tfAnalysis.orderBlocks.map((ob, i) => ({
+    id: ob.id,
+    type: ob.type === "bullish" ? ("support" as const) : ("resistance" as const),
+    price: ob.type === "bullish" ? ob.low : ob.high,
+    strength: Math.min(5, Math.ceil(ob.score * 5)) as 1 | 2 | 3 | 4 | 5,
+    touches: ob.status === "tested" ? 1 : 0,
+    firstSeen: ob.createdAt,
+    lastTested: ob.createdAt,
+    broken: ob.status === "mitigated",
+  }));
+
+  // Convert supply/demand zones to order block overlay format
+  const sdBlocks: OrderBlock[] = tfAnalysis.supplyDemandZones.map((z) => ({
+    id: z.id,
+    type: z.type as "supply" | "demand",
+    high: z.high,
+    low: z.low,
+    volume: 0,
+    timeframe: z.timeframe,
+    createdAt: z.createdAt,
+    mitigated: z.status === "broken",
+  }));
+
+  // Merge with base
+  return {
+    ...base,
+    structures: [...base.structures, ...htfStructures],
+    orderBlocks: [...base.orderBlocks, ...sdBlocks],
+    htfBias: mtf?.htfBias ?? tfAnalysis.bias,
+    tradeProbability: mtf?.tradeProbability ?? { long: 33, short: 33, neutral: 34 },
+    htfOrderBlocks: tfAnalysis.orderBlocks,
+    abcdPatterns: tfAnalysis.abcdPatterns,
+    supplyDemandZones: tfAnalysis.supplyDemandZones,
+    keyLevels: mtf?.keyLevels ?? [],
+  };
 }
