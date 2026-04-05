@@ -54,6 +54,7 @@ import circuitBreakerRouter from "./circuit_breaker";
 import positionSizingRouter from "./position_sizing";
 import tradeJournalRouter from "./trade_journal";
 import systemOrchestratorRouter from "./system_orchestrator";
+import apiGatewayRouter from "./api_gateway";
 
 const router: IRouter = Router();
 
@@ -111,6 +112,7 @@ router.use(circuitBreakerRouter);
 router.use(positionSizingRouter);
 router.use(tradeJournalRouter);
 router.use(systemOrchestratorRouter);
+router.use(apiGatewayRouter);
 
 // Python v2 microservices proxy — shadow routes at /v2/*
 router.use(pythonV2Router);

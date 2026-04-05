@@ -3618,3 +3618,64 @@ export function useResetOrchestrator() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["orchestrator"] }); },
   });
 }
+
+
+/* ── Phase 59: API Gateway + Auth ── */
+
+export interface ApiKeyInfo {
+  key: string;
+  name: string;
+  role: "admin" | "trader" | "viewer" | "bot";
+  permissions: string[];
+  enabled: boolean;
+  rateLimit: number;
+  requestCount: number;
+}
+
+export interface GatewaySnapshot {
+  totalKeys: number;
+  activeKeys: number;
+  totalRequests: number;
+  blockedRequests: number;
+  auditLogSize: number;
+  avgLatencyMs: number;
+}
+
+export function useGatewaySnapshot() {
+  return useQuery({
+    queryKey: ["gateway", "snapshot"],
+    queryFn: () => apiFetch<GatewaySnapshot>("/gateway/snapshot"),
+    staleTime: 5_000,
+    refetchInterval: 10_000,
+  });
+}
+
+export function useApiKeys() {
+  return useQuery({
+    queryKey: ["gateway", "keys"],
+    queryFn: () => apiFetch<ApiKeyInfo[]>("/gateway/keys"),
+    staleTime: 10_000,
+  });
+}
+
+export function useCreateApiKey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { name: string; role: string; rateLimit?: number }) =>
+      apiFetch<ApiKeyInfo>("/gateway/keys", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(params),
+      }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["gateway"] }); },
+  });
+}
+
+export function useRevokeApiKey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (key: string) =>
+      apiFetch<{ ok: boolean }>("/gateway/keys/revoke", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key }),
+      }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["gateway"] }); },
+  });
+}
