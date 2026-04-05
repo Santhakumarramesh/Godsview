@@ -402,14 +402,17 @@ async function scanSymbol(
     }
 
     touchScanned(symbol, run.signalsFound > 0);
-    run.symbolsScanned++;
   } catch (err) {
     if (isAlpacaAuthFailureError(err)) {
       const normalizedErr = err instanceof Error ? err : new Error(String(err));
       logAuthDegraded(symbol, normalizedErr);
+      touchScanned(symbol, false);
       return;
     }
+    touchScanned(symbol, false);
     logger.warn({ symbol, err }, "[scanner] Symbol scan failed");
+  } finally {
+    run.symbolsScanned++;
   }
 }
 
