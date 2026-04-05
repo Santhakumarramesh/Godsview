@@ -51,6 +51,7 @@ import walkForwardStressRouter from "./walk_forward_stress";
 import tradingviewOverlayRouter from "./tradingview_overlay";
 import liveIntelligenceMonitorRouter from "./live_intelligence_monitor";
 import circuitBreakerRouter from "./circuit_breaker";
+import positionSizingRouter from "./position_sizing";
 
 const router: IRouter = Router();
 
@@ -105,6 +106,7 @@ router.use(walkForwardStressRouter);
 router.use(tradingviewOverlayRouter);
 router.use(liveIntelligenceMonitorRouter);
 router.use(circuitBreakerRouter);
+router.use(positionSizingRouter);
 
 // Python v2 microservices proxy — shadow routes at /v2/*
 router.use(pythonV2Router);
