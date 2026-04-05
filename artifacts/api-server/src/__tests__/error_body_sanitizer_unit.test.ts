@@ -23,6 +23,11 @@ describe("sanitizeUpstreamErrorBody", () => {
     expect(snippet).toBe("401 Authorization Required nginx");
   });
 
+  it("extracts concise messages from json bodies", () => {
+    expect(sanitizeUpstreamErrorBody("{\"message\":\"unauthorized.\"}")).toBe("unauthorized.");
+    expect(sanitizeUpstreamErrorBody("{\"error\":{\"detail\":\"token expired\"}}")).toBe("token expired");
+  });
+
   it("returns a stable fallback for empty and markup-only bodies", () => {
     expect(sanitizeUpstreamErrorBody("   ")).toBe("empty response");
     expect(sanitizeUpstreamErrorBody("<html><body></body></html>")).toBe("html response omitted");
