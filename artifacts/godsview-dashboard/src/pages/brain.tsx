@@ -71,6 +71,10 @@ import {
   type ExecutionAutonomyGuardSnapshot,
   useExecutionMarketGuard,
   type ExecutionMarketGuardSnapshot,
+  useContextFusionSnapshot,
+  useResetContextFusion,
+  type ContextFusionSnapshot,
+  type ContextFusionResult,
 } from "@/lib/api";
 import { useLivePrices } from "@/lib/market-store";
 import BrainFocusMode from "@/components/BrainFocusMode";
@@ -1913,6 +1917,80 @@ function ExecutionMarketGuardPanel({
   );
 }
 
+
+function ContextFusionPanel() {
+  const { data } = useContextFusionSnapshot();
+  const resetMut = useResetContextFusion();
+  const snap: ContextFusionSnapshot | undefined = data?.snapshot;
+
+  const levelColor = (level?: string) => {
+    if (level === "FAVORABLE") return "#22c55e";
+    if (level === "NEUTRAL") return "#eab308";
+    if (level === "CAUTIOUS") return "#f97316";
+    if (level === "HOSTILE") return "#ef4444";
+    return "#6b7280";
+  };
+
+  return (
+    <div style={{ background: "#111", borderRadius: 12, padding: 16, marginBottom: 16, border: "1px solid #333" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <h3 style={{ margin: 0, color: "#e2e8f0", fontSize: 14 }}>Context Fusion Intelligence</h3>
+        <button
+          onClick={() => resetMut.mutate()}
+          style={{ background: "#374151", color: "#e2e8f0", border: "none", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11 }}
+        >
+          RESET
+        </button>
+      </div>
+      {!snap ? (
+        <div style={{ color: "#6b7280", fontSize: 12 }}>Loading...</div>
+      ) : !snap.enabled ? (
+        <div style={{ color: "#f97316", fontSize: 12 }}>Context fusion is disabled</div>
+      ) : (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 10 }}>
+            <div style={{ background: "#1a1a2e", borderRadius: 8, padding: 8, textAlign: "center" }}>
+              <div style={{ color: "#9ca3af", fontSize: 10 }}>Evaluations</div>
+              <div style={{ color: "#e2e8f0", fontSize: 16, fontWeight: 700 }}>{snap.totalEvaluations}</div>
+            </div>
+            <div style={{ background: "#1a1a2e", borderRadius: 8, padding: 8, textAlign: "center" }}>
+              <div style={{ color: "#9ca3af", fontSize: 10 }}>Blocked</div>
+              <div style={{ color: "#ef4444", fontSize: 16, fontWeight: 700 }}>{snap.blockedCount}</div>
+            </div>
+            <div style={{ background: "#1a1a2e", borderRadius: 8, padding: 8, textAlign: "center" }}>
+              <div style={{ color: "#9ca3af", fontSize: 10 }}>Boosted</div>
+              <div style={{ color: "#22c55e", fontSize: 16, fontWeight: 700 }}>{snap.boostedCount}</div>
+            </div>
+          </div>
+          {snap.lastEvaluation && (
+            <div style={{ background: "#1a1a2e", borderRadius: 8, padding: 10, marginBottom: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                <span style={{ color: "#9ca3af", fontSize: 11 }}>Last Fusion</span>
+                <span style={{ color: levelColor(snap.lastEvaluation.level), fontSize: 12, fontWeight: 600 }}>
+                  {snap.lastEvaluation.level} ({(snap.lastEvaluation.fusionScore * 100).toFixed(1)}%)
+                </span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, fontSize: 10, color: "#9ca3af" }}>
+                <span>Macro: {(snap.lastEvaluation.components.macroBiasScore * 100).toFixed(0)}%</span>
+                <span>Sentiment: {(snap.lastEvaluation.components.sentimentScore * 100).toFixed(0)}%</span>
+                <span>Event Risk: {(snap.lastEvaluation.components.eventRiskScore * 100).toFixed(0)}%</span>
+                <span>Regime: {snap.lastEvaluation.components.regimeLabel}</span>
+              </div>
+              <div style={{ color: "#9ca3af", fontSize: 10, marginTop: 4 }}>
+                Size: {(snap.lastEvaluation.sizeMultiplier * 100).toFixed(0)}%
+                {snap.lastEvaluation.blocked && <span style={{ color: "#ef4444", marginLeft: 8 }}>BLOCKED</span>}
+              </div>
+            </div>
+          )}
+          <div style={{ color: "#6b7280", fontSize: 10 }}>
+            Cache: {snap.cacheSize} entries | Reduced: {snap.reducedCount}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function WalkForwardPanel({
   strategyId,
   walkForward,
@@ -2986,7 +3064,8 @@ function BrainPageComponent() {
           onStop={handleAllocatorStop}
           onRun={handleAllocatorRun}
         />
-        <ExecutionMarketGuardPanel marketGuard={executionMarketGuard} />
+        <ContextFusionPanel />
+              <ExecutionMarketGuardPanel marketGuard={executionMarketGuard} />
         <ExecutionIncidentPanel incident={executionIncidentGuard} />
         <WalkForwardPanel strategyId={activeStrategyId} walkForward={walkForward} tierRegistry={tierRegistry} />
         <LiveSIFeed decisions={siDecisions} />

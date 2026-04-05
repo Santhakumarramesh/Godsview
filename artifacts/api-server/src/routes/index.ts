@@ -42,6 +42,7 @@ import brainNodesRouter from "./brain_nodes";
 import portfolioAllocatorRouter from "./portfolio_allocator";
 import decisionReplayRouter from "./decision_replay";
 import microstructureRouter from "./microstructure";
+import contextFusionRouter from "./context_fusion";
 
 const router: IRouter = Router();
 
@@ -87,6 +88,7 @@ router.use(brainNodesRouter);
 router.use(portfolioAllocatorRouter);
 router.use(decisionReplayRouter);
 router.use(microstructureRouter);
+router.use(contextFusionRouter);
 
 // Python v2 microservices proxy — shadow routes at /v2/*
 router.use(pythonV2Router);

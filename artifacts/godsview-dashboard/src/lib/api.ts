@@ -2744,3 +2744,75 @@ export function useDecisionReplayLatency(hours = 24, limit = 2000) {
     refetchInterval: 30_000,
   });
 }
+
+// ─── Phase 47: Context Fusion types & hooks ───────────────────────────────────
+
+export interface ContextFusionComponents {
+  macroBiasScore: number;
+  macroBiasDirection: string;
+  macroBiasConviction: string;
+  macroBiasAligned: boolean;
+  sentimentScore: number;
+  sentimentCrowding: string;
+  sentimentAligned: boolean;
+  eventRiskScore: number;
+  eventLockout: boolean;
+  highImpactEvents: number;
+  regimeScore: number;
+  regimeLabel: string;
+}
+
+export interface ContextFusionResult {
+  fusionScore: number;
+  level: "FAVORABLE" | "NEUTRAL" | "CAUTIOUS" | "HOSTILE";
+  sizeMultiplier: number;
+  blocked: boolean;
+  blockReason: string | null;
+  components: ContextFusionComponents;
+  reasons: string[];
+  evaluatedAt: string;
+}
+
+export interface ContextFusionSnapshot {
+  enabled: boolean;
+  blockThreshold: number;
+  reduceThreshold: number;
+  boostThreshold: number;
+  cacheTtlMs: number;
+  cacheSize: number;
+  totalEvaluations: number;
+  blockedCount: number;
+  reducedCount: number;
+  boostedCount: number;
+  lastEvaluation: ContextFusionResult | null;
+  lastEvaluatedAt: string | null;
+}
+
+export function useContextFusionSnapshot() {
+  return useQuery({
+    queryKey: ["context-fusion", "snapshot"],
+    queryFn: () => apiFetch<{ ok: boolean; snapshot: ContextFusionSnapshot }>("/context/fusion/snapshot"),
+    staleTime: 10_000,
+    refetchInterval: 15_000,
+  });
+}
+
+export function useContextFusionEvaluate(symbol: string, direction: "long" | "short" = "long", regime?: string) {
+  return useQuery({
+    queryKey: ["context-fusion", "evaluate", symbol, direction, regime],
+    queryFn: () => apiFetch<{ ok: boolean; result: ContextFusionResult }>(
+      `/context/fusion/evaluate?symbol=${symbol}&direction=${direction}${regime ? `&regime=${regime}` : ""}`
+    ),
+    enabled: !!symbol,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+  });
+}
+
+export function useResetContextFusion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch<{ ok: boolean }>("/context/fusion/reset", { method: "POST" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["context-fusion"] }); },
+  });
+}

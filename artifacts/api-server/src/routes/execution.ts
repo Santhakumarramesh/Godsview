@@ -48,6 +48,11 @@ import {
   resetExecutionIdempotencyStore,
 } from "../lib/execution_idempotency";
 import { auditExecutionLifecycle } from "../lib/audit_logger";
+import {
+  evaluateContextFusion,
+  getContextFusionSnapshot,
+  type ContextFusionResult,
+} from "../lib/context_fusion_engine";
 
 export const executionRouter = Router();
 
@@ -342,6 +347,41 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
       return;
     }
 
+    // Phase 47: Context fusion intelligence gate (macro + sentiment + event risk + regime)
+    let contextFusion: ContextFusionResult | null = null;
+    try {
+      contextFusion = await evaluateContextFusion({
+        symbol: symbolText,
+        direction: directionText as "long" | "short",
+        regime: regime ?? undefined,
+      });
+      if (contextFusion.blocked) {
+        emitLifecycleAudit(
+          "execution_gate_blocked",
+          "context_fusion_blocked",
+          contextFusion.blockReason ?? "context_fusion_hostile",
+          { gate: "context_fusion", level: contextFusion.level, score: contextFusion.fusionScore, reasons: contextFusion.reasons },
+        );
+        recordExecutionAttempt({
+          symbol: symbolText,
+          outcome: "BLOCKED",
+          detail: `context_fusion_block:${contextFusion.level}`,
+          reason: contextFusion.blockReason ?? undefined,
+        });
+        sendTracked(429, {
+          error: "context_fusion_blocked",
+          message: `Execution blocked by context fusion (${contextFusion.blockReason ?? contextFusion.level})`,
+          context_fusion: contextFusion,
+          autonomy_guard: getExecutionAutonomyGuardSnapshot(),
+          incident_guard: getExecutionIncidentSnapshot(),
+          market_guard: getExecutionMarketGuardSnapshot(),
+        });
+        return;
+      }
+    } catch (cfErr) {
+      logger.warn("Context fusion evaluation failed, proceeding without", { error: String(cfErr) });
+    }
+
     // Compute ATR from bars if available
     let atrValue = 0;
     try {
@@ -407,7 +447,7 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
     // Apply throttle multiplier from breaker + portfolio risk guard
     const adjustedQty = Math.max(
       1,
-      Math.round(decision.quantity * sizeMultiplier * portfolioRiskGate.size_multiplier),
+      Math.round(decision.quantity * sizeMultiplier * portfolioRiskGate.size_multiplier * (contextFusion?.sizeMultiplier ?? 1.0)),
     );
 
     // 2. Execute order
@@ -500,6 +540,13 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
         kelly_pct: decision.signal.kelly_fraction,
       },
       breaker_multiplier: sizeMultiplier,
+        context_fusion: contextFusion ? {
+          score: contextFusion.fusionScore,
+          level: contextFusion.level,
+          size_multiplier: contextFusion.sizeMultiplier,
+          blocked: contextFusion.blocked,
+          reasons: contextFusion.reasons,
+        } : null,
       portfolio_risk_action: portfolioRiskGate.action,
       portfolio_risk_reasons: portfolioRiskGate.reasons,
       portfolio_risk_multiplier: portfolioRiskGate.size_multiplier,
