@@ -3113,3 +3113,63 @@ export function useResetStrategyRegistry() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["strategy-registry"] }); },
   });
 }
+
+
+// ─── GodsView Lab Types (Phase 51) ─────────────────────────────────────────────
+
+export interface ParsedStrategy {
+  name: string;
+  symbols: string[];
+  entryRules: { action: string; conditions: { indicator: string; period?: number; operator: string; value: number | string; valuePeriod?: number }[]; logic: string }[];
+  exitRules: { action: string; conditions: { indicator: string; period?: number; operator: string; value: number | string; valuePeriod?: number }[]; logic: string }[];
+  stopRule: { type: string; value: number } | null;
+  riskPct: number;
+  timeframe: string;
+  confidence: number;
+  rawPrompt: string;
+  parsedAt: string;
+}
+
+export interface CompiledRule {
+  id: string;
+  action: string;
+  expression: string;
+  conditions: { field: string; op: string; target: string }[];
+  compiledAt: string;
+}
+
+export interface LabSnapshot {
+  totalPromptsParsed: number;
+  totalStrategiesCompiled: number;
+  totalStrategiesRegistered: number;
+  recentParsed: ParsedStrategy[];
+  recentCompiled: CompiledRule[];
+}
+
+export function useLabSnapshot() {
+  return useQuery({
+    queryKey: ["lab", "snapshot"],
+    queryFn: () => apiFetch<{ ok: boolean; snapshot: LabSnapshot }>("/lab/snapshot"),
+    staleTime: 10_000,
+    refetchInterval: 15_000,
+  });
+}
+
+export function useLabCreate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { prompt: string; author?: string }) =>
+      apiFetch<{ ok: boolean; parsed: ParsedStrategy; compiled: CompiledRule[]; registered: StrategyEntry }>("/lab/create", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(params),
+      }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["lab"] }); qc.invalidateQueries({ queryKey: ["strategy-registry"] }); },
+  });
+}
+
+export function useResetLab() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch<{ ok: boolean }>("/lab/reset", { method: "POST" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["lab"] }); },
+  });
+}

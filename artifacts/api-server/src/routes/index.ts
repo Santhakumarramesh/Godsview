@@ -46,6 +46,7 @@ import contextFusionRouter from "./context_fusion";
 import adaptiveLearningRouter from "./adaptive_learning";
 import executionIntelligenceRouter from "./execution_intelligence";
 import strategyRegistryRouter from "./strategy_registry";
+import godsviewLabRouter from "./godsview_lab";
 
 const router: IRouter = Router();
 
@@ -95,6 +96,7 @@ router.use(contextFusionRouter);
 router.use(adaptiveLearningRouter);
 router.use(executionIntelligenceRouter);
 router.use(strategyRegistryRouter);
+router.use(godsviewLabRouter);
 
 // Python v2 microservices proxy — shadow routes at /v2/*
 router.use(pythonV2Router);
