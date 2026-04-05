@@ -99,14 +99,14 @@ router.post("/api/learning/attribute", (req: Request, res: Response) => {
 
 router.get("/api/learning/triggers/:strategyId", (req: Request, res: Response) => {
   try {
-    const triggers = evaluateRetrainTriggers(req.params.strategyId);
+    const triggers = evaluateRetrainTriggers(String(req.params.strategyId));
     res.json({ ok: true, triggers });
   } catch (err) { res.status(500).json({ ok: false, error: String(err) }); }
 });
 
 router.get("/api/learning/regime/:strategyId", (req: Request, res: Response) => {
   try {
-    const performance = getRegimePerformance(req.params.strategyId);
+    const performance = getRegimePerformance(String(req.params.strategyId));
     res.json({ ok: true, performance });
   } catch (err) { res.status(500).json({ ok: false, error: String(err) }); }
 });

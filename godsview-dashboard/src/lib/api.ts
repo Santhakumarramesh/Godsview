@@ -2908,3 +2908,108 @@ export function useResetAdaptiveLearning() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["adaptive-learning"] }); },
   });
 }
+
+
+// ─── Execution Intelligence Types (Phase 49) ──────────────────────────────────
+
+export interface SlippageEstimate {
+  symbol: string;
+  direction: "long" | "short";
+  estimatedBps: number;
+  spreadBps: number;
+  volumeImpactBps: number;
+  volatilityBps: number;
+  confidence: number;
+  recommendation: "MARKET" | "LIMIT" | "LIMIT_AGGRESSIVE";
+  estimatedAt: string;
+}
+
+export interface ExitTarget {
+  level: number;
+  targetPrice: number;
+  sizePct: number;
+  label: string;
+  rMultiple: number;
+}
+
+export interface StopPlan {
+  initialStop: number;
+  trailingEnabled: boolean;
+  trailingType: "ATR" | "PERCENTAGE" | "STRUCTURE" | "FIXED";
+  atrMultiplier: number;
+  currentStop: number;
+  migrationHistory: { fromPrice: number; toPrice: number; reason: string; migratedAt: string }[];
+}
+
+export interface ExecutionPlan {
+  symbol: string;
+  direction: "long" | "short";
+  orderType: "MARKET" | "LIMIT" | "LIMIT_AGGRESSIVE";
+  entryPrice: number;
+  limitOffset: number;
+  slippageEstimate: SlippageEstimate;
+  exitLadder: ExitTarget[];
+  stopPlan: StopPlan;
+  totalRiskPct: number;
+  expectedRR: number;
+  planCreatedAt: string;
+}
+
+export interface ExecutionQualityReport {
+  tradeId: string;
+  symbol: string;
+  expectedEntry: number;
+  actualEntry: number;
+  entrySlippageBps: number;
+  expectedExit: number;
+  actualExit: number;
+  exitSlippageBps: number;
+  totalSlippageCost: number;
+  fillTimeMs: number;
+  orderType: string;
+  qualityScore: number;
+  grade: "A" | "B" | "C" | "D" | "F";
+  reportedAt: string;
+}
+
+export interface ExecutionIntelligenceSnapshot {
+  enabled: boolean;
+  totalPlansCreated: number;
+  totalQualityReports: number;
+  avgSlippageBps: number;
+  avgQualityScore: number;
+  recentPlans: ExecutionPlan[];
+  recentReports: ExecutionQualityReport[];
+  stopMigrations: number;
+  lastPlanAt: string | null;
+}
+
+export function useExecutionIntelligenceSnapshot() {
+  return useQuery({
+    queryKey: ["execution-intelligence", "snapshot"],
+    queryFn: () => apiFetch<{ ok: boolean; snapshot: ExecutionIntelligenceSnapshot }>("/execution-intelligence/snapshot"),
+    staleTime: 10_000,
+    refetchInterval: 15_000,
+  });
+}
+
+export function useCreateExecutionPlan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { symbol: string; direction?: string; currentPrice: number; atr: number; spread?: number; volume24h?: number; stopDistance?: number }) =>
+      apiFetch<{ ok: boolean; plan: ExecutionPlan }>("/execution-intelligence/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["execution-intelligence"] }); },
+  });
+}
+
+export function useResetExecutionIntelligence() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch<{ ok: boolean }>("/execution-intelligence/reset", { method: "POST" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["execution-intelligence"] }); },
+  });
+}

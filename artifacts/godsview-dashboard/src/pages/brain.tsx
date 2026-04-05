@@ -75,6 +75,9 @@ import {
   useResetContextFusion,
   type ContextFusionSnapshot,
   type ContextFusionResult,
+  useExecutionIntelligenceSnapshot,
+  useResetExecutionIntelligence,
+  type ExecutionIntelligenceSnapshot,
 } from "@/lib/api";
 import { useLivePrices } from "@/lib/market-store";
 import BrainFocusMode from "@/components/BrainFocusMode";
@@ -1991,6 +1994,87 @@ function ContextFusionPanel() {
   );
 }
 
+
+function ExecutionIntelligencePanel() {
+  const { data } = useExecutionIntelligenceSnapshot();
+  const resetMut = useResetExecutionIntelligence();
+  const snap: ExecutionIntelligenceSnapshot | undefined = data?.snapshot;
+
+  const gradeColor = (grade?: string) => {
+    if (grade === "A") return "#22c55e";
+    if (grade === "B") return "#3b82f6";
+    if (grade === "C") return "#eab308";
+    if (grade === "D") return "#f97316";
+    if (grade === "F") return "#ef4444";
+    return "#6b7280";
+  };
+
+  return (
+    <div style={{ background: "#111", borderRadius: 12, padding: 16, marginBottom: 16, border: "1px solid #333" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <h3 style={{ margin: 0, color: "#e2e8f0", fontSize: 14 }}>Execution Intelligence</h3>
+        <button
+          onClick={() => resetMut.mutate()}
+          style={{ background: "#374151", color: "#e2e8f0", border: "none", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11 }}
+        >
+          RESET
+        </button>
+      </div>
+      {!snap ? (
+        <div style={{ color: "#6b7280", fontSize: 12 }}>Loading...</div>
+      ) : !snap.enabled ? (
+        <div style={{ color: "#f97316", fontSize: 12 }}>Execution intelligence is disabled</div>
+      ) : (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8, marginBottom: 10 }}>
+            <div style={{ background: "#1a1a2e", borderRadius: 8, padding: 8, textAlign: "center" }}>
+              <div style={{ color: "#9ca3af", fontSize: 10 }}>Plans</div>
+              <div style={{ color: "#e2e8f0", fontSize: 16, fontWeight: 700 }}>{snap.totalPlansCreated}</div>
+            </div>
+            <div style={{ background: "#1a1a2e", borderRadius: 8, padding: 8, textAlign: "center" }}>
+              <div style={{ color: "#9ca3af", fontSize: 10 }}>Quality Reports</div>
+              <div style={{ color: "#e2e8f0", fontSize: 16, fontWeight: 700 }}>{snap.totalQualityReports}</div>
+            </div>
+            <div style={{ background: "#1a1a2e", borderRadius: 8, padding: 8, textAlign: "center" }}>
+              <div style={{ color: "#9ca3af", fontSize: 10 }}>Avg Score</div>
+              <div style={{ color: "#3b82f6", fontSize: 16, fontWeight: 700 }}>{snap.avgQualityScore?.toFixed(0) ?? "—"}</div>
+            </div>
+            <div style={{ background: "#1a1a2e", borderRadius: 8, padding: 8, textAlign: "center" }}>
+              <div style={{ color: "#9ca3af", fontSize: 10 }}>Avg Slip (bps)</div>
+              <div style={{ color: "#eab308", fontSize: 16, fontWeight: 700 }}>{snap.avgSlippageBps?.toFixed(1) ?? "—"}</div>
+            </div>
+          </div>
+          {snap.recentReports && snap.recentReports.length > 0 && (
+            <div style={{ background: "#1a1a2e", borderRadius: 8, padding: 10, marginBottom: 8 }}>
+              <div style={{ color: "#9ca3af", fontSize: 11, marginBottom: 6 }}>Recent Quality Reports</div>
+              {snap.recentReports.slice(0, 3).map((r, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 3 }}>
+                  <span style={{ color: "#e2e8f0" }}>{r.symbol} ({r.direction})</span>
+                  <span style={{ color: gradeColor(r.grade), fontWeight: 600 }}>{r.grade} ({r.qualityScore})</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {snap.recentPlans && snap.recentPlans.length > 0 && (
+            <div style={{ background: "#1a1a2e", borderRadius: 8, padding: 10, marginBottom: 8 }}>
+              <div style={{ color: "#9ca3af", fontSize: 11, marginBottom: 6 }}>Latest Plan</div>
+              <div style={{ fontSize: 11, color: "#e2e8f0" }}>
+                {snap.recentPlans[0].symbol} — {snap.recentPlans[0].orderType} @ {snap.recentPlans[0].entryPrice.toFixed(2)}
+                <span style={{ color: "#9ca3af", marginLeft: 8 }}>
+                  R:R {snap.recentPlans[0].expectedRR.toFixed(1)} | {snap.recentPlans[0].exitLadder.length} targets
+                </span>
+              </div>
+            </div>
+          )}
+          <div style={{ color: "#6b7280", fontSize: 10 }}>
+            Quality reports: {snap.totalQualityReports} | Last plan: {snap.lastPlanAt ? new Date(snap.lastPlanAt).toLocaleTimeString() : "—"}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function WalkForwardPanel({
   strategyId,
   walkForward,
@@ -3065,6 +3149,7 @@ function BrainPageComponent() {
           onRun={handleAllocatorRun}
         />
         <ContextFusionPanel />
+        <ExecutionIntelligencePanel />
               <ExecutionMarketGuardPanel marketGuard={executionMarketGuard} />
         <ExecutionIncidentPanel incident={executionIncidentGuard} />
         <WalkForwardPanel strategyId={activeStrategyId} walkForward={walkForward} tierRegistry={tierRegistry} />

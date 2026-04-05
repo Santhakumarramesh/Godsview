@@ -234,9 +234,9 @@ export function compareStrategies(
   if (challengerResults.length > MAX_CHALLENGER_RESULTS) challengerResults.pop();
   lastEvaluatedAt = result.evaluatedAt;
 
-  logger.info("Champion/Challenger comparison", {
+  logger.info({
     championId, challengerId, regime, verdict, confidence: confidence.toFixed(2),
-  });
+  }, "Champion/Challenger comparison");
 
   return result;
 }
@@ -340,7 +340,7 @@ export function evaluateRetrainTriggers(strategyId: string, baseline?: StrategyP
   while (recentTriggers.length > MAX_TRIGGERS) recentTriggers.pop();
 
   if (triggers.length > 0) {
-    logger.info("Retrain triggers raised", { strategyId, count: triggers.length, types: triggers.map(t => t.triggerType) });
+    logger.info({ strategyId, count: triggers.length, types: triggers.map(t => t.triggerType) }, "Retrain triggers raised");
   }
 
   return triggers;
@@ -452,7 +452,7 @@ export function attributeTrade(params: {
   totalTradesAttributed++;
   while (recentAttributions.length > MAX_ATTRIBUTIONS) recentAttributions.pop();
 
-  logger.info("Post-trade attribution", { tradeId, strategyId, symbol, outcome, pnl: pnl.toFixed(2) });
+  logger.info({ tradeId, strategyId, symbol, outcome, pnl: pnl.toFixed(2) }, "Post-trade attribution");
 
   return attribution;
 }

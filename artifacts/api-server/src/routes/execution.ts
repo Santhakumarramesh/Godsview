@@ -379,7 +379,7 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
         return;
       }
     } catch (cfErr) {
-      logger.warn("Context fusion evaluation failed, proceeding without", { error: String(cfErr) });
+      logger.warn({ error: String(cfErr) }, "Context fusion evaluation failed, proceeding without");
     }
 
     // Compute ATR from bars if available

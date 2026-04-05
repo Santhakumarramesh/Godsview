@@ -252,7 +252,7 @@ export async function evaluateContextFusion(input: ContextFusionInput): Promise<
       reasons.push("macro_data_not_live");
     }
   } catch (err) {
-    logger.warn("Context fusion: macro bias fetch failed", { error: String(err) });
+    logger.warn({ error: String(err) }, "Context fusion: macro bias fetch failed");
     reasons.push("macro_bias_unavailable");
   }
 
@@ -355,7 +355,7 @@ export async function evaluateContextFusion(input: ContextFusionInput): Promise<
   // Cache
   cache.set(key, { result, expiresAt: Date.now() + CACHE_TTL_MS });
 
-  logger.info("Context fusion evaluated", {
+  logger.info({
     symbol: input.symbol,
     direction: input.direction,
     regime: regimeLabel,
@@ -363,7 +363,7 @@ export async function evaluateContextFusion(input: ContextFusionInput): Promise<
     level,
     sizeMultiplier: finalSizeMultiplier.toFixed(2),
     blocked,
-  });
+  }, "Context fusion evaluated");
 
   return result;
 }

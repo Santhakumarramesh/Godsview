@@ -63,7 +63,7 @@ router.get("/api/context/fusion/evaluate", async (req: Request, res: Response) =
 // GET /api/context/fusion/:symbol — quick evaluation with defaults
 router.get("/api/context/fusion/:symbol", async (req: Request, res: Response) => {
   try {
-    const symbol = req.params.symbol?.trim().toUpperCase() ?? "";
+    const symbol = (Array.isArray(req.params.symbol) ? req.params.symbol[0] : req.params.symbol ?? '').trim().toUpperCase() ?? "";
     const direction = String(req.query.direction ?? "long").trim().toLowerCase() as "long" | "short";
     const regime = req.query.regime ? String(req.query.regime).trim().toUpperCase() : undefined;
 
