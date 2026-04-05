@@ -3671,3 +3671,120 @@ export function useRevokeApiKey() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["gateway"] }); },
   });
 }
+
+// ─── Market Structure HTF Types (Phase 63) ────────────────────────────────────
+
+export type Timeframe = "15min" | "1H" | "4H" | "1D" | "1W";
+export type StructureBias = "bullish" | "bearish" | "ranging";
+
+export interface SwingPoint { index: number; price: number; timestamp: string; type: "high" | "low"; }
+export interface OrderBlockHTF {
+  id: string; type: "bullish" | "bearish"; timeframe: Timeframe;
+  high: number; low: number; score: number; status: "fresh" | "tested" | "mitigated";
+  createdAt: string;
+}
+export interface ABCDPattern {
+  id: string; type: "bullish" | "bearish"; timeframe: Timeframe;
+  pointA: SwingPoint; pointB: SwingPoint; pointC: SwingPoint; pointD: SwingPoint;
+  fibAccuracy: number; score: number; status: "forming" | "complete" | "triggered" | "invalidated";
+}
+export interface MultiTimeframeStructure {
+  symbol: string; analyzedAt: string;
+  htfBias: StructureBias;
+  tradeProbability: { long: number; short: number; neutral: number; };
+  keyLevels: { price: number; type: string; timeframe: Timeframe; strength: number; }[];
+  nearestOrderBlocks: { bullish: OrderBlockHTF | null; bearish: OrderBlockHTF | null; };
+  nearestABCD: ABCDPattern | null;
+  timeframes: Record<string, {
+    bias: StructureBias;
+    orderBlocks: OrderBlockHTF[];
+    abcdPatterns: ABCDPattern[];
+  }>;
+}
+
+export function useMultiTimeframeStructure(symbol: string) {
+  return useQuery<MultiTimeframeStructure>({
+    queryKey: ["mtf-structure", symbol],
+    queryFn: () => apiFetch(`/api/market-structure/${symbol}/analyze`),
+    enabled: !!symbol,
+    refetchInterval: 60_000,
+  });
+}
+
+// ─── Daily Review Types (Phase 63) ────────────────────────────────────────────
+
+export interface DailyFinding {
+  type: string; description: string; importance: "high" | "medium" | "low";
+  price: number; timeframe: string; timestamp: string;
+}
+
+export interface DailyReview {
+  id: string; date: string; symbol: string;
+  htfBias: StructureBias; tradeProbability: { long: number; short: number; neutral: number; };
+  chanceOfTrade: number; signalsGenerated: number; tradesExecuted: number;
+  tradesWon: number; tradesLost: number; pnlPct: number;
+  findings: DailyFinding[]; structureSummary: string; createdAt: string;
+  keyLevels: { price: number; type: string; timeframe: string; }[];
+  orderBlocksActive: number; abcdPatternsActive: number;
+}
+
+export function useDailyReview(symbol: string, date: string) {
+  return useQuery<DailyReview>({
+    queryKey: ["daily-review", symbol, date],
+    queryFn: () => apiFetch(`/api/daily-review/${symbol}/${date}`),
+    enabled: !!symbol && !!date,
+  });
+}
+
+export function useDailyReviews(symbol: string) {
+  return useQuery<DailyReview[]>({
+    queryKey: ["daily-reviews", symbol],
+    queryFn: () => apiFetch(`/api/daily-review/${symbol}`),
+    enabled: !!symbol,
+  });
+}
+
+export function useGenerateDailyReview() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { symbol: string; date: string }) =>
+      apiFetch<DailyReview>("/api/daily-review/generate", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["daily-review"] }); },
+  });
+}
+
+// ─── Side-by-Side Backtest Types (Phase 63) ────────────────────────────────────
+
+export interface SideBySideSnapshot {
+  id: string;
+  config: { symbols: string[]; historicalDays: number; strategies: string[]; };
+  backtest: { status: string; tradesTotal: number; winRate: number; pnlPct: number; sharpeRatio: number; maxDrawdown: number; progress: number; };
+  live: { status: string; tradesTotal: number; winRate: number; pnlPct: number; unrealizedPnl: number; openPositions: number; };
+  comparison: { winRateDelta: number; pnlDelta: number; signalOverlap: number; divergenceScore: number; };
+  status: string; startedAt: string; updatedAt: string;
+}
+
+export function useSideBySideSnapshot() {
+  return useQuery<SideBySideSnapshot | null>({
+    queryKey: ["side-by-side"],
+    queryFn: () => apiFetch("/api/side-by-side/snapshot"),
+    refetchInterval: 5_000,
+  });
+}
+
+export function useStartSideBySide() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { symbols: string[]; historicalDays: number; strategies: string[]; }) =>
+      apiFetch<SideBySideSnapshot>("/api/side-by-side/start", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["side-by-side"] }); },
+  });
+}
+
+export function useStopSideBySide() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch("/api/side-by-side/stop", { method: "POST" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["side-by-side"] }); },
+  });
+}

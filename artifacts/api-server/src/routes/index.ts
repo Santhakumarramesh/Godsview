@@ -55,6 +55,9 @@ import positionSizingRouter from "./position_sizing";
 import tradeJournalRouter from "./trade_journal";
 import systemOrchestratorRouter from "./system_orchestrator";
 import apiGatewayRouter from "./api_gateway";
+import dailyReviewRouter from "./daily_review";
+import sideBySideRouter from "./side_by_side";
+import marketStructureRouter from "./market_structure";
 
 const router: IRouter = Router();
 
@@ -113,6 +116,9 @@ router.use(positionSizingRouter);
 router.use(tradeJournalRouter);
 router.use(systemOrchestratorRouter);
 router.use(apiGatewayRouter);
+router.use("/api", dailyReviewRouter);
+router.use("/api", sideBySideRouter);
+router.use("/api", marketStructureRouter);
 
 // Python v2 microservices proxy — shadow routes at /v2/*
 router.use(pythonV2Router);
