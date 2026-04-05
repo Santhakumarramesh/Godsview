@@ -3535,3 +3535,86 @@ export function useResetTradeJournal() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["tradeJournal"] }); },
   });
 }
+
+
+/* ── Phase 58: System Orchestrator ── */
+
+export type EngineState = "stopped" | "starting" | "running" | "degraded" | "error" | "stopping";
+
+export interface EngineRegistration {
+  id: string;
+  name: string;
+  version: string;
+  state: EngineState;
+  startedAt?: string;
+  lastHeartbeat?: string;
+  errorCount: number;
+  lastError?: string;
+  dependencies: string[];
+}
+
+export interface SystemHealthSummary {
+  overall: "healthy" | "degraded" | "critical" | "offline";
+  enginesTotal: number;
+  enginesRunning: number;
+  enginesDegraded: number;
+  enginesError: number;
+  enginesStopped: number;
+  uptimeMs: number;
+  lastHealthCheck: string;
+}
+
+export interface OrchestratorSnapshot {
+  health: SystemHealthSummary;
+  engines: EngineRegistration[];
+  recentEvents: { id: string; timestamp: string; type: string; engineId: string; detail: string }[];
+  commandsExecuted: number;
+}
+
+export function useOrchestratorSnapshot() {
+  return useQuery({
+    queryKey: ["orchestrator", "snapshot"],
+    queryFn: () => apiFetch<OrchestratorSnapshot>("/orchestrator/snapshot"),
+    staleTime: 5_000,
+    refetchInterval: 10_000,
+  });
+}
+
+export function useSystemHealth() {
+  return useQuery({
+    queryKey: ["orchestrator", "health"],
+    queryFn: () => apiFetch<SystemHealthSummary>("/orchestrator/health"),
+    staleTime: 3_000,
+    refetchInterval: 5_000,
+  });
+}
+
+export function useRegisterEngine() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { id: string; name: string; version?: string }) =>
+      apiFetch<EngineRegistration>("/orchestrator/register", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(params),
+      }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["orchestrator"] }); },
+  });
+}
+
+export function useSetEngineState() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { engineId: string; state: EngineState; error?: string }) =>
+      apiFetch<EngineRegistration>("/orchestrator/state", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(params),
+      }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["orchestrator"] }); },
+  });
+}
+
+export function useResetOrchestrator() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch<{ status: string }>("/orchestrator/reset", { method: "POST" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["orchestrator"] }); },
+  });
+}
