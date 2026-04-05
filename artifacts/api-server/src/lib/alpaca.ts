@@ -4,6 +4,7 @@
 // Broker keys (CK prefix) do NOT have market data access
 
 import { normalizeMarketSymbol, toAlpacaSlash } from "./market/symbols";
+import { sanitizeUpstreamErrorBody } from "./error_body_sanitizer";
 const KEY_ID = process.env.ALPACA_API_KEY ?? "";
 const SECRET_KEY = process.env.ALPACA_SECRET_KEY ?? "";
 
@@ -72,9 +73,7 @@ export function getAlpacaCredentialStatus(): AlpacaCredentialStatus {
 }
 
 function compactBodySnippet(body: string, maxLen = 220): string {
-  const compact = String(body ?? "").replace(/\s+/g, " ").trim();
-  if (!compact) return "empty response";
-  return compact.length > maxLen ? `${compact.slice(0, maxLen)}...` : compact;
+  return sanitizeUpstreamErrorBody(body, { maxLen });
 }
 
 export class AlpacaApiError extends Error {

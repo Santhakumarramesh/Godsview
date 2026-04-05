@@ -37,7 +37,17 @@ describe("alpaca auth cooldown", () => {
 
     const alpaca = await import("../lib/alpaca");
 
-    await expect(alpaca.getAccount()).rejects.toThrow(/Alpaca API 401/i);
+    let firstErr: unknown;
+    await expect(async () => {
+      try {
+        await alpaca.getAccount();
+      } catch (err) {
+        firstErr = err;
+        throw err;
+      }
+    }).rejects.toThrow(/Alpaca API 401/i);
+    expect((firstErr as Error).message).toContain("401 Authorization Required");
+    expect((firstErr as Error).message).not.toContain("<html>");
     expect(alpaca.getAlpacaAuthFailureState().active).toBe(true);
 
     await expect(alpaca.getPositions()).rejects.toThrow(/cooldown/i);

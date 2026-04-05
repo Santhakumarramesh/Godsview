@@ -13,12 +13,20 @@ describe("parseOrderbookRestResponse", () => {
       captured = err;
     }
     expect(isOrderbookAuthFailureError(captured)).toBe(true);
+    expect((captured as Error).message).toContain("401 Authorization Required");
+    expect((captured as Error).message).not.toContain("<html>");
   });
 
   it("throws explicit parse errors for invalid JSON on 2xx responses", () => {
-    expect(() => parseOrderbookRestResponse("BTCUSD", 200, "<html>not-json</html>")).toThrow(
-      /invalid JSON/i,
-    );
+    let captured: unknown;
+    expect(() => parseOrderbookRestResponse("BTCUSD", 200, "<html>not-json</html>")).toThrow(/invalid JSON/i);
+    try {
+      parseOrderbookRestResponse("BTCUSD", 200, "<html>not-json</html>");
+    } catch (err) {
+      captured = err;
+    }
+    expect((captured as Error).message).toContain("not-json");
+    expect((captured as Error).message).not.toContain("<html>");
   });
 
   it("parses a valid orderbook payload", () => {

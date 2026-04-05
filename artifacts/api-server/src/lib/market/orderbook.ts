@@ -19,6 +19,7 @@ import type { OrderBookSnapshot, OrderBookListener, PriceLevel } from "./types";
 import { normalizeMarketSymbol, toAlpacaSlash } from "./symbols";
 import { orderBookRecorder } from "./orderbook_recorder";
 import { logger as _logger } from "../logger";
+import { sanitizeUpstreamErrorBody } from "../error_body_sanitizer";
 
 const ALPACA_DATA_URL = "data.alpaca.markets";
 const KEY_ID          = process.env.ALPACA_API_KEY    ?? "";
@@ -60,9 +61,7 @@ function parseLevels(raw: Array<{ p: number; s: number }>): PriceLevel[] {
 }
 
 function compactBodySnippet(body: string, maxLen = 180): string {
-  const compact = body.replace(/\s+/g, " ").trim();
-  if (!compact) return "empty response";
-  return compact.length > maxLen ? `${compact.slice(0, maxLen)}...` : compact;
+  return sanitizeUpstreamErrorBody(body, { maxLen });
 }
 
 export class OrderbookApiError extends Error {
