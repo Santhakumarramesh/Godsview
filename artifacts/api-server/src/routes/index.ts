@@ -47,6 +47,7 @@ import adaptiveLearningRouter from "./adaptive_learning";
 import executionIntelligenceRouter from "./execution_intelligence";
 import strategyRegistryRouter from "./strategy_registry";
 import godsviewLabRouter from "./godsview_lab";
+import walkForwardStressRouter from "./walk_forward_stress";
 
 const router: IRouter = Router();
 
@@ -97,6 +98,7 @@ router.use(adaptiveLearningRouter);
 router.use(executionIntelligenceRouter);
 router.use(strategyRegistryRouter);
 router.use(godsviewLabRouter);
+router.use(walkForwardStressRouter);
 
 // Python v2 microservices proxy — shadow routes at /v2/*
 router.use(pythonV2Router);

@@ -3173,3 +3173,86 @@ export function useResetLab() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["lab"] }); },
   });
 }
+
+
+// ─── Walk-Forward + Stress Testing Types (Phase 52) ────────────────────────────
+
+export interface WalkForwardWindow {
+  windowId: number;
+  inSampleSharpe: number;
+  outOfSampleSharpe: number;
+  degradation: number;
+  passed: boolean;
+}
+
+export interface WalkForwardResult {
+  strategyId: string;
+  totalWindows: number;
+  passedWindows: number;
+  avgDegradation: number;
+  avgOosSharpe: number;
+  verdict: "PASS" | "FAIL" | "MARGINAL";
+  windows: WalkForwardWindow[];
+}
+
+export interface StressTestResult {
+  scenario: string;
+  description: string;
+  stressedSharpe: number;
+  stressedMaxDD: number;
+  survivalRate: number;
+  passed: boolean;
+}
+
+export interface StressTestSuite {
+  strategyId: string;
+  scenarios: StressTestResult[];
+  overallPassed: number;
+  overallFailed: number;
+  verdict: "PASS" | "FAIL" | "MARGINAL";
+}
+
+export interface ValidationGateResult {
+  strategyId: string;
+  walkForward: WalkForwardResult;
+  stressTest: StressTestSuite;
+  overallVerdict: "APPROVED" | "REJECTED" | "NEEDS_REVIEW";
+  reasons: string[];
+  validatedAt: string;
+}
+
+export interface WalkForwardStressSnapshot {
+  totalWalkForwards: number;
+  totalStressTests: number;
+  totalValidations: number;
+  passRate: number;
+  recentValidations: ValidationGateResult[];
+}
+
+export function useValidationSnapshot() {
+  return useQuery({
+    queryKey: ["validation", "snapshot"],
+    queryFn: () => apiFetch<{ ok: boolean; snapshot: WalkForwardStressSnapshot }>("/validation/snapshot"),
+    staleTime: 10_000,
+    refetchInterval: 15_000,
+  });
+}
+
+export function useRunValidationGate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { strategyId: string; baseSharpe?: number; baseWinRate?: number; baseMaxDD?: number }) =>
+      apiFetch<{ ok: boolean; result: ValidationGateResult }>("/validation/gate", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(params),
+      }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["validation"] }); },
+  });
+}
+
+export function useResetValidation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch<{ ok: boolean }>("/validation/reset", { method: "POST" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["validation"] }); },
+  });
+}
