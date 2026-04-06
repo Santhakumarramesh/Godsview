@@ -81,6 +81,10 @@ type SIDecisionEvent = {
   approved: boolean; win_probability: number; edge_score: number;
   enhanced_quality: number; kelly_pct: number; regime: string;
   rejection_reason?: string; timestamp: string;
+  // V3 fields (optional for backward compat)
+  v3_tier?: "ELITE" | "STRONG" | "MARGINAL" | "WEAK";
+  v3_antifragility?: number;
+  v3_regime_boost?: number;
 };
 
 type SIStatus = {
@@ -91,6 +95,18 @@ type SIStatus = {
   } | null;
   message: string;
   current_regime?: string;
+};
+
+type V3Status = {
+  version: string;
+  v2_symbols: Array<{
+    symbol: string; version: string; outcomes: number;
+    accuracy: string; brier: string; weights: Record<string, number>;
+  }>;
+  correlation_pairs: number;
+  adverse_pool_size: number;
+  temporal_symbols: number;
+  layers: string[];
 };
 
 type AutonomousStatus = {
@@ -195,6 +211,13 @@ export default function SuperIntelligencePage() {
     refetchInterval: 30_000,
   });
 
+  // V3 Super Intelligence status
+  const { data: v3Status } = useQuery<V3Status>({
+    queryKey: ["si-v3-status"],
+    queryFn: () => fetch("/api/super-intelligence/v3/status").then(r => r.json()),
+    refetchInterval: 30_000,
+  });
+
   // Paper validation loop: predicted vs realized in paper mode
   const { data: paperValidationStatus } = usePaperValidationStatus();
   const { data: paperValidationReport } = usePaperValidationReport({
@@ -281,7 +304,7 @@ export default function SuperIntelligencePage() {
             Super Intelligence
           </h1>
           <p style={{ fontSize: "11px", color: C.outline }}>
-            Ensemble ML + Kelly Criterion + Regime-Adaptive + Production Gate
+            V3 Adaptive Ensemble + Regime Switching + Tier Classification + Anti-Fragility + Claude Veto
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -500,6 +523,98 @@ export default function SuperIntelligencePage() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── V3 Adaptive Intelligence Panel ── */}
+      {v3Status && (
+        <div className="rounded p-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <MicroLabel>V3 Adaptive Intelligence</MicroLabel>
+              <span style={{
+                fontSize: "9px", fontFamily: "JetBrains Mono, monospace",
+                backgroundColor: "rgba(167,139,250,0.12)", color: C.purple,
+                border: `1px solid rgba(167,139,250,0.25)`,
+                padding: "2px 6px", borderRadius: "4px",
+              }}>
+                {v3Status.version ?? "v3.0"}
+              </span>
+            </div>
+            <div style={{ fontSize: "9px", color: C.outline, fontFamily: "JetBrains Mono, monospace" }}>
+              {v3Status.v2_symbols?.length ?? 0} symbols tracked
+            </div>
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
+            <div>
+              <div style={{ fontSize: "8px", color: C.outline, fontFamily: "Space Grotesk", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: "8px" }}>
+                Correlation Pairs
+              </div>
+              <div style={{ fontSize: "14px", fontWeight: 600, color: C.secondary, fontFamily: "JetBrains Mono, monospace" }}>
+                {v3Status.correlation_pairs}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: "8px", color: C.outline, fontFamily: "Space Grotesk", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: "8px" }}>
+                Adverse Pool
+              </div>
+              <div style={{ fontSize: "14px", fontWeight: 600, color: v3Status.adverse_pool_size > 50 ? C.gold : C.primary, fontFamily: "JetBrains Mono, monospace" }}>
+                {v3Status.adverse_pool_size}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: "8px", color: C.outline, fontFamily: "Space Grotesk", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: "8px" }}>
+                Temporal Symbols
+              </div>
+              <div style={{ fontSize: "14px", fontWeight: 600, color: C.purple, fontFamily: "JetBrains Mono, monospace" }}>
+                {v3Status.temporal_symbols}
+              </div>
+            </div>
+            <div className="col-span-2">
+              <div style={{ fontSize: "8px", color: C.outline, fontFamily: "Space Grotesk", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: "8px" }}>
+                Intelligence Layers
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {(v3Status.layers ?? []).map((layer, i) => (
+                  <span key={i} style={{
+                    fontSize: "8px", fontFamily: "JetBrains Mono, monospace",
+                    backgroundColor: i === 3 ? "rgba(156,255,147,0.1)" : "rgba(102,157,255,0.08)",
+                    color: i === 3 ? C.primary : C.secondary,
+                    border: `1px solid ${i === 3 ? "rgba(156,255,147,0.2)" : "rgba(102,157,255,0.15)"}`,
+                    padding: "2px 6px", borderRadius: "3px",
+                  }}>
+                    {layer}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+          {/* V3 Symbol Detail Table */}
+          {v3Status.v2_symbols && v3Status.v2_symbols.length > 0 && (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", fontSize: "10px", fontFamily: "JetBrains Mono, monospace", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                    {["Symbol", "Outcomes", "Accuracy", "Brier"].map(h => (
+                      <th key={h} style={{ padding: "6px 8px", textAlign: "left", fontSize: "8px", color: C.outline, fontFamily: "Space Grotesk", letterSpacing: "0.15em", textTransform: "uppercase" }}>
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {v3Status.v2_symbols.slice(0, 10).map((sym, i) => (
+                    <tr key={i} style={{ borderBottom: `1px solid rgba(72,72,73,0.15)` }}>
+                      <td style={{ padding: "5px 8px", color: "#fff", fontWeight: 600 }}>{sym.symbol}</td>
+                      <td style={{ padding: "5px 8px", color: C.muted }}>{sym.outcomes}</td>
+                      <td style={{ padding: "5px 8px", color: parseFloat(sym.accuracy) >= 60 ? C.primary : parseFloat(sym.accuracy) >= 50 ? C.gold : C.tertiary }}>{sym.accuracy}</td>
+                      <td style={{ padding: "5px 8px", color: parseFloat(sym.brier) <= 0.25 ? C.primary : C.muted }}>{sym.brier}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
