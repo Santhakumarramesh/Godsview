@@ -46,6 +46,10 @@ const CommandCenterPage  = React.lazy(() => import("@/pages/command-center"));
 const MarketStructurePage = React.lazy(() => import("@/pages/market-structure"));
 const DailyReviewPage     = React.lazy(() => import("@/pages/daily-review"));
 const SideBySidePage      = React.lazy(() => import("@/pages/side-by-side"));
+const DecisionLoopPage    = React.lazy(() => import("@/pages/decision-loop"));
+const TrustSurfacePage    = React.lazy(() => import("@/pages/trust-surface"));
+const EvalHarnessPage     = React.lazy(() => import("@/pages/eval-harness"));
+const CalibrationPage     = React.lazy(() => import("@/pages/calibration"));
 const NotFound           = React.lazy(() => import("@/pages/not-found"));
 
 // ── QueryClient ─────────────────────────────────────────────────────────────
@@ -180,6 +184,10 @@ function Router() {
         <RoutedPage path="/market-structure" component={MarketStructurePage}   scope="page:market-structure" />
         <RoutedPage path="/daily-review"     component={DailyReviewPage}       scope="page:daily-review" />
         <RoutedPage path="/side-by-side"     component={SideBySidePage}        scope="page:side-by-side" />
+        <RoutedPage path="/decision-loop"    component={DecisionLoopPage}      scope="page:decision-loop" />
+        <RoutedPage path="/trust-surface"    component={TrustSurfacePage}      scope="page:trust-surface" />
+        <RoutedPage path="/eval-harness"     component={EvalHarnessPage}       scope="page:eval-harness" />
+        <RoutedPage path="/calibration"      component={CalibrationPage}       scope="page:calibration" />
 
         <Route>
           <AppErrorBoundary scope="page:not-found">
