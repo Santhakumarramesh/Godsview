@@ -11,6 +11,8 @@ import {
 } from "../lib/super_intelligence";
 import { evaluateForProduction, getProductionGateStats } from "../lib/production_gate";
 import { addSSEClient, getSSEClientCount } from "../lib/signal_stream";
+import { superIntelligenceV3 } from "../lib/super_intelligence_v3";
+import { superIntelligenceV2, buildSIFeatures } from "../lib/super_intelligence_v2";
 
 const router: IRouter = Router();
 
@@ -198,6 +200,46 @@ router.get("/super-intelligence/strategy-leaderboard", async (_req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: "internal_error", message: "Failed to get strategy leaderboard" });
+  }
+});
+
+// ── GET /super-intelligence/v3/status ──────────────────────────────────────
+router.get("/super-intelligence/v3/status", async (_req, res) => {
+  try {
+    const v3Status = superIntelligenceV3.getStatus();
+    res.json({
+      version: v3Status.version,
+      v2_symbols: v3Status.v2Status.map((s) => ({
+        symbol: s.symbol, version: s.version, outcomes: s.outcomes,
+        accuracy: (s.accuracy * 100).toFixed(1) + "%", brier: s.brier.toFixed(3), weights: s.weights,
+      })),
+      correlation_pairs: v3Status.correlationPairs,
+      adverse_pool_size: v3Status.adversePoolSize,
+      temporal_symbols: v3Status.temporalSymbols,
+      layers: ["Adaptive Regime Switching", "Temporal Attention", "Cross-Asset Correlation", "Signal Tier Classification", "Anti-Fragility Scoring"],
+    });
+  } catch (err) {
+    res.status(500).json({ error: "internal_error", message: "Failed to get V3 status" });
+  }
+});
+
+// ── POST /super-intelligence/v3/predict ───────────────────────────────────
+router.post("/super-intelligence/v3/predict", async (req, res): Promise<void> => {
+  try {
+    const body = req.body;
+    if (!body.symbol || !body.direction) {
+      res.status(400).json({ error: "validation_error", message: "symbol and direction are required" });
+      return;
+    }
+    const features = buildSIFeatures(body.symbol, body.direction,
+      { smc: body.smc ?? {}, regime: body.regime_data ?? {}, mtfScores: body.mtf ?? {}, trend: body.trend ?? "neutral", regimeLabel: body.regime ?? "unknown", structureScore: body.structure_score ?? 0.5, regimeScore: body.regime_score ?? 0.5 },
+      { macroBias: body.macro ?? {}, sentiment: body.sentiment ?? {}, volatility: body.volatility ?? {}, macroScore: body.macro_score ?? 0.5, sentimentScore: body.sentiment_score ?? 0.5, stressScore: body.stress_score ?? 0.5 },
+      { setupMemory: body.memory ?? {}, marketDna: body.dna ?? {}, winRate: body.historical_wr ?? 0.5, profitFactor: body.profit_factor ?? 1.5, decayDetected: body.decay_detected ?? false, similarSetups: body.similar_setups ?? 0 },
+    );
+    const prediction = superIntelligenceV3.predict(features, body.correlated_symbols);
+    res.json(prediction);
+  } catch (err) {
+    res.status(500).json({ error: "internal_error", message: "V3 prediction failed" });
   }
 });
 

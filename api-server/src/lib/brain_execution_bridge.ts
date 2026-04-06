@@ -27,6 +27,7 @@ import { logger } from "./logger.js";
 import { autonomousBrain } from "./autonomous_brain.js";
 import { strategyRegistry } from "./strategy_evolution.js";
 import { superIntelligenceV2 } from "./super_intelligence_v2.js";
+import { superIntelligenceV3, type V3Prediction } from "./super_intelligence_v3.js";
 import { brainEventBus } from "./brain_event_bus.js";
 import { saveTradeOutcome, saveChartSnapshot } from "./brain_persistence.js";
 import { brainPerformance } from "./brain_performance.js";
@@ -92,6 +93,8 @@ export interface OpenBrainPosition {
   currentR?: number;
   /** SI prediction at entry */
   winProbAtEntry?: number;
+  /** V3 prediction snapshot at entry */
+  v3Prediction?: V3Prediction;
 }
 
 // ── Configuration ─────────────────────────────────────────────────────────────
@@ -228,6 +231,29 @@ class BrainExecutionBridge {
       }
     }
 
+    // ── Gate 9: V3 Super Intelligence tier check ──────────────────────────────
+    let v3Result: V3Prediction | undefined;
+    try {
+      const { buildSIFeatures } = await import("./super_intelligence_v2.js");
+      const siFeatures = buildSIFeatures(
+        signal.symbol,
+        signal.direction.includes("LONG") ? "long" : "short",
+        { smc: signal.layerContext?.smc ?? {}, regime: signal.layerContext?.regime ?? {}, mtfScores: signal.layerContext?.mtfScores ?? {}, trend: String(signal.layerContext?.trend ?? "neutral"), regimeLabel: signal.regime, structureScore: signal.confirmationScore, regimeScore: 0.5 },
+        { macroBias: signal.layerContext?.macroBias ?? {}, sentiment: signal.layerContext?.sentiment ?? {}, volatility: signal.layerContext?.volatility ?? {}, macroScore: 0.5, sentimentScore: 0.5, stressScore: 0.5 },
+        { setupMemory: signal.layerContext?.setupMemory ?? {}, marketDna: signal.layerContext?.marketDna ?? {}, winRate: signal.winProbability ?? 0.5, profitFactor: 1.5, decayDetected: false, similarSetups: 10 },
+      );
+      v3Result = superIntelligenceV3.predict(siFeatures);
+      if (v3Result.tier.tier === "WEAK") {
+        return this._reject(signal, "V3_WEAK_TIER", `V3 Super Intelligence classified as WEAK: ${v3Result.tier.reason}`);
+      }
+      if (v3Result.tier.tier === "MARGINAL" && brainState.mode === "DEFENSIVE") {
+        return this._reject(signal, "V3_MARGINAL_DEFENSIVE", `MARGINAL tier + DEFENSIVE mode — skipping: ${v3Result.tier.reason}`);
+      }
+      logger.info({ symbol: signal.symbol, tier: v3Result.tier.tier, adjustedProb: v3Result.v3Adjustments.adjustedProbability.toFixed(3), edgeScore: v3Result.edgeScore.toFixed(3) }, "[BrainBridge] V3 SI gate passed");
+    } catch (err) {
+      logger.warn({ err, symbol: signal.symbol }, "[BrainBridge] V3 SI check failed — continuing with V2");
+    }
+
     // ── Gates passed — compute position sizing ────────────────────────────────
     this.totalApproved++;
 
@@ -246,8 +272,10 @@ class BrainExecutionBridge {
 
     const sizingMeta = regimeSizingInfo(signal.regime, regimeConfidence);
     logger.debug({ symbol: signal.symbol, baseKelly, regimeAdaptedKelly, kellyFraction, ...sizingMeta }, "[BrainBridge] Regime-adaptive sizing applied");
+    // Apply V3 tier size multiplier (ELITE=1.5x, STRONG=1.0x, MARGINAL=0.5x)
+    const v3SizeMultiplier = v3Result?.tier.sizeMultiplier ?? 1.0;
     const maxQtyByKelly = Math.floor(ACCOUNT_EQUITY * kellyFraction / signal.entryPrice);
-    const finalQty = Math.max(1, Math.min(rawQty, maxQtyByKelly));
+    const finalQty = Math.max(1, Math.min(rawQty, Math.floor(maxQtyByKelly * v3SizeMultiplier)));
 
     // ── Build execution request ───────────────────────────────────────────────
     const side = signal.direction.includes("LONG") ? "buy" : "sell";
@@ -305,7 +333,8 @@ class BrainExecutionBridge {
           confirmationId: signal.confirmationId,
           strategyId: signal.strategyId,
           orderId: execResult.order_id,
-          winProbAtEntry: signal.winProbability,
+          winProbAtEntry: v3Result?.v3Adjustments.adjustedProbability ?? signal.winProbability,
+          v3Prediction: v3Result,
         });
 
         // Register cost basis with fill reconciler (Phase 11A)
@@ -432,18 +461,25 @@ class BrainExecutionBridge {
       brainAlerts.slHit(symbol, pnlR).catch(() => {});
     }
 
-    // Feed super intelligence with outcome
-    superIntelligenceV2.recordOutcome({
+    // Feed V3 super intelligence with outcome (also feeds V2 internally)
+    const adverseConditions: string[] = [];
+    if (pos.v3Prediction) {
+      if (pos.v3Prediction.v3Adjustments.antifragility < 0.4) adverseConditions.push("low_antifragility");
+      if (pos.v3Prediction.v3Adjustments.correlationBoost < -0.02) adverseConditions.push("cross_asset_contradiction");
+      if (pos.v3Prediction.v3Adjustments.regimeBoost < -0.03) adverseConditions.push("adverse_regime");
+    }
+    superIntelligenceV3.recordOutcome({
       id: pos.confirmationId,
       symbol,
       strategyId: pos.strategyId,
       direction: pos.direction,
-      regime: "unknown", // Will be enriched by regime engine in production
+      regime: pos.v3Prediction?.regime ?? "unknown",
       features: {},
       predictedWinProb: pos.winProbAtEntry ?? 0.5,
       actualWon: won,
       achievedR: pnlR,
       timestamp: exitTime.toISOString(),
+      adverseConditions,
     });
 
     // Feed autonomous brain for streak tracking + defensive mode
