@@ -1,6 +1,8 @@
 import { db, siDecisionsTable, tradesTable } from "@workspace/db";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { getStrategyAllocationForSignal } from "./strategy_allocator";
+import { persistWrite, persistRead, persistAppend } from "./persistent_store";
+import { logger } from "./logger";
 
 export interface PortfolioAllocatorPolicy {
   account_equity: number;
@@ -96,6 +98,90 @@ function normalizeSymbol(value: unknown): string {
     .trim()
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, "");
+}
+
+/**
+ * Validate allocation constraints
+ */
+export function validateAllocationConstraints(policy: PortfolioAllocatorPolicy): string[] {
+  const errors: string[] = [];
+
+  if (policy.max_total_risk_pct < 0 || policy.max_total_risk_pct > 1) {
+    errors.push(`max_total_risk_pct must be in [0, 1], got ${policy.max_total_risk_pct}`);
+  }
+  if (policy.max_symbol_exposure_pct < 0 || policy.max_symbol_exposure_pct > 1) {
+    errors.push(`max_symbol_exposure_pct must be in [0, 1], got ${policy.max_symbol_exposure_pct}`);
+  }
+  if (policy.min_risk_pct_per_trade < 0 || policy.min_risk_pct_per_trade > 1) {
+    errors.push(`min_risk_pct_per_trade must be in [0, 1], got ${policy.min_risk_pct_per_trade}`);
+  }
+  if (policy.max_risk_pct_per_trade < 0 || policy.max_risk_pct_per_trade > 1) {
+    errors.push(`max_risk_pct_per_trade must be in [0, 1], got ${policy.max_risk_pct_per_trade}`);
+  }
+  if (policy.min_risk_pct_per_trade > policy.max_risk_pct_per_trade) {
+    errors.push("min_risk_pct_per_trade must be <= max_risk_pct_per_trade");
+  }
+  if (policy.max_positions <= 0) {
+    errors.push(`max_positions must be positive, got ${policy.max_positions}`);
+  }
+  if (policy.account_equity <= 0) {
+    errors.push(`account_equity must be positive, got ${policy.account_equity}`);
+  }
+
+  return errors;
+}
+
+/**
+ * Correlation guard — warn if highly correlated positions exceed threshold
+ */
+export function correlationGuard(allocations: PortfolioAllocationEntry[]): {
+  passed: boolean;
+  warnings: string[];
+} {
+  const warnings: string[] = [];
+
+  // Group by potential correlations (simplified: check sector-like groupings)
+  // In a real system, you'd calculate actual correlation matrix
+  const highCorrelationPairs: { [key: string]: string[] } = {
+    tech: ["AAPL", "MSFT", "GOOGL", "META", "NVDA", "TSLA"],
+    banking: ["JPM", "BAC", "WFC", "GS", "MS"],
+    energy: ["XOM", "CVX", "COP", "MPC"],
+  };
+
+  // Check for correlated positions with combined weight > 40%
+  for (const [, symbols] of Object.entries(highCorrelationPairs)) {
+    const matching = allocations.filter((a) => symbols.includes(a.symbol));
+    if (matching.length >= 2) {
+      const combinedWeight = matching.reduce((sum, a) => sum + (a.risk_pct * 100), 0);
+      if (combinedWeight > 40) {
+        warnings.push(
+          `Correlated cluster (${matching.map((a) => a.symbol).join(", ")}) has combined weight ${combinedWeight.toFixed(1)}% > 40%`,
+        );
+      }
+    }
+  }
+
+  // Check individual correlations > 0.8 (simplified placeholder)
+  for (let i = 0; i < allocations.length; i++) {
+    for (let j = i + 1; j < allocations.length; j++) {
+      const a = allocations[i];
+      const b = allocations[j];
+      // Simplified check: same regime or strategy are likely correlated
+      if (a.regime === b.regime && a.strategy_id === b.strategy_id) {
+        const combined = (a.risk_pct + b.risk_pct) * 100;
+        if (combined > 40) {
+          warnings.push(
+            `${a.symbol} and ${b.symbol} share regime/strategy with combined weight ${combined.toFixed(1)}% > 40%`,
+          );
+        }
+      }
+    }
+  }
+
+  return {
+    passed: warnings.length === 0,
+    warnings,
+  };
 }
 
 function strategyId(setupType: string, regime: string, symbol: string): string {
@@ -500,6 +586,12 @@ export async function computePortfolioAllocatorSnapshot(reason = "manual"): Prom
   const policy = policyFromEnv();
   const [openTrades, pendingDecisions] = await Promise.all([loadOpenTrades(), loadPendingDecisions()]);
 
+  // Validate allocation constraints
+  const validationErrors = validateAllocationConstraints(policy);
+  if (validationErrors.length > 0) {
+    logger.warn({ errors: validationErrors }, "Portfolio allocator policy validation failed");
+  }
+
   const exposure = buildExposure(policy, openTrades);
   const opportunities = buildOpportunities(pendingDecisions, policy);
   const allocation = allocate(opportunities, exposure, policy);
@@ -515,6 +607,19 @@ export async function computePortfolioAllocatorSnapshot(reason = "manual"): Prom
     available_risk_pct: Number(allocation.availableRiskPct.toFixed(4)),
     available_risk_usd: Number((allocation.availableRiskPct * policy.account_equity).toFixed(2)),
   };
+
+  // Persist allocation snapshot
+  try {
+    persistAppend("allocation_snapshots", snapshot, 1000);
+  } catch (err) {
+    logger.warn({ err }, "Failed to persist allocation snapshot");
+  }
+
+  // Check correlation guard
+  const correlationCheck = correlationGuard(allocation.allocations);
+  if (!correlationCheck.passed) {
+    logger.warn({ warnings: correlationCheck.warnings }, "Correlation guard warnings");
+  }
 
   _latestSnapshot = snapshot;
   return snapshot;

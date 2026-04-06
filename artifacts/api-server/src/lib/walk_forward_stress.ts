@@ -7,6 +7,7 @@
  */
 
 import { logger } from "./logger.js";
+import { persistWrite, persistRead } from "./persistent_store.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -92,6 +93,47 @@ let totalPassed = 0;
 const recentValidations: ValidationGateResult[] = [];
 const MAX_RECENT = 20;
 
+// ─── Validation ───────────────────────────────────────────────────────────────
+
+export interface WalkForwardParamValidationError {
+  field: string;
+  message: string;
+}
+
+export interface ValidateWalkForwardParamsResult {
+  valid: boolean;
+  errors: WalkForwardParamValidationError[];
+}
+
+/**
+ * Validate walk-forward parameters before running
+ * - minWindows >= 2 (at least 2 windows for meaningful analysis)
+ * - trainRatio between 0.5 and 0.9 (50-90% training, 10-50% testing)
+ */
+export function validateWalkForwardParams(params: {
+  minWindows?: number;
+  trainRatio?: number;
+  windows?: number;
+}): ValidateWalkForwardParamsResult {
+  const errors: WalkForwardParamValidationError[] = [];
+  const minWindows = params.minWindows ?? 2;
+  const trainRatio = params.trainRatio ?? 0.67;
+
+  if (minWindows < 2) {
+    errors.push({ field: "minWindows", message: "Must be >= 2 for statistical validity" });
+  }
+
+  if (trainRatio < 0.5 || trainRatio > 0.9) {
+    errors.push({ field: "trainRatio", message: "Must be between 0.5 and 0.9 (50-90%)" });
+  }
+
+  if (params.windows !== undefined && params.windows < minWindows) {
+    errors.push({ field: "windows", message: `Must be >= ${minWindows}` });
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function clamp(v: number, lo: number, hi: number) { return Math.min(hi, Math.max(lo, v)); }
@@ -110,9 +152,18 @@ export function runWalkForward(params: {
   baseWinRate?: number;
   windows?: number;
 }): WalkForwardResult {
+  // Validate parameters
+  const validation = validateWalkForwardParams({ windows: params.windows });
+  if (!validation.valid) {
+    const errorMsg = validation.errors.map((e) => `${e.field}: ${e.message}`).join("; ");
+    logger.warn({ strategyId: params.strategyId, errors: validation.errors }, "Walk-forward param validation failed");
+    throw new Error(`Invalid walk-forward parameters: ${errorMsg}`);
+  }
+
   const { strategyId, baseSharpe = 1.5, baseWinRate = 0.58, windows: numWindows = 6 } = params;
   const now = new Date();
   const windowResults: WalkForwardWindow[] = [];
+  const TIMEOUT_MS = 30000; // 30-second timeout per window
 
   for (let i = 0; i < numWindows; i++) {
     const isStart = new Date(now.getTime() - (numWindows - i) * 90 * 86400000);
@@ -156,9 +207,7 @@ export function runWalkForward(params: {
   const verdict = passRatio >= 0.7 ? "PASS" : passRatio >= 0.5 ? "MARGINAL" : "FAIL";
 
   totalWalkForwards++;
-  logger.info({ strategyId, verdict, passedWindows, totalWindows: numWindows, avgOosSharpe: avgOosSharpe.toFixed(3) }, "Walk-forward complete");
-
-  return {
+  const result: WalkForwardResult = {
     strategyId, totalWindows: numWindows, passedWindows,
     avgDegradation: parseFloat(avgDegradation.toFixed(1)),
     avgOosSharpe: parseFloat(avgOosSharpe.toFixed(3)),
@@ -166,6 +215,16 @@ export function runWalkForward(params: {
     windows: windowResults, verdict,
     runAt: now.toISOString(),
   };
+
+  // Persist result to storage
+  try {
+    persistWrite(`walk_forward_${strategyId}`, result);
+  } catch (error) {
+    logger.warn({ strategyId, error }, "Failed to persist walk-forward result");
+  }
+
+  logger.info({ strategyId, verdict, passedWindows, totalWindows: numWindows, avgOosSharpe: avgOosSharpe.toFixed(3) }, "Walk-forward complete");
+  return result;
 }
 
 // ─── Stress Testing ───────────────────────────────────────────────────────────
@@ -267,6 +326,26 @@ export function runValidationGate(params: {
 
   logger.info({ strategyId, verdict: overallVerdict }, "Validation gate complete");
   return result;
+}
+
+// ─── Historical Retrieval ─────────────────────────────────────────────────────
+
+/**
+ * Retrieve historical walk-forward results for a strategy from persistent store
+ */
+export function getHistoricalWalkForward(strategyId: string): WalkForwardResult | null {
+  try {
+    const key = `walk_forward_${strategyId}`;
+    const result = persistRead<WalkForwardResult>(key, null as unknown as WalkForwardResult);
+    if (result && result.strategyId === strategyId) {
+      logger.debug({ strategyId }, "Retrieved historical walk-forward result");
+      return result;
+    }
+    return null;
+  } catch (error) {
+    logger.warn({ strategyId, error }, "Failed to retrieve historical walk-forward result");
+    return null;
+  }
 }
 
 // ─── Snapshot & Reset ─────────────────────────────────────────────────────────

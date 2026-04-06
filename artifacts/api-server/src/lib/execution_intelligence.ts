@@ -16,6 +16,7 @@
  */
 
 import { logger } from "./logger.js";
+import { persistWrite, persistRead, persistAppend } from "./persistent_store";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -121,6 +122,37 @@ const MAX_RECENT = 50;
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function clamp(v: number, lo: number, hi: number) { return Math.min(hi, Math.max(lo, v)); }
+
+// ─── Slippage Validation ──────────────────────────────────────────────────────
+
+export function validateSlippageInput(params: {
+  symbol?: string;
+  spread?: number;
+  price?: number;
+  volume?: number;
+  atr?: number;
+  orderSizeUsd?: number;
+}): string[] {
+  const errors: string[] = [];
+
+  if (params.price !== undefined && (params.price <= 0 || !Number.isFinite(params.price))) {
+    errors.push(`Invalid price: ${params.price}`);
+  }
+  if (params.volume !== undefined && (params.volume < 0 || !Number.isFinite(params.volume))) {
+    errors.push(`Invalid volume: ${params.volume}`);
+  }
+  if (params.spread !== undefined && (params.spread < 0 || !Number.isFinite(params.spread))) {
+    errors.push(`Invalid spread: ${params.spread}`);
+  }
+  if (params.atr !== undefined && (params.atr < 0 || !Number.isFinite(params.atr))) {
+    errors.push(`Invalid ATR: ${params.atr}`);
+  }
+  if (params.orderSizeUsd !== undefined && (params.orderSizeUsd < 0 || !Number.isFinite(params.orderSizeUsd))) {
+    errors.push(`Invalid order size: ${params.orderSizeUsd}`);
+  }
+
+  return errors;
+}
 
 // ─── Slippage Model ───────────────────────────────────────────────────────────
 
@@ -316,6 +348,13 @@ export function createExecutionPlan(params: {
   totalPlansCreated++;
   lastPlanAt = plan.planCreatedAt;
 
+  // Persist allocation snapshot
+  try {
+    persistAppend("execution_plans", plan, 1000);
+  } catch (err) {
+    logger.warn({ err, symbol }, "Failed to persist execution plan");
+  }
+
   logger.info({
     symbol, direction, orderType: plan.orderType,
     slippageBps: slippageEstimate.estimatedBps.toFixed(1),
@@ -369,6 +408,13 @@ export function reportExecutionQuality(params: {
   totalSlippageBpsSum += entrySlippageBps + exitSlippageBps;
   totalQualityScoreSum += qualityScore;
 
+  // Persist execution quality report
+  try {
+    persistAppend("execution_quality", report, 2000);
+  } catch (err) {
+    logger.warn({ err, tradeId }, "Failed to persist execution quality report");
+  }
+
   logger.info({
     tradeId, symbol, grade, qualityScore,
     entrySlippage: entrySlippageBps.toFixed(1),
@@ -376,6 +422,59 @@ export function reportExecutionQuality(params: {
   }, "Execution quality report");
 
   return report;
+}
+
+/**
+ * Get slippage statistics over a time period
+ */
+export function getSlippageStats(symbol: string, days: number = 30): {
+  symbol: string;
+  avgSlippageBps: number;
+  minSlippageBps: number;
+  maxSlippageBps: number;
+  sampleCount: number;
+  daysAnalyzed: number;
+} {
+  try {
+    const reports = persistRead<ExecutionQualityReport[]>("execution_quality", []);
+    const cutoffTime = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const filtered = reports.filter(
+      (r) => r.symbol === symbol && new Date(r.reportedAt) >= cutoffTime,
+    );
+
+    if (filtered.length === 0) {
+      return {
+        symbol,
+        avgSlippageBps: 0,
+        minSlippageBps: 0,
+        maxSlippageBps: 0,
+        sampleCount: 0,
+        daysAnalyzed: days,
+      };
+    }
+
+    const slippages = filtered.map((r) => r.entrySlippageBps + r.exitSlippageBps);
+    const avg = slippages.reduce((s, v) => s + v, 0) / slippages.length;
+
+    return {
+      symbol,
+      avgSlippageBps: Math.round(avg * 100) / 100,
+      minSlippageBps: Math.min(...slippages),
+      maxSlippageBps: Math.max(...slippages),
+      sampleCount: filtered.length,
+      daysAnalyzed: days,
+    };
+  } catch (err) {
+    logger.warn({ err, symbol }, "Failed to compute slippage stats");
+    return {
+      symbol,
+      avgSlippageBps: 0,
+      minSlippageBps: 0,
+      maxSlippageBps: 0,
+      sampleCount: 0,
+      daysAnalyzed: days,
+    };
+  }
 }
 
 // ─── Snapshot ─────────────────────────────────────────────────────────────────

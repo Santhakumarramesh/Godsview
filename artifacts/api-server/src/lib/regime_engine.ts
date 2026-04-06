@@ -7,9 +7,13 @@
  *   - FFT-based dominant cycle detection (spectral analysis)
  *   - Cycle stability tracking
  *   - Merged regime + spectral state with confidence
+ *   - Regime transition logging and anomaly detection
  *
  * All functions are pure — no I/O, no side effects.
  */
+
+import { persistAppend, persistRead } from "./persistent_store.js";
+import { logger } from "./logger.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -53,6 +57,24 @@ export interface MergedRegimeState {
   /** Overall regime confidence 0-1 */
   confidence: number;
   computedAt: string;
+}
+
+export interface RegimeTransitionLog {
+  id: string;
+  symbol: string;
+  from: BasicRegime;
+  to: BasicRegime;
+  confidence: number;
+  timestamp: string;
+  durationSeconds?: number;
+}
+
+export interface RegimeAnomaly {
+  symbol: string;
+  changesInLastHour: number;
+  threshold: number;
+  anomalous: boolean;
+  detectedAt: string;
 }
 
 // ── Basic Regime Detection (Enhanced) ──────────────────────────────────────────
@@ -385,6 +407,76 @@ export function computeFullRegime(
   const basic = computeBasicRegime(bars);
   const spectral = computeSpectralRegime(bars);
   return mergeRegimeState(basic, spectral);
+}
+
+// ── Transition Logging & Anomaly Detection ─────────────────────────────────────
+
+const _lastRegimes = new Map<string, { regime: BasicRegime; timestamp: number }>();
+
+export function recordRegimeTransition(
+  symbol: string,
+  from: BasicRegime,
+  to: BasicRegime,
+  confidence: number,
+): RegimeTransitionLog {
+  const now = new Date();
+  const transition: RegimeTransitionLog = {
+    id: `transition_${symbol}_${Date.now()}`,
+    symbol,
+    from,
+    to,
+    confidence,
+    timestamp: now.toISOString(),
+    durationSeconds: _lastRegimes.has(symbol)
+      ? Math.round((now.getTime() - (_lastRegimes.get(symbol)?.timestamp ?? 0)) / 1000)
+      : undefined,
+  };
+
+  _lastRegimes.set(symbol, { regime: to, timestamp: now.getTime() });
+
+  try {
+    persistAppend("regime_transitions", transition, 2000);
+  } catch (err) {
+    logger.warn({ err, symbol }, "Failed to persist regime transition");
+  }
+
+  return transition;
+}
+
+export function getRegimeHistory(symbol: string, limit = 50): RegimeTransitionLog[] {
+  try {
+    const all = persistRead<RegimeTransitionLog[]>("regime_transitions", []);
+    return all.filter((t) => t.symbol === symbol).slice(-limit);
+  } catch (err) {
+    logger.warn({ err, symbol }, "Failed to read regime history");
+    return [];
+  }
+}
+
+export function detectRegimeAnomaly(symbol: string, threshold = 5): RegimeAnomaly {
+  try {
+    const history = getRegimeHistory(symbol, 100);
+    const oneHourAgo = Date.now() - 60 * 60 * 1000;
+    const changesInLastHour = history.filter((t) => new Date(t.timestamp).getTime() > oneHourAgo).length;
+    const anomalous = changesInLastHour > threshold;
+
+    return {
+      symbol,
+      changesInLastHour,
+      threshold,
+      anomalous,
+      detectedAt: new Date().toISOString(),
+    };
+  } catch (err) {
+    logger.warn({ err, symbol }, "Failed to detect regime anomaly");
+    return {
+      symbol,
+      changesInLastHour: 0,
+      threshold,
+      anomalous: false,
+      detectedAt: new Date().toISOString(),
+    };
+  }
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────

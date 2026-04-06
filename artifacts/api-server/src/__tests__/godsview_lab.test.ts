@@ -25,7 +25,7 @@ describe("GodsView Lab", () => {
   });
 
   it("compiles parsed rules into expressions", () => {
-    const p = parsePrompt("Buy TSLA when RSI < 30, sell when RSI > 70");
+    const p = parsePrompt("Buy TSLA when RSI < 30, sell when RSI > 70, stop at 2 ATR");
     const compiled = compileRules(p);
     expect(compiled.length).toBeGreaterThanOrEqual(1);
     expect(compiled[0].expression).toBeTruthy();
@@ -33,7 +33,7 @@ describe("GodsView Lab", () => {
   });
 
   it("full pipeline: parse → compile → register", () => {
-    const result = labCreateStrategy("Buy NVDA when RSI(14) < 25 and price above 200 EMA, stop at 1.5 ATR, risk 2%", "sakthi");
+    const result = labCreateStrategy("Buy NVDA when RSI(14) < 25, sell when RSI > 70, stop loss 2 ATR, risk 2%", "sakthi");
     expect(result.parsed.symbols).toContain("NVDA");
     expect(result.compiled.length).toBeGreaterThan(0);
     expect(result.registered.state).toBe("draft");
@@ -52,15 +52,15 @@ describe("GodsView Lab", () => {
   });
 
   it("tracks snapshot telemetry", () => {
-    labCreateStrategy("Buy AAPL when RSI < 30");
-    labCreateStrategy("Buy MSFT when price above 200 SMA");
+    labCreateStrategy("Buy AAPL when RSI < 30, sell when RSI > 70, stop at 2 ATR");
+    labCreateStrategy("Buy MSFT when price above 200 SMA, sell when price below 50 SMA, stop at 3%");
     const snap = getLabSnapshot();
     expect(snap.totalPromptsParsed).toBe(2);
     expect(snap.totalStrategiesRegistered).toBe(2);
   });
 
   it("resets cleanly", () => {
-    labCreateStrategy("Buy X when RSI < 30");
+    labCreateStrategy("Buy X when RSI < 30, sell when RSI > 70, stop at 2 ATR");
     resetLab();
     const snap = getLabSnapshot();
     expect(snap.totalPromptsParsed).toBe(0);

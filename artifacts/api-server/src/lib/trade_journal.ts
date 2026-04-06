@@ -3,6 +3,9 @@
  * Records every trade with full context, enables replay & analytics.
  */
 
+import { persistWrite, persistRead, persistAppend } from "./persistent_store";
+import { logger } from "./logger";
+
 export interface JournalEntry {
   id: string;
   tradeId: string;
@@ -112,6 +115,14 @@ export function recordEntry(params: {
     status: "open",
   };
   journal.push(entry);
+
+  // Persist journal entry
+  try {
+    persistAppend("journal_entries", entry, 5000);
+  } catch (err) {
+    logger.warn({ err, tradeId: params.tradeId }, "Failed to persist journal entry");
+  }
+
   return entry;
 }
 
@@ -269,6 +280,81 @@ export function getTradeJournalSnapshot(): TradeJournalSnapshot {
     winRate: closed.length ? wins.length / closed.length : 0,
     totalPnl: closed.reduce((s, e) => s + (e.pnl ?? 0), 0),
     replaysGenerated: replayCount,
+  };
+}
+
+/**
+ * Journal health check
+ */
+export function journalHealthCheck(): {
+  total_entries: number;
+  entries_today: number;
+  avg_pnl: number;
+  open_positions: number;
+} {
+  const today = new Date().toDateString();
+  const todayEntries = journal.filter((e) => new Date(e.entryTime).toDateString() === today);
+  const closed = journal.filter((e) => e.status === "closed");
+  const avgPnl = closed.length > 0
+    ? closed.reduce((s, e) => s + (e.pnl ?? 0), 0) / closed.length
+    : 0;
+
+  return {
+    total_entries: journal.length,
+    entries_today: todayEntries.length,
+    avg_pnl: Math.round(avgPnl * 100) / 100,
+    open_positions: journal.filter((e) => e.status === "open").length,
+  };
+}
+
+/**
+ * Get journal stats by period (new aggregation function)
+ */
+export function getJournalStatsByPeriod(period: "day" | "week" | "month"): {
+  period: string;
+  trades: number;
+  win_rate: number;
+  total_pnl: number;
+  avg_pnl: number;
+  largest_win: number;
+  largest_loss: number;
+} {
+  const now = Date.now();
+  const periodMs = period === "day"
+    ? 24 * 60 * 60 * 1000
+    : period === "week"
+      ? 7 * 24 * 60 * 60 * 1000
+      : 30 * 24 * 60 * 60 * 1000;
+
+  const cutoff = now - periodMs;
+  const filtered = journal.filter(
+    (e) => e.status === "closed" && new Date(e.entryTime).getTime() >= cutoff,
+  );
+
+  if (filtered.length === 0) {
+    return {
+      period,
+      trades: 0,
+      win_rate: 0,
+      total_pnl: 0,
+      avg_pnl: 0,
+      largest_win: 0,
+      largest_loss: 0,
+    };
+  }
+
+  const wins = filtered.filter((e) => (e.pnl ?? 0) > 0);
+  const pnls = filtered.map((e) => e.pnl ?? 0);
+  const totalPnl = pnls.reduce((s, v) => s + v, 0);
+
+  return {
+    period,
+    trades: filtered.length,
+    win_rate: wins.length / filtered.length,
+    total_pnl: Math.round(totalPnl * 100) / 100,
+    avg_pnl: Math.round((totalPnl / filtered.length) * 100) / 100,
+    largest_win: Math.max(...pnls),
+    largest_loss: Math.min(...pnls),
   };
 }
 

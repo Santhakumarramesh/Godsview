@@ -6,9 +6,12 @@
  *   2. Rate limiter: prevents API/order spam
  *   3. Kill switch: emergency global halt
  *   4. Cooldown periods: progressive backoff after breaches
+ *   5. Escalation policy: auto kill-switch on repeated trips
+ *   6. Trip history persistence
  */
 
 import { logger } from "./logger.js";
+import { persistAppend, persistRead } from "./persistent_store.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -57,6 +60,24 @@ export interface CircuitBreakerSnapshot {
   tradingAllowed: boolean;
 }
 
+export interface BreakerTripEvent {
+  id: string;
+  reason: string;
+  timestamp: string;
+  consecutiveLosses: number;
+  dailyPnlPct: number;
+  drawdownPct: number;
+  cooldownUntil: string | null;
+}
+
+export interface CircuitBreakerHealthCheck {
+  state: BreakerState;
+  tripsToday: number;
+  timeSinceLastTrip: number | null;
+  tripsIn24h: number;
+  escalationPolicy: { triggered: boolean; reason: string | null };
+}
+
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 const DEFAULT_CONFIG: CircuitBreakerConfig = {
@@ -95,16 +116,47 @@ let killSwitchReason: string | null = null;
 let killSwitchActivatedAt: string | null = null;
 let killSwitchActivatedBy: string | null = null;
 
+// Escalation policy
+const ESCALATION_THRESHOLD = 3; // 3 trips in 24h triggers auto-kill
+let lastTripTimestamps: number[] = [];
+
 // ─── Circuit Breaker ──────────────────────────────────────────────────────────
 
 function tripBreaker(reason: string): void {
   breakerState = "OPEN";
   tripReason = reason;
-  trippedAt = new Date().toISOString();
-  cooldownUntil = new Date(Date.now() + config.cooldownMinutes * 60000).toISOString();
+  const now = new Date();
+  trippedAt = now.toISOString();
+  cooldownUntil = new Date(now.getTime() + config.cooldownMinutes * 60000).toISOString();
   halfOpenTradesUsed = 0;
   totalTrips++;
-  logger.info({ reason, cooldownUntil }, "Circuit breaker TRIPPED");
+
+  // Persist trip event
+  const tripEvent: BreakerTripEvent = {
+    id: `trip_${Date.now()}`,
+    reason,
+    timestamp: trippedAt,
+    consecutiveLosses,
+    dailyPnlPct,
+    drawdownPct,
+    cooldownUntil,
+  };
+  try {
+    persistAppend("breaker_events", tripEvent, 500);
+  } catch (err) {
+    logger.warn({ err }, "Failed to persist breaker trip event");
+  }
+
+  // Track escalation
+  const now_ms = now.getTime();
+  lastTripTimestamps.push(now_ms);
+  lastTripTimestamps = lastTripTimestamps.filter((t) => now_ms - t < 24 * 60 * 60 * 1000);
+
+  if (lastTripTimestamps.length >= ESCALATION_THRESHOLD) {
+    activateKillSwitch(`Escalation: ${lastTripTimestamps.length} trips in 24h`, "circuit_breaker");
+  }
+
+  logger.info({ reason, cooldownUntil, tripsInDay: lastTripTimestamps.length }, "Circuit breaker TRIPPED");
 }
 
 export function recordTradeResult(pnlPct: number): CircuitBreakerStatus {
@@ -260,4 +312,49 @@ export function manualTrip(reason?: string): CircuitBreakerStatus {
 
 export function getTripHistory() {
   return { totalTrips, lastTrip: trippedAt, lastReason: tripReason };
+}
+
+export function getBreakerTripHistory(days: number): BreakerTripEvent[] {
+  try {
+    const safeDays = Math.max(1, Math.min(90, Math.round(days)));
+    const allTrips = persistRead<BreakerTripEvent[]>("breaker_events", []);
+    const cutoff = new Date(Date.now() - safeDays * 24 * 60 * 60 * 1000);
+    return allTrips.filter((t) => new Date(t.timestamp) >= cutoff);
+  } catch (err) {
+    logger.warn({ err, days }, "Failed to read breaker trip history");
+    return [];
+  }
+}
+
+export function CircuitBreakerHealthCheck(): CircuitBreakerHealthCheck {
+  const now = Date.now();
+  const cutoff24h = now - 24 * 60 * 60 * 1000;
+
+  // Get trips in last 24h
+  try {
+    const allTrips = persistRead<BreakerTripEvent[]>("breaker_events", []);
+    const tripsInDay = allTrips.filter((t) => new Date(t.timestamp).getTime() > cutoff24h).length;
+    const tripsToday = tripsInDay;
+    const timeSinceLastTrip = trippedAt ? now - new Date(trippedAt).getTime() : null;
+
+    return {
+      state: breakerState,
+      tripsToday,
+      timeSinceLastTrip,
+      tripsIn24h: tripsInDay,
+      escalationPolicy: {
+        triggered: killSwitchActive,
+        reason: killSwitchReason,
+      },
+    };
+  } catch (err) {
+    logger.warn({ err }, "Failed to compute health check");
+    return {
+      state: breakerState,
+      tripsToday: 0,
+      timeSinceLastTrip: null,
+      tripsIn24h: 0,
+      escalationPolicy: { triggered: killSwitchActive, reason: killSwitchReason },
+    };
+  }
 }

@@ -10,6 +10,7 @@
  */
 
 import { logger } from "./logger.js";
+import { persistWrite, persistRead, persistAppend } from "./persistent_store";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -54,6 +55,36 @@ let totalSizeSum = 0;
 let totalRiskSum = 0;
 const methodCounts: Record<SizingMethod, number> = { KELLY: 0, FIXED_FRACTIONAL: 0, VOLATILITY_SCALED: 0, REGIME_ADJUSTED: 0 };
 
+// ─── Validation ───────────────────────────────────────────────────────────────
+
+export function validateSizingInput(input: SizingInput): string[] {
+  const errors: string[] = [];
+
+  if (input.equity <= 0 || !Number.isFinite(input.equity)) {
+    errors.push(`Invalid equity: ${input.equity}`);
+  }
+  if (input.riskPct < 0.001 || input.riskPct > 0.1) {
+    errors.push(`Risk pct must be in [0.001, 0.1], got ${input.riskPct}`);
+  }
+  if (input.entryPrice <= 0 || !Number.isFinite(input.entryPrice)) {
+    errors.push(`Invalid entry price: ${input.entryPrice}`);
+  }
+  if (input.stopLoss <= 0 || !Number.isFinite(input.stopLoss)) {
+    errors.push(`Invalid stop loss: ${input.stopLoss}`);
+  }
+  if (input.winRate !== undefined && (input.winRate < 0 || input.winRate > 1)) {
+    errors.push(`Win rate must be in [0, 1], got ${input.winRate}`);
+  }
+  if (input.avgWinLossRatio !== undefined && input.avgWinLossRatio < 0) {
+    errors.push(`Average win/loss ratio must be non-negative, got ${input.avgWinLossRatio}`);
+  }
+  if (input.atr !== undefined && input.atr < 0) {
+    errors.push(`ATR must be non-negative, got ${input.atr}`);
+  }
+
+  return errors;
+}
+
 // ─── Core Sizing ──────────────────────────────────────────────────────────────
 
 function clamp(v: number, lo: number, hi: number) { return Math.min(hi, Math.max(lo, v)); }
@@ -66,6 +97,13 @@ export function calculatePositionSize(input: SizingInput): SizingResult {
     method = "FIXED_FRACTIONAL",
   } = input;
 
+  // Validate input
+  const validationErrors = validateSizingInput(input);
+  if (validationErrors.length > 0) {
+    logger.warn({ errors: validationErrors }, "Position sizing input validation failed");
+    return makeResult(method, 0, 0, 0, riskPct, [], 0);
+  }
+
   const riskPerShare = Math.abs(entryPrice - stopLoss);
   if (riskPerShare === 0) {
     return makeResult(method, 0, 0, 0, riskPct, [], 0);
@@ -75,10 +113,10 @@ export function calculatePositionSize(input: SizingInput): SizingResult {
   const adjustments: { factor: string; multiplier: number }[] = [];
   let kellyFraction: number | undefined;
 
-  // Kelly Criterion
+  // Kelly Criterion with 25% cap (never risk more than quarter-Kelly)
   if (method === "KELLY" || method === "REGIME_ADJUSTED") {
     const kellyRaw = winRate - ((1 - winRate) / avgWinLossRatio);
-    kellyFraction = clamp(kellyRaw, 0, 0.25); // cap at 25%
+    kellyFraction = clamp(kellyRaw, 0, 0.25); // cap at 25% quarter-Kelly
     const halfKelly = kellyFraction * 0.5; // use half-Kelly for safety
     if (method === "KELLY") {
       dollarRisk = equity * halfKelly;
@@ -123,6 +161,23 @@ export function calculatePositionSize(input: SizingInput): SizingResult {
   totalSizeSum += positionSize;
   totalRiskSum += riskPctActual;
   methodCounts[method]++;
+
+  // Persist sizing decision
+  try {
+    persistAppend("sizing_decisions", {
+      method,
+      positionSize,
+      dollarRisk,
+      shares,
+      riskPctActual,
+      kellyFraction,
+      adjustments,
+      confidence,
+      calculatedAt: new Date().toISOString(),
+    } as SizingResult, 2000);
+  } catch (err) {
+    logger.warn({ err }, "Failed to persist sizing decision");
+  }
 
   logger.info({ method, shares, positionSize: positionSize.toFixed(0), riskPctActual: (riskPctActual * 100).toFixed(2) }, "Position sized");
   return makeResult(method, positionSize, dollarRisk, shares, riskPctActual, adjustments, confidence, kellyFraction);

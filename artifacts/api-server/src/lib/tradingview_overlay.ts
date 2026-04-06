@@ -11,6 +11,7 @@
  */
 
 import { logger } from "./logger.js";
+import { persistWrite, persistRead, persistAppend } from "./persistent_store.js";
 import {
   analyzeTimeframe,
   analyzeMultiTimeframe,
@@ -109,6 +110,7 @@ export interface OverlaySnapshot {
 const overlayCache = new Map<string, ChartOverlay>();
 let totalGenerated = 0;
 const MAX_CACHE = 50;
+const overlayVersions = new Map<string, number>();
 
 // ─── Color Helpers ────────────────────────────────────────────────────────────
 
@@ -219,6 +221,35 @@ export function renderSignalMarkers(params: {
   }));
 }
 
+// ─── Validation ───────────────────────────────────────────────────────────────
+
+export function validateOverlayParams(params: {
+  symbol?: string;
+  currentPrice?: number;
+  timeframe?: string;
+  position?: unknown;
+  signals?: unknown;
+  structureLevels?: unknown;
+  orderBlocks?: unknown;
+}): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+
+  if (!params.symbol || String(params.symbol).trim().length === 0) {
+    errors.push("symbol must not be empty");
+  }
+
+  const validTypes = ["structure", "orderblock", "position", "signal", "indicator", "zone"];
+  // Validate position if present
+  if (params.position && typeof params.position === "object") {
+    const p = params.position as Record<string, unknown>;
+    if (p.direction && !["long", "short"].includes(p.direction as string)) {
+      errors.push("position.direction must be 'long' or 'short'");
+    }
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
 // ─── Full Overlay Generator ───────────────────────────────────────────────────
 
 export function generateChartOverlay(params: {
@@ -231,6 +262,13 @@ export function generateChartOverlay(params: {
   orderBlocks?: { high: number; low: number; type?: "supply" | "demand" }[];
 }): ChartOverlay {
   const { symbol, currentPrice, timeframe = "1D", position, signals = [], structureLevels, orderBlocks } = params;
+
+  // Validate params
+  const validation = validateOverlayParams(params);
+  if (!validation.valid) {
+    logger.warn({ symbol, errors: validation.errors }, "Invalid overlay params");
+    throw new Error(`Invalid overlay params: ${validation.errors.join(", ")}`);
+  }
 
   const structures = renderStructureLevels({ symbol, currentPrice, levels: structureLevels });
   const blocks = renderOrderBlocks({ symbol, currentPrice, blocks: orderBlocks });
@@ -248,9 +286,25 @@ export function generateChartOverlay(params: {
     const oldest = overlayCache.keys().next().value;
     if (oldest) overlayCache.delete(oldest);
   }
+
+  // Increment version for this symbol
+  const version = (overlayVersions.get(symbol) ?? 0) + 1;
+  overlayVersions.set(symbol, version);
   totalGenerated++;
 
-  logger.info({ symbol, structures: structures.length, blocks: blocks.length, signals: signalMarkers.length }, "Chart overlay generated");
+  // Persist overlay with version metadata
+  try {
+    const overlayWithVersion = {
+      ...overlay,
+      version,
+      versionedAt: new Date().toISOString(),
+    };
+    persistAppend("overlay_snapshots", overlayWithVersion, 1000);
+  } catch (err) {
+    logger.warn({ err, symbol }, "Failed to persist overlay snapshot");
+  }
+
+  logger.info({ symbol, structures: structures.length, blocks: blocks.length, signals: signalMarkers.length, version }, "Chart overlay generated");
   return overlay;
 }
 
@@ -274,8 +328,42 @@ export function getOverlaySnapshot(): OverlaySnapshot {
 
 export function resetOverlays(): void {
   overlayCache.clear();
+  overlayVersions.clear();
   totalGenerated = 0;
   logger.info("TradingView overlay cache reset");
+}
+
+export function getOverlayHistory(symbol: string, limit = 10): ChartOverlay[] {
+  try {
+    const allSnapshots = persistRead<Array<ChartOverlay & { version?: number; versionedAt?: string }>>("overlay_snapshots", []);
+    const symSnapshots = allSnapshots
+      .filter((s) => s.symbol === symbol.toUpperCase())
+      .slice(-limit);
+    return symSnapshots;
+  } catch (err) {
+    logger.warn({ err, symbol }, "Failed to read overlay history");
+    return [];
+  }
+}
+
+export function overlayHealthCheck(): {
+  activeOverlays: number;
+  symbolsWithOverlays: string[];
+  staleness: { symbol: string; lastGeneratedAgo: number }[];
+} {
+  const now = Date.now();
+  const active = Array.from(overlayCache.values());
+  const symbols = Array.from(overlayCache.keys());
+  const staleness = active.map((o) => ({
+    symbol: o.symbol,
+    lastGeneratedAgo: now - new Date(o.generatedAt).getTime(),
+  }));
+
+  return {
+    activeOverlays: active.length,
+    symbolsWithOverlays: symbols,
+    staleness: staleness.sort((a, b) => b.lastGeneratedAgo - a.lastGeneratedAgo),
+  };
 }
 
 // ─── HTF Market Structure Integration ──────────────────────────────────────

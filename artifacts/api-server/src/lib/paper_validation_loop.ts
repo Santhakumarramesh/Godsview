@@ -1,6 +1,7 @@
 import { accuracyResultsTable, db, siDecisionsTable } from "@workspace/db";
 import { and, asc, desc, eq, gte, isNull, lte, or } from "drizzle-orm";
 import { logger } from "./logger";
+import { persistWrite, persistRead, persistAppend } from "./persistent_store";
 
 type OutcomeLabel = "win" | "loss";
 type ValidationStatus = "INSUFFICIENT" | "HEALTHY" | "WATCH" | "DRIFT" | "CRITICAL";
@@ -132,6 +133,19 @@ const DEFAULT_THRESHOLD = 0.55;
 const DEFAULT_DAYS = 30;
 const DEFAULT_INTERVAL_MS = 3 * 60 * 1000;
 const OPTIMIZATION_COOLDOWN_MS = 30 * 60 * 1000;
+const RETRY_DELAY_MS = 60 * 1000; // 60 seconds
+
+export interface ValidationConfig {
+  minSignals: number;
+  maxDriftPct: number;
+  calibrationBins: number;
+}
+
+const DEFAULT_CONFIG: ValidationConfig = {
+  minSignals: 20,
+  maxDriftPct: 5.0,
+  calibrationBins: 10,
+};
 
 let _loopRunning = false;
 let _loopInterval: NodeJS.Timeout | null = null;
@@ -142,6 +156,8 @@ let _history: PaperValidationReport[] = [];
 let _lastCycleAt: string | null = null;
 let _lastError: string | null = null;
 const _lastOptimizationAt = new Map<string, number>();
+let _validationConfig = { ...DEFAULT_CONFIG };
+let _retryScheduled: NodeJS.Timeout | null = null;
 
 function parseNum(value: unknown): number {
   const n = Number(value);
@@ -623,10 +639,27 @@ export async function runPaperValidationCycle(options?: {
     _lastCycleAt = report.generated_at;
     _lastError = null;
     _history = [report, ..._history].slice(0, HISTORY_LIMIT);
+
+    // Persist validation report
+    try {
+      persistAppend("validation_reports", report, 500);
+    } catch (persistErr) {
+      logger.warn({ err: persistErr }, "[paper-validation] failed to persist report");
+    }
+
     return report;
   } catch (err) {
     _lastError = err instanceof Error ? err.message : String(err);
     logger.error({ err }, "[paper-validation] cycle failed");
+
+    // Schedule retry on error
+    if (_retryScheduled) clearTimeout(_retryScheduled);
+    _retryScheduled = setTimeout(() => {
+      runPaperValidationCycle(options).catch((retryErr) => {
+        logger.error({ err: retryErr }, "[paper-validation] retry cycle failed");
+      });
+    }, RETRY_DELAY_MS);
+
     throw err;
   } finally {
     _cycleInFlight = false;
@@ -700,4 +733,42 @@ export function getLatestPaperValidationReport(): PaperValidationReport | null {
 export function getPaperValidationHistory(limit = 20): PaperValidationReport[] {
   const safeLimit = Math.max(1, Math.min(HISTORY_LIMIT, Math.round(limit)));
   return _history.slice(0, safeLimit);
+}
+
+export function setValidationConfig(config: Partial<ValidationConfig>): ValidationConfig {
+  _validationConfig = { ..._validationConfig, ...config };
+  logger.info({ config: _validationConfig }, "[paper-validation] config updated");
+  return _validationConfig;
+}
+
+export function getValidationConfig(): ValidationConfig {
+  return { ..._validationConfig };
+}
+
+export function getValidationTrend(days: number): {
+  reports: PaperValidationReport[];
+  avgAccuracy: number;
+  trend: "improving" | "declining" | "stable";
+} {
+  const safeDays = Math.max(1, Math.min(120, Math.round(days)));
+  try {
+    const allReports = persistRead<PaperValidationReport[]>("validation_reports", []);
+    const cutoff = new Date(Date.now() - safeDays * 24 * 60 * 60 * 1000);
+    const recent = allReports.filter((r) => new Date(r.generated_at) >= cutoff).slice(-50);
+
+    if (recent.length < 2) {
+      return { reports: recent, avgAccuracy: 0, trend: "stable" };
+    }
+
+    const accuracies = recent.map((r) => r.approved.realized_win_rate);
+    const avgAccuracy = accuracies.reduce((s, a) => s + a, 0) / accuracies.length;
+    const first = accuracies.slice(0, Math.ceil(accuracies.length / 2)).reduce((s, a) => s + a, 0) / Math.ceil(accuracies.length / 2);
+    const last = accuracies.slice(Math.floor(accuracies.length / 2)).reduce((s, a) => s + a, 0) / Math.ceil(accuracies.length / 2);
+    const trend: "improving" | "declining" | "stable" = Math.abs(last - first) < 0.02 ? "stable" : last > first ? "improving" : "declining";
+
+    return { reports: recent, avgAccuracy, trend };
+  } catch (err) {
+    logger.warn({ err, days }, "[paper-validation] failed to compute trend");
+    return { reports: [], avgAccuracy: 0, trend: "stable" };
+  }
 }

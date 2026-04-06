@@ -59,9 +59,16 @@ import dailyReviewRouter from "./daily_review";
 import sideBySideRouter from "./side_by_side";
 import marketStructureRouter from "./market_structure";
 import persistenceRouter from "./persistence";
+import siSupervisorRouter from "./si_supervisor";
+import observabilityRouter from "./observability";
+import governanceRouter from "./governance";
+import paperTradingRouter from "./paper_trading";
+import liveLaunchRouter from "./live_launch";
+import autonomousRouter from "./autonomous";
 
 const router: IRouter = Router();
 
+router.use(governanceRouter);
 router.use(healthRouter);
 router.use(signalsRouter);
 router.use(tradesRouter);
@@ -121,6 +128,11 @@ router.use("/api", dailyReviewRouter);
 router.use("/api", sideBySideRouter);
 router.use(persistenceRouter);
 router.use("/api", marketStructureRouter);
+router.use(siSupervisorRouter);
+router.use(observabilityRouter);
+router.use(paperTradingRouter);
+router.use(liveLaunchRouter);
+router.use(autonomousRouter);
 
 // Python v2 microservices proxy — shadow routes at /v2/*
 router.use(pythonV2Router);

@@ -94,6 +94,148 @@ const OPERATOR_PATTERNS: { regex: RegExp; op: ConditionOperator }[] = [
   { regex: /(?:is\s*)?(?:less|below|under|lower)\s*than|<\s*=?/i, op: "<=" },
 ];
 
+// ─── Input Validation ─────────────────────────────────────────────────────────
+
+export interface ValidationError {
+  valid: false;
+  error: string;
+}
+
+export interface ValidationSuccess {
+  valid: true;
+}
+
+export type ValidationResult = ValidationSuccess | ValidationError;
+
+/**
+ * Validate raw prompt input before parsing
+ * - Rejects empty strings
+ * - Rejects input > 2000 chars (prevent memory exhaustion)
+ * - Rejects input with injection-prone patterns (code, shell, etc)
+ */
+export function validatePromptInput(prompt: string): ValidationResult {
+  if (!prompt || typeof prompt !== "string") {
+    return { valid: false, error: "Prompt must be a non-empty string" };
+  }
+
+  const trimmed = prompt.trim();
+  if (trimmed.length === 0) {
+    return { valid: false, error: "Prompt cannot be empty or whitespace-only" };
+  }
+
+  if (trimmed.length > 2000) {
+    return { valid: false, error: "Prompt exceeds 2000 character limit" };
+  }
+
+  // Check for injection-prone patterns
+  const injectionPatterns = [
+    /import\s+/i,
+    /require\s*\(/i,
+    /eval\s*\(/i,
+    /exec\s*\(/i,
+    /system\s*\(/i,
+    /process\s*\./i,
+    /<script/i,
+    /javascript:/i,
+    /onclick\s*=/i,
+    /on\w+\s*=/i,
+  ];
+
+  for (const pattern of injectionPatterns) {
+    if (pattern.test(trimmed)) {
+      return { valid: false, error: `Prompt contains forbidden pattern: ${pattern.source}` };
+    }
+  }
+
+  return { valid: true };
+}
+
+// ─── Compiled Strategy Validation ─────────────────────────────────────────────
+
+export interface StrategyValidationError {
+  field: string;
+  message: string;
+}
+
+export interface ValidateCompiledStrategyResult {
+  valid: boolean;
+  errors: StrategyValidationError[];
+}
+
+/**
+ * Validate that compiled strategy rules make logical sense
+ * - Must have at least 1 entry rule AND 1 exit rule
+ * - Must have a stop loss defined
+ * - Entry/exit rules must have at least 1 condition each
+ * - Risk percentage must be > 0 and <= 0.5 (50%)
+ */
+export function validateCompiledStrategy(parsed: ParsedStrategy): ValidateCompiledStrategyResult {
+  const errors: StrategyValidationError[] = [];
+
+  if (!parsed.entryRules || parsed.entryRules.length === 0) {
+    errors.push({ field: "entryRules", message: "Must have at least 1 entry rule" });
+  } else {
+    for (let i = 0; i < parsed.entryRules.length; i++) {
+      const rule = parsed.entryRules[i];
+      if (!rule.conditions || rule.conditions.length === 0) {
+        errors.push({ field: `entryRules[${i}]`, message: "Entry rule must have at least 1 condition" });
+      }
+    }
+  }
+
+  if (!parsed.exitRules || parsed.exitRules.length === 0) {
+    errors.push({ field: "exitRules", message: "Must have at least 1 exit rule" });
+  } else {
+    for (let i = 0; i < parsed.exitRules.length; i++) {
+      const rule = parsed.exitRules[i];
+      if (!rule.conditions || rule.conditions.length === 0) {
+        errors.push({ field: `exitRules[${i}]`, message: "Exit rule must have at least 1 condition" });
+      }
+    }
+  }
+
+  if (!parsed.stopRule) {
+    errors.push({ field: "stopRule", message: "Stop loss must be defined" });
+  } else {
+    if (parsed.stopRule.value <= 0) {
+      errors.push({ field: "stopRule.value", message: "Stop value must be > 0" });
+    }
+  }
+
+  if (parsed.riskPct <= 0 || parsed.riskPct > 0.5) {
+    errors.push({ field: "riskPct", message: "Risk must be > 0 and <= 50%" });
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
+}
+
+// ─── Lab Health Check ─────────────────────────────────────────────────────────
+
+export interface LabHealthCheckResult {
+  totalPromptsParsed: number;
+  totalStrategiesCompiled: number;
+  totalStrategiesRegistered: number;
+  recentParsedCapacity: number;
+  recentCompiledCapacity: number;
+  maxRecentCapacity: number;
+  healthy: boolean;
+}
+
+export function labHealthCheck(): LabHealthCheckResult {
+  return {
+    totalPromptsParsed,
+    totalStrategiesCompiled,
+    totalStrategiesRegistered,
+    recentParsedCapacity: recentParsed.length,
+    recentCompiledCapacity: recentCompiled.length,
+    maxRecentCapacity: MAX_RECENT,
+    healthy: recentParsed.length < MAX_RECENT && recentCompiled.length < MAX_RECENT,
+  };
+}
+
 // ─── Prompt Parser ────────────────────────────────────────────────────────────
 
 function extractSymbols(prompt: string): string[] {
@@ -168,6 +310,14 @@ function parseConditionClause(clause: string): RuleCondition | null {
 }
 
 export function parsePrompt(prompt: string): ParsedStrategy {
+  // Validate input first
+  const validation = validatePromptInput(prompt);
+  if (!validation.valid) {
+    const errorMsg = validation.valid === false ? validation.error : "Unknown error";
+    logger.warn({ error: errorMsg }, "Prompt validation failed");
+    throw new Error(`Prompt validation failed: ${errorMsg}`);
+  }
+
   const symbols = extractSymbols(prompt);
   const timeframe = extractTimeframe(prompt);
   const riskPct = extractRiskPct(prompt);
@@ -248,41 +398,56 @@ export function parsePrompt(prompt: string): ParsedStrategy {
 // ─── Rule Compiler ────────────────────────────────────────────────────────────
 
 export function compileRules(parsed: ParsedStrategy): CompiledRule[] {
-  const compiled: CompiledRule[] = [];
-  const now = new Date().toISOString();
+  // Wrap in try/catch for structured error handling
+  try {
+    // Validate strategy structure before compilation
+    const validation = validateCompiledStrategy(parsed);
+    if (!validation.valid) {
+      const errorMsg = validation.errors.map((e) => `${e.field}: ${e.message}`).join("; ");
+      logger.warn({ name: parsed.name, errors: validation.errors }, "Strategy validation failed");
+      throw new Error(`Strategy validation failed: ${errorMsg}`);
+    }
 
-  const compileConditions = (conditions: RuleCondition[]) =>
-    conditions.map((c) => {
-      const field = c.period ? `${c.indicator}(${c.period})` : c.indicator;
-      const target = typeof c.value === "number"
-        ? String(c.value)
-        : c.valuePeriod ? `${c.value}(${c.valuePeriod})` : String(c.value);
-      return { field, op: c.operator, target };
-    });
+    const compiled: CompiledRule[] = [];
+    const now = new Date().toISOString();
 
-  for (const rule of [...parsed.entryRules, ...parsed.exitRules]) {
-    const conditions = compileConditions(rule.conditions);
-    const expression = conditions
-      .map((c) => `${c.field} ${c.op} ${c.target}`)
-      .join(` ${rule.logic} `);
+    const compileConditions = (conditions: RuleCondition[]) =>
+      conditions.map((c) => {
+        const field = c.period ? `${c.indicator}(${c.period})` : c.indicator;
+        const target = typeof c.value === "number"
+          ? String(c.value)
+          : c.valuePeriod ? `${c.value}(${c.valuePeriod})` : String(c.value);
+        return { field, op: c.operator, target };
+      });
 
-    compiled.push({
-      id: `rule_${compiled.length + 1}_${Date.now().toString(36)}`,
-      action: rule.action,
-      expression,
-      conditions,
-      compiledAt: now,
-    });
+    for (const rule of [...parsed.entryRules, ...parsed.exitRules]) {
+      const conditions = compileConditions(rule.conditions);
+      const expression = conditions
+        .map((c) => `${c.field} ${c.op} ${c.target}`)
+        .join(` ${rule.logic} `);
+
+      compiled.push({
+        id: `rule_${compiled.length + 1}_${Date.now().toString(36)}`,
+        action: rule.action,
+        expression,
+        conditions,
+        compiledAt: now,
+      });
+    }
+
+    totalStrategiesCompiled++;
+    for (const c of compiled) {
+      recentCompiled.unshift(c);
+      if (recentCompiled.length > MAX_RECENT) recentCompiled.pop();
+    }
+
+    logger.info({ name: parsed.name, rulesCompiled: compiled.length }, "Rules compiled");
+    return compiled;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error({ name: parsed.name, error: message }, "Rule compilation failed");
+    throw error;
   }
-
-  totalStrategiesCompiled++;
-  for (const c of compiled) {
-    recentCompiled.unshift(c);
-    if (recentCompiled.length > MAX_RECENT) recentCompiled.pop();
-  }
-
-  logger.info({ name: parsed.name, rulesCompiled: compiled.length }, "Rules compiled");
-  return compiled;
 }
 
 // ─── Full Pipeline: Parse → Compile → Register ───────────────────────────────

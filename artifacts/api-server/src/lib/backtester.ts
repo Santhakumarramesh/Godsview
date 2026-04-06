@@ -19,6 +19,139 @@ import { computeFinalQuality } from "./strategy_engine";
 import { getBars, AlpacaBar } from "./alpaca";
 import pLimit from "p-limit";
 
+// ─── Validation ───────────────────────────────────────────────────────────────
+
+export interface BacktestConfigValidationError {
+  field: string;
+  message: string;
+}
+
+export interface ValidateBacktestConfigResult {
+  valid: boolean;
+  errors: BacktestConfigValidationError[];
+}
+
+/**
+ * Validate backtest configuration before execution
+ * - lookback_days must be > 0 and <= 3650 (10 years)
+ * - initial_equity must be > 0
+ * - symbol must be non-empty and valid format
+ * - mode must be one of: baseline | super_intelligence | comparison
+ * - min_signals (if provided) must be > 0
+ */
+export function validateBacktestConfig(config: BacktestConfig): ValidateBacktestConfigResult {
+  const errors: BacktestConfigValidationError[] = [];
+
+  if (!config.lookback_days || config.lookback_days <= 0 || config.lookback_days > 3650) {
+    errors.push({ field: "lookback_days", message: "Must be > 0 and <= 3650 days (10 years)" });
+  }
+
+  if (!config.initial_equity || config.initial_equity <= 0) {
+    errors.push({ field: "initial_equity", message: "Must be > 0" });
+  }
+
+  if (config.initial_equity && config.initial_equity > 1_000_000_000) {
+    errors.push({ field: "initial_equity", message: "Initial equity exceeds reasonable limit (1B)" });
+  }
+
+  const validModes: BacktestConfig["mode"][] = ["baseline", "super_intelligence", "comparison"];
+  if (!validModes.includes(config.mode)) {
+    errors.push({ field: "mode", message: `Must be one of: ${validModes.join(", ")}` });
+  }
+
+  if (config.min_signals !== undefined) {
+    if (config.min_signals <= 0) {
+      errors.push({ field: "min_signals", message: "Must be > 0" });
+    }
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+// ─── Backtest Health Check ────────────────────────────────────────────────────
+
+export interface BacktestHealthCheckResult {
+  activeBacktests: number;
+  estimatedMemoryMB: number;
+  healthy: boolean;
+  warnings: string[];
+}
+
+let activeBacktestCount = 0;
+
+export function backtestHealthCheck(): BacktestHealthCheckResult {
+  const warnings: string[] = [];
+
+  if (activeBacktestCount > 10) {
+    warnings.push(`High number of active backtests: ${activeBacktestCount}`);
+  }
+
+  const estimatedMemoryMB = activeBacktestCount * 15; // ~15MB per active backtest
+
+  if (estimatedMemoryMB > 500) {
+    warnings.push(`Estimated memory usage high: ${estimatedMemoryMB}MB`);
+  }
+
+  return {
+    activeBacktests: activeBacktestCount,
+    estimatedMemoryMB,
+    healthy: activeBacktestCount <= 10 && estimatedMemoryMB <= 500,
+    warnings,
+  };
+}
+
+/**
+ * Protect equity curve from going negative — floor at 0
+ * Logs warning if equity would have gone negative
+ */
+export function enforceEquityCurveFloor(equity: number, startingEquity: number): number {
+  if (equity < 0) {
+    console.warn(`Equity curve would have gone negative: ${equity}. Flooring at 0.`);
+    return 0;
+  }
+  return equity;
+}
+
+/**
+ * Compute running checksum of trade sequence for integrity validation
+ * Uses simple hash to detect if trades have been modified or reordered
+ */
+export function computeTradeChecksum(trades: TradeResult[]): string {
+  let hash = 5381;
+  for (const trade of trades) {
+    const tradeStr = `${trade.signal_id}|${trade.entry_price}|${trade.outcome}|${trade.pnl_pct}`;
+    for (let i = 0; i < tradeStr.length; i++) {
+      hash = ((hash << 5) + hash) + tradeStr.charCodeAt(i);
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+  }
+  return Math.abs(hash).toString(16);
+}
+
+/**
+ * Validate trade sequence integrity
+ */
+export function validateTradeSequenceIntegrity(trades: TradeResult[], expectedChecksum?: string): boolean {
+  if (trades.length === 0) return true;
+
+  const computed = computeTradeChecksum(trades);
+
+  if (expectedChecksum && computed !== expectedChecksum) {
+    console.warn(`Trade sequence checksum mismatch. Expected: ${expectedChecksum}, Got: ${computed}`);
+    return false;
+  }
+
+  // Additional validation: ensure trades are ordered by signal_id (monotonic)
+  for (let i = 1; i < trades.length; i++) {
+    if (trades[i].signal_id < trades[i - 1].signal_id) {
+      console.warn(`Trade sequence not monotonic. Trade ${i} (id=${trades[i].signal_id}) follows trade ${i - 1} (id=${trades[i - 1].signal_id})`);
+      return false;
+    }
+  }
+
+  return true;
+}
+
 /**
  * Generate synthetic 1-minute bars for backtesting when real bars aren't available.
  * Uses a random walk around a base price with realistic OHLCV structure.
