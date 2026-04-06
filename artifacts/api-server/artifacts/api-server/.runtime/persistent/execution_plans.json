@@ -1,0 +1,158 @@
+[
+  {
+    "symbol": "BTCUSD",
+    "direction": "long",
+    "orderType": "LIMIT",
+    "entryPrice": 65000,
+    "limitOffset": 172.50000005,
+    "slippageEstimate": {
+      "symbol": "BTCUSD",
+      "direction": "long",
+      "estimatedBps": 26.538461546153847,
+      "spreadBps": 1.5384615384615385,
+      "volumeImpactBps": 7.692307692307693e-9,
+      "volatilityBps": 20,
+      "confidence": 0.95,
+      "recommendation": "LIMIT",
+      "estimatedAt": "2026-04-06T21:42:59.658Z"
+    },
+    "exitLadder": [
+      {
+        "level": 1,
+        "targetPrice": 66200,
+        "sizePct": 0.4,
+        "label": "TP1 (1.0R)",
+        "rMultiple": 1
+      },
+      {
+        "level": 2,
+        "targetPrice": 67400,
+        "sizePct": 0.35,
+        "label": "TP2 (2.0R)",
+        "rMultiple": 2
+      },
+      {
+        "level": 3,
+        "targetPrice": 68600,
+        "sizePct": 0.25,
+        "label": "TP3 (3.0R)",
+        "rMultiple": 3
+      }
+    ],
+    "stopPlan": {
+      "initialStop": 63800,
+      "trailingEnabled": true,
+      "trailingType": "ATR",
+      "atrMultiplier": 1.5,
+      "currentStop": 63800,
+      "migrationHistory": []
+    },
+    "totalRiskPct": 1.8461538461538463,
+    "expectedRR": 1.85,
+    "planCreatedAt": "2026-04-06T21:42:59.658Z"
+  },
+  {
+    "symbol": "Y",
+    "direction": "long",
+    "orderType": "LIMIT",
+    "entryPrice": 100,
+    "limitOffset": 0.2701,
+    "slippageEstimate": {
+      "symbol": "Y",
+      "direction": "long",
+      "estimatedBps": 27.009999999999998,
+      "spreadBps": 2,
+      "volumeImpactBps": 0.01,
+      "volatilityBps": 20,
+      "confidence": 0.95,
+      "recommendation": "LIMIT",
+      "estimatedAt": "2026-04-06T21:42:59.661Z"
+    },
+    "exitLadder": [
+      {
+        "level": 1,
+        "targetPrice": 105,
+        "sizePct": 0.4,
+        "label": "TP1 (1.0R)",
+        "rMultiple": 1
+      },
+      {
+        "level": 2,
+        "targetPrice": 110,
+        "sizePct": 0.35,
+        "label": "TP2 (2.0R)",
+        "rMultiple": 2
+      },
+      {
+        "level": 3,
+        "targetPrice": 115,
+        "sizePct": 0.25,
+        "label": "TP3 (3.0R)",
+        "rMultiple": 3
+      }
+    ],
+    "stopPlan": {
+      "initialStop": 95,
+      "trailingEnabled": true,
+      "trailingType": "ATR",
+      "atrMultiplier": 1.5,
+      "currentStop": 95,
+      "migrationHistory": []
+    },
+    "totalRiskPct": 5,
+    "expectedRR": 1.85,
+    "planCreatedAt": "2026-04-06T21:42:59.662Z"
+  },
+  {
+    "symbol": "Z",
+    "direction": "long",
+    "orderType": "LIMIT",
+    "entryPrice": 30,
+    "limitOffset": 0.0951,
+    "slippageEstimate": {
+      "symbol": "Z",
+      "direction": "long",
+      "estimatedBps": 31.7,
+      "spreadBps": 6.666666666666666,
+      "volumeImpactBps": 0.03333333333333333,
+      "volatilityBps": 20,
+      "confidence": 0.95,
+      "recommendation": "LIMIT",
+      "estimatedAt": "2026-04-06T21:42:59.662Z"
+    },
+    "exitLadder": [
+      {
+        "level": 1,
+        "targetPrice": 32,
+        "sizePct": 0.4,
+        "label": "TP1 (1.0R)",
+        "rMultiple": 1
+      },
+      {
+        "level": 2,
+        "targetPrice": 34,
+        "sizePct": 0.35,
+        "label": "TP2 (2.0R)",
+        "rMultiple": 2
+      },
+      {
+        "level": 3,
+        "targetPrice": 36,
+        "sizePct": 0.25,
+        "label": "TP3 (3.0R)",
+        "rMultiple": 3
+      }
+    ],
+    "stopPlan": {
+      "initialStop": 28,
+      "trailingEnabled": true,
+      "trailingType": "ATR",
+      "atrMultiplier": 1.5,
+      "currentStop": 28,
+      "migrationHistory": []
+    },
+    "totalRiskPct": 6.666666666666667,
+    "expectedRR": 1.85,
+    "planCreatedAt": "2026-04-06T21:42:59.662Z"
+  }
+]

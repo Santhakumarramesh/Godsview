@@ -1,0 +1,51 @@
+{
+  "strategyId": "test_strategy",
+  "totalWindows": 3,
+  "passedWindows": 3,
+  "avgDegradation": 20.7,
+  "avgOosSharpe": 1.147,
+  "avgOosWinRate": 0.5398,
+  "windows": [
+    {
+      "windowId": 1,
+      "inSampleStart": "2025-07-10T21:42:52.209Z",
+      "inSampleEnd": "2025-09-08T21:42:52.209Z",
+      "outOfSampleStart": "2025-09-09T21:42:52.209Z",
+      "outOfSampleEnd": "2025-10-09T21:42:52.209Z",
+      "inSampleSharpe": 1.55,
+      "outOfSampleSharpe": 1.421,
+      "inSampleWinRate": 0.5619,
+      "outOfSampleWinRate": 0.511,
+      "degradation": 8.4,
+      "passed": true
+    },
+    {
+      "windowId": 2,
+      "inSampleStart": "2025-10-08T21:42:52.209Z",
+      "inSampleEnd": "2025-12-07T21:42:52.209Z",
+      "outOfSampleStart": "2025-12-08T21:42:52.209Z",
+      "outOfSampleEnd": "2026-01-07T21:42:52.209Z",
+      "inSampleSharpe": 1.365,
+      "outOfSampleSharpe": 0.866,
+      "inSampleWinRate": 0.5904,
+      "outOfSampleWinRate": 0.5647,
+      "degradation": 36.6,
+      "passed": true
+    },
+    {
+      "windowId": 3,
+      "inSampleStart": "2026-01-06T21:42:52.209Z",
+      "inSampleEnd": "2026-03-07T21:42:52.209Z",
+      "outOfSampleStart": "2026-03-08T21:42:52.209Z",
+      "outOfSampleEnd": "2026-04-07T21:42:52.209Z",
+      "inSampleSharpe": 1.396,
+      "outOfSampleSharpe": 1.155,
+      "inSampleWinRate": 0.5547,
+      "outOfSampleWinRate": 0.5436,
+      "degradation": 17.2,
+      "passed": true
+    }
+  ],
+  "verdict": "PASS",
+  "runAt": "2026-04-06T21:42:52.209Z"
+}

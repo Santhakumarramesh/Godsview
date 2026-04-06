@@ -1,0 +1,90 @@
+{
+  "strategyId": "high_15",
+  "totalWindows": 6,
+  "passedWindows": 6,
+  "avgDegradation": 27.1,
+  "avgOosSharpe": 2.219,
+  "avgOosWinRate": 0.6365,
+  "windows": [
+    {
+      "windowId": 1,
+      "inSampleStart": "2024-10-13T21:42:51.984Z",
+      "inSampleEnd": "2024-12-12T21:42:51.984Z",
+      "outOfSampleStart": "2024-12-13T21:42:51.984Z",
+      "outOfSampleEnd": "2025-01-12T21:42:51.984Z",
+      "inSampleSharpe": 2.948,
+      "outOfSampleSharpe": 1.918,
+      "inSampleWinRate": 0.6716,
+      "outOfSampleWinRate": 0.5835,
+      "degradation": 34.9,
+      "passed": true
+    },
+    {
+      "windowId": 2,
+      "inSampleStart": "2025-01-11T21:42:51.984Z",
+      "inSampleEnd": "2025-03-12T21:42:51.984Z",
+      "outOfSampleStart": "2025-03-13T21:42:51.984Z",
+      "outOfSampleEnd": "2025-04-12T21:42:51.984Z",
+      "inSampleSharpe": 3.273,
+      "outOfSampleSharpe": 2.964,
+      "inSampleWinRate": 0.7218,
+      "outOfSampleWinRate": 0.6755,
+      "degradation": 9.4,
+      "passed": true
+    },
+    {
+      "windowId": 3,
+      "inSampleStart": "2025-04-11T21:42:51.984Z",
+      "inSampleEnd": "2025-06-10T21:42:51.984Z",
+      "outOfSampleStart": "2025-06-11T21:42:51.984Z",
+      "outOfSampleEnd": "2025-07-11T21:42:51.984Z",
+      "inSampleSharpe": 2.876,
+      "outOfSampleSharpe": 2.177,
+      "inSampleWinRate": 0.7256,
+      "outOfSampleWinRate": 0.6252,
+      "degradation": 24.3,
+      "passed": true
+    },
+    {
+      "windowId": 4,
+      "inSampleStart": "2025-07-10T21:42:51.984Z",
+      "inSampleEnd": "2025-09-08T21:42:51.984Z",
+      "outOfSampleStart": "2025-09-09T21:42:51.984Z",
+      "outOfSampleEnd": "2025-10-09T21:42:51.984Z",
+      "inSampleSharpe": 2.715,
+      "outOfSampleSharpe": 1.746,
+      "inSampleWinRate": 0.7157,
+      "outOfSampleWinRate": 0.6943,
+      "degradation": 35.7,
+      "passed": true
+    },
+    {
+      "windowId": 5,
+      "inSampleStart": "2025-10-08T21:42:51.984Z",
+      "inSampleEnd": "2025-12-07T21:42:51.984Z",
+      "outOfSampleStart": "2025-12-08T21:42:51.984Z",
+      "outOfSampleEnd": "2026-01-07T21:42:51.984Z",
+      "inSampleSharpe": 3.128,
+      "outOfSampleSharpe": 1.926,
+      "inSampleWinRate": 0.6701,
+      "outOfSampleWinRate": 0.5769,
+      "degradation": 38.4,
+      "passed": true
+    },
+    {
+      "windowId": 6,
+      "inSampleStart": "2026-01-06T21:42:51.984Z",
+      "inSampleEnd": "2026-03-07T21:42:51.984Z",
+      "outOfSampleStart": "2026-03-08T21:42:51.984Z",
+      "outOfSampleEnd": "2026-04-07T21:42:51.984Z",
+      "inSampleSharpe": 3.216,
+      "outOfSampleSharpe": 2.581,
+      "inSampleWinRate": 0.6823,
+      "outOfSampleWinRate": 0.6638,
+      "degradation": 19.7,
+      "passed": true
+    }
+  ],
+  "verdict": "PASS",
+  "runAt": "2026-04-06T21:42:51.984Z"
+}

@@ -1,0 +1,184 @@
+[
+  {
+    "symbol": "BTCUSD",
+    "stage": "opened",
+    "entry_price": 50000,
+    "entry_time": "2026-04-06T21:42:52.895Z",
+    "quantity_opened": 1
+  },
+  {
+    "symbol": "BTCUSD",
+    "stage": "opened",
+    "entry_price": 84000,
+    "entry_time": "2026-04-06T21:42:58.860Z",
+    "quantity_opened": 10
+  },
+  {
+    "symbol": "BTCUSD",
+    "stage": "opened",
+    "entry_price": 84000,
+    "entry_time": "2026-04-06T21:42:58.863Z",
+    "quantity_opened": 10
+  },
+  {
+    "symbol": "BTCUSD",
+    "stage": "opened",
+    "entry_price": 84000,
+    "entry_time": "2026-04-06T21:42:58.863Z",
+    "quantity_opened": 10
+  },
+  {
+    "symbol": "BTCUSD",
+    "stage": "opened",
+    "entry_price": 84000,
+    "entry_time": "2026-04-06T21:42:58.864Z",
+    "quantity_opened": 10
+  },
+  {
+    "symbol": "BTCUSD",
+    "stage": "opened",
+    "entry_price": 84000,
+    "entry_time": "2026-04-06T21:42:58.864Z",
+    "quantity_opened": 10
+  },
+  {
+    "symbol": "BTCUSD",
+    "stage": "opened",
+    "entry_price": 84000,
+    "entry_time": "2026-04-06T21:42:58.864Z",
+    "quantity_opened": 10
+  },
+  {
+    "symbol": "BTCUSD",
+    "stage": "opened",
+    "entry_price": 84000,
+    "entry_time": "2026-04-06T21:42:58.864Z",
+    "quantity_opened": 10
+  },
+  {
+    "symbol": "BTCUSD",
+    "stage": "opened",
+    "entry_price": 84000,
+    "entry_time": "2026-04-06T21:42:58.864Z",
+    "quantity_opened": 10
+  },
+  {
+    "symbol": "BTCUSD",
+    "stage": "opened",
+    "entry_price": 84000,
+    "entry_time": "2026-04-06T21:42:58.865Z",
+    "quantity_opened": 10
+  },
+  {
+    "symbol": "ETHUSD",
+    "stage": "opened",
+    "entry_price": 3000,
+    "entry_time": "2026-04-06T21:42:58.865Z",
+    "quantity_opened": 10
+  },
+  {
+    "symbol": "BTCUSD",
+    "stage": "opened",
+    "entry_price": 84000,
+    "entry_time": "2026-04-06T21:42:58.865Z",
+    "quantity_opened": 10
+  },
+  {
+    "symbol": "BTCUSD",
+    "stage": "opened",
+    "entry_price": 85000,
+    "entry_time": "2026-04-06T21:42:58.865Z",
+    "quantity_opened": 5
+  },
+  {
+    "symbol": "BTCUSD",
+    "stage": "opened",
+    "entry_price": 84000,
+    "entry_time": "2026-04-06T21:42:58.866Z",
+    "quantity_opened": 10
+  },
+  {
+    "symbol": "ETHUSD",
+    "stage": "opened",
+    "entry_price": 84000,
+    "entry_time": "2026-04-06T21:42:58.866Z",
+    "quantity_opened": 10
+  },
+  {
+    "symbol": "SOLUSD",
+    "stage": "opened",
+    "entry_price": 84000,
+    "entry_time": "2026-04-06T21:42:58.866Z",
+    "quantity_opened": 10
+  },
+  {
+    "symbol": "BTCUSD",
+    "stage": "opened",
+    "entry_price": 84000,
+    "entry_time": "2026-04-06T21:42:58.867Z",
+    "quantity_opened": 10
+  },
+  {
+    "symbol": "BTCUSD",
+    "stage": "opened",
+    "entry_price": 84000,
+    "entry_time": "2026-04-06T21:42:58.867Z",
+    "quantity_opened": 10
+  },
+  {
+    "symbol": "ETHUSD",
+    "stage": "opened",
+    "entry_price": 84000,
+    "entry_time": "2026-04-06T21:42:58.867Z",
+    "quantity_opened": 10
+  },
+  {
+    "symbol": "BTCUSD",
+    "stage": "opened",
+    "entry_price": 84000,
+    "entry_time": "2026-04-06T21:42:58.868Z",
+    "quantity_opened": 10
+  },
+  {
+    "symbol": "BTCUSD",
+    "stage": "opened",
+    "entry_price": 84000,
+    "entry_time": "2026-04-06T21:42:58.868Z",
+    "quantity_opened": 10
+  },
+  {
+    "symbol": "ETHUSD",
+    "stage": "opened",
+    "entry_price": 84000,
+    "entry_time": "2026-04-06T21:42:58.868Z",
+    "quantity_opened": 10
+  },
+  {
+    "symbol": "BTCUSD",
+    "stage": "opened",
+    "entry_price": 84000,
+    "entry_time": "2026-04-06T21:42:58.868Z",
+    "quantity_opened": 10
+  },
+  {
+    "symbol": "ETHUSD",
+    "stage": "opened",
+    "entry_price": 84000,
+    "entry_time": "2026-04-06T21:42:58.868Z",
+    "quantity_opened": 10
+  },
+  {
+    "symbol": "BTCUSD",
+    "stage": "opened",
+    "entry_price": 84000,
+    "entry_time": "2026-04-06T21:42:58.870Z",
+    "quantity_opened": 10
+  },
+  {
+    "symbol": "SOLUSD",
+    "stage": "opened",
+    "entry_price": 84000,
+    "entry_time": "2026-04-06T21:42:58.870Z",
+    "quantity_opened": 10
+  }
+]

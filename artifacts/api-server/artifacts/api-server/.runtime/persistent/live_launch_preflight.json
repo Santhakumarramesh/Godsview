@@ -1,0 +1,482 @@
+[
+  {
+    "passed": false,
+    "checks": [
+      {
+        "name": "broker_connected",
+        "passed": false,
+        "details": "Broker not connected"
+      },
+      {
+        "name": "model_trained",
+        "passed": false,
+        "details": "Model not trained or in error state"
+      },
+      {
+        "name": "market_open",
+        "passed": false,
+        "details": "Outside market hours"
+      },
+      {
+        "name": "validation_passing",
+        "passed": false,
+        "details": "No recent validation pass"
+      },
+      {
+        "name": "circuit_breaker_healthy",
+        "passed": true,
+        "details": "Circuit breaker CLOSED"
+      }
+    ],
+    "summary": "4 checks failed",
+    "timestamp": "2026-04-06T21:42:51.650Z"
+  },
+  {
+    "passed": false,
+    "checks": [
+      {
+        "name": "broker_connected",
+        "passed": false,
+        "details": "Broker not connected"
+      },
+      {
+        "name": "model_trained",
+        "passed": false,
+        "details": "Model not trained or in error state"
+      },
+      {
+        "name": "market_open",
+        "passed": false,
+        "details": "Outside market hours"
+      },
+      {
+        "name": "validation_passing",
+        "passed": false,
+        "details": "No recent validation pass"
+      },
+      {
+        "name": "circuit_breaker_healthy",
+        "passed": true,
+        "details": "Circuit breaker CLOSED"
+      }
+    ],
+    "summary": "4 checks failed",
+    "timestamp": "2026-04-06T21:42:51.659Z"
+  },
+  {
+    "passed": false,
+    "checks": [
+      {
+        "name": "broker_connected",
+        "passed": false,
+        "details": "Broker not connected"
+      },
+      {
+        "name": "model_trained",
+        "passed": false,
+        "details": "Model not trained or in error state"
+      },
+      {
+        "name": "market_open",
+        "passed": false,
+        "details": "Outside market hours"
+      },
+      {
+        "name": "validation_passing",
+        "passed": false,
+        "details": "No recent validation pass"
+      },
+      {
+        "name": "circuit_breaker_healthy",
+        "passed": true,
+        "details": "Circuit breaker CLOSED"
+      }
+    ],
+    "summary": "4 checks failed",
+    "timestamp": "2026-04-06T21:42:51.660Z"
+  },
+  {
+    "passed": false,
+    "checks": [
+      {
+        "name": "broker_connected",
+        "passed": false,
+        "details": "Broker not connected"
+      },
+      {
+        "name": "model_trained",
+        "passed": false,
+        "details": "Model not trained or in error state"
+      },
+      {
+        "name": "market_open",
+        "passed": false,
+        "details": "Outside market hours"
+      },
+      {
+        "name": "validation_passing",
+        "passed": false,
+        "details": "No recent validation pass"
+      },
+      {
+        "name": "circuit_breaker_healthy",
+        "passed": true,
+        "details": "Circuit breaker CLOSED"
+      }
+    ],
+    "summary": "4 checks failed",
+    "timestamp": "2026-04-06T21:42:51.660Z"
+  },
+  {
+    "passed": false,
+    "checks": [
+      {
+        "name": "broker_connected",
+        "passed": false,
+        "details": "Broker not connected"
+      },
+      {
+        "name": "model_trained",
+        "passed": false,
+        "details": "Model not trained or in error state"
+      },
+      {
+        "name": "market_open",
+        "passed": false,
+        "details": "Outside market hours"
+      },
+      {
+        "name": "validation_passing",
+        "passed": false,
+        "details": "No recent validation pass"
+      },
+      {
+        "name": "circuit_breaker_healthy",
+        "passed": true,
+        "details": "Circuit breaker CLOSED"
+      }
+    ],
+    "summary": "4 checks failed",
+    "timestamp": "2026-04-06T21:42:51.661Z"
+  },
+  {
+    "passed": false,
+    "checks": [
+      {
+        "name": "broker_connected",
+        "passed": false,
+        "details": "Broker not connected"
+      },
+      {
+        "name": "model_trained",
+        "passed": false,
+        "details": "Model not trained or in error state"
+      },
+      {
+        "name": "market_open",
+        "passed": false,
+        "details": "Outside market hours"
+      },
+      {
+        "name": "validation_passing",
+        "passed": false,
+        "details": "No recent validation pass"
+      },
+      {
+        "name": "circuit_breaker_healthy",
+        "passed": true,
+        "details": "Circuit breaker CLOSED"
+      }
+    ],
+    "summary": "4 checks failed",
+    "timestamp": "2026-04-06T21:42:51.685Z"
+  },
+  {
+    "passed": false,
+    "checks": [
+      {
+        "name": "broker_connected",
+        "passed": false,
+        "details": "Broker not connected"
+      },
+      {
+        "name": "model_trained",
+        "passed": false,
+        "details": "Model not trained or in error state"
+      },
+      {
+        "name": "market_open",
+        "passed": false,
+        "details": "Outside market hours"
+      },
+      {
+        "name": "validation_passing",
+        "passed": false,
+        "details": "No recent validation pass"
+      },
+      {
+        "name": "circuit_breaker_healthy",
+        "passed": true,
+        "details": "Circuit breaker CLOSED"
+      }
+    ],
+    "summary": "4 checks failed",
+    "timestamp": "2026-04-06T21:42:51.686Z"
+  },
+  {
+    "passed": false,
+    "checks": [
+      {
+        "name": "broker_connected",
+        "passed": false,
+        "details": "Broker not connected"
+      },
+      {
+        "name": "model_trained",
+        "passed": false,
+        "details": "Model not trained or in error state"
+      },
+      {
+        "name": "market_open",
+        "passed": false,
+        "details": "Outside market hours"
+      },
+      {
+        "name": "validation_passing",
+        "passed": false,
+        "details": "No recent validation pass"
+      },
+      {
+        "name": "circuit_breaker_healthy",
+        "passed": true,
+        "details": "Circuit breaker CLOSED"
+      }
+    ],
+    "summary": "4 checks failed",
+    "timestamp": "2026-04-06T21:42:51.688Z"
+  },
+  {
+    "passed": false,
+    "checks": [
+      {
+        "name": "broker_connected",
+        "passed": false,
+        "details": "Broker not connected"
+      },
+      {
+        "name": "model_trained",
+        "passed": false,
+        "details": "Model not trained or in error state"
+      },
+      {
+        "name": "market_open",
+        "passed": false,
+        "details": "Outside market hours"
+      },
+      {
+        "name": "validation_passing",
+        "passed": false,
+        "details": "No recent validation pass"
+      },
+      {
+        "name": "circuit_breaker_healthy",
+        "passed": true,
+        "details": "Circuit breaker CLOSED"
+      }
+    ],
+    "summary": "4 checks failed",
+    "timestamp": "2026-04-06T21:42:52.581Z"
+  },
+  {
+    "passed": false,
+    "checks": [
+      {
+        "name": "broker_connected",
+        "passed": false,
+        "details": "Broker not connected"
+      },
+      {
+        "name": "model_trained",
+        "passed": false,
+        "details": "Model not trained or in error state"
+      },
+      {
+        "name": "market_open",
+        "passed": false,
+        "details": "Outside market hours"
+      },
+      {
+        "name": "validation_passing",
+        "passed": false,
+        "details": "No recent validation pass"
+      },
+      {
+        "name": "circuit_breaker_healthy",
+        "passed": true,
+        "details": "Circuit breaker CLOSED"
+      }
+    ],
+    "summary": "4 checks failed",
+    "timestamp": "2026-04-06T21:42:52.582Z"
+  },
+  {
+    "passed": false,
+    "checks": [
+      {
+        "name": "broker_connected",
+        "passed": false,
+        "details": "Broker not connected"
+      },
+      {
+        "name": "model_trained",
+        "passed": false,
+        "details": "Model not trained or in error state"
+      },
+      {
+        "name": "market_open",
+        "passed": false,
+        "details": "Outside market hours"
+      },
+      {
+        "name": "validation_passing",
+        "passed": false,
+        "details": "No recent validation pass"
+      },
+      {
+        "name": "circuit_breaker_healthy",
+        "passed": true,
+        "details": "Circuit breaker CLOSED"
+      }
+    ],
+    "summary": "4 checks failed",
+    "timestamp": "2026-04-06T21:42:52.583Z"
+  },
+  {
+    "passed": false,
+    "checks": [
+      {
+        "name": "broker_connected",
+        "passed": false,
+        "details": "Broker not connected"
+      },
+      {
+        "name": "model_trained",
+        "passed": false,
+        "details": "Model not trained or in error state"
+      },
+      {
+        "name": "market_open",
+        "passed": false,
+        "details": "Outside market hours"
+      },
+      {
+        "name": "validation_passing",
+        "passed": false,
+        "details": "No recent validation pass"
+      },
+      {
+        "name": "circuit_breaker_healthy",
+        "passed": true,
+        "details": "Circuit breaker CLOSED"
+      }
+    ],
+    "summary": "4 checks failed",
+    "timestamp": "2026-04-06T21:42:52.584Z"
+  },
+  {
+    "passed": false,
+    "checks": [
+      {
+        "name": "broker_connected",
+        "passed": false,
+        "details": "Broker not connected"
+      },
+      {
+        "name": "model_trained",
+        "passed": false,
+        "details": "Model not trained or in error state"
+      },
+      {
+        "name": "market_open",
+        "passed": false,
+        "details": "Outside market hours"
+      },
+      {
+        "name": "validation_passing",
+        "passed": false,
+        "details": "No recent validation pass"
+      },
+      {
+        "name": "circuit_breaker_healthy",
+        "passed": true,
+        "details": "Circuit breaker CLOSED"
+      }
+    ],
+    "summary": "4 checks failed",
+    "timestamp": "2026-04-06T21:42:52.584Z"
+  },
+  {
+    "passed": false,
+    "checks": [
+      {
+        "name": "broker_connected",
+        "passed": false,
+        "details": "Broker not connected"
+      },
+      {
+        "name": "model_trained",
+        "passed": false,
+        "details": "Model not trained or in error state"
+      },
+      {
+        "name": "market_open",
+        "passed": false,
+        "details": "Outside market hours"
+      },
+      {
+        "name": "validation_passing",
+        "passed": false,
+        "details": "No recent validation pass"
+      },
+      {
+        "name": "circuit_breaker_healthy",
+        "passed": true,
+        "details": "Circuit breaker CLOSED"
+      }
+    ],
+    "summary": "4 checks failed",
+    "timestamp": "2026-04-06T21:42:52.584Z"
+  },
+  {
+    "passed": false,
+    "checks": [
+      {
+        "name": "broker_connected",
+        "passed": false,
+        "details": "Broker not connected"
+      },
+      {
+        "name": "model_trained",
+        "passed": false,
+        "details": "Model not trained or in error state"
+      },
+      {
+        "name": "market_open",
+        "passed": false,
+        "details": "Outside market hours"
+      },
+      {
+        "name": "validation_passing",
+        "passed": false,
+        "details": "No recent validation pass"
+      },
+      {
+        "name": "circuit_breaker_healthy",
+        "passed": true,
+        "details": "Circuit breaker CLOSED"
+      }
+    ],
+    "summary": "4 checks failed",
+    "timestamp": "2026-04-06T21:42:52.584Z"
+  }
+]

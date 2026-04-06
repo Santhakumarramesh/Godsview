@@ -1,0 +1,78 @@
+[
+  {
+    "id": "transition_AAPL_1775511777476",
+    "symbol": "AAPL",
+    "from": "range",
+    "to": "trend_up",
+    "confidence": 0.85,
+    "timestamp": "2026-04-06T21:42:57.476Z"
+  },
+  {
+    "id": "transition_ETH_1775511777476",
+    "symbol": "ETH",
+    "from": "compression",
+    "to": "expansion",
+    "confidence": 0.75,
+    "timestamp": "2026-04-06T21:42:57.476Z"
+  },
+  {
+    "id": "transition_ETH_1775511777476",
+    "symbol": "ETH",
+    "from": "expansion",
+    "to": "range",
+    "confidence": 0.8,
+    "timestamp": "2026-04-06T21:42:57.476Z",
+    "durationSeconds": 0
+  },
+  {
+    "id": "transition_BTC_1775511777477",
+    "symbol": "BTC",
+    "from": "trend_down",
+    "to": "range",
+    "confidence": 0.7,
+    "timestamp": "2026-04-06T21:42:57.477Z"
+  },
+  {
+    "id": "transition_MULTI_1775511777477",
+    "symbol": "MULTI",
+    "from": "range",
+    "to": "trend_up",
+    "confidence": 0.7,
+    "timestamp": "2026-04-06T21:42:57.477Z"
+  },
+  {
+    "id": "transition_MULTI_1775511777477",
+    "symbol": "MULTI",
+    "from": "trend_up",
+    "to": "expansion",
+    "confidence": 0.8,
+    "timestamp": "2026-04-06T21:42:57.477Z",
+    "durationSeconds": 0
+  },
+  {
+    "id": "transition_MULTI_1775511777478",
+    "symbol": "MULTI",
+    "from": "expansion",
+    "to": "chaotic",
+    "confidence": 0.5,
+    "timestamp": "2026-04-06T21:42:57.478Z",
+    "durationSeconds": 0
+  },
+  {
+    "id": "transition_PERSIST1_1775511777484",
+    "symbol": "PERSIST1",
+    "from": "range",
+    "to": "trend_up",
+    "confidence": 0.8,
+    "timestamp": "2026-04-06T21:42:57.484Z"
+  },
+  {
+    "id": "transition_PERSIST1_1775511777484",
+    "symbol": "PERSIST1",
+    "from": "trend_up",
+    "to": "expansion",
+    "confidence": 0.75,
+    "timestamp": "2026-04-06T21:42:57.484Z",
+    "durationSeconds": 0
+  }
+]

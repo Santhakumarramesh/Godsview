@@ -1,0 +1,135 @@
+[
+  {
+    "method": "FIXED_FRACTIONAL",
+    "positionSize": 40000,
+    "dollarRisk": 2000,
+    "shares": 400,
+    "riskPctActual": 0.02,
+    "adjustments": [],
+    "confidence": 0.5,
+    "calculatedAt": "2026-04-06T21:42:59.052Z"
+  },
+  {
+    "method": "KELLY",
+    "positionSize": 312500,
+    "dollarRisk": 12500,
+    "shares": 6250,
+    "riskPctActual": 0.125,
+    "kellyFraction": 0.25,
+    "adjustments": [
+      {
+        "factor": "kelly_half",
+        "multiplier": 6.25
+      }
+    ],
+    "confidence": 0.6,
+    "calculatedAt": "2026-04-06T21:42:59.057Z"
+  },
+  {
+    "method": "FIXED_FRACTIONAL",
+    "positionSize": 40000,
+    "dollarRisk": 2000,
+    "shares": 400,
+    "riskPctActual": 0.02,
+    "adjustments": [],
+    "confidence": 0.5,
+    "calculatedAt": "2026-04-06T21:42:59.058Z"
+  },
+  {
+    "method": "VOLATILITY_SCALED",
+    "positionSize": 20000,
+    "dollarRisk": 1000,
+    "shares": 200,
+    "riskPctActual": 0.01,
+    "adjustments": [
+      {
+        "factor": "volatility",
+        "multiplier": 0.5
+      }
+    ],
+    "confidence": 0.6,
+    "calculatedAt": "2026-04-06T21:42:59.058Z"
+  },
+  {
+    "method": "FIXED_FRACTIONAL",
+    "positionSize": 40000,
+    "dollarRisk": 2000,
+    "shares": 400,
+    "riskPctActual": 0.02,
+    "adjustments": [],
+    "confidence": 0.5,
+    "calculatedAt": "2026-04-06T21:42:59.058Z"
+  },
+  {
+    "method": "REGIME_ADJUSTED",
+    "positionSize": 12000,
+    "dollarRisk": 600,
+    "shares": 120,
+    "riskPctActual": 0.006,
+    "kellyFraction": 0.25,
+    "adjustments": [
+      {
+        "factor": "regime",
+        "multiplier": 0.3
+      }
+    ],
+    "confidence": 0.6,
+    "calculatedAt": "2026-04-06T21:42:59.058Z"
+  },
+  {
+    "method": "FIXED_FRACTIONAL",
+    "positionSize": 38000,
+    "dollarRisk": 1900,
+    "shares": 380,
+    "riskPctActual": 0.019,
+    "adjustments": [
+      {
+        "factor": "context",
+        "multiplier": 0.95
+      }
+    ],
+    "confidence": 0.6,
+    "calculatedAt": "2026-04-06T21:42:59.059Z"
+  },
+  {
+    "method": "FIXED_FRACTIONAL",
+    "positionSize": 24000,
+    "dollarRisk": 1200,
+    "shares": 240,
+    "riskPctActual": 0.012,
+    "adjustments": [
+      {
+        "factor": "context",
+        "multiplier": 0.6
+      }
+    ],
+    "confidence": 0.6,
+    "calculatedAt": "2026-04-06T21:42:59.059Z"
+  },
+  {
+    "method": "FIXED_FRACTIONAL",
+    "positionSize": 20000,
+    "dollarRisk": 500,
+    "shares": 100,
+    "riskPctActual": 0.01,
+    "adjustments": [],
+    "confidence": 0.5,
+    "calculatedAt": "2026-04-06T21:42:59.062Z"
+  },
+  {
+    "method": "KELLY",
+    "positionSize": 250000,
+    "dollarRisk": 6250,
+    "shares": 1250,
+    "riskPctActual": 0.125,
+    "kellyFraction": 0.25,
+    "adjustments": [
+      {
+        "factor": "kelly_half",
+        "multiplier": 12.5
+      }
+    ],
+    "confidence": 0.6,
+    "calculatedAt": "2026-04-06T21:42:59.062Z"
+  }
+]

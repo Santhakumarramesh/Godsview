@@ -1,0 +1,1145 @@
+[
+  {
+    "id": "snap_limit_0",
+    "symbol": "TSLA",
+    "timeframe": "1h",
+    "htfBias": "bullish",
+    "orderBlockCount": 1,
+    "keyLevelCount": 2,
+    "signalCount": 1,
+    "tradeProbability": {
+      "long": 0.5,
+      "short": 0.3,
+      "neutral": 0.2
+    },
+    "createdAt": "2026-04-06T21:42:53.284Z"
+  },
+  {
+    "id": "snap_limit_1",
+    "symbol": "TSLA",
+    "timeframe": "1h",
+    "htfBias": "bullish",
+    "orderBlockCount": 1,
+    "keyLevelCount": 2,
+    "signalCount": 1,
+    "tradeProbability": {
+      "long": 0.5,
+      "short": 0.3,
+      "neutral": 0.2
+    },
+    "createdAt": "2026-04-06T21:42:53.384Z"
+  },
+  {
+    "id": "snap_limit_2",
+    "symbol": "TSLA",
+    "timeframe": "1h",
+    "htfBias": "bullish",
+    "orderBlockCount": 1,
+    "keyLevelCount": 2,
+    "signalCount": 1,
+    "tradeProbability": {
+      "long": 0.5,
+      "short": 0.3,
+      "neutral": 0.2
+    },
+    "createdAt": "2026-04-06T21:42:53.484Z"
+  },
+  {
+    "id": "snap_limit_3",
+    "symbol": "TSLA",
+    "timeframe": "1h",
+    "htfBias": "bullish",
+    "orderBlockCount": 1,
+    "keyLevelCount": 2,
+    "signalCount": 1,
+    "tradeProbability": {
+      "long": 0.5,
+      "short": 0.3,
+      "neutral": 0.2
+    },
+    "createdAt": "2026-04-06T21:42:53.584Z"
+  },
+  {
+    "id": "snap_limit_4",
+    "symbol": "TSLA",
+    "timeframe": "1h",
+    "htfBias": "bullish",
+    "orderBlockCount": 1,
+    "keyLevelCount": 2,
+    "signalCount": 1,
+    "tradeProbability": {
+      "long": 0.5,
+      "short": 0.3,
+      "neutral": 0.2
+    },
+    "createdAt": "2026-04-06T21:42:53.684Z"
+  },
+  {
+    "id": "snap_limit_5",
+    "symbol": "TSLA",
+    "timeframe": "1h",
+    "htfBias": "bullish",
+    "orderBlockCount": 1,
+    "keyLevelCount": 2,
+    "signalCount": 1,
+    "tradeProbability": {
+      "long": 0.5,
+      "short": 0.3,
+      "neutral": 0.2
+    },
+    "createdAt": "2026-04-06T21:42:53.784Z"
+  },
+  {
+    "id": "snap_limit_6",
+    "symbol": "TSLA",
+    "timeframe": "1h",
+    "htfBias": "bullish",
+    "orderBlockCount": 1,
+    "keyLevelCount": 2,
+    "signalCount": 1,
+    "tradeProbability": {
+      "long": 0.5,
+      "short": 0.3,
+      "neutral": 0.2
+    },
+    "createdAt": "2026-04-06T21:42:53.884Z"
+  },
+  {
+    "id": "snap_limit_7",
+    "symbol": "TSLA",
+    "timeframe": "1h",
+    "htfBias": "bullish",
+    "orderBlockCount": 1,
+    "keyLevelCount": 2,
+    "signalCount": 1,
+    "tradeProbability": {
+      "long": 0.5,
+      "short": 0.3,
+      "neutral": 0.2
+    },
+    "createdAt": "2026-04-06T21:42:53.984Z"
+  },
+  {
+    "id": "snap_limit_8",
+    "symbol": "TSLA",
+    "timeframe": "1h",
+    "htfBias": "bullish",
+    "orderBlockCount": 1,
+    "keyLevelCount": 2,
+    "signalCount": 1,
+    "tradeProbability": {
+      "long": 0.5,
+      "short": 0.3,
+      "neutral": 0.2
+    },
+    "createdAt": "2026-04-06T21:42:54.084Z"
+  },
+  {
+    "id": "snap_limit_9",
+    "symbol": "TSLA",
+    "timeframe": "1h",
+    "htfBias": "bullish",
+    "orderBlockCount": 1,
+    "keyLevelCount": 2,
+    "signalCount": 1,
+    "tradeProbability": {
+      "long": 0.5,
+      "short": 0.3,
+      "neutral": 0.2
+    },
+    "createdAt": "2026-04-06T21:42:54.184Z"
+  },
+  {
+    "id": "snap_limit_10",
+    "symbol": "TSLA",
+    "timeframe": "1h",
+    "htfBias": "bullish",
+    "orderBlockCount": 1,
+    "keyLevelCount": 2,
+    "signalCount": 1,
+    "tradeProbability": {
+      "long": 0.5,
+      "short": 0.3,
+      "neutral": 0.2
+    },
+    "createdAt": "2026-04-06T21:42:54.284Z"
+  },
+  {
+    "id": "snap_limit_11",
+    "symbol": "TSLA",
+    "timeframe": "1h",
+    "htfBias": "bullish",
+    "orderBlockCount": 1,
+    "keyLevelCount": 2,
+    "signalCount": 1,
+    "tradeProbability": {
+      "long": 0.5,
+      "short": 0.3,
+      "neutral": 0.2
+    },
+    "createdAt": "2026-04-06T21:42:54.384Z"
+  },
+  {
+    "id": "snap_limit_12",
+    "symbol": "TSLA",
+    "timeframe": "1h",
+    "htfBias": "bullish",
+    "orderBlockCount": 1,
+    "keyLevelCount": 2,
+    "signalCount": 1,
+    "tradeProbability": {
+      "long": 0.5,
+      "short": 0.3,
+      "neutral": 0.2
+    },
+    "createdAt": "2026-04-06T21:42:54.485Z"
+  },
+  {
+    "id": "snap_limit_13",
+    "symbol": "TSLA",
+    "timeframe": "1h",
+    "htfBias": "bullish",
+    "orderBlockCount": 1,
+    "keyLevelCount": 2,
+    "signalCount": 1,
+    "tradeProbability": {
+      "long": 0.5,
+      "short": 0.3,
+      "neutral": 0.2
+    },
+    "createdAt": "2026-04-06T21:42:54.585Z"
+  },
+  {
+    "id": "snap_limit_14",
+    "symbol": "TSLA",
+    "timeframe": "1h",
+    "htfBias": "bullish",
+    "orderBlockCount": 1,
+    "keyLevelCount": 2,
+    "signalCount": 1,
+    "tradeProbability": {
+      "long": 0.5,
+      "short": 0.3,
+      "neutral": 0.2
+    },
+    "createdAt": "2026-04-06T21:42:54.685Z"
+  },
+  {
+    "id": "snap_limit_15",
+    "symbol": "TSLA",
+    "timeframe": "1h",
+    "htfBias": "bullish",
+    "orderBlockCount": 1,
+    "keyLevelCount": 2,
+    "signalCount": 1,
+    "tradeProbability": {
+      "long": 0.5,
+      "short": 0.3,
+      "neutral": 0.2
+    },
+    "createdAt": "2026-04-06T21:42:54.785Z"
+  },
+  {
+    "id": "snap_limit_16",
+    "symbol": "TSLA",
+    "timeframe": "1h",
+    "htfBias": "bullish",
+    "orderBlockCount": 1,
+    "keyLevelCount": 2,
+    "signalCount": 1,
+    "tradeProbability": {
+      "long": 0.5,
+      "short": 0.3,
+      "neutral": 0.2
+    },
+    "createdAt": "2026-04-06T21:42:54.885Z"
+  },
+  {
+    "id": "snap_limit_17",
+    "symbol": "TSLA",
+    "timeframe": "1h",
+    "htfBias": "bullish",
+    "orderBlockCount": 1,
+    "keyLevelCount": 2,
+    "signalCount": 1,
+    "tradeProbability": {
+      "long": 0.5,
+      "short": 0.3,
+      "neutral": 0.2
+    },
+    "createdAt": "2026-04-06T21:42:54.986Z"
+  },
+  {
+    "id": "snap_limit_18",
+    "symbol": "TSLA",
+    "timeframe": "1h",
+    "htfBias": "bullish",
+    "orderBlockCount": 1,
+    "keyLevelCount": 2,
+    "signalCount": 1,
+    "tradeProbability": {
+      "long": 0.5,
+      "short": 0.3,
+      "neutral": 0.2
+    },
+    "createdAt": "2026-04-06T21:42:55.086Z"
+  },
+  {
+    "id": "snap_limit_19",
+    "symbol": "TSLA",
+    "timeframe": "1h",
+    "htfBias": "bullish",
+    "orderBlockCount": 1,
+    "keyLevelCount": 2,
+    "signalCount": 1,
+    "tradeProbability": {
+      "long": 0.5,
+      "short": 0.3,
+      "neutral": 0.2
+    },
+    "createdAt": "2026-04-06T21:42:55.186Z"
+  },
+  {
+    "symbol": "EURUSD",
+    "timeframe": "1D",
+    "structures": [
+      {
+        "id": "struct_EURUSD_s1",
+        "type": "support",
+        "price": 1.1,
+        "strength": 3,
+        "touches": 2,
+        "firstSeen": "2026-04-06T21:42:57.474Z",
+        "lastTested": "2026-04-06T21:42:57.474Z",
+        "broken": false
+      },
+      {
+        "id": "struct_EURUSD_s2",
+        "type": "support",
+        "price": 1.07,
+        "strength": 4,
+        "touches": 3,
+        "firstSeen": "2026-04-06T21:42:57.474Z",
+        "lastTested": "2026-04-06T21:42:57.474Z",
+        "broken": false
+      },
+      {
+        "id": "struct_EURUSD_r1",
+        "type": "resistance",
+        "price": 1.15,
+        "strength": 3,
+        "touches": 1,
+        "firstSeen": "2026-04-06T21:42:57.474Z",
+        "lastTested": "2026-04-06T21:42:57.474Z",
+        "broken": false
+      },
+      {
+        "id": "struct_EURUSD_r2",
+        "type": "resistance",
+        "price": 1.17,
+        "strength": 5,
+        "touches": 4,
+        "firstSeen": "2026-04-06T21:42:57.474Z",
+        "lastTested": "2026-04-06T21:42:57.474Z",
+        "broken": false
+      }
+    ],
+    "orderBlocks": [
+      {
+        "id": "ob_EURUSD_d1",
+        "type": "demand",
+        "high": 1.09,
+        "low": 1.07,
+        "volume": 0,
+        "timeframe": "1D",
+        "createdAt": "2026-04-06T21:42:57.475Z",
+        "mitigated": false
+      },
+      {
+        "id": "ob_EURUSD_s1",
+        "type": "supply",
+        "high": 1.17,
+        "low": 1.16,
+        "volume": 0,
+        "timeframe": "1D",
+        "createdAt": "2026-04-06T21:42:57.475Z",
+        "mitigated": false
+      }
+    ],
+    "positions": [],
+    "signals": [],
+    "indicators": [],
+    "generatedAt": "2026-04-06T21:42:57.475Z",
+    "version": 1,
+    "versionedAt": "2026-04-06T21:42:57.475Z"
+  },
+  {
+    "symbol": "TEST1",
+    "timeframe": "1D",
+    "structures": [
+      {
+        "id": "struct_TEST1_s1",
+        "type": "support",
+        "price": 98,
+        "strength": 3,
+        "touches": 2,
+        "firstSeen": "2026-04-06T21:42:57.476Z",
+        "lastTested": "2026-04-06T21:42:57.476Z",
+        "broken": false
+      },
+      {
+        "id": "struct_TEST1_s2",
+        "type": "support",
+        "price": 95,
+        "strength": 4,
+        "touches": 3,
+        "firstSeen": "2026-04-06T21:42:57.476Z",
+        "lastTested": "2026-04-06T21:42:57.476Z",
+        "broken": false
+      },
+      {
+        "id": "struct_TEST1_r1",
+        "type": "resistance",
+        "price": 102,
+        "strength": 3,
+        "touches": 1,
+        "firstSeen": "2026-04-06T21:42:57.476Z",
+        "lastTested": "2026-04-06T21:42:57.476Z",
+        "broken": false
+      },
+      {
+        "id": "struct_TEST1_r2",
+        "type": "resistance",
+        "price": 104,
+        "strength": 5,
+        "touches": 4,
+        "firstSeen": "2026-04-06T21:42:57.476Z",
+        "lastTested": "2026-04-06T21:42:57.476Z",
+        "broken": false
+      }
+    ],
+    "orderBlocks": [
+      {
+        "id": "ob_TEST1_d1",
+        "type": "demand",
+        "high": 97,
+        "low": 95.5,
+        "volume": 0,
+        "timeframe": "1D",
+        "createdAt": "2026-04-06T21:42:57.476Z",
+        "mitigated": false
+      },
+      {
+        "id": "ob_TEST1_s1",
+        "type": "supply",
+        "high": 104.5,
+        "low": 103,
+        "volume": 0,
+        "timeframe": "1D",
+        "createdAt": "2026-04-06T21:42:57.476Z",
+        "mitigated": false
+      }
+    ],
+    "positions": [],
+    "signals": [],
+    "indicators": [],
+    "generatedAt": "2026-04-06T21:42:57.476Z",
+    "version": 1,
+    "versionedAt": "2026-04-06T21:42:57.476Z"
+  },
+  {
+    "symbol": "TEST2",
+    "timeframe": "1D",
+    "structures": [
+      {
+        "id": "struct_TEST2_s1",
+        "type": "support",
+        "price": 98,
+        "strength": 3,
+        "touches": 2,
+        "firstSeen": "2026-04-06T21:42:57.476Z",
+        "lastTested": "2026-04-06T21:42:57.476Z",
+        "broken": false
+      },
+      {
+        "id": "struct_TEST2_s2",
+        "type": "support",
+        "price": 95,
+        "strength": 4,
+        "touches": 3,
+        "firstSeen": "2026-04-06T21:42:57.476Z",
+        "lastTested": "2026-04-06T21:42:57.476Z",
+        "broken": false
+      },
+      {
+        "id": "struct_TEST2_r1",
+        "type": "resistance",
+        "price": 102,
+        "strength": 3,
+        "touches": 1,
+        "firstSeen": "2026-04-06T21:42:57.476Z",
+        "lastTested": "2026-04-06T21:42:57.476Z",
+        "broken": false
+      },
+      {
+        "id": "struct_TEST2_r2",
+        "type": "resistance",
+        "price": 104,
+        "strength": 5,
+        "touches": 4,
+        "firstSeen": "2026-04-06T21:42:57.476Z",
+        "lastTested": "2026-04-06T21:42:57.476Z",
+        "broken": false
+      }
+    ],
+    "orderBlocks": [
+      {
+        "id": "ob_TEST2_d1",
+        "type": "demand",
+        "high": 97,
+        "low": 95.5,
+        "volume": 0,
+        "timeframe": "1D",
+        "createdAt": "2026-04-06T21:42:57.476Z",
+        "mitigated": false
+      },
+      {
+        "id": "ob_TEST2_s1",
+        "type": "supply",
+        "high": 104.5,
+        "low": 103,
+        "volume": 0,
+        "timeframe": "1D",
+        "createdAt": "2026-04-06T21:42:57.476Z",
+        "mitigated": false
+      }
+    ],
+    "positions": [],
+    "signals": [],
+    "indicators": [],
+    "generatedAt": "2026-04-06T21:42:57.476Z",
+    "version": 1,
+    "versionedAt": "2026-04-06T21:42:57.476Z"
+  },
+  {
+    "symbol": "VER1",
+    "timeframe": "1D",
+    "structures": [
+      {
+        "id": "struct_VER1_s1",
+        "type": "support",
+        "price": 98,
+        "strength": 3,
+        "touches": 2,
+        "firstSeen": "2026-04-06T21:42:57.482Z",
+        "lastTested": "2026-04-06T21:42:57.482Z",
+        "broken": false
+      },
+      {
+        "id": "struct_VER1_s2",
+        "type": "support",
+        "price": 95,
+        "strength": 4,
+        "touches": 3,
+        "firstSeen": "2026-04-06T21:42:57.482Z",
+        "lastTested": "2026-04-06T21:42:57.482Z",
+        "broken": false
+      },
+      {
+        "id": "struct_VER1_r1",
+        "type": "resistance",
+        "price": 102,
+        "strength": 3,
+        "touches": 1,
+        "firstSeen": "2026-04-06T21:42:57.482Z",
+        "lastTested": "2026-04-06T21:42:57.482Z",
+        "broken": false
+      },
+      {
+        "id": "struct_VER1_r2",
+        "type": "resistance",
+        "price": 104,
+        "strength": 5,
+        "touches": 4,
+        "firstSeen": "2026-04-06T21:42:57.482Z",
+        "lastTested": "2026-04-06T21:42:57.482Z",
+        "broken": false
+      }
+    ],
+    "orderBlocks": [
+      {
+        "id": "ob_VER1_d1",
+        "type": "demand",
+        "high": 97,
+        "low": 95.5,
+        "volume": 0,
+        "timeframe": "1D",
+        "createdAt": "2026-04-06T21:42:57.482Z",
+        "mitigated": false
+      },
+      {
+        "id": "ob_VER1_s1",
+        "type": "supply",
+        "high": 104.5,
+        "low": 103,
+        "volume": 0,
+        "timeframe": "1D",
+        "createdAt": "2026-04-06T21:42:57.482Z",
+        "mitigated": false
+      }
+    ],
+    "positions": [],
+    "signals": [],
+    "indicators": [],
+    "generatedAt": "2026-04-06T21:42:57.482Z",
+    "version": 1,
+    "versionedAt": "2026-04-06T21:42:57.482Z"
+  },
+  {
+    "symbol": "VER1",
+    "timeframe": "1D",
+    "structures": [
+      {
+        "id": "struct_VER1_s1",
+        "type": "support",
+        "price": 98.98,
+        "strength": 3,
+        "touches": 2,
+        "firstSeen": "2026-04-06T21:42:57.482Z",
+        "lastTested": "2026-04-06T21:42:57.482Z",
+        "broken": false
+      },
+      {
+        "id": "struct_VER1_s2",
+        "type": "support",
+        "price": 95.95,
+        "strength": 4,
+        "touches": 3,
+        "firstSeen": "2026-04-06T21:42:57.482Z",
+        "lastTested": "2026-04-06T21:42:57.482Z",
+        "broken": false
+      },
+      {
+        "id": "struct_VER1_r1",
+        "type": "resistance",
+        "price": 103.02,
+        "strength": 3,
+        "touches": 1,
+        "firstSeen": "2026-04-06T21:42:57.482Z",
+        "lastTested": "2026-04-06T21:42:57.482Z",
+        "broken": false
+      },
+      {
+        "id": "struct_VER1_r2",
+        "type": "resistance",
+        "price": 105.04,
+        "strength": 5,
+        "touches": 4,
+        "firstSeen": "2026-04-06T21:42:57.482Z",
+        "lastTested": "2026-04-06T21:42:57.482Z",
+        "broken": false
+      }
+    ],
+    "orderBlocks": [
+      {
+        "id": "ob_VER1_d1",
+        "type": "demand",
+        "high": 97.97,
+        "low": 96.45,
+        "volume": 0,
+        "timeframe": "1D",
+        "createdAt": "2026-04-06T21:42:57.482Z",
+        "mitigated": false
+      },
+      {
+        "id": "ob_VER1_s1",
+        "type": "supply",
+        "high": 105.55,
+        "low": 104.03,
+        "volume": 0,
+        "timeframe": "1D",
+        "createdAt": "2026-04-06T21:42:57.482Z",
+        "mitigated": false
+      }
+    ],
+    "positions": [],
+    "signals": [],
+    "indicators": [],
+    "generatedAt": "2026-04-06T21:42:57.482Z",
+    "version": 2,
+    "versionedAt": "2026-04-06T21:42:57.482Z"
+  },
+  {
+    "symbol": "VER1",
+    "timeframe": "1D",
+    "structures": [
+      {
+        "id": "struct_VER1_s1",
+        "type": "support",
+        "price": 99.96,
+        "strength": 3,
+        "touches": 2,
+        "firstSeen": "2026-04-06T21:42:57.483Z",
+        "lastTested": "2026-04-06T21:42:57.483Z",
+        "broken": false
+      },
+      {
+        "id": "struct_VER1_s2",
+        "type": "support",
+        "price": 96.9,
+        "strength": 4,
+        "touches": 3,
+        "firstSeen": "2026-04-06T21:42:57.483Z",
+        "lastTested": "2026-04-06T21:42:57.483Z",
+        "broken": false
+      },
+      {
+        "id": "struct_VER1_r1",
+        "type": "resistance",
+        "price": 104.04,
+        "strength": 3,
+        "touches": 1,
+        "firstSeen": "2026-04-06T21:42:57.483Z",
+        "lastTested": "2026-04-06T21:42:57.483Z",
+        "broken": false
+      },
+      {
+        "id": "struct_VER1_r2",
+        "type": "resistance",
+        "price": 106.08,
+        "strength": 5,
+        "touches": 4,
+        "firstSeen": "2026-04-06T21:42:57.483Z",
+        "lastTested": "2026-04-06T21:42:57.483Z",
+        "broken": false
+      }
+    ],
+    "orderBlocks": [
+      {
+        "id": "ob_VER1_d1",
+        "type": "demand",
+        "high": 98.94,
+        "low": 97.41,
+        "volume": 0,
+        "timeframe": "1D",
+        "createdAt": "2026-04-06T21:42:57.483Z",
+        "mitigated": false
+      },
+      {
+        "id": "ob_VER1_s1",
+        "type": "supply",
+        "high": 106.59,
+        "low": 105.06,
+        "volume": 0,
+        "timeframe": "1D",
+        "createdAt": "2026-04-06T21:42:57.483Z",
+        "mitigated": false
+      }
+    ],
+    "positions": [],
+    "signals": [],
+    "indicators": [],
+    "generatedAt": "2026-04-06T21:42:57.483Z",
+    "version": 3,
+    "versionedAt": "2026-04-06T21:42:57.483Z"
+  },
+  {
+    "symbol": "TSLA",
+    "timeframe": "1D",
+    "structures": [
+      {
+        "id": "struct_TSLA_s1",
+        "type": "support",
+        "price": 245,
+        "strength": 3,
+        "touches": 2,
+        "firstSeen": "2026-04-06T21:42:59.840Z",
+        "lastTested": "2026-04-06T21:42:59.840Z",
+        "broken": false
+      },
+      {
+        "id": "struct_TSLA_s2",
+        "type": "support",
+        "price": 237.5,
+        "strength": 4,
+        "touches": 3,
+        "firstSeen": "2026-04-06T21:42:59.840Z",
+        "lastTested": "2026-04-06T21:42:59.840Z",
+        "broken": false
+      },
+      {
+        "id": "struct_TSLA_r1",
+        "type": "resistance",
+        "price": 255,
+        "strength": 3,
+        "touches": 1,
+        "firstSeen": "2026-04-06T21:42:59.840Z",
+        "lastTested": "2026-04-06T21:42:59.840Z",
+        "broken": false
+      },
+      {
+        "id": "struct_TSLA_r2",
+        "type": "resistance",
+        "price": 260,
+        "strength": 5,
+        "touches": 4,
+        "firstSeen": "2026-04-06T21:42:59.840Z",
+        "lastTested": "2026-04-06T21:42:59.840Z",
+        "broken": false
+      }
+    ],
+    "orderBlocks": [
+      {
+        "id": "ob_TSLA_d1",
+        "type": "demand",
+        "high": 242.5,
+        "low": 238.75,
+        "volume": 0,
+        "timeframe": "1D",
+        "createdAt": "2026-04-06T21:42:59.840Z",
+        "mitigated": false
+      },
+      {
+        "id": "ob_TSLA_s1",
+        "type": "supply",
+        "high": 261.25,
+        "low": 257.5,
+        "volume": 0,
+        "timeframe": "1D",
+        "createdAt": "2026-04-06T21:42:59.840Z",
+        "mitigated": false
+      }
+    ],
+    "positions": [
+      {
+        "id": "pos_TSLA_1775511779840",
+        "symbol": "TSLA",
+        "direction": "long",
+        "entryPrice": 245,
+        "currentStop": 238,
+        "targets": [
+          {
+            "price": 260,
+            "label": "TP1",
+            "hit": false
+          }
+        ],
+        "quantity": 0,
+        "unrealizedPnl": 0,
+        "openedAt": "2026-04-06T21:42:59.840Z"
+      }
+    ],
+    "signals": [
+      {
+        "id": "sig_TSLA_0_1775511779840",
+        "symbol": "TSLA",
+        "type": "buy",
+        "price": 245,
+        "timestamp": "2026-04-06T21:42:59.840Z",
+        "label": "Entry signal",
+        "confidence": 0.5,
+        "source": "godsview"
+      }
+    ],
+    "indicators": [],
+    "generatedAt": "2026-04-06T21:42:59.840Z",
+    "version": 1,
+    "versionedAt": "2026-04-06T21:42:59.840Z"
+  },
+  {
+    "symbol": "SPY",
+    "timeframe": "1D",
+    "structures": [
+      {
+        "id": "struct_SPY_s1",
+        "type": "support",
+        "price": 490,
+        "strength": 3,
+        "touches": 2,
+        "firstSeen": "2026-04-06T21:42:59.842Z",
+        "lastTested": "2026-04-06T21:42:59.842Z",
+        "broken": false
+      },
+      {
+        "id": "struct_SPY_s2",
+        "type": "support",
+        "price": 475,
+        "strength": 4,
+        "touches": 3,
+        "firstSeen": "2026-04-06T21:42:59.842Z",
+        "lastTested": "2026-04-06T21:42:59.842Z",
+        "broken": false
+      },
+      {
+        "id": "struct_SPY_r1",
+        "type": "resistance",
+        "price": 510,
+        "strength": 3,
+        "touches": 1,
+        "firstSeen": "2026-04-06T21:42:59.842Z",
+        "lastTested": "2026-04-06T21:42:59.842Z",
+        "broken": false
+      },
+      {
+        "id": "struct_SPY_r2",
+        "type": "resistance",
+        "price": 520,
+        "strength": 5,
+        "touches": 4,
+        "firstSeen": "2026-04-06T21:42:59.842Z",
+        "lastTested": "2026-04-06T21:42:59.842Z",
+        "broken": false
+      }
+    ],
+    "orderBlocks": [
+      {
+        "id": "ob_SPY_d1",
+        "type": "demand",
+        "high": 485,
+        "low": 477.5,
+        "volume": 0,
+        "timeframe": "1D",
+        "createdAt": "2026-04-06T21:42:59.842Z",
+        "mitigated": false
+      },
+      {
+        "id": "ob_SPY_s1",
+        "type": "supply",
+        "high": 522.5,
+        "low": 515,
+        "volume": 0,
+        "timeframe": "1D",
+        "createdAt": "2026-04-06T21:42:59.842Z",
+        "mitigated": false
+      }
+    ],
+    "positions": [],
+    "signals": [],
+    "indicators": [],
+    "generatedAt": "2026-04-06T21:42:59.842Z",
+    "version": 1,
+    "versionedAt": "2026-04-06T21:42:59.842Z"
+  },
+  {
+    "symbol": "A",
+    "timeframe": "1D",
+    "structures": [
+      {
+        "id": "struct_A_s1",
+        "type": "support",
+        "price": 98,
+        "strength": 3,
+        "touches": 2,
+        "firstSeen": "2026-04-06T21:42:59.843Z",
+        "lastTested": "2026-04-06T21:42:59.843Z",
+        "broken": false
+      },
+      {
+        "id": "struct_A_s2",
+        "type": "support",
+        "price": 95,
+        "strength": 4,
+        "touches": 3,
+        "firstSeen": "2026-04-06T21:42:59.843Z",
+        "lastTested": "2026-04-06T21:42:59.843Z",
+        "broken": false
+      },
+      {
+        "id": "struct_A_r1",
+        "type": "resistance",
+        "price": 102,
+        "strength": 3,
+        "touches": 1,
+        "firstSeen": "2026-04-06T21:42:59.843Z",
+        "lastTested": "2026-04-06T21:42:59.843Z",
+        "broken": false
+      },
+      {
+        "id": "struct_A_r2",
+        "type": "resistance",
+        "price": 104,
+        "strength": 5,
+        "touches": 4,
+        "firstSeen": "2026-04-06T21:42:59.843Z",
+        "lastTested": "2026-04-06T21:42:59.843Z",
+        "broken": false
+      }
+    ],
+    "orderBlocks": [
+      {
+        "id": "ob_A_d1",
+        "type": "demand",
+        "high": 97,
+        "low": 95.5,
+        "volume": 0,
+        "timeframe": "1D",
+        "createdAt": "2026-04-06T21:42:59.843Z",
+        "mitigated": false
+      },
+      {
+        "id": "ob_A_s1",
+        "type": "supply",
+        "high": 104.5,
+        "low": 103,
+        "volume": 0,
+        "timeframe": "1D",
+        "createdAt": "2026-04-06T21:42:59.843Z",
+        "mitigated": false
+      }
+    ],
+    "positions": [],
+    "signals": [],
+    "indicators": [],
+    "generatedAt": "2026-04-06T21:42:59.843Z",
+    "version": 1,
+    "versionedAt": "2026-04-06T21:42:59.843Z"
+  },
+  {
+    "symbol": "B",
+    "timeframe": "1D",
+    "structures": [
+      {
+        "id": "struct_B_s1",
+        "type": "support",
+        "price": 196,
+        "strength": 3,
+        "touches": 2,
+        "firstSeen": "2026-04-06T21:42:59.843Z",
+        "lastTested": "2026-04-06T21:42:59.843Z",
+        "broken": false
+      },
+      {
+        "id": "struct_B_s2",
+        "type": "support",
+        "price": 190,
+        "strength": 4,
+        "touches": 3,
+        "firstSeen": "2026-04-06T21:42:59.843Z",
+        "lastTested": "2026-04-06T21:42:59.843Z",
+        "broken": false
+      },
+      {
+        "id": "struct_B_r1",
+        "type": "resistance",
+        "price": 204,
+        "strength": 3,
+        "touches": 1,
+        "firstSeen": "2026-04-06T21:42:59.843Z",
+        "lastTested": "2026-04-06T21:42:59.843Z",
+        "broken": false
+      },
+      {
+        "id": "struct_B_r2",
+        "type": "resistance",
+        "price": 208,
+        "strength": 5,
+        "touches": 4,
+        "firstSeen": "2026-04-06T21:42:59.843Z",
+        "lastTested": "2026-04-06T21:42:59.843Z",
+        "broken": false
+      }
+    ],
+    "orderBlocks": [
+      {
+        "id": "ob_B_d1",
+        "type": "demand",
+        "high": 194,
+        "low": 191,
+        "volume": 0,
+        "timeframe": "1D",
+        "createdAt": "2026-04-06T21:42:59.843Z",
+        "mitigated": false
+      },
+      {
+        "id": "ob_B_s1",
+        "type": "supply",
+        "high": 209,
+        "low": 206,
+        "volume": 0,
+        "timeframe": "1D",
+        "createdAt": "2026-04-06T21:42:59.843Z",
+        "mitigated": false
+      }
+    ],
+    "positions": [],
+    "signals": [],
+    "indicators": [],
+    "generatedAt": "2026-04-06T21:42:59.843Z",
+    "version": 1,
+    "versionedAt": "2026-04-06T21:42:59.843Z"
+  },
+  {
+    "symbol": "X",
+    "timeframe": "1D",
+    "structures": [
+      {
+        "id": "struct_X_s1",
+        "type": "support",
+        "price": 49,
+        "strength": 3,
+        "touches": 2,
+        "firstSeen": "2026-04-06T21:42:59.844Z",
+        "lastTested": "2026-04-06T21:42:59.844Z",
+        "broken": false
+      },
+      {
+        "id": "struct_X_s2",
+        "type": "support",
+        "price": 47.5,
+        "strength": 4,
+        "touches": 3,
+        "firstSeen": "2026-04-06T21:42:59.844Z",
+        "lastTested": "2026-04-06T21:42:59.844Z",
+        "broken": false
+      },
+      {
+        "id": "struct_X_r1",
+        "type": "resistance",
+        "price": 51,
+        "strength": 3,
+        "touches": 1,
+        "firstSeen": "2026-04-06T21:42:59.844Z",
+        "lastTested": "2026-04-06T21:42:59.844Z",
+        "broken": false
+      },
+      {
+        "id": "struct_X_r2",
+        "type": "resistance",
+        "price": 52,
+        "strength": 5,
+        "touches": 4,
+        "firstSeen": "2026-04-06T21:42:59.844Z",
+        "lastTested": "2026-04-06T21:42:59.844Z",
+        "broken": false
+      }
+    ],
+    "orderBlocks": [
+      {
+        "id": "ob_X_d1",
+        "type": "demand",
+        "high": 48.5,
+        "low": 47.75,
+        "volume": 0,
+        "timeframe": "1D",
+        "createdAt": "2026-04-06T21:42:59.844Z",
+        "mitigated": false
+      },
+      {
+        "id": "ob_X_s1",
+        "type": "supply",
+        "high": 52.25,
+        "low": 51.5,
+        "volume": 0,
+        "timeframe": "1D",
+        "createdAt": "2026-04-06T21:42:59.844Z",
+        "mitigated": false
+      }
+    ],
+    "positions": [],
+    "signals": [],
+    "indicators": [],
+    "generatedAt": "2026-04-06T21:42:59.844Z",
+    "version": 1,
+    "versionedAt": "2026-04-06T21:42:59.844Z"
+  }
+]

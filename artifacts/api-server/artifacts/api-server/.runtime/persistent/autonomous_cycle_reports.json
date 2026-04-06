@@ -1,0 +1,92 @@
+[
+  {
+    "cycleId": "cycle_1775511772590",
+    "timestamp": "2026-04-06T21:42:52.590Z",
+    "durationMs": 0,
+    "signalsGathered": 2,
+    "decisionsEvaluated": 2,
+    "decisionsExecuted": 2,
+    "selfHealTriggered": false,
+    "error": null
+  },
+  {
+    "cycleId": "cycle_1775511772590",
+    "timestamp": "2026-04-06T21:42:52.590Z",
+    "durationMs": 0,
+    "signalsGathered": 2,
+    "decisionsEvaluated": 2,
+    "decisionsExecuted": 1,
+    "selfHealTriggered": false,
+    "error": null
+  },
+  {
+    "cycleId": "cycle_1775511772600",
+    "timestamp": "2026-04-06T21:42:52.600Z",
+    "durationMs": 0,
+    "signalsGathered": 2,
+    "decisionsEvaluated": 2,
+    "decisionsExecuted": 1,
+    "selfHealTriggered": false,
+    "error": null
+  },
+  {
+    "cycleId": "cycle_1775511772600",
+    "timestamp": "2026-04-06T21:42:52.600Z",
+    "durationMs": 0,
+    "signalsGathered": 2,
+    "decisionsEvaluated": 2,
+    "decisionsExecuted": 1,
+    "selfHealTriggered": false,
+    "error": null
+  },
+  {
+    "cycleId": "cycle_1775511772601",
+    "timestamp": "2026-04-06T21:42:52.601Z",
+    "durationMs": 0,
+    "signalsGathered": 2,
+    "decisionsEvaluated": 2,
+    "decisionsExecuted": 2,
+    "selfHealTriggered": false,
+    "error": null
+  },
+  {
+    "cycleId": "cycle_1775511772601",
+    "timestamp": "2026-04-06T21:42:52.601Z",
+    "durationMs": 0,
+    "signalsGathered": 2,
+    "decisionsEvaluated": 2,
+    "decisionsExecuted": 2,
+    "selfHealTriggered": false,
+    "error": null
+  },
+  {
+    "cycleId": "cycle_1775511772601",
+    "timestamp": "2026-04-06T21:42:52.601Z",
+    "durationMs": 0,
+    "signalsGathered": 2,
+    "decisionsEvaluated": 2,
+    "decisionsExecuted": 2,
+    "selfHealTriggered": false,
+    "error": null
+  },
+  {
+    "cycleId": "cycle_1775511772602",
+    "timestamp": "2026-04-06T21:42:52.602Z",
+    "durationMs": 0,
+    "signalsGathered": 2,
+    "decisionsEvaluated": 2,
+    "decisionsExecuted": 1,
+    "selfHealTriggered": false,
+    "error": null
+  },
+  {
+    "cycleId": "cycle_1775511772602",
+    "timestamp": "2026-04-06T21:42:52.602Z",
+    "durationMs": 0,
+    "signalsGathered": 2,
+    "decisionsEvaluated": 2,
+    "decisionsExecuted": 2,
+    "selfHealTriggered": false,
+    "error": null
+  }
+]
