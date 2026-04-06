@@ -92,4 +92,10 @@ router.use("/api/market", marketRouter);         // Phase 5 — Market data
 import decisionLoopRouter from "./decision_loop";
 router.use("/api/decision-loop", decisionLoopRouter); // Phase 87 — Unified pipeline
 
+// ── Phase 88: Evaluation & Proof Layer ───────────────────────────────────
+import evalRouter from "./eval";
+import trustRouter from "./trust";
+router.use("/api/eval", evalRouter);             // Phase 88 — Eval harness + benchmarks
+router.use("/api/trust", trustRouter);           // Phase 88 — Trust surface + promotion gates
+
 export default router;
