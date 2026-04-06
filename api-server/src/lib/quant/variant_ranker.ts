@@ -1,199 +1,519 @@
-/**
- * variant_ranker.ts — GodsView Quant Reasoning: Strategy Robustness Ranking
- *
- * Score strategy variants across multiple robustness dimensions.
- * Real quant work: rank by robustness, not just PnL.
- *
- * Key responsibilities:
- * - Score robustness across 8+ independent dimensions
- * - Rank variants by composite quality score
- * - Compare strategies fairly (PnL-adjusted robustness)
- * - Identify fragile vs resilient approaches
- */
+import { Strategy, BacktestResult } from '../types';
 
-export interface StrategyMetrics {
-  sharpe: number;
-  winRate: number;
-  profitFactor: number;
-  maxDrawdown: number;
-  totalTrades: number;
-  monthlyConsistency: number;
-  inSampleVsOutSampleDecay: number; // gap between in/out performance
-  parameterSensitivity: number; // 0-1: how much does PnL degrade with param changes
-  regimeConsistency: number; // 0-1: % of regimes where strategy works
-  recoveryFactor: number;
-  complexityRank: number; // 1-10: complexity (higher = more fragile)
+export interface RobustnessScores {
+  edgeStability: number;
+  parameterSensitivity: number;
+  regimeRobustness: number;
+  drawdownProfile: number;
+  executionRealism: number;
+  complexityPenalty: number;
+  sampleSizeAdequacy: number;
+  outOfSamplePerformance: number;
 }
 
-export interface RobustnessScore {
-  overall: number; // 0-100
-  parameterStability: number; // how sensitive to parameter changes
-  regimeAdaptability: number; // works across regimes
-  outOfSampleDecay: number; // in-sample vs out-of-sample gap (0 = no decay)
-  drawdownBehavior: number; // recovery speed, max DD
-  consistencyScore: number; // Sharpe consistency across periods
-  complexityPenalty: number; // simpler = more robust
-  sampleSize: number; // enough trades? (0-100)
-  edgeDurability: number; // expected longevity of edge
-  backtestTrust: number; // 0-100: trust this backtest
-  liveReadiness: number; // 0-100: ready for live trading
-  explanation: string[];
-  warnings: string[];
-}
-
-export interface RankedVariant {
-  strategy: any;
-  results: any;
-  robustness: RobustnessScore;
+export interface VariantScore {
+  strategyId: string;
+  name: string;
+  backtestResults: BacktestResult;
+  robustnessScores: RobustnessScores;
+  compositeScore: number;
   rank: number;
-  recommendedCapitalAllocation: number; // % of capital
-  reason: string;
+  reasoning: string;
 }
 
 export interface ComparisonResult {
-  strategyA: { name: string; score: number };
-  strategyB: { name: string; score: number };
-  winner: "A" | "B" | "tie";
-  difference: number;
-  reasoning: string[];
+  strategyA: string;
+  strategyB: string;
+  winner: string;
+  winMargin: number;
+  scoreBreakdown: Record<string, { scoreA: number; scoreB: number; winner: string }>;
+  recommendation: string;
 }
 
-class VariantRanker {
+export class VariantRanker {
   /**
-   * Score a strategy across multiple robustness dimensions
+   * Score a strategy variant on 8 robustness dimensions
    */
-  scoreRobustness(strategy: any, backtestResults: any): RobustnessScore {
-    const metrics: StrategyMetrics = {
-      sharpe: backtestResults.sharpe || 0,
-      winRate: backtestResults.winRate || 0.5,
-      profitFactor: backtestResults.profitFactor || 1.0,
-      maxDrawdown: backtestResults.maxDrawdown || 0.3,
-      totalTrades: backtestResults.totalTrades || 0,
-      monthlyConsistency: backtestResults.monthlyConsistency || 0.5,
-      inSampleVsOutSampleDecay: backtestResults.outOfSampleDecay || 0.2,
-      parameterSensitivity: this.estimateParameterSensitivity(strategy, backtestResults),
-      regimeConsistency: this.estimateRegimeConsistency(strategy, backtestResults),
-      recoveryFactor: backtestResults.recoveryFactor || 0,
-      complexityRank: this.estimateComplexity(strategy),
+  private scoreVariant(strategy: Strategy, backtestResults: BacktestResult): RobustnessScores {
+    const scores: RobustnessScores = {
+      edgeStability: this.scoreEdgeStability(backtestResults),
+      parameterSensitivity: this.scoreParameterSensitivity(backtestResults),
+      regimeRobustness: this.scoreRegimeRobustness(backtestResults),
+      drawdownProfile: this.scoreDrawdownProfile(backtestResults),
+      executionRealism: this.scoreExecutionRealism(strategy, backtestResults),
+      complexityPenalty: this.scoreComplexityPenalty(strategy),
+      sampleSizeAdequacy: this.scoreSampleSizeAdequacy(backtestResults),
+      outOfSamplePerformance: this.scoreOutOfSamplePerformance(backtestResults),
     };
 
-    const explanation: string[] = [];
-    const warnings: string[] = [];
+    return scores;
+  }
 
-    // ── Dimension 1: Parameter Stability ──────────────────────────────────────
-    const parameterStability = this.scoreParameterStability(metrics, explanation);
+  private scoreEdgeStability(backtestResults: BacktestResult): number {
+    // Score based on rolling window Sharpe consistency
+    if (!backtestResults.rollingWindowSharpe || backtestResults.rollingWindowSharpe.length === 0) {
+      return 0.5; // Unknown
+    }
 
-    // ── Dimension 2: Regime Adaptability ──────────────────────────────────────
-    const regimeAdaptability = this.scoreRegimeAdaptability(metrics, explanation);
+    const windows = backtestResults.rollingWindowSharpe;
+    const mean = windows.reduce((a, b) => a + b) / windows.length;
+    const variance = windows.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / windows.length;
+    const stdDev = Math.sqrt(variance);
 
-    // ── Dimension 3: Out-of-Sample Decay ─────────────────────────────────────
-    const outOfSampleDecay = Math.max(0, 100 - metrics.inSampleVsOutSampleDecay * 300);
+    // Lower coefficient of variation = more stable
+    const cv = stdDev / Math.max(Math.abs(mean), 0.1);
+    if (cv < 0.3) return 1.0;
+    if (cv < 0.5) return 0.8;
+    if (cv < 0.8) return 0.6;
+    if (cv < 1.2) return 0.4;
+    return 0.2;
+  }
 
-    // ── Dimension 4: Drawdown Behavior ───────────────────────────────────────
-    const drawdownBehavior = this.scoreDrawdownBehavior(metrics, explanation, warnings);
+  private scoreParameterSensitivity(backtestResults: BacktestResult): number {
+    // Lower sensitivity = higher score
+    // Sensitivity measures how much returns change with small parameter variations
+    if (!backtestResults.parameterSensitivity) {
+      return 0.5; // Unknown
+    }
 
-    // ── Dimension 5: Consistency Score ───────────────────────────────────────
-    const consistencyScore = this.scoreConsistency(metrics, explanation);
+    const sensitivity = backtestResults.parameterSensitivity;
+    if (sensitivity < 0.05) return 1.0;
+    if (sensitivity < 0.1) return 0.9;
+    if (sensitivity < 0.15) return 0.8;
+    if (sensitivity < 0.25) return 0.6;
+    if (sensitivity < 0.4) return 0.3;
+    return 0.1;
+  }
 
-    // ── Dimension 6: Complexity Penalty ──────────────────────────────────────
-    const complexityPenalty = this.scoreComplexityPenalty(metrics, explanation, warnings);
+  private scoreRegimeRobustness(backtestResults: BacktestResult): number {
+    // Score based on performance consistency across regimes
+    if (!backtestResults.regimePerformance) {
+      return 0.5; // Unknown
+    }
 
-    // ── Dimension 7: Sample Size ────────────────────────────────────────────
-    const sampleSize = this.scoreSampleSize(metrics, explanation, warnings);
+    const performances = Object.values(backtestResults.regimePerformance as Record<string, number>);
+    if (performances.length < 2) return 0.5; // Only one regime
 
-    // ── Dimension 8: Edge Durability ────────────────────────────────────────
-    const edgeDurability = this.scoreEdgeDurability(metrics, explanation);
+    const mean = performances.reduce((a, b) => a + b) / performances.length;
+    const variance = performances.reduce((sum, p) => sum + Math.pow(p - mean, 2), 0) / performances.length;
+    const stdDev = Math.sqrt(variance);
 
-    // ── Backtest Trust Score ──────────────────────────────────────────────────
-    const backtestTrust = this.scoreBacktestTrust(metrics, explanation, warnings);
+    // Lower coefficient of variation = more consistent across regimes
+    const cv = stdDev / Math.max(Math.abs(mean), 0.1);
+    if (cv < 0.2) return 1.0;
+    if (cv < 0.4) return 0.85;
+    if (cv < 0.7) return 0.65;
+    if (cv < 1.2) return 0.4;
+    return 0.15;
+  }
 
-    // ── Live Readiness ──────────────────────────────────────────────────────
-    const liveReadiness = this.scoreLiveReadiness(metrics, warnings);
+  private scoreDrawdownProfile(backtestResults: BacktestResult): number {
+    let score = 0;
 
-    // ── Composite Score ─────────────────────────────────────────────────────
-    const overall = this.computeCompositeScore({
-      parameterStability,
-      regimeAdaptability,
-      outOfSampleDecay,
-      drawdownBehavior,
-      consistencyScore,
-      complexityPenalty,
-      sampleSize,
-      edgeDurability,
-      backtestTrust,
-      liveReadiness,
+    // Max drawdown component (lower is better)
+    const maxDD = backtestResults.maxDrawdown || 0.5;
+    if (maxDD < 0.1) {
+      score += 0.4;
+    } else if (maxDD < 0.2) {
+      score += 0.3;
+    } else if (maxDD < 0.35) {
+      score += 0.2;
+    } else if (maxDD < 0.5) {
+      score += 0.1;
+    }
+
+    // Recovery time component (faster recovery is better)
+    if (backtestResults.maxDrawdownRecoveryDays) {
+      const recoveryDays = backtestResults.maxDrawdownRecoveryDays;
+      if (recoveryDays < 30) {
+        score += 0.3;
+      } else if (recoveryDays < 60) {
+        score += 0.2;
+      } else if (recoveryDays < 120) {
+        score += 0.1;
+      }
+    } else {
+      score += 0.15;
+    }
+
+    // Tail risk component (avoid extreme losses)
+    const worstMonth = backtestResults.worstMonthReturn || -0.3;
+    if (worstMonth > -0.15) {
+      score += 0.3;
+    } else if (worstMonth > -0.25) {
+      score += 0.15;
+    } else if (worstMonth > -0.4) {
+      score += 0.05;
+    }
+
+    return Math.min(score, 1);
+  }
+
+  private scoreExecutionRealism(strategy: Strategy, backtestResults: BacktestResult): number {
+    let score = 0;
+
+    // Slippage handling (if results account for slippage, good)
+    if (backtestResults.slippageAssumed && backtestResults.slippageAssumed > 0) {
+      score += 0.25;
+    }
+
+    // Commission costs
+    if (backtestResults.commissionsIncluded) {
+      score += 0.25;
+    }
+
+    // Spread assumptions
+    if (backtestResults.spreadAssumed && backtestResults.spreadAssumed > 0) {
+      score += 0.2;
+    }
+
+    // Liquidity check during backtest
+    if (backtestResults.liquidityCheck) {
+      score += 0.15;
+    }
+
+    // Order execution realism
+    const orderType = strategy.orderType || 'market';
+    if (orderType === 'limit' || strategy.entryRules?.some(r => r.type?.includes('limit'))) {
+      score += 0.15;
+    }
+
+    return Math.min(score, 1);
+  }
+
+  private scoreComplexityPenalty(strategy: Strategy): number {
+    // Simpler strategies score higher
+    let score = 1.0;
+
+    // Penalize for too many rules
+    const ruleCount = (strategy.entryRules?.length || 0) + (strategy.exitRules?.length || 0);
+    if (ruleCount > 10) {
+      score -= 0.3;
+    } else if (ruleCount > 6) {
+      score -= 0.15;
+    } else if (ruleCount > 3) {
+      score -= 0.05;
+    }
+
+    // Penalize for too many parameters
+    const paramCount = strategy.parameters?.length || 0;
+    if (paramCount > 15) {
+      score -= 0.2;
+    } else if (paramCount > 8) {
+      score -= 0.1;
+    }
+
+    // Penalize for custom/complex indicators
+    const customIndicators = strategy.indicators?.filter(i => i.type.includes('Custom')).length || 0;
+    if (customIndicators > 0) {
+      score -= 0.1;
+    }
+
+    return Math.min(Math.max(score, 0), 1);
+  }
+
+  private scoreSampleSizeAdequacy(backtestResults: BacktestResult): number {
+    // Score based on sufficient number of trades for statistical significance
+    const trades = backtestResults.totalTrades || 0;
+
+    if (trades > 500) return 1.0;
+    if (trades > 300) return 0.95;
+    if (trades > 200) return 0.85;
+    if (trades > 100) return 0.7;
+    if (trades > 50) return 0.5;
+    if (trades > 20) return 0.25;
+    return 0.1;
+  }
+
+  private scoreOutOfSamplePerformance(backtestResults: BacktestResult): number {
+    // Compare out-of-sample to in-sample performance
+    if (!backtestResults.outOfSampleSharpe || !backtestResults.sharpeRatio) {
+      return 0.5; // Unknown
+    }
+
+    const degradation = backtestResults.outOfSampleSharpe / Math.max(backtestResults.sharpeRatio, 0.1);
+
+    if (degradation > 0.9) return 1.0;
+    if (degradation > 0.75) return 0.85;
+    if (degradation > 0.6) return 0.65;
+    if (degradation > 0.4) return 0.4;
+    if (degradation > 0.2) return 0.15;
+    return 0.05;
+  }
+
+  /**
+   * Calculate composite robustness score
+   */
+  private calculateCompositeScore(robustnessScores: RobustnessScores): number {
+    // Weighted average of all 8 dimensions
+    const weights = {
+      edgeStability: 0.15,
+      parameterSensitivity: 0.15,
+      regimeRobustness: 0.15,
+      drawdownProfile: 0.15,
+      executionRealism: 0.15,
+      complexityPenalty: 0.1,
+      sampleSizeAdequacy: 0.1,
+      outOfSamplePerformance: 0.15,
+    };
+
+    let score = 0;
+    score += robustnessScores.edgeStability * weights.edgeStability;
+    score += robustnessScores.parameterSensitivity * weights.parameterSensitivity;
+    score += robustnessScores.regimeRobustness * weights.regimeRobustness;
+    score += robustnessScores.drawdownProfile * weights.drawdownProfile;
+    score += robustnessScores.executionRealism * weights.executionRealism;
+    score += robustnessScores.complexityPenalty * weights.complexityPenalty;
+    score += robustnessScores.sampleSizeAdequacy * weights.sampleSizeAdequacy;
+    score += robustnessScores.outOfSamplePerformance * weights.outOfSamplePerformance;
+
+    return Math.min(score, 1);
+  }
+
+  /**
+   * Rank multiple strategy variants by robustness
+   */
+  rankVariants(variants: Array<{ strategy: Strategy; backtestResults: BacktestResult }>): VariantScore[] {
+    const scores: VariantScore[] = variants.map((variant, index) => {
+      const robustnessScores = this.scoreVariant(variant.strategy, variant.backtestResults);
+      const compositeScore = this.calculateCompositeScore(robustnessScores);
+
+      return {
+        strategyId: variant.strategy.id || `variant-${index}`,
+        name: variant.strategy.name || `Variant ${index + 1}`,
+        backtestResults: variant.backtestResults,
+        robustnessScores,
+        compositeScore,
+        rank: 0, // Will be set after sorting
+        reasoning: '',
+      };
     });
 
+    // Sort by composite score (descending)
+    scores.sort((a, b) => b.compositeScore - a.compositeScore);
+
+    // Assign ranks and generate reasoning
+    for (let i = 0; i < scores.length; i++) {
+      scores[i].rank = i + 1;
+      scores[i].reasoning = this.generateRankingReasoning(scores[i], scores.length);
+    }
+
+    return scores;
+  }
+
+  private generateRankingReasoning(score: VariantScore, totalVariants: number): string {
+    const parts: string[] = [];
+
+    parts.push(`Ranked #${score.rank} out of ${totalVariants} variants.`);
+
+    // Identify strengths
+    const robustness = score.robustnessScores;
+    const strengths: string[] = [];
+
+    if (robustness.edgeStability > 0.8) {
+      strengths.push('edge stability');
+    }
+    if (robustness.parameterSensitivity > 0.8) {
+      strengths.push('parameter robustness');
+    }
+    if (robustness.regimeRobustness > 0.8) {
+      strengths.push('regime consistency');
+    }
+    if (robustness.drawdownProfile > 0.8) {
+      strengths.push('drawdown management');
+    }
+    if (robustness.executionRealism > 0.8) {
+      strengths.push('execution feasibility');
+    }
+    if (robustness.outOfSamplePerformance > 0.8) {
+      strengths.push('generalization to new data');
+    }
+
+    if (strengths.length > 0) {
+      parts.push(`Strengths: ${strengths.join(', ')}.`);
+    }
+
+    // Identify weaknesses
+    const weaknesses: string[] = [];
+
+    if (robustness.edgeStability < 0.5) {
+      weaknesses.push('unstable edge');
+    }
+    if (robustness.parameterSensitivity < 0.5) {
+      weaknesses.push('sensitive to parameters');
+    }
+    if (robustness.regimeRobustness < 0.5) {
+      weaknesses.push('regime dependent');
+    }
+    if (robustness.drawdownProfile < 0.5) {
+      weaknesses.push('high drawdown risk');
+    }
+    if (robustness.sampleSizeAdequacy < 0.5) {
+      weaknesses.push('insufficient trades');
+    }
+    if (robustness.outOfSamplePerformance < 0.5) {
+      weaknesses.push('poor generalization');
+    }
+
+    if (weaknesses.length > 0) {
+      parts.push(`Weaknesses: ${weaknesses.join(', ')}.`);
+    }
+
+    // Recommendation
+    if (score.rank === 1) {
+      parts.push('Recommendation: Best variant - most robust. Suitable for live deployment.');
+    } else if (score.rank <= 3) {
+      parts.push('Recommendation: Good variant with acceptable robustness. Can deploy with monitoring.');
+    } else if (score.rank <= totalVariants / 2) {
+      parts.push('Recommendation: Moderate variant. Needs further refinement before deployment.');
+    } else {
+      parts.push('Recommendation: Weak variant. Significant robustness issues. Not recommended for deployment.');
+    }
+
+    return parts.join(' ');
+  }
+
+  /**
+   * Compare two strategy variants head-to-head
+   */
+  compareTwo(variantA: { strategy: Strategy; backtestResults: BacktestResult }, variantB: { strategy: Strategy; backtestResults: BacktestResult }): ComparisonResult {
+    const scoresA = this.scoreVariant(variantA.strategy, variantA.backtestResults);
+    const scoresB = this.scoreVariant(variantB.strategy, variantB.backtestResults);
+
+    const compositeA = this.calculateCompositeScore(scoresA);
+    const compositeB = this.calculateCompositeScore(scoresB);
+
+    const winner = compositeA > compositeB ? (variantA.strategy.name || 'A') : variantB.strategy.name || 'B';
+    const winMargin = Math.abs(compositeA - compositeB);
+
+    const breakdown: Record<string, { scoreA: number; scoreB: number; winner: string }> = {
+      edgeStability: {
+        scoreA: scoresA.edgeStability,
+        scoreB: scoresB.edgeStability,
+        winner: scoresA.edgeStability > scoresB.edgeStability ? 'A' : 'B',
+      },
+      parameterSensitivity: {
+        scoreA: scoresA.parameterSensitivity,
+        scoreB: scoresB.parameterSensitivity,
+        winner: scoresA.parameterSensitivity > scoresB.parameterSensitivity ? 'A' : 'B',
+      },
+      regimeRobustness: {
+        scoreA: scoresA.regimeRobustness,
+        scoreB: scoresB.regimeRobustness,
+        winner: scoresA.regimeRobustness > scoresB.regimeRobustness ? 'A' : 'B',
+      },
+      drawdownProfile: {
+        scoreA: scoresA.drawdownProfile,
+        scoreB: scoresB.drawdownProfile,
+        winner: scoresA.drawdownProfile > scoresB.drawdownProfile ? 'A' : 'B',
+      },
+      executionRealism: {
+        scoreA: scoresA.executionRealism,
+        scoreB: scoresB.executionRealism,
+        winner: scoresA.executionRealism > scoresB.executionRealism ? 'A' : 'B',
+      },
+      complexityPenalty: {
+        scoreA: scoresA.complexityPenalty,
+        scoreB: scoresB.complexityPenalty,
+        winner: scoresA.complexityPenalty > scoresB.complexityPenalty ? 'A' : 'B',
+      },
+      sampleSizeAdequacy: {
+        scoreA: scoresA.sampleSizeAdequacy,
+        scoreB: scoresB.sampleSizeAdequacy,
+        winner: scoresA.sampleSizeAdequacy > scoresB.sampleSizeAdequacy ? 'A' : 'B',
+      },
+      outOfSamplePerformance: {
+        scoreA: scoresA.outOfSamplePerformance,
+        scoreB: scoresB.outOfSamplePerformance,
+        winner: scoresA.outOfSamplePerformance > scoresB.outOfSamplePerformance ? 'A' : 'B',
+      },
+    };
+
+    let recommendation = '';
+    if (winMargin > 0.15) {
+      recommendation = `${winner} is significantly more robust. Recommend ${winner}.`;
+    } else if (winMargin > 0.05) {
+      recommendation = `${winner} is moderately better. Recommend ${winner} with qualification that difference is marginal.`;
+    } else {
+      recommendation = `Variants are nearly equivalent in robustness. Choose based on other criteria (simplicity, capital requirements, etc.).`;
+    }
+
     return {
-      overall,
-      parameterStability,
-      regimeAdaptability,
-      outOfSampleDecay,
-      drawdownBehavior,
-      consistencyScore,
-      complexityPenalty,
-      sampleSize,
-      edgeDurability,
-      backtestTrust,
-      liveReadiness,
-      explanation,
-      warnings,
+      strategyA: variantA.strategy.name || 'A',
+      strategyB: variantB.strategy.name || 'B',
+      winner,
+      winMargin,
+      scoreBreakdown: breakdown,
+      recommendation,
     };
   }
 
   /**
-   * Rank multiple strategy variants
+   * Get top N variants with explanation
    */
-  rankByRobustness(variants: { strategy: any; results: any }[]): RankedVariant[] {
-    const ranked = variants
-      .map((v) => ({
-        strategy: v.strategy,
-        results: v.results,
-        robustness: this.scoreRobustness(v.strategy, v.results),
-        rank: 0,
-        recommendedCapitalAllocation: 0,
-        reason: "",
-      }))
-      .sort((a, b) => b.robustness.overall - a.robustness.overall)
-      .map((v, idx) => {
-        const allocation = this.allocateCapital(idx, variants.length, v.robustness.overall);
-        return {
-          ...v,
-          rank: idx,
-          recommendedCapitalAllocation: allocation,
-          reason: this.generateReason(v.robustness, idx, variants.length),
-        };
-      });
-
-    return ranked;
+  topN(variants: Array<{ strategy: Strategy; backtestResults: BacktestResult }>, n: number): VariantScore[] {
+    const ranked = this.rankVariants(variants);
+    return ranked.slice(0, Math.min(n, ranked.length));
   }
 
   /**
-   * Compute composite quality score
+   * Get variance analysis - how much do variants differ in each dimension?
    */
-  computeQualityScore(metrics: StrategyMetrics): number {
-    // Simple quality score: Sharpe / MaxDD ratio
-    const riskAdjusted = metrics.sharpe / Math.max(metrics.maxDrawdown, 0.1);
-    const winRateScore = (metrics.winRate - 0.5) * 100; // 0-50 scale
-    const consistency = metrics.monthlyConsistency * 100; // 0-100
+  varianceAnalysis(variants: Array<{ strategy: Strategy; backtestResults: BacktestResult }>): Record<string, { mean: number; stdDev: number; range: [number, number] }> {
+    const allScores = variants.map(v => this.scoreVariant(v.strategy, v.backtestResults));
 
-    return riskAdjusted * 20 + winRateScore * 0.5 + consistency * 0.3;
+    const dimensions = [
+      'edgeStability',
+      'parameterSensitivity',
+      'regimeRobustness',
+      'drawdownProfile',
+      'executionRealism',
+      'complexityPenalty',
+      'sampleSizeAdequacy',
+      'outOfSamplePerformance',
+    ] as const;
+
+    const analysis: Record<string, { mean: number; stdDev: number; range: [number, number] }> = {};
+
+    for (const dim of dimensions) {
+      const values = allScores.map(s => s[dim]);
+      const mean = values.reduce((a, b) => a + b, 0) / values.length;
+      const variance = values.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / values.length;
+      const stdDev = Math.sqrt(variance);
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+
+      analysis[dim] = {
+        mean,
+        stdDev,
+        range: [min, max],
+      };
+    }
+
+    return analysis;
   }
 
   /**
-   * Compare robustness of two strategies
+   * Consensus score - how much do all variants agree on quality?
    */
-  compareRobustness(a: any, b: any): ComparisonResult {
-    const scoreA = this.scoreRobustness(a.strategy, a.results);
-    const scoreB = this.scoreRobustness(b.strategy, b.results);
+  consensusScore(variants: Array<{ strategy: Strategy; backtestResults: BacktestResult }>): number {
+    if (variants.length < 2) return 1.0; // No disagreement with 1 variant
 
-    const reasoning: string[] = [];
+    const ranked = this.rankVariants(variants);
+    const topScore = ranked[0].compositeScore;
+    const bottomScore = ranked[ranked.length - 1].compositeScore;
 
-    // Compare each dimension
-    if (scoreA.parameterStability > scoreB.parameterStability + 5) {
-      reasoning.push(`Strategy A is more parameter-stable (${scoreA.parameterStability.toFixed(0)} vs ${scoreB.parameterStability.toFixed(0)})`);
-    }
+    // Measure spread relative to mean
+    const mean = ranked.reduce((sum, v) => sum + v.compositeScore, 0) / ranked.length;
+    const variance = ranked.reduce((sum, v) => sum + Math.pow(v.compositeScore - mean, 2), 0) / ranked.length;
+    const stdDev = Math.sqrt(variance);
 
-    if (scoreA.regimeAdaptability > scoreB.regimeAdaptability + 5) {
-      reasoning.push(`Strategy A adapts better across regimes (${scoreA.regimeAdaptability.toFixed(0)} vs ${scoreB.regimeAdaptability.toFixed(0)})`);
-    }
+    // Coefficient of variation (0 = perfect agreement, 1 = high disagreement)
+    const cv = stdDev / Math.max(mean, 0.1);
+
+    // Convert to consensus score (0-1, higher = more consensus)
+    return 1 / (1 + cv);
+  }
+}
+
+export default VariantRanker;
