@@ -88,4 +88,8 @@ router.use("/api/autonomous", autonomousRouter); // Phase 9 — Autonomous ops
 router.use("/api/backtest", backtestEnhancedRouter); // Phase 2 — Enhanced backtest
 router.use("/api/market", marketRouter);         // Phase 5 — Market data
 
+// ── Phase 87: Quant Decision Loop ────────────────────────────────────────
+import decisionLoopRouter from "./decision_loop";
+router.use("/api/decision-loop", decisionLoopRouter); // Phase 87 — Unified pipeline
+
 export default router;
