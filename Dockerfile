@@ -79,7 +79,7 @@ COPY scripts/package.json scripts/
 RUN pnpm install --frozen-lockfile --prod
 
 # Install tsx globally for running migration scripts (.ts)
-RUN corepack pnpm add -g tsx
+RUN npm install -g tsx
 
 # Copy built API bundle
 COPY --from=build /app/artifacts/api-server/dist ./artifacts/api-server/dist
