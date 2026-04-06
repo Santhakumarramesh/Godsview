@@ -98,4 +98,10 @@ import trustRouter from "./trust";
 router.use("/api/eval", evalRouter);             // Phase 88 — Eval harness + benchmarks
 router.use("/api/trust", trustRouter);           // Phase 88 — Trust surface + promotion gates
 
+// ── Phase 91: System Integration & Operations ────────────────────────────
+import systemBridgeRouter from "./system_bridge";
+import opsQuantRouter from "./ops_quant";
+router.use("/api/bridge", systemBridgeRouter);   // Phase 91 — Unified system bridge
+router.use("/api/ops", opsQuantRouter);          // Phase 91 — Operational runbook + briefs
+
 export default router;
