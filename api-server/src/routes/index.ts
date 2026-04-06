@@ -67,4 +67,25 @@ router.use(strategyParamsRouter);    // Phase 11B — /brain/strategy/params
 router.use(positionSizingRouter);    // Phase 11C — /brain/positions/sizing, /brain/account/equity
 router.use(brainHealthRouter);       // Phase 12D — /brain/health/*
 
+// ── Phase 77-85: Quant Super-Intelligence Subsystems ─────────────────────
+import labRouter from "./lab";
+import quantRouter from "./quant";
+import memoryRouter from "./memory";
+import governanceRouter from "./governance";
+import uxRouter from "./ux";
+import explainRouter from "./explain";
+import autonomousRouter from "./autonomous";
+import backtestEnhancedRouter from "./backtest_enhanced";
+import marketRouter from "./market";
+
+router.use("/api/lab", labRouter);               // Phase 1 — Strategy Lab
+router.use("/api/quant", quantRouter);           // Phase 3 — Quant reasoning
+router.use("/api/memory", memoryRouter);         // Phase 4 — Memory system
+router.use("/api/governance", governanceRouter); // Phase 6 — Governance
+router.use("/api/ux", uxRouter);                 // Phase 7 — UX workflow
+router.use("/api/explain", explainRouter);       // Phase 8 — Explainability
+router.use("/api/autonomous", autonomousRouter); // Phase 9 — Autonomous ops
+router.use("/api/backtest", backtestEnhancedRouter); // Phase 2 — Enhanced backtest
+router.use("/api/market", marketRouter);         // Phase 5 — Market data
+
 export default router;
