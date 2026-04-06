@@ -32,7 +32,7 @@ router.get("/brain/nodes", async (req, res) => {
 
 router.get("/brain/nodes/:symbol", async (req, res) => {
   try {
-    const node = await getBrainNode(req.params.symbol);
+    const node = await getBrainNode(String(req.params.symbol ?? ""));
     if (!node) {
       res.status(404).json({ error: "not_found", message: "Node not found" });
       return;
@@ -50,7 +50,7 @@ router.get("/brain/nodes/:symbol/drilldown", async (req, res) => {
     const eventLimit = parsePositiveInt(req.query.event_limit, 80, 1, 300);
     const decisionLimit = parsePositiveInt(req.query.decision_limit, 40, 1, 200);
 
-    const drilldown = await getBrainNodeDrilldown(req.params.symbol, {
+    const drilldown = await getBrainNodeDrilldown(String(req.params.symbol ?? ""), {
       memoryLimit,
       eventLimit,
       decisionLimit,

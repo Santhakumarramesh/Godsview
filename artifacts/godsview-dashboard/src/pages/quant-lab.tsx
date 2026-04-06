@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useBacktestRun, useBacktestQuick } from "../lib/api";
 
 type BacktestResult = {
   baseline: { win_rate: number; profit_factor: number; sharpe_ratio: number; total_trades: number; net_pnl: number; max_drawdown: number; equity_curve: number[] };
@@ -47,27 +47,8 @@ export default function QuantLabPage() {
   const [lookback, setLookback] = useState(30);
   const [equity, setEquity] = useState(10000);
 
-  const runMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/backtest/run", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lookback_days: lookback, initial_equity: equity, mode: "comparison" }),
-      });
-      if (!res.ok) throw new Error("Backtest failed");
-      return res.json() as Promise<BacktestResult>;
-    },
-  });
-
-  // Quick load on mount
-  const { data: quickData } = useQuery({
-    queryKey: ["backtest-quick"],
-    queryFn: async () => {
-      const res = await fetch("/backtest/quick");
-      if (!res.ok) return null;
-      return res.json();
-    },
-  });
+  const runMutation = useBacktestRun();
+  const { data: quickData } = useBacktestQuick();
 
   const bt = runMutation.data;
 
@@ -101,7 +82,7 @@ export default function QuantLabPage() {
             style={{ padding: "8px 12px", borderRadius: "6px", backgroundColor: "#1a191b", border: "1px solid rgba(72,72,73,0.3)", color: "#fff", fontSize: "12px", fontFamily: "JetBrains Mono, monospace", width: "120px" }} />
         </div>
         <div style={{ alignSelf: "flex-end" }}>
-          <button onClick={() => runMutation.mutate()}
+          <button onClick={() => runMutation.mutate({ lookback_days: lookback, initial_equity: equity, mode: "comparison" })}
             disabled={runMutation.isPending}
             style={{
               padding: "8px 24px", borderRadius: "6px",

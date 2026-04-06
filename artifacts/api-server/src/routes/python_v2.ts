@@ -153,7 +153,7 @@ router.post("/v2/backtest", async (req: Request, res: Response) => {
 router.get("/v2/backtest/:runId", async (req: Request, res: Response) => {
   await proxyToService(res, {
     targetBase: PY_GATEWAY_URL,
-    targetPath: `/api/backtest/${req.params.runId}`,
+    targetPath: `/api/backtest/${String(req.params.runId ?? "")}`,
   });
 });
 
@@ -162,7 +162,7 @@ router.get("/v2/backtest/:runId", async (req: Request, res: Response) => {
 router.get("/v2/market/bars/:symbol", async (req: Request, res: Response) => {
   await proxyToService(res, {
     targetBase: PY_GATEWAY_URL,
-    targetPath: `/api/market/bars/${req.params.symbol}`,
+    targetPath: `/api/market/bars/${String(req.params.symbol ?? "")}`,
     query: extractQuery(req, ["timeframe", "count", "start", "end"]),
   });
 });
@@ -170,7 +170,7 @@ router.get("/v2/market/bars/:symbol", async (req: Request, res: Response) => {
 router.get("/v2/market/price/:symbol", async (req: Request, res: Response) => {
   await proxyToService(res, {
     targetBase: PY_GATEWAY_URL,
-    targetPath: `/api/market/price/${req.params.symbol}`,
+    targetPath: `/api/market/price/${String(req.params.symbol ?? "")}`,
   });
 });
 
@@ -223,7 +223,7 @@ router.get("/v2/trades", async (req: Request, res: Response) => {
 router.delete("/v2/trades/:id", async (req: Request, res: Response) => {
   await proxyToService(res, {
     targetBase: PY_GATEWAY_URL,
-    targetPath: `/api/trades/${req.params.id}`,
+    targetPath: `/api/trades/${String(req.params.id ?? "")}`,
     method: "DELETE",
   });
 });

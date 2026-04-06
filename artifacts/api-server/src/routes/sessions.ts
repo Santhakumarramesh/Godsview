@@ -75,7 +75,7 @@ router.post("/sessions/end", async (req, res) => {
 
 router.get("/sessions/:id/events", async (req, res) => {
   try {
-    const sessionId = req.params.id;
+    const sessionId = String(req.params.id ?? "");
     const [sessionRows, auditRows, breakerRows] = await Promise.all([
       db
         .select()

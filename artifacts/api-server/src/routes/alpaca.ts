@@ -1473,7 +1473,7 @@ router.delete("/alpaca/orders/:id", async (req, res) => {
   try {
     if (!ensureTradingWriteAccess(req, res)) return;
     if (!hasValidTradingKey) { res.status(403).json({ error: "no_trading_key" }); return; }
-    const result = await cancelOrder(req.params.id);
+    const result = await cancelOrder(String(req.params.id));
     res.json({ success: true, result });
   } catch (err) {
     req.log.error({ err }, "Failed to cancel order");
@@ -1508,7 +1508,7 @@ router.delete("/alpaca/positions/:symbol", async (req, res) => {
   try {
     if (!ensureTradingWriteAccess(req, res)) return;
     if (!hasValidTradingKey) { res.status(403).json({ error: "no_trading_key" }); return; }
-    const result = await closePosition(req.params.symbol);
+    const result = await closePosition(String(req.params.symbol ?? ""));
     res.json({ success: true, result });
   } catch (err) {
     req.log.error({ err }, "Failed to close position");

@@ -545,7 +545,7 @@ router.get("/brain/:symbol/context", async (req, res) => {
 // ─── Market DNA endpoint ───────────────────────────────────────────────────
 router.get("/brain/:symbol/dna", async (req, res) => {
   try {
-    const symbol = req.params.symbol.toUpperCase();
+    const symbol = String(req.params.symbol ?? "").toUpperCase();
     const { getMarketDNA } = await import("../lib/market_dna");
     
     // Fetch recent bars from Alpaca for DNA computation
@@ -588,7 +588,7 @@ router.get("/brain/:symbol/dna", async (req, res) => {
 // ─── Setup Memory endpoint ─────────────────────────────────────────────────
 router.get("/brain/:symbol/memory", async (req, res) => {
   try {
-    const symbol = req.params.symbol.toUpperCase();
+    const symbol = String(req.params.symbol ?? "").toUpperCase();
     const { getSetupMemory } = await import("../lib/setup_memory");
     const memory = await getSetupMemory(symbol);
     res.json(memory);
@@ -601,7 +601,7 @@ router.get("/brain/:symbol/memory", async (req, res) => {
 // ─── Combined intelligence endpoint (DNA + Memory + Context) ───────────────
 router.get("/brain/:symbol/intelligence", async (req, res) => {
   try {
-    const symbol = req.params.symbol.toUpperCase();
+    const symbol = String(req.params.symbol ?? "").toUpperCase();
     
     const [dnaResult, memoryResult, contextResult] = await Promise.allSettled([
       (async () => {
@@ -676,7 +676,7 @@ async function fetchSMCBars(
 // ─── SMC State endpoint ────────────────────────────────────────────────────
 router.get("/brain/:symbol/smc", async (req, res) => {
   try {
-    const symbol = req.params.symbol.toUpperCase();
+    const symbol = String(req.params.symbol ?? "").toUpperCase();
     const { computeSMCState } = await import("../lib/smc_engine");
 
     let bars1m: any[] = [];
@@ -699,7 +699,7 @@ router.get("/brain/:symbol/smc", async (req, res) => {
 // ─── Regime + Spectral endpoint ────────────────────────────────────────────
 router.get("/brain/:symbol/regime", async (req, res) => {
   try {
-    const symbol = req.params.symbol.toUpperCase();
+    const symbol = String(req.params.symbol ?? "").toUpperCase();
     const { computeFullRegime } = await import("../lib/regime_engine");
 
     let bars: any[] = [];
@@ -722,7 +722,7 @@ router.get("/brain/:symbol/regime", async (req, res) => {
 // ─── Order Flow endpoint ───────────────────────────────────────────────────
 router.get("/brain/:symbol/orderflow", async (req, res) => {
   try {
-    const symbol = req.params.symbol.toUpperCase();
+    const symbol = String(req.params.symbol ?? "").toUpperCase();
     const { computeOrderflowState, computeLiquidityMapState, buildCandlePackets } =
       await import("../lib/orderflow_engine");
 
@@ -759,7 +759,7 @@ router.get("/brain/:symbol/orderflow", async (req, res) => {
 // ─── Volatility / Stress endpoint ──────────────────────────────────────────
 router.get("/brain/:symbol/stress", async (req, res) => {
   try {
-    const symbol = req.params.symbol.toUpperCase();
+    const symbol = String(req.params.symbol ?? "").toUpperCase();
     const { computeVolatilityState } = await import("../lib/stress_engine");
 
     let bars: any[] = [];
@@ -782,7 +782,7 @@ router.get("/brain/:symbol/stress", async (req, res) => {
 // ─── Full Brain State endpoint (all engines combined) ──────────────────────
 router.get("/brain/:symbol/brain-state", async (req, res) => {
   try {
-    const symbol = req.params.symbol.toUpperCase();
+    const symbol = String(req.params.symbol ?? "").toUpperCase();
     const { computeSymbolBrainState } = await import("../lib/symbol_brain");
 
     let bars1m: any[] = [];

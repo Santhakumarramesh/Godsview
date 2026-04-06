@@ -144,6 +144,22 @@ export function useBacktest() {
   });
 }
 
+// ─── Quant Lab Backtest Run & Quick ─────────────────────────────────────────
+export function useBacktestRun() {
+  return useMutation({
+    mutationFn: (params: { lookback_days: number; initial_equity: number; mode?: string }) =>
+      apiFetch<any>("/backtest/run", { method: "POST", body: JSON.stringify(params) }),
+  });
+}
+
+export function useBacktestQuick() {
+  return useQuery({
+    queryKey: ["backtest", "quick"],
+    queryFn: () => apiFetch<any>("/backtest/quick"),
+    retry: false,
+  });
+}
+
 export type StrategyTier = "SEED" | "LEARNING" | "PROVEN" | "ELITE" | "DEGRADING" | "SUSPENDED";
 
 export interface WalkForwardWindowMetrics {
