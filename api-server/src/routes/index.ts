@@ -189,4 +189,8 @@ router.use("/api/capital-gating", capitalGatingRouter);      // Phase 117 — Ti
 import pyBridgeRouter from "./py_bridge";
 router.use("/api/v2", pyBridgeRouter);                        // Phase 120 — Proxy to Python microservices
 
+// ── Phase 123: OpenAPI Documentation ────────────────────────────────────────
+import openapiRouter from "./openapi";
+router.use("/api/docs", openapiRouter);                       // Phase 123 — Scalar API reference UI + spec.json
+
 export default router;
