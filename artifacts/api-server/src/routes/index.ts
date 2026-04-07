@@ -213,4 +213,8 @@ router.use("/api/autonomous", autonomousBrainRouter);         // Phase 147 — P
 import strategyPromptRouter from "./strategy_prompt";
 router.use("/api/strategy-prompt", strategyPromptRouter);     // Phase 149 — NLP to multi-TF quant backtest
 
+// ── Phase 150+: Production Hardening export default router; Observability ────────────────────────
+import opsV2Router from "./ops_v2";
+router.use("/api/ops/v2", opsV2Router);              // Operator brief, kill switch, exposure, drift, startup
+
 export default router;

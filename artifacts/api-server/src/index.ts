@@ -12,9 +12,14 @@ import { ScannerScheduler } from "./lib/scanner_scheduler";
 import { startReconciler, stopReconciler } from "./lib/fill_reconciler";
 import { alpacaAccountStream, wireAccountStreamToReconciler } from "./lib/alpaca_account_stream";
 import { startPaperValidationLoop, stopPaperValidationLoop } from "./lib/paper_validation_loop";
+import { validateOrExit } from "./lib/ops/startup_validator";
+import { initGracefulShutdown } from "./lib/ops/graceful_shutdown";
 
 // ── Validate environment before anything else ───────────────────
 validateEnv();
+
+// ── Phase 6: Production startup validation ───────────────────
+try { validateOrExit(); } catch (e: any) { logger.warn({ err: e.message }, "Startup validator unavailable (non-fatal)"); }
 
 const rawPort = process.env["PORT"];
 
@@ -37,6 +42,9 @@ const server = app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
+
+  // Phase 6: Enhanced graceful shutdown with priority hooks
+  try { initGracefulShutdown(server); } catch (e: any) { logger.warn({ err: e.message }, "Enhanced graceful shutdown unavailable"); }
 
   // Phase 124: Attach WebSocket server for dual-transport real-time streaming
   try {
