@@ -6,3 +6,7 @@ export * from "./si_decisions";
 export * from "./brain";
 export * from "./strategy_evolution";
 export * from "./data_engine";
+export * from "./audit_events";
+export * from "./orders";
+export * from "./positions";
+export * from "./risk_assessments";
