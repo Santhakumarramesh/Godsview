@@ -22,6 +22,7 @@ const StitchLabPage      = React.lazy(() => import("@/pages/stitch-lab"));
 const PipelinePage       = React.lazy(() => import("@/pages/pipeline"));
 const CandleXRayPage     = React.lazy(() => import("@/pages/candle-xray"));
 const TradingViewChartPage = React.lazy(() => import("@/pages/tradingview-chart")); // Phase 125
+const BloombergTerminalPage = React.lazy(() => import("@/pages/bloomberg-terminal")); // Phase 126
 const SetupExplorerPage  = React.lazy(() => import("@/pages/setup-explorer"));
 const ReportsPage        = React.lazy(() => import("@/pages/reports"));
 const RiskPage           = React.lazy(() => import("@/pages/risk"));
@@ -182,6 +183,7 @@ function Router() {
         <RoutedPage path="/pipeline"          component={PipelinePage}          scope="page:pipeline" />
         <RoutedPage path="/candle-xray"       component={CandleXRayPage}        scope="page:candle-xray" />
         <RoutedPage path="/tradingview-chart" component={TradingViewChartPage}  scope="page:tradingview-chart" />
+        <RoutedPage path="/bloomberg-terminal" component={BloombergTerminalPage} scope="page:bloomberg-terminal" />
         <RoutedPage path="/setup-explorer"    component={SetupExplorerPage}     scope="page:setup-explorer" />
         <RoutedPage path="/reports"           component={ReportsPage}           scope="page:reports" />
         <RoutedPage path="/risk"              component={RiskPage}              scope="page:risk" />

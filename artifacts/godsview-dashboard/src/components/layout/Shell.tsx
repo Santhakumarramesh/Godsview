@@ -314,6 +314,7 @@ const navSections: NavSection[] = [
     items: [
       { href: "/", label: "Mission Control", icon: "dashboard", sub: "Overview" },
       { href: "/command-center", label: "Command Center", icon: "security", sub: "Unified Control" },
+      { href: "/bloomberg-terminal", label: "Bloomberg Terminal", icon: "terminal", sub: "Multi-Panel" },
       { href: "/brain", label: "Brain", icon: "neurology", sub: "Intelligence" },
       { href: "/brain-graph", label: "God Brain", icon: "neurology", sub: "Live Neural Graph" },
       { href: "/infinity", label: "Infinity Screen", icon: "grid_view", sub: "Multi-Chart" },
