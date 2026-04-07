@@ -1,0 +1,96 @@
+{
+  "dashboard": {
+    "title": "GodsView Brain Subsystems",
+    "uid": "godsview-brain",
+    "tags": ["godsview", "brain", "ai"],
+    "timezone": "browser",
+    "refresh": "5s",
+    "time": { "from": "now-1h", "to": "now" },
+    "panels": [
+      {
+        "title": "Brain Subsystem Status",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+        "targets": [{ "expr": "count(godsview_brain_subsystem_healthy == 1)", "legendFormat": "Healthy" }],
+        "fieldConfig": { "defaults": { "thresholds": { "steps": [{ "value": null, "color": "red" }, { "value": 15, "color": "yellow" }, { "value": 20, "color": "green" }] } } }
+      },
+      {
+        "title": "Master Event Bus Throughput",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+        "targets": [{ "expr": "rate(godsview_brain_events_total{subsystem=\"master-bus\"}[1m])", "legendFormat": "events/s" }],
+        "fieldConfig": { "defaults": { "unit": "ops" } }
+      },
+      {
+        "title": "Signal Engine Confidence (Avg)",
+        "type": "gauge",
+        "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+        "targets": [{ "expr": "avg(godsview_signal_confidence)", "legendFormat": "Confidence" }],
+        "fieldConfig": { "defaults": { "min": 0, "max": 1, "thresholds": { "steps": [{ "value": null, "color": "red" }, { "value": 0.5, "color": "yellow" }, { "value": 0.7, "color": "green" }] } } }
+      },
+      {
+        "title": "Brain Error Rate",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+        "targets": [{ "expr": "sum(rate(godsview_brain_errors_total[5m]))", "legendFormat": "errors/s" }],
+        "fieldConfig": { "defaults": { "unit": "ops", "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 0.1, "color": "yellow" }, { "value": 1, "color": "red" }] } } }
+      },
+      {
+        "title": "Subsystem Latency (P95)",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+        "targets": [
+          { "expr": "histogram_quantile(0.95, rate(godsview_brain_latency_seconds_bucket{subsystem=\"signal-engine\"}[5m]))", "legendFormat": "Signal Engine" },
+          { "expr": "histogram_quantile(0.95, rate(godsview_brain_latency_seconds_bucket{subsystem=\"decision-loop\"}[5m]))", "legendFormat": "Decision Loop" },
+          { "expr": "histogram_quantile(0.95, rate(godsview_brain_latency_seconds_bucket{subsystem=\"exec-engine\"}[5m]))", "legendFormat": "Exec Engine" },
+          { "expr": "histogram_quantile(0.95, rate(godsview_brain_latency_seconds_bucket{subsystem=\"risk-gate\"}[5m]))", "legendFormat": "Risk Gate" },
+          { "expr": "histogram_quantile(0.95, rate(godsview_brain_latency_seconds_bucket{subsystem=\"regime-detector\"}[5m]))", "legendFormat": "Regime Detector" },
+          { "expr": "histogram_quantile(0.95, rate(godsview_brain_latency_seconds_bucket{subsystem=\"sentiment-ai\"}[5m]))", "legendFormat": "Sentiment AI" }
+        ],
+        "fieldConfig": { "defaults": { "unit": "s" } }
+      },
+      {
+        "title": "Brain Event Flow",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+        "targets": [
+          { "expr": "rate(godsview_brain_events_total{event_type=\"signal\"}[5m])", "legendFormat": "Signals" },
+          { "expr": "rate(godsview_brain_events_total{event_type=\"decision\"}[5m])", "legendFormat": "Decisions" },
+          { "expr": "rate(godsview_brain_events_total{event_type=\"execution\"}[5m])", "legendFormat": "Executions" },
+          { "expr": "rate(godsview_brain_events_total{event_type=\"risk\"}[5m])", "legendFormat": "Risk Events" },
+          { "expr": "rate(godsview_brain_events_total{event_type=\"alert\"}[5m])", "legendFormat": "Alerts" }
+        ]
+      },
+      {
+        "title": "Regime Detection",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 8, "x": 0, "y": 12 },
+        "targets": [
+          { "expr": "godsview_regime_state", "legendFormat": "Regime (0=range,1=bull,2=bear,3=volatile)" },
+          { "expr": "godsview_regime_confidence", "legendFormat": "Confidence" }
+        ]
+      },
+      {
+        "title": "Sentiment Scores by Source",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 8, "x": 8, "y": 12 },
+        "targets": [
+          { "expr": "godsview_sentiment_score{source=\"bloomberg\"}", "legendFormat": "Bloomberg" },
+          { "expr": "godsview_sentiment_score{source=\"reuters\"}", "legendFormat": "Reuters" },
+          { "expr": "godsview_sentiment_score{source=\"social\"}", "legendFormat": "Social" },
+          { "expr": "godsview_sentiment_composite", "legendFormat": "Composite" }
+        ],
+        "fieldConfig": { "defaults": { "min": -1, "max": 1 } }
+      },
+      {
+        "title": "Strategy Allocation & Performance",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 8, "x": 16, "y": 12 },
+        "targets": [
+          { "expr": "godsview_strategy_allocation_pct", "legendFormat": "{{ strategy }}" },
+          { "expr": "godsview_strategy_pnl_total", "legendFormat": "{{ strategy }} PnL" }
+        ]
+      }
+    ]
+  }
+}
