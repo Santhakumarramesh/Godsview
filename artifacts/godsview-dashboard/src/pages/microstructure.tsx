@@ -373,7 +373,7 @@ const OrderBookDepth: React.FC<{ symbol: string }> = ({ symbol }) => {
     queryFn: () => fetch(`/api/microstructure/book?symbol=${symbol}`).then(r => r.json()).catch(() => mockBook),
   });
 
-  const maxSize = Math.max(...data.bids.map(b => b.size), ...data.asks.map(a => a.size));
+  const maxSize = Math.max(...data.bids.map((b: any) => b.size), ...data.asks.map((a: any) => a.size));
   const imbalancePercent = ((data.imbalance + 1) / 2) * 100;
 
   return (
@@ -924,7 +924,7 @@ const SlippageEstimator: React.FC<{ symbol: string }> = ({ symbol }) => {
             SIDE
           </label>
           <div style={{ display: 'flex', gap: 8 }}>
-            {['buy', 'sell'].map((s) => (
+            {['buy', 'sell'].map((s: any) => (
               <button
                 key={s}
                 onClick={() => setSide(s as 'buy' | 'sell')}
@@ -1076,7 +1076,7 @@ export default function MicrostructurePage() {
 
           {/* Symbol Selector */}
           <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
-            {['AAPL', 'NVDA', 'TSLA', 'BTC-USD'].map((sym) => (
+            {['AAPL', 'NVDA', 'TSLA', 'BTC-USD'].map((sym: any) => (
               <button
                 key={sym}
                 onClick={() => setSymbol(sym)}

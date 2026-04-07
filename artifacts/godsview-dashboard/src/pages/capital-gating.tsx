@@ -448,7 +448,8 @@ function LaunchControlCenter({
     steady_state: C.success,
     paused: C.warning,
     aborted: C.error,
-  }[status as keyof typeof statusColor] || C.muted;
+  };
+  const statusColor = statusColorMap[status as keyof typeof statusColorMap] || C.muted;
 
   return (
     <div

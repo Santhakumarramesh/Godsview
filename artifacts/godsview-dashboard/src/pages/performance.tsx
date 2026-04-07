@@ -35,13 +35,13 @@ export default function Performance() {
   const { data, isLoading } = useGetPerformance({ days });
   const { data: modelDiagnostics } = useQuery<ModelDiagnosticsPayload>({
     queryKey: ["system-model-diagnostics"],
-    queryFn: () => fetch("/api/system/model/diagnostics").then((r) => r.json()),
+    queryFn: () => fetch("/api/system/model/diagnostics").then((r: any) => r.json()),
     refetchInterval: 45_000,
     staleTime: 30_000,
   });
   const { data: oosProof } = useQuery<OosPayload>({
     queryKey: ["proof-oos-vs-is"],
-    queryFn: () => fetch("/api/system/proof/oos-vs-is?lookback_days=90&oos_days=14&min_signals=20").then((r) => r.json()),
+    queryFn: () => fetch("/api/system/proof/oos-vs-is?lookback_days=90&oos_days=14&min_signals=20").then((r: any) => r.json()),
     refetchInterval: 60_000,
     staleTime: 45_000,
   });
@@ -209,7 +209,7 @@ export default function Performance() {
               </tr>
             </thead>
             <tbody>
-              {(data.by_session ?? []).map((s) => (
+              {(data.by_session ?? []).map((s: any) => (
                 <tr key={s.session} className="hover:brightness-105 transition-all" style={{ borderBottom: "1px solid rgba(72,72,73,0.1)" }}>
                   <td className="px-4 py-2.5 font-headline font-bold text-xs">{s.session}</td>
                   <td className="px-4 py-2.5" style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: C.muted }}>{formatPercent(s.win_rate)}</td>
@@ -239,7 +239,7 @@ export default function Performance() {
               </tr>
             </thead>
             <tbody>
-              {(data.by_regime ?? []).map((r) => (
+              {(data.by_regime ?? []).map((r: any) => (
                 <tr key={r.regime} className="hover:brightness-105 transition-all" style={{ borderBottom: "1px solid rgba(72,72,73,0.1)" }}>
                   <td className="px-4 py-2.5 font-headline font-bold text-xs capitalize">{r.regime.replace("_", " ")}</td>
                   <td className="px-4 py-2.5" style={{ fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: C.muted }}>{formatPercent(r.win_rate)}</td>

@@ -8,7 +8,7 @@ import { useQuery, useMutation, useQueryClient, type UseQueryOptions } from "@ta
 // ─── Base Fetch ──────────────────────────────────────────────────────────────
 const API_BASE = import.meta.env.VITE_API_URL || "/api";
 
-async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const url = `${API_BASE}${path}`;
   const res = await fetch(url, {
     ...init,

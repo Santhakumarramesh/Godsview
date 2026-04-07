@@ -74,9 +74,6 @@ const DecisionExplainabilityPage = React.lazy(() => import("@/pages/decision-exp
 const OpsSecurityPage    = React.lazy(() => import("@/pages/ops-security"));
 const PaperTradingProgramPage = React.lazy(() => import("@/pages/paper-trading-program"));
 const CapitalGatingPage  = React.lazy(() => import("@/pages/capital-gating"));
-const TradingViewChartPage = React.lazy(() => import("@/pages/tradingview-chart"));
-const BloombergTerminalPage = React.lazy(() => import("@/pages/bloomberg-terminal"));
-const NewsMonitorPage    = React.lazy(() => import("@/pages/news-monitor"));
 const BrainNodesPage     = React.lazy(() => import("@/pages/brain-nodes"));
 const AdvancedRiskPage   = React.lazy(() => import("@/pages/advanced-risk"));
 const EconomicCalendarPage = React.lazy(() => import("@/pages/economic-calendar"));

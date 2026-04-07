@@ -5,6 +5,7 @@
  * They follow the same pattern as existing hooks using useQuery/useMutation with apiFetch
  */
 
+import { apiFetch } from './api';
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 // NOTE: This assumes apiFetch is already imported in api.ts

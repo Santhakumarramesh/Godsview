@@ -107,7 +107,7 @@ export default function NewsMonitor() {
       };
       ws.onclose = () => setWsConnected(false);
       return () => ws.close();
-    } catch { setWsConnected(false); }
+    } catch { setWsConnected(false); return () => {}; }
   }, []);
 
   const toggleCategory = (cat: NewsCategory) => {
@@ -273,7 +273,6 @@ export default function NewsMonitor() {
                 <div style={{
                   position: "absolute", left: "50%", top: 0, bottom: 0,
                   width: `${Math.abs(g.score) * 50}%`,
-                  ...(g.score >= 0 ? { left: "50%" } : { right: "50%", left: "auto" }),
                   background: sentColor(g.score),
                   borderRadius: 4,
                 }} />

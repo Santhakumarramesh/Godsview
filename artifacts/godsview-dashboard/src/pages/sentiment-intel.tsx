@@ -247,7 +247,7 @@ function NewsFeed() {
   });
 
   const news = data || mockNews;
-  const filtered = filter === "All" ? news : news.filter(n => {
+  const filtered = filter === "All" ? news : news.filter((n: any) => {
     if (filter === "Bullish") return n.sentiment > 0.3;
     if (filter === "Bearish") return n.sentiment < -0.3;
     if (filter === "High Impact") return n.impact === "HIGH";
@@ -278,7 +278,7 @@ function NewsFeed() {
       </div>
 
       <div style={{ maxHeight: "400px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "12px" }}>
-        {filtered.map(item => {
+        {filtered.map((item: any) => {
           const sentimentColor = item.sentiment > 0.3 ? C.green : item.sentiment < -0.3 ? C.red : C.yellow;
           const impactColor = item.impact === "HIGH" ? C.red : item.impact === "MED" ? C.yellow : C.textDim;
           return (
@@ -340,7 +340,7 @@ function SocialPulse() {
   });
 
   const social = data || mockSocial;
-  const maxMentions = Math.max(...social.trending.map(t => t.mentions));
+  const maxMentions = Math.max(...social.trending.map((t: any) => t.mentions));
 
   return (
     <div style={{ marginBottom: "32px" }}>
@@ -354,7 +354,7 @@ function SocialPulse() {
           padding: "16px",
         }}>
           <h4 style={{ color: C.text, fontSize: "14px", fontWeight: "bold", margin: "0 0 12px 0" }}>Trending Symbols</h4>
-          {social.trending.map(t => (
+          {social.trending.map((t: any) => (
             <div key={t.symbol} style={{ marginBottom: "12px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", marginBottom: "4px" }}>
                 <span style={{ color: C.text, fontWeight: "600" }}>{t.symbol}</span>
@@ -442,7 +442,7 @@ function SocialPulse() {
         }}>
           <h4 style={{ color: C.text, fontSize: "14px", fontWeight: "bold", margin: "0 0 12px 0" }}>Volume Spike Indicators</h4>
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-            {social.volumeSpikes.map(symbol => (
+            {social.volumeSpikes.map((symbol: any) => (
               <div key={symbol} style={{
                 display: "flex",
                 alignItems: "center",
@@ -552,8 +552,8 @@ function KeywordCloud() {
   });
 
   const keywords = data || mockKeywords;
-  const maxSize = Math.max(...keywords.map(k => k.size));
-  const minSize = Math.min(...keywords.map(k => k.size));
+  const maxSize = Math.max(...keywords.map((k: any) => k.size));
+  const minSize = Math.min(...keywords.map((k: any) => k.size));
 
   // Generate word cloud layout
   const positions = keywords.map((kw: any, i: any) => {

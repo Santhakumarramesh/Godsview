@@ -156,8 +156,8 @@ interface ComparisonRowProps {
 }
 
 function ComparisonRow({ result }: ComparisonRowProps) {
-  const calculateImprovement = (mcp: number, baseline?: number): number | null => {
-    if (!baseline) return null;
+  const calculateImprovement = (mcp: number, baseline?: number): number | undefined => {
+    if (!baseline) return undefined;
     return (mcp - baseline) / baseline;
   };
 

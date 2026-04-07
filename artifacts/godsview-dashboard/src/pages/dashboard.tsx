@@ -327,9 +327,9 @@ export default function Dashboard() {
   const sigs = signals?.signals ?? [];
   const hasDataIssue = sysError || perfError || sigError || diagError;
   const diagnosticLayers = diagnostics ? Object.values(diagnostics.layers) : [];
-  const liveLayerCount = diagnosticLayers.filter((layer) => layer.status === "live").length;
-  const degradedLayerCount = diagnosticLayers.filter((layer) => layer.status === "degraded").length;
-  const offlineLayerCount = diagnosticLayers.filter((layer) => layer.status === "offline").length;
+  const liveLayerCount = diagnosticLayers.filter((layer: any) => layer.status === "live").length;
+  const degradedLayerCount = diagnosticLayers.filter((layer: any) => layer.status === "degraded").length;
+  const offlineLayerCount = diagnosticLayers.filter((layer: any) => layer.status === "offline").length;
   const coreScore = diagnosticLayers.length > 0
     ? Math.round(((liveLayerCount + degradedLayerCount * 0.5) / diagnosticLayers.length) * 100)
     : null;
@@ -359,15 +359,15 @@ export default function Dashboard() {
     rawInstrument.includes("BTC") ? "BTCUSD" :
     rawInstrument.includes("ETH") ? "ETHUSD" : "BTCUSD";
   const board = consciousness?.board ?? [];
-  const rankedBoard = [...board].sort((a, b) => b.attention_score - a.attention_score);
+  const rankedBoard = [...board].sort((a: any, b: any) => b.attention_score - a.attention_score);
   const featuredBrainNodes = rankedBoard.slice(0, 8);
-  const avgAttention = rankedBoard.length > 0 ? rankedBoard.reduce((sum, row) => sum + row.attention_score, 0) / rankedBoard.length : 0;
-  const avgRiskScore = rankedBoard.length > 0 ? rankedBoard.reduce((sum, row) => sum + row.risk_score, 0) / rankedBoard.length : 0;
-  const avgStructureScore = rankedBoard.length > 0 ? rankedBoard.reduce((sum, row) => sum + row.structure_score, 0) / rankedBoard.length : 0;
-  const avgOrderflowScore = rankedBoard.length > 0 ? rankedBoard.reduce((sum, row) => sum + row.orderflow_score, 0) / rankedBoard.length : 0;
-  const bullishBiasCount = rankedBoard.filter((row) => row.direction === "long").length;
-  const bearishBiasCount = rankedBoard.filter((row) => row.direction === "short").length;
-  const sentimentQuality = sigs.length > 0 ? sigs.reduce((sum, row) => sum + row.final_quality, 0) / sigs.length : avgAttention * 100;
+  const avgAttention = rankedBoard.length > 0 ? rankedBoard.reduce((sum: any, row: any) => sum + row.attention_score, 0) / rankedBoard.length : 0;
+  const avgRiskScore = rankedBoard.length > 0 ? rankedBoard.reduce((sum: any, row: any) => sum + row.risk_score, 0) / rankedBoard.length : 0;
+  const avgStructureScore = rankedBoard.length > 0 ? rankedBoard.reduce((sum: any, row: any) => sum + row.structure_score, 0) / rankedBoard.length : 0;
+  const avgOrderflowScore = rankedBoard.length > 0 ? rankedBoard.reduce((sum: any, row: any) => sum + row.orderflow_score, 0) / rankedBoard.length : 0;
+  const bullishBiasCount = rankedBoard.filter((row: any) => row.direction === "long").length;
+  const bearishBiasCount = rankedBoard.filter((row: any) => row.direction === "short").length;
+  const sentimentQuality = sigs.length > 0 ? sigs.reduce((sum: any, row: any) => sum + row.final_quality, 0) / sigs.length : avgAttention * 100;
   const sentimentSign = winRate >= 0.5 ? "+" : "";
   const sentimentLabel = bullishBiasCount > bearishBiasCount ? "Bullish" : bearishBiasCount > bullishBiasCount ? "Bearish" : "Balanced";
   const setupAlerts = sigs.slice(0, 4);
@@ -408,7 +408,7 @@ export default function Dashboard() {
     () => {
       const count = Math.max(featuredBrainNodes.length, 1);
       const angleStep = (Math.PI * 2) / count;
-      const nodes = featuredBrainNodes.map((row, idx) => {
+      const nodes = featuredBrainNodes.map((row: any, idx) => {
         const attention = Math.max(0, Math.min(1, row.attention_score));
         const seed = (getSymbolSeed(row.symbol) % 17) * 0.01;
         const angle = -Math.PI / 2 + idx * angleStep + orbitPhase + seed;
@@ -439,7 +439,7 @@ export default function Dashboard() {
         }
       }
 
-      return nodes.map((node) => {
+      return nodes.map((node: any) => {
         const clampedLeft = Math.min(90, Math.max(10, node.left));
         const clampedTop = Math.min(86, Math.max(14, node.top));
         return {
@@ -455,20 +455,20 @@ export default function Dashboard() {
   );
   const surgeTopSymbols = orbitNodes
     .slice()
-    .sort((a, b) => b.row.attention_score - a.row.attention_score)
+    .sort((a: any, b: any) => b.row.attention_score - a.row.attention_score)
     .slice(0, 3)
-    .map((row) => row.row.symbol);
+    .map((row: any) => row.row.symbol);
   const activeFocusedSymbol = pinnedSymbol ?? hoveredSymbol;
   const focusedNode = useMemo(
     () =>
-      rankedBoard.find((row) => row.symbol === activeFocusedSymbol) ??
+      rankedBoard.find((row: any) => row.symbol === activeFocusedSymbol) ??
       orbitNodes[0]?.row ??
       null,
     [rankedBoard, activeFocusedSymbol, orbitNodes]
   );
   const drawerNode = useMemo(
     () =>
-      rankedBoard.find((row) => row.symbol === drawerSymbol) ??
+      rankedBoard.find((row: any) => row.symbol === drawerSymbol) ??
       focusedNode ??
       null,
     [rankedBoard, drawerSymbol, focusedNode]
@@ -544,12 +544,12 @@ export default function Dashboard() {
   ];
 
   useEffect(() => {
-    if (pinnedSymbol && !rankedBoard.some((row) => row.symbol === pinnedSymbol)) {
+    if (pinnedSymbol && !rankedBoard.some((row: any) => row.symbol === pinnedSymbol)) {
       setPinnedSymbol(null);
     }
   }, [pinnedSymbol, rankedBoard]);
   useEffect(() => {
-    if (drawerSymbol && !rankedBoard.some((row) => row.symbol === drawerSymbol)) {
+    if (drawerSymbol && !rankedBoard.some((row: any) => row.symbol === drawerSymbol)) {
       setDrawerSymbol(null);
     }
   }, [drawerSymbol, rankedBoard]);
@@ -672,7 +672,7 @@ export default function Dashboard() {
             <div className="rounded p-3" style={{ backgroundColor: "#111726", border: `1px solid ${C.border}` }}>
               <MicroLabel>Setup Alerts</MicroLabel>
               <div className="mt-2 space-y-1.5">
-                {setupAlerts.length > 0 ? setupAlerts.map((sig, idx) => (
+                {setupAlerts.length > 0 ? setupAlerts.map((sig: any, idx: any) => (
                   <div key={sig.id} className="rounded px-2 py-1.5 flex items-center justify-between" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0f131e" }}>
                     <span style={{ fontSize: "10px", color: "#fff", fontFamily: "Space Grotesk" }}>{idx + 1}. {sig.instrument} {sig.setup_type.replace(/_/g, " ")}</span>
                     <span style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: sig.final_quality > 70 ? C.primary : sig.final_quality > 50 ? "#fbbf24" : C.tertiary }}>
@@ -853,7 +853,7 @@ export default function Dashboard() {
             <div className="rounded p-3" style={{ backgroundColor: "#111726", border: `1px solid ${C.border}` }}>
               <MicroLabel>Claude Analysis</MicroLabel>
               <div className="mt-2 space-y-2">
-                {rankedBoard.slice(0, 4).map((row) => {
+                {rankedBoard.slice(0, 4).map((row: any) => {
                   const dotColor = row.readiness === "allow" ? C.primary : row.readiness === "watch" ? "#fbbf24" : C.tertiary;
                   const sparklineValues = buildSparklineSeries(row);
                   const sparklinePath = buildSparklinePath(sparklineValues, 74, 22, 1.5);
@@ -914,7 +914,7 @@ export default function Dashboard() {
         </div>
 
         <div className="flex gap-2 overflow-x-auto pb-1 md:grid md:grid-cols-4 md:overflow-visible">
-          {setupAlerts.length > 0 ? setupAlerts.map((sig) => (
+          {setupAlerts.length > 0 ? setupAlerts.map((sig: any) => (
             <div key={`strip-${sig.id}`} className="rounded px-3 py-2 min-w-[220px] md:min-w-0" style={{ backgroundColor: "#111726", border: `1px solid ${C.border}` }}>
               <div style={{ fontSize: "10px", color: "#fff", fontWeight: 700, fontFamily: "Space Grotesk" }}>{sig.instrument} {sig.setup_type.replace(/_/g, " ")}</div>
               <div style={{ fontSize: "9px", marginTop: "3px", color: sig.final_quality > 65 ? C.primary : sig.final_quality > 50 ? "#fbbf24" : C.tertiary }}>
@@ -1076,7 +1076,7 @@ export default function Dashboard() {
                 </div>
                 <div className="mt-2 overflow-x-auto">
                   <div className="flex items-end gap-1 min-w-max pb-1">
-                    {xrayBars.map((bar) => {
+                    {xrayBars.map((bar: any) => {
                       const isSelected = selectedCandle?.time === bar.time;
                       const up = bar.close >= bar.open;
                       const bodyPct = Math.max(10, Math.min(100, Math.abs(bar.body_ratio) * 100));
@@ -1136,7 +1136,7 @@ export default function Dashboard() {
               </div>
 
               <div className="mt-2 flex flex-wrap gap-1">
-                {selectedCandleTags.map((tag) => (
+                {selectedCandleTags.map((tag: any) => (
                   <span
                     key={`tag-${tag}`}
                     className="px-2 py-0.5 rounded-full"
@@ -1151,7 +1151,7 @@ export default function Dashboard() {
               </div>
 
               <div className="mt-2 flex flex-wrap gap-1.5">
-                {xrayTabs.map((tab) => {
+                {xrayTabs.map((tab: any) => {
                   const active = xrayTab === tab.key;
                   return (
                     <button
@@ -1500,7 +1500,7 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="space-y-1">
-          {(proofBySetup?.rows ?? []).slice(0, 3).map((row) => (
+          {(proofBySetup?.rows ?? []).slice(0, 3).map((row: any) => (
             <div key={row.key} className="flex items-center justify-between rounded px-2 py-1.5" style={{ backgroundColor: "#0f0f10", border: `1px solid ${C.border}` }}>
               <span style={{ fontSize: "10px", fontFamily: "Space Grotesk", color: "#fff" }}>{row.key.replace(/_/g, " ")}</span>
               <span style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: C.muted }}>
@@ -1545,7 +1545,7 @@ export default function Dashboard() {
           </span>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
-          {layers.map((layer, i) => {
+          {layers.map((layer: any, i: any) => {
             const isActive = layer.status === "active";
             const isWarn = layer.status === "warning";
             const color = isActive ? C.primary : isWarn ? "#fbbf24" : C.tertiary;
@@ -1583,7 +1583,7 @@ export default function Dashboard() {
           <table className="w-full text-left">
             <thead>
               <tr style={{ borderBottom: `1px solid rgba(72,72,73,0.3)` }}>
-                {["Time", "Instrument", "Setup", "Quality", "Entry", "Status"].map((h) => (
+                {["Time", "Instrument", "Setup", "Quality", "Entry", "Status"].map((h: any) => (
                   <th key={h} className="px-4 py-2.5" style={{ fontSize: "8px", fontFamily: "Space Grotesk", letterSpacing: "0.15em", textTransform: "uppercase", color: C.outlineVar }}>
                     {h}
                   </th>
@@ -1591,7 +1591,7 @@ export default function Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {sigs.map((sig) => {
+              {sigs.map((sig: any) => {
                 const q = sig.final_quality;
                 const qColor = q > 75 ? C.primary : q > 50 ? "#fbbf24" : C.tertiary;
                 const isActiveSignal = sig.status === "approved" || sig.status === "executed";

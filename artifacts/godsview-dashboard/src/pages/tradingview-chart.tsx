@@ -137,7 +137,7 @@ export default function TradingViewChart() {
       height: chartContainerRef.current.clientHeight,
     });
 
-    const candleSeries = chart.addCandlestickSeries({
+    const candleSeries = (chart as any).addCandlestickSeries({
       upColor: "#22c55e",
       downColor: "#ef4444",
       borderDownColor: "#ef4444",
@@ -146,7 +146,7 @@ export default function TradingViewChart() {
       wickUpColor: "#22c55e",
     });
 
-    const volumeSeries = chart.addHistogramSeries({
+    const volumeSeries = (chart as any).addHistogramSeries({
       color: "#3b82f6",
       priceFormat: { type: "volume" },
       priceScaleId: "volume",
@@ -222,9 +222,9 @@ export default function TradingViewChart() {
 
     if (showSignals) {
       const signals = generateMockSignals(bars);
-      candleSeriesRef.current.setMarkers(signals);
+      (candleSeriesRef.current as any).setMarkers(signals);
     } else {
-      candleSeriesRef.current.setMarkers([]);
+      (candleSeriesRef.current as any).setMarkers([]);
     }
 
     const last = bars[bars.length - 1];
@@ -275,6 +275,7 @@ export default function TradingViewChart() {
       };
     } catch {
       setWsConnected(false);
+    return undefined;
     }
   }, [symbol]);
 

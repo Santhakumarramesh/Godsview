@@ -858,7 +858,7 @@ export default function System() {
               </span>
             </div>
             <div className="space-y-1.5">
-              {(proofBySetup?.rows ?? []).slice(0, 5).map((row) => (
+              {(proofBySetup?.rows ?? []).slice(0, 5).map((row: any) => (
                 <div key={row.key} className="rounded px-2 py-1.5 flex items-center justify-between" style={{ border: `1px solid ${C.border}`, backgroundColor: "#131314" }}>
                   <div>
                     <div style={{ fontSize: "10px", fontFamily: "Space Grotesk", fontWeight: 700 }}>{row.key.replace(/_/g, " ")}</div>
@@ -881,7 +881,7 @@ export default function System() {
               </span>
             </div>
             <div className="space-y-1.5">
-              {(proofByRegime?.rows ?? []).slice(0, 5).map((row) => (
+              {(proofByRegime?.rows ?? []).slice(0, 5).map((row: any) => (
                 <div key={row.key} className="rounded px-2 py-1.5 flex items-center justify-between" style={{ border: `1px solid ${C.border}`, backgroundColor: "#131314" }}>
                   <div>
                     <div style={{ fontSize: "10px", fontFamily: "Space Grotesk", fontWeight: 700 }}>{row.key.replace(/_/g, " ")}</div>
@@ -991,11 +991,11 @@ export default function System() {
                 <div className="flex items-center justify-between mb-2">
                   <MicroLabel>Strict Checks</MicroLabel>
                   <span style={{ fontSize: "9px", color: C.outlineVar, fontFamily: "JetBrains Mono, monospace" }}>
-                    {governanceOverview.checks.filter((c) => c.pass).length}/{governanceOverview.checks.length} pass
+                    {governanceOverview.checks.filter((c: any) => c.pass).length}/{governanceOverview.checks.length} pass
                   </span>
                 </div>
                 <div className="space-y-1.5">
-                  {governanceOverview.checks.map((check) => (
+                  {governanceOverview.checks.map((check: any) => (
                     <div key={check.id} className="rounded px-2 py-1.5 flex items-center justify-between" style={{ border: `1px solid ${C.border}`, backgroundColor: "#131314" }}>
                       <div>
                         <div style={{ fontSize: "10px", fontFamily: "Space Grotesk", fontWeight: 700 }}>{check.label}</div>
@@ -1096,7 +1096,7 @@ export default function System() {
                 </span>
               </div>
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-1.5">
-                {pipelineTrace.stages.map((stage) => {
+                {pipelineTrace.stages.map((stage: any) => {
                   const normalized = stage.status.toLowerCase();
                   const status = normalized === "pass" || normalized === "submitted" || normalized === "simulated"
                     ? "live"
@@ -1204,7 +1204,7 @@ export default function System() {
         )}
         {consciousness?.has_data ? (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-            {(consciousness.board ?? []).map((row) => {
+            {(consciousness.board ?? []).map((row: any) => {
               const readinessColor = row.readiness === "allow" ? C.primary : row.readiness === "watch" ? "#fbbf24" : C.tertiary;
               const directionColor = row.direction === "long" ? C.primary : row.direction === "short" ? C.tertiary : C.muted;
               return (
@@ -1379,7 +1379,7 @@ export default function System() {
           </div>
         )}
         <div className="space-y-2">
-          {data.layers.map((layer, index) => {
+          {data.layers.map((layer: any, index: any) => {
             const isActive = layer.status === "active";
             const isWarn = layer.status === "warning";
             const color = isActive ? C.primary : isWarn ? "#fbbf24" : C.tertiary;
@@ -1680,13 +1680,13 @@ export default function System() {
               </div>
               {auditSummary.top_reasons.length > 0 && (
                 <div className="col-span-3 text-[9px]" style={{ color: C.muted }}>
-                  Top reasons: {auditSummary.top_reasons.slice(0, 3).map((r) => `${r.reason} (${r.count})`).join(", ")}
+                  Top reasons: {auditSummary.top_reasons.slice(0, 3).map((r: any) => `${r.reason} (${r.count})`).join(", ")}
                 </div>
               )}
             </div>
           )}
           <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-            {(audit?.events ?? []).map((event) => (
+            {(audit?.events ?? []).map((event: any) => (
               <div
                 key={event.id}
                 className="rounded p-2"

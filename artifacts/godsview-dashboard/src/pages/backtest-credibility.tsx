@@ -125,7 +125,6 @@ const CredibilityGradeBadge: React.FC<{ grade: string }> = ({ grade }) => {
         borderRadius: '6px',
         backgroundColor: color + '20',
         border: `1.5px solid ${color}`,
-        display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         fontSize: '14px',
@@ -156,7 +155,6 @@ const RiskLevelBadge: React.FC<{ level: 'low' | 'moderate' | 'high' | 'severe' }
       style={{
         display: 'inline-block',
         padding: '0 8px',
-        paddingY: '4px',
         borderRadius: '4px',
         backgroundColor: config.color + '20',
         border: `1px solid ${config.color}`,
@@ -264,7 +262,6 @@ const AssumptionCell: React.FC<{ check: AssumptionCheck }> = ({ check }) => {
         style={{
           display: 'inline-block',
           padding: '0 6px',
-          paddingY: '3px',
           borderRadius: '3px',
           backgroundColor: color + '20',
           border: `1px solid ${color}`,
