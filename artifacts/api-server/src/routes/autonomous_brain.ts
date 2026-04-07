@@ -35,7 +35,7 @@ router.get("/brains", (_req: Request, res: Response) => {
 // GET /autonomous/brain/:symbol — full brain state for one symbol
 router.get("/brain/:symbol", (req: Request, res: Response) => {
   const { symbol } = req.params;
-  const brain = autonomousBrainEngine.get(symbol.toUpperCase());
+  const brain = autonomousBrainEngine.get(String(symbol).toUpperCase());
   if (!brain) {
     res.status(404).json({ error: `No brain node for ${symbol}` });
     return;
@@ -46,7 +46,7 @@ router.get("/brain/:symbol", (req: Request, res: Response) => {
 // GET /autonomous/brain/:symbol/:timeframe — decision for specific TF
 router.get("/brain/:symbol/:timeframe", (req: Request, res: Response) => {
   const { symbol, timeframe } = req.params;
-  const decision = autonomousBrainEngine.getDecision(symbol.toUpperCase(), timeframe as Timeframe);
+  const decision = autonomousBrainEngine.getDecision(String(symbol).toUpperCase(), timeframe as Timeframe);
   if (!decision) {
     res.status(404).json({ error: `No decision for ${symbol}/${timeframe}` });
     return;
@@ -61,7 +61,7 @@ router.post("/activate", (req: Request, res: Response) => {
     res.status(400).json({ error: "symbol required" });
     return;
   }
-  const state = autonomousBrainEngine.activate(symbol.toUpperCase());
+  const state = autonomousBrainEngine.activate(String(symbol).toUpperCase());
   res.json({ activated: true, symbol: state.symbol, compositeScore: state.compositeScore });
 });
 
@@ -69,8 +69,8 @@ router.post("/activate", (req: Request, res: Response) => {
 router.post("/deactivate", (req: Request, res: Response) => {
   const { symbol } = req.body ?? {};
   if (!symbol) { res.status(400).json({ error: "symbol required" }); return; }
-  autonomousBrainEngine.deactivate(symbol.toUpperCase());
-  res.json({ deactivated: true, symbol: symbol.toUpperCase() });
+  autonomousBrainEngine.deactivate(String(symbol).toUpperCase());
+  res.json({ deactivated: true, symbol: String(symbol).toUpperCase() });
 });
 
 // GET /autonomous/opportunities — top ranked opportunities

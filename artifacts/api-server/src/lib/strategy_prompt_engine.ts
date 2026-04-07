@@ -154,7 +154,7 @@ export function parseStrategyPrompt(prompt: string): ParsedStrategy {
   const slType = /atr/i.test(lowerPrompt) ? "atr" as const
     : /structure/i.test(lowerPrompt) ? "structure" as const
     : /swing/i.test(lowerPrompt) ? "swing" as const : "atr" as const;
-  const slVal = slType === "atr" ? 2 : slType === "fixed_pct" ? 2 : 1.5;
+  const slVal = slType === "atr" ? 2 : slType === "structure" ? 1.5 : 2;
 
   // Take profit R:R
   const rrMatch = lowerPrompt.match(/(\d+(?:\.\d+)?)\s*(?:to\s*1|:1|r\s*r|risk\s*reward)/);

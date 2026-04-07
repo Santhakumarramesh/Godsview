@@ -58,14 +58,14 @@ const server = app.listen(port, (err) => {
 
   // Verify DB connectivity
   checkDbHealth()
-    .then((h) => {
+    .then((h: any) => {
       if (h.ok) {
         logger.info({ driver: h.driver, latencyMs: h.latencyMs }, "Database health OK");
       } else {
         logger.error({ error: h.error }, "Database health check failed");
       }
     })
-    .catch((err) => logger.error({ err }, "DB health check threw"));
+    .catch((err: any) => logger.error({ err }, "DB health check threw"));
 
   // Start trading session
   const systemMode = process.env.GODSVIEW_SYSTEM_MODE || "paper";
@@ -121,21 +121,21 @@ const server = app.listen(port, (err) => {
       process.env.BRAIN_AUTOSTART === "true") {
     setTimeout(async () => {
       try {
-        const { watchlist } = await import("./lib/watchlist.js");
+        const { listEnabledSymbols } = await import("./lib/watchlist.js");
         const { autonomousBrain } = await import("./lib/autonomous_brain.js");
         const { runFullBrainCycle, runBacktestAndChartPipeline } = await import("./lib/brain_orchestrator.js");
         const { brainRulebook } = await import("./lib/brain_rulebook.js");
 
         // Build inputFn inline (mirrors buildCycleInput in routes/brain.ts)
         const buildInput = async (symbol: string) => {
-          const { default: alpacaLib } = await import("./lib/alpaca.js");
+          const alpacaLib = await import("./lib/alpaca.js");
           let bars1m: any[] = [], bars5m: any[] = [];
           try { bars1m = (await alpacaLib.getBars(symbol, "1Min", 200)) ?? []; } catch {}
           try { bars5m = (await alpacaLib.getBars(symbol, "5Min", 200)) ?? []; } catch {}
           return { symbol, bars1m, bars5m, orderbook: null, dna: null, marketStress: null };
         };
 
-        const enabled = watchlist.getAll().filter((e) => e.enabled).map((e) => e.symbol);
+        const enabled = listEnabledSymbols().map((e: any) => e.symbol);
         const symbols = enabled.length > 0 ? enabled : ["SPY", "QQQ", "AAPL", "TSLA", "NVDA", "BTC/USD"];
 
         if (!autonomousBrain.status.running) {
