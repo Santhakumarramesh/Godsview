@@ -174,4 +174,16 @@ router.use("/api/model-gov", modelGovRouter);            // Phase 113 — Model 
 import explainabilityRouter from "./explainability";
 router.use("/api/explainability", explainabilityRouter);    // Phase 114 — Decision packets, replay, post-mortems
 
+// ── Phase 115: Ops, Security & Failure Testing ─────────────────────────────
+import opsSecurityRouter from "./ops_security";
+router.use("/api", opsSecurityRouter);                        // Phase 115 — Security audit, chaos, ops health, deploy gate
+// ── Phase 116: Paper Program Validation & Certification ───────────────────
+import paperProgramRouter from "./paper_trading_program";
+router.use("/api/paper-program", paperProgramRouter);        // Phase 116 — Paper trading cert, phases, risk compliance
+
+// ── Phase 117: Capital Gating & Controlled Launch ───────────────────────
+import capitalGatingRouter from "./capital_gating";
+router.use("/api/capital-gating", capitalGatingRouter);      // Phase 117 — Tier system, launch control, protection
+
+
 export default router;

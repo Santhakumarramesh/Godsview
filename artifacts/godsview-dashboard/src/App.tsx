@@ -68,6 +68,9 @@ const ExecReliabilityPage = React.lazy(() => import("@/pages/exec-reliability"))
 const RiskCommandV2Page  = React.lazy(() => import("@/pages/risk-command-v2"));
 const ModelGovernancePage = React.lazy(() => import("@/pages/model-governance"));
 const DecisionExplainabilityPage = React.lazy(() => import("@/pages/decision-explainability"));
+const OpsSecurityPage    = React.lazy(() => import("@/pages/ops-security"));
+const PaperTradingProgramPage = React.lazy(() => import("@/pages/paper-trading-program"));
+const CapitalGatingPage  = React.lazy(() => import("@/pages/capital-gating"));
 const NotFound           = React.lazy(() => import("@/pages/not-found"));
 
 // ── QueryClient ─────────────────────────────────────────────────────────────
@@ -224,6 +227,9 @@ function Router() {
         <RoutedPage path="/risk-command-v2" component={RiskCommandV2Page} scope="page:risk-command-v2" />
         <RoutedPage path="/model-governance" component={ModelGovernancePage} scope="page:model-governance" />
         <RoutedPage path="/decision-explainability" component={DecisionExplainabilityPage} scope="page:decision-explainability" />
+        <RoutedPage path="/ops-security" component={OpsSecurityPage} scope="page:ops-security" />
+        <RoutedPage path="/paper-trading-program" component={PaperTradingProgramPage} scope="page:paper-trading-program" />
+        <RoutedPage path="/capital-gating" component={CapitalGatingPage} scope="page:capital-gating" />
 
         <Route>
           <AppErrorBoundary scope="page:not-found">

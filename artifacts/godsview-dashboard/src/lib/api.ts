@@ -3892,3 +3892,261 @@ export function useMCPBacktestComparison(runId: string) {
 export function useMCPBacktestSignalLog(runId: string, limit = 100, offset = 0) {
   return useQuery({ queryKey: ["mcp-backtest", "signal-log", runId, limit, offset], queryFn: () => apiFetch<any>(`/mcp-backtest/signal-log/${runId}?limit=${limit}&offset=${offset}`), enabled: !!runId });
 }
+
+// ─── Phase 115: Ops, Security & Failure Testing ─────────────────────────────
+
+export function useSecurityAudit() {
+  return useQuery({ queryKey: ["security", "audit"], queryFn: () => apiFetch<any>("/ops-security/security/audit") });
+}
+
+export function useSecurityScore() {
+  return useQuery({ queryKey: ["security", "score"], queryFn: () => apiFetch<any>("/ops-security/security/score"), refetchInterval: 30_000 });
+}
+
+export function useSecurityHistory() {
+  return useQuery({ queryKey: ["security", "history"], queryFn: () => apiFetch<any>("/ops-security/security/history") });
+}
+
+export function useRunChaosTest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { scenario: string }) => apiFetch<any>("/ops-security/chaos/run", { method: "POST", body: JSON.stringify(params) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["chaos"] }); },
+  });
+}
+
+export function useChaosResults() {
+  return useQuery({ queryKey: ["chaos", "results"], queryFn: () => apiFetch<any>("/ops-security/chaos/results") });
+}
+
+export function useResiliencyMatrix() {
+  return useQuery({ queryKey: ["chaos", "resiliency"], queryFn: () => apiFetch<any>("/ops-security/chaos/resiliency") });
+}
+
+export function useRecoveryMetrics() {
+  return useQuery({ queryKey: ["chaos", "recovery"], queryFn: () => apiFetch<any>("/ops-security/chaos/recovery") });
+}
+
+export function useOpsSnapshot() {
+  return useQuery({ queryKey: ["ops", "snapshot"], queryFn: () => apiFetch<any>("/ops-security/ops/snapshot"), refetchInterval: 5_000 });
+}
+
+export function useIncidentLog(limit = 50) {
+  return useQuery({ queryKey: ["ops", "incidents", limit], queryFn: () => apiFetch<any>(`/ops-security/ops/incidents?limit=${limit}`) });
+}
+
+export function useLogIncident() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { severity: string; title: string; description: string; component: string }) => apiFetch<any>("/ops-security/ops/incidents", { method: "POST", body: JSON.stringify(params) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["ops"] }); },
+  });
+}
+
+export function useResolveIncident() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiFetch<any>(`/ops-security/ops/incidents/${id}/resolve`, { method: "PATCH" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["ops"] }); },
+  });
+}
+
+export function useGetRunbook(component: string) {
+  return useQuery({ queryKey: ["ops", "runbook", component], queryFn: () => apiFetch<any>(`/ops-security/ops/runbook/${component}`), enabled: !!component });
+}
+
+export function useDeployGate() {
+  return useQuery({ queryKey: ["deploy", "gate"], queryFn: () => apiFetch<any>("/ops-security/deploy/gate") });
+}
+
+export function useDeployHistory() {
+  return useQuery({ queryKey: ["deploy", "history"], queryFn: () => apiFetch<any>("/ops-security/deploy/history") });
+}
+
+export function useRecordDeployment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { version: string; commitHash: string; deployer: string; notes: string }) => apiFetch<any>("/ops-security/deploy/record", { method: "POST", body: JSON.stringify(params) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["deploy"] }); },
+  });
+}
+
+// ─── Phase 116: Paper Trading Validation Program ────────────────────────────
+
+export function usePaperProgramStatus() {
+  return useQuery({ queryKey: ["paper-program", "status"], queryFn: () => apiFetch<any>("/paper-program/status"), refetchInterval: 5_000 });
+}
+
+export function useStartPaperProgram() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { strategies: string[]; symbols: string[]; capitalAllocation: number }) => apiFetch<any>("/paper-program/start", { method: "POST", body: JSON.stringify(params) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["paper-program"] }); },
+  });
+}
+
+export function useAdvancePaperDay() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch<any>("/paper-program/advance", { method: "POST" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["paper-program"] }); },
+  });
+}
+
+export function usePausePaperProgram() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch<any>("/paper-program/pause", { method: "POST" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["paper-program"] }); },
+  });
+}
+
+export function useResumePaperProgram() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch<any>("/paper-program/resume", { method: "POST" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["paper-program"] }); },
+  });
+}
+
+export function usePaperPhaseReport(phase: number) {
+  return useQuery({ queryKey: ["paper-program", "phase", phase], queryFn: () => apiFetch<any>(`/paper-program/phase/${phase}`), enabled: phase >= 1 && phase <= 4 });
+}
+
+export function usePaperSignalLog(limit = 50) {
+  return useQuery({ queryKey: ["paper-program", "signals", limit], queryFn: () => apiFetch<any>(`/paper-program/signals?limit=${limit}`) });
+}
+
+export function usePaperExecutionLog(limit = 50) {
+  return useQuery({ queryKey: ["paper-program", "executions", limit], queryFn: () => apiFetch<any>(`/paper-program/executions?limit=${limit}`) });
+}
+
+export function usePaperRiskCompliance() {
+  return useQuery({ queryKey: ["paper-program", "risk-compliance"], queryFn: () => apiFetch<any>("/paper-program/risk-compliance") });
+}
+
+export function usePaperStrategyComparison() {
+  return useQuery({ queryKey: ["paper-program", "strategy-comparison"], queryFn: () => apiFetch<any>("/paper-program/strategy-comparison") });
+}
+
+export function usePaperCertification() {
+  return useQuery({ queryKey: ["paper-program", "certification"], queryFn: () => apiFetch<any>("/paper-program/certification") });
+}
+
+export function useGenerateCertificate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch<any>("/paper-program/certify", { method: "POST" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["paper-program"] }); },
+  });
+}
+
+// ─── Phase 117: Capital Gating & Controlled Launch ──────────────────────────
+
+export function useStrategyTiers() {
+  return useQuery({ queryKey: ["capital", "tiers"], queryFn: () => apiFetch<any>("/capital-gating/tiers"), refetchInterval: 10_000 });
+}
+
+export function useStrategyTier(strategyId: string) {
+  return useQuery({ queryKey: ["capital", "tier", strategyId], queryFn: () => apiFetch<any>(`/capital-gating/tiers/${strategyId}`), enabled: !!strategyId });
+}
+
+export function useRequestPromotion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (strategyId: string) => apiFetch<any>(`/capital-gating/tiers/${strategyId}/promote`, { method: "POST" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["capital"] }); },
+  });
+}
+
+export function useDemoteStrategy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { strategyId: string; reason: string }) => apiFetch<any>(`/capital-gating/tiers/${params.strategyId}/demote`, { method: "POST", body: JSON.stringify({ reason: params.reason }) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["capital"] }); },
+  });
+}
+
+export function usePromotionHistory(strategyId: string) {
+  return useQuery({ queryKey: ["capital", "history", strategyId], queryFn: () => apiFetch<any>(`/capital-gating/tiers/${strategyId}/history`), enabled: !!strategyId });
+}
+
+export function useCapitalAllocation() {
+  return useQuery({ queryKey: ["capital", "allocation"], queryFn: () => apiFetch<any>("/capital-gating/allocation"), refetchInterval: 10_000 });
+}
+
+export function useLaunchPlan() {
+  return useQuery({ queryKey: ["launch", "plan"], queryFn: () => apiFetch<any>("/capital-gating/launch/plan") });
+}
+
+export function useCreateLaunchPlan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { strategies: string[]; startDate: string; rampSchedule: number[] }) => apiFetch<any>("/capital-gating/launch/plan", { method: "POST", body: JSON.stringify(params) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["launch"] }); },
+  });
+}
+
+export function useLaunchStatus() {
+  return useQuery({ queryKey: ["launch", "status"], queryFn: () => apiFetch<any>("/capital-gating/launch/status"), refetchInterval: 5_000 });
+}
+
+export function useAdvanceLaunch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch<any>("/capital-gating/launch/advance", { method: "POST" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["launch"] }); },
+  });
+}
+
+export function usePauseLaunch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (reason: string) => apiFetch<any>("/capital-gating/launch/pause", { method: "POST", body: JSON.stringify({ reason }) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["launch"] }); },
+  });
+}
+
+export function useAbortLaunch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (reason: string) => apiFetch<any>("/capital-gating/launch/abort", { method: "POST", body: JSON.stringify({ reason }) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["launch"] }); },
+  });
+}
+
+export function useLaunchMetrics() {
+  return useQuery({ queryKey: ["launch", "metrics"], queryFn: () => apiFetch<any>("/capital-gating/launch/metrics"), refetchInterval: 3_000 });
+}
+
+export function useRampSchedule() {
+  return useQuery({ queryKey: ["launch", "ramp"], queryFn: () => apiFetch<any>("/capital-gating/launch/ramp") });
+}
+
+export function usePreLaunchChecklist() {
+  return useQuery({ queryKey: ["protection", "checklist"], queryFn: () => apiFetch<any>("/capital-gating/protection/checklist") });
+}
+
+export function useCapitalAtRisk() {
+  return useQuery({ queryKey: ["protection", "capital-at-risk"], queryFn: () => apiFetch<any>("/capital-gating/protection/capital-at-risk"), refetchInterval: 5_000 });
+}
+
+export function useDrawdownBudget() {
+  return useQuery({ queryKey: ["protection", "drawdown-budget"], queryFn: () => apiFetch<any>("/capital-gating/protection/drawdown-budget"), refetchInterval: 5_000 });
+}
+
+export function useSetMaxDrawdown() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (amount: number) => apiFetch<any>("/capital-gating/protection/max-drawdown", { method: "POST", body: JSON.stringify({ amount }) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["protection"] }); },
+  });
+}
+
+export function useEmergencyHalt() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (reason: string) => apiFetch<any>("/capital-gating/protection/emergency-halt", { method: "POST", body: JSON.stringify({ reason }) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["protection", "launch", "capital"] }); },
+  });
+}

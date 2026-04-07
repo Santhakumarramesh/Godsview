@@ -361,6 +361,10 @@ const navItems = [
   { href: "/exec-reliability", label: "Exec Reliability", icon: "security", sub: "Failsafe & Recon" },
   { href: "/risk-command-v2", label: "Risk v2", icon: "shield", sub: "VaR & Capital Guard" },
   { href: "/model-governance", label: "Model Gov", icon: "model_training", sub: "Registry & Drift" },
+  { href: "/decision-explainability", label: "Explainability", icon: "lightbulb", sub: "Decision Replay" },
+  { href: "/ops-security", label: "Ops & Security", icon: "admin_panel_settings", sub: "Chaos & Deploy" },
+  { href: "/paper-trading-program", label: "Paper Program", icon: "assignment_turned_in", sub: "Validation & Cert" },
+  { href: "/capital-gating", label: "Capital Gating", icon: "rocket_launch", sub: "Launch Control" },
   { href: "/settings", label: "Settings", icon: "settings", sub: "Configuration" },
 ];
 
