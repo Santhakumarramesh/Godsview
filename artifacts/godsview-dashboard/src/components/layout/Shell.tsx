@@ -343,6 +343,7 @@ const navSections: NavSection[] = [
       { href: "/pipeline-status", label: "Pipeline Status", icon: "hub", sub: "Live Pipeline" },
       { href: "/candle-xray", label: "Candle X-Ray", icon: "radiology", sub: "Microstructure" },
       { href: "/tradingview-chart", label: "TradingView Chart", icon: "show_chart", sub: "Advanced Charting" },
+      { href: "/news-monitor", label: "News Monitor", icon: "newspaper", sub: "Sentiment Stream" },
       { href: "/microstructure", label: "Microstructure", icon: "candlestick_chart", sub: "Order Flow & Depth" },
       { href: "/market-structure", label: "Market Structure", icon: "bar_chart", sub: "Market Analysis" },
       { href: "/setup-explorer", label: "Setup Explorer", icon: "explore", sub: "Strategy Matrix" },
