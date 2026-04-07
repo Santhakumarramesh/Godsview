@@ -69,10 +69,15 @@ jobs:
           pip install ruff pytest pytest-asyncio
 
       - name: Ruff lint
-        run: ruff check services/ --select=E,W,F,I --ignore=E501,F401 --exit-zero
+        run: ruff check services/ godsview-openbb/ --select=E,W,F,I --ignore=E501,F401 --exit-zero
 
       - name: Ruff format check
-        run: ruff format --check services/ --exit-zero
+        run: ruff format --check services/ godsview-openbb/ --exit-zero
+
+      - name: MyPy typecheck (shared contracts)
+        run: |
+          pip install mypy pydantic
+          mypy godsview-openbb/app/shared_contracts.py --ignore-missing-imports --no-error-summary || true
 
       - name: Run pytest (all 130+ tests)
         env:
@@ -84,6 +89,70 @@ jobs:
         run: |
           cd ${{ github.workspace }}
           python -m pytest services/tests/ -q --tb=short --no-header
+
+  # ── 2b. Security Scan ─────────────────────────────────────────────
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Audit Node dependencies
+        run: pnpm audit --audit-level=high || true
+
+      - name: Check for secrets in code
+        run: |
+          if grep -rn "ALPACA_SECRET\|sk-[a-zA-Z0-9]\{20,\}\|password\s*=\s*['\"][^'\"]\+" --include="*.ts" --include="*.js" --include="*.py" api-server/src/ godsview-openbb/ services/ 2>/dev/null | grep -v "test\|mock\|example\|\.env\."; then
+            echo "::warning::Potential hardcoded secrets detected"
+          fi
+
+      - name: Check for unsafe patterns
+        run: |
+          if grep -rn "eval(\|Function(\|child_process\|exec(" --include="*.ts" --include="*.js" api-server/src/ 2>/dev/null | grep -v "test\|__tests__"; then
+            echo "::warning::Potentially unsafe code patterns detected"
+          fi
+
+  # ── 2c. Contract Validation ──────────────────────────────────────
+  contract-validation:
+    name: Validate Shared Contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [typecheck-and-test]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run contract tests
+        run: |
+          GODSVIEW_DATA_DIR=artifacts/api-server/.runtime pnpm --filter @workspace/api-server exec vitest run src/__tests__/shared_contracts.test.ts
+        env:
+          NODE_ENV: test
 
   # ── 3. Docker build Python services (main only) ───────────────────
   docker-python:
@@ -126,7 +195,7 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [typecheck-and-test, python-v2]
+    needs: [typecheck-and-test, python-v2, security-scan, contract-validation]
 
     steps:
       - uses: actions/checkout@v4
@@ -149,6 +218,15 @@ jobs:
       - name: Build Dashboard
         run: pnpm --filter @workspace/godsview-dashboard build
 
+      - name: Verify test count (regression gate)
+        run: |
+          TEST_COUNT=$(GODSVIEW_DATA_DIR=artifacts/api-server/.runtime pnpm --filter @workspace/api-server exec vitest run --reporter=json 2>/dev/null | grep -o '"numPassedTests":[0-9]*' | grep -o '[0-9]*' || echo "0")
+          echo "Tests passed: $TEST_COUNT"
+          if [ "$TEST_COUNT" -lt 3000 ]; then
+            echo "::error::Test count regression: $TEST_COUNT < 3000 minimum"
+            exit 1
+          fi
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -158,7 +236,7 @@ jobs:
             artifacts/godsview-dashboard/dist/
           retention-days: 7
 
-  # ── 3. Docker Build + Push (main only) ───────────────────────────
+  # ── 5. Docker Build + Push (main only) ───────────────────────────
   docker:
     name: Docker Build & Push
     runs-on: ubuntu-latest
@@ -202,7 +280,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # ── 4. Deploy (main only, after Docker push) ─────────────────────
+  # ── 6. Deploy (main only, after Docker push) ─────────────────────
   deploy:
     name: Deploy to Production
     runs-on: ubuntu-latest
