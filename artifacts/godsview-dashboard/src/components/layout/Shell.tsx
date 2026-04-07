@@ -1,6 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, lazy, Suspense } from "react";
+const BrainFloatingPanel = lazy(() => import("@/components/brain-floating-panel"));
 import {
   SIDEBAR_SECTION_ORDER,
   SIDEBAR_WATCHLIST,
@@ -639,6 +640,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
           {children}
         </div>
       </main>
+      {/* Brain Floating Panel — available on every page */}
+      <Suspense fallback={null}>
+        <BrainFloatingPanel />
+      </Suspense>
     </div>
   );
 }

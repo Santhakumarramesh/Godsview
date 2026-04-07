@@ -1,0 +1,19 @@
+{
+  "name": "@godsview/bloomberg-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for Bloomberg-style terminal data — market data, news, analytics, portfolio",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "tsx": "^4.19.0"
+  }
+}

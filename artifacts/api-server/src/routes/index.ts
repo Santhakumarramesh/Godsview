@@ -193,4 +193,16 @@ router.use("/api/v2", pyBridgeRouter);                        // Phase 120 — P
 import openapiRouter from "./openapi";
 router.use("/api/docs", openapiRouter);                       // Phase 123 — Scalar API reference UI + spec.json
 
+// ── Phase 138-139: Bloomberg Data & Market Intelligence ─────────────────────
+import bloombergDataRouter from "./bloomberg_data";
+router.use("/api", bloombergDataRouter);                      // Phase 139 — Market snapshots, sectors, econ, yield, news
+
+// ── Phase 140: News Monitor Feed ─────────────────────────────────────────────
+import newsMonitorRouter from "./news_monitor_feed";
+router.use("/api", newsMonitorRouter);                        // Phase 140 — Real-time news aggregation + sentiment
+
+// ── Phase 142: Brain Nodes WebSocket ─────────────────────────────────────────
+import brainNodesWsRouter from "./brain_nodes_ws";
+router.use("/api", brainNodesWsRouter);                       // Phase 142 — Brain subsystem live status
+
 export default router;
