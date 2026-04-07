@@ -74,6 +74,12 @@ const DecisionExplainabilityPage = React.lazy(() => import("@/pages/decision-exp
 const OpsSecurityPage    = React.lazy(() => import("@/pages/ops-security"));
 const PaperTradingProgramPage = React.lazy(() => import("@/pages/paper-trading-program"));
 const CapitalGatingPage  = React.lazy(() => import("@/pages/capital-gating"));
+const TradingViewChartPage = React.lazy(() => import("@/pages/tradingview-chart"));
+const BloombergTerminalPage = React.lazy(() => import("@/pages/bloomberg-terminal"));
+const NewsMonitorPage    = React.lazy(() => import("@/pages/news-monitor"));
+const BrainNodesPage     = React.lazy(() => import("@/pages/brain-nodes"));
+const AdvancedRiskPage   = React.lazy(() => import("@/pages/advanced-risk"));
+const EconomicCalendarPage = React.lazy(() => import("@/pages/economic-calendar"));
 const NotFound           = React.lazy(() => import("@/pages/not-found"));
 
 // ── QueryClient ─────────────────────────────────────────────────────────────
@@ -236,6 +242,12 @@ function Router() {
         <RoutedPage path="/ops-security" component={OpsSecurityPage} scope="page:ops-security" />
         <RoutedPage path="/paper-trading-program" component={PaperTradingProgramPage} scope="page:paper-trading-program" />
         <RoutedPage path="/capital-gating" component={CapitalGatingPage} scope="page:capital-gating" />
+        <RoutedPage path="/tradingview-chart" component={TradingViewChartPage} scope="page:tradingview-chart" />
+        <RoutedPage path="/bloomberg-terminal" component={BloombergTerminalPage} scope="page:bloomberg-terminal" />
+        <RoutedPage path="/news-monitor" component={NewsMonitorPage} scope="page:news-monitor" />
+        <RoutedPage path="/brain-nodes" component={BrainNodesPage} scope="page:brain-nodes" />
+        <RoutedPage path="/advanced-risk" component={AdvancedRiskPage} scope="page:advanced-risk" />
+        <RoutedPage path="/economic-calendar" component={EconomicCalendarPage} scope="page:economic-calendar" />
 
         <Route>
           <AppErrorBoundary scope="page:not-found">
