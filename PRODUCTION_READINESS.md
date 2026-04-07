@@ -141,4 +141,34 @@ k6 run load-tests/k6-websocket.js
 | 134 | Database migrations (orders, positions, risk) | c9c9119 |
 | 135 | Multi-broker abstraction layer | 4414881 |
 | 136 | Economic calendar + page registration fixes | 9a285ea |
-| 137 | Production readiness verification | (this) |
+| 137 | Production readiness verification | 483c6df |
+| 138-143 | MCP servers, Bloomberg, News, Brain floating | be80319 |
+| 144 | Final integration verification | (this) |
+
+## MCP Servers (Phase 138-140)
+
+| Server | Tools | Transport |
+|--------|-------|-----------|
+| TradingView | 8 (OHLCV, SMC, orderflow, regime, signals, annotations, watchlist) | stdio |
+| Bloomberg | 8 (snapshot, portfolio, sectors, econ, news, correlation, risk, yield) | stdio |
+| News Monitor | 4 (feed, sentiment, critical alerts, symbol news) | stdio |
+
+## Brain Floating Panel (Phase 141)
+- Draggable overlay available on every page
+- 16 canonical subsystems from brain-structure-v2 spec
+- Live status updates every 2s
+- Minimizable, links to full Brain Nodes page
+
+## System Totals
+
+| Metric | Count |
+|--------|-------|
+| Dashboard Pages | 68 |
+| API Routes | 72 |
+| Backend Libraries | 109 |
+| Test Files | 159 |
+| Unit Tests | 3,188 |
+| MCP Servers | 3 |
+| Prometheus Alerts | 22 |
+| Grafana Dashboards | 2 |
+| Python Microservices | 9 |
