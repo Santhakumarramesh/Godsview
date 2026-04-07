@@ -30,6 +30,7 @@
  *   into "defensive mode" — tighter filters, smaller size.
  */
 
+import { logger } from "./logger";
 import { brainEventBus } from "./brain_event_bus";
 import { brainJobQueue, BrainJobs, registerJobHandler, dispatchBatch, type JobType, type BrainJob } from "./job_queue";
 import { evolveStrategy, rankStrategies, strategyRegistry } from "./strategy_evolution";
@@ -146,7 +147,7 @@ class AutonomousBrain {
     overrideTimers?: Partial<BrainTimers>,
   ): void {
     if (this.state.running) {
-      console.log("[AutonomousBrain] Already running");
+      logger.info("[AutonomousBrain] Already running");
       return;
     }
 
@@ -167,7 +168,7 @@ class AutonomousBrain {
     // Seed the queue with initial work
     this._seedInitialJobs();
 
-    console.log(`[AutonomousBrain] Started — ${symbols.length} symbols, mode: ${this.state.mode}`);
+    logger.info(`[AutonomousBrain] Started — ${symbols.length} symbols, mode: ${this.state.mode}`);
     brainEventBus.agentReport({
       agentId: "brain",
       symbol: "SYSTEM",
@@ -195,7 +196,7 @@ class AutonomousBrain {
       // Start watchdog
       if (!brainWatchdog.isRunning?.()) {
         brainWatchdog.start();
-        console.log("[AutonomousBrain] Watchdog auto-started");
+        logger.info("[AutonomousBrain] Watchdog auto-started");
       }
 
       // Start stream bridge (stock WebSocket)
@@ -205,16 +206,16 @@ class AutonomousBrain {
         for (const sym of symbols) {
           brainStreamBridge.subscribeSymbol(sym);
         }
-        console.log(`[AutonomousBrain] StreamBridge auto-started — ${symbols.length} symbols`);
+        logger.info(`[AutonomousBrain] StreamBridge auto-started — ${symbols.length} symbols`);
       }
 
       // Start correlation engine feeds
-      console.log("[AutonomousBrain] CorrelationEngine ready");
+      logger.info("[AutonomousBrain] CorrelationEngine ready");
 
       // Start P&L tracker
       if (!brainPnLTracker.isRunning?.()) {
         brainPnLTracker.start();
-        console.log("[AutonomousBrain] P&L Tracker auto-started");
+        logger.info("[AutonomousBrain] P&L Tracker auto-started");
       }
 
       // Warm-load performance engine for all symbols
@@ -222,9 +223,9 @@ class AutonomousBrain {
         brainPerformance.warmLoad(sym).catch(() => {});
       }
 
-      console.log("[AutonomousBrain] All Phase 8 subsystems booted");
+      logger.info("[AutonomousBrain] All Phase 8 subsystems booted");
     }).catch((err) => {
-      console.warn("[AutonomousBrain] Subsystem auto-boot warning:", err?.message ?? err);
+      logger.warn("[AutonomousBrain] Subsystem auto-boot warning:", err?.message ?? err);
     });
   }
 
@@ -241,7 +242,7 @@ class AutonomousBrain {
       try {
         await this._runAttentionBacktest();
       } catch (err) {
-        console.error("[AutonomousBrain] Attention backtest tick error:", err);
+        logger.error("[AutonomousBrain] Attention backtest tick error:", err);
       }
       if (this.state.running) {
         this._attentionBacktestTimer = setTimeout(tick, this.ATTENTION_BACKTEST_INTERVAL_MS);
@@ -277,7 +278,7 @@ class AutonomousBrain {
     }
 
     if (topCandidates.length > 0) {
-      console.log(`[AutonomousBrain] Attention backtest queued: ${topCandidates.join(", ")}`);
+      logger.info(`[AutonomousBrain] Attention backtest queued: ${topCandidates.join(", ")}`);
     }
   }
 
@@ -302,7 +303,7 @@ class AutonomousBrain {
       `Brain stopped after ${this.state.cycleCount} cycles, ${this.state.totalJobsCompleted} jobs`
     ).catch(() => {});
 
-    console.log(`[AutonomousBrain] Stopped. Cycles: ${this.state.cycleCount}, Jobs: ${this.state.totalJobsCompleted}`);
+    logger.info(`[AutonomousBrain] Stopped. Cycles: ${this.state.cycleCount}, Jobs: ${this.state.totalJobsCompleted}`);
   }
 
   // ── Job Registration ───────────────────────────────────────────────────────
@@ -527,7 +528,7 @@ class AutonomousBrain {
     // React to losing streak
     if (this.state.consecutiveLosses >= 5 && this.state.mode !== "DEFENSIVE") {
       this.state.mode = "DEFENSIVE";
-      console.log("[AutonomousBrain] Entering DEFENSIVE mode after 5 consecutive losses");
+      logger.info("[AutonomousBrain] Entering DEFENSIVE mode after 5 consecutive losses");
 
       // Phase 9: fire alert for consecutive losses + defensive mode
       brainAlerts.consecutiveLosses(symbol, this.state.consecutiveLosses).catch(() => {});
@@ -554,7 +555,7 @@ class AutonomousBrain {
     // Recover from defensive mode after winning streak
     if (this.state.consecutiveWins >= 8 && this.state.mode === "DEFENSIVE") {
       this.state.mode = "NORMAL";
-      console.log("[AutonomousBrain] Recovering to NORMAL mode after 8 consecutive wins");
+      logger.info("[AutonomousBrain] Recovering to NORMAL mode after 8 consecutive wins");
     }
 
     // Trigger ML retrain when enough new outcomes
@@ -614,7 +615,7 @@ class AutonomousBrain {
         await this._runScanTick();
       } catch (err) {
         this.state.errors++;
-        console.error("[AutonomousBrain] Scan tick error:", err);
+        logger.error("[AutonomousBrain] Scan tick error:", err);
       }
 
       if (this.state.running) {
@@ -737,7 +738,7 @@ class AutonomousBrain {
 
   /** React to regime change — re-rank and re-scan affected symbols */
   onRegimeChange(symbol: string, newRegime: string, oldRegime: string): void {
-    console.log(`[AutonomousBrain] Regime change: ${symbol} ${oldRegime} → ${newRegime}`);
+    logger.info(`[AutonomousBrain] Regime change: ${symbol} ${oldRegime} → ${newRegime}`);
     BrainJobs.scanSymbol(symbol, `Regime change: ${oldRegime}→${newRegime}`, 1);
     BrainJobs.rankSymbols(this.state.symbols);
     this.state.totalJobsCreated += 2;
@@ -756,7 +757,7 @@ class AutonomousBrain {
 
   setMode(mode: BrainMode): void {
     this.state.mode = mode;
-    console.log(`[AutonomousBrain] Mode set to ${mode}`);
+    logger.info(`[AutonomousBrain] Mode set to ${mode}`);
   }
 
   getFullStatus(): {

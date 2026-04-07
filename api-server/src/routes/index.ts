@@ -185,5 +185,8 @@ router.use("/api/paper-program", paperProgramRouter);        // Phase 116 — Pa
 import capitalGatingRouter from "./capital_gating";
 router.use("/api/capital-gating", capitalGatingRouter);      // Phase 117 — Tier system, launch control, protection
 
+// ── Phase 120: Python v2 Service Bridge ─────────────────────────────────
+import pyBridgeRouter from "./py_bridge";
+router.use("/api/v2", pyBridgeRouter);                        // Phase 120 — Proxy to Python microservices
 
 export default router;

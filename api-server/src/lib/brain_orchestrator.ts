@@ -23,6 +23,7 @@
  * Then the head trader decides: "STRONG LONG — all layers aligned."
  */
 
+import { logger } from "./logger";
 import {
   brainEventBus,
   type AgentReport,
@@ -381,7 +382,7 @@ async function _autoEvaluateSignal(
     }
   } catch (err: any) {
     // Never throw — this is fire-and-forget
-    console.warn("[BrainOrchestrator] Auto-signal evaluation error:", err?.message ?? err);
+    logger.warn("[BrainOrchestrator] Auto-signal evaluation error:", err?.message ?? err);
   }
 }
 
@@ -515,7 +516,7 @@ export function startBrainScheduler(
   options: { cycleIntervalMs?: number; backtestIntervalMs?: number } = {},
 ): void {
   if (schedulerState.running) {
-    console.log("[BrainScheduler] Already running — ignoring duplicate start");
+    logger.info("[BrainScheduler] Already running — ignoring duplicate start");
     return;
   }
 
@@ -527,7 +528,7 @@ export function startBrainScheduler(
   schedulerState.cycleIntervalMs = options.cycleIntervalMs ?? 30_000;
   schedulerState.backtestIntervalMs = options.backtestIntervalMs ?? 3_600_000;
 
-  console.log(`[BrainScheduler] Starting — ${symbols.length} symbols, ${schedulerState.cycleIntervalMs / 1000}s cycle, ${schedulerState.backtestIntervalMs / 60000}min backtest interval`);
+  logger.info(`[BrainScheduler] Starting — ${symbols.length} symbols, ${schedulerState.cycleIntervalMs / 1000}s cycle, ${schedulerState.backtestIntervalMs / 60000}min backtest interval`);
 
   const tick = async () => {
     if (!schedulerState.running) return;
@@ -558,13 +559,13 @@ export function startBrainScheduler(
               schedulerState.lastBacktestAt[sym] = Date.now();
             }
           } catch (btErr) {
-            console.error(`[BrainScheduler] Backtest error for ${sym}:`, btErr);
+            logger.error(`[BrainScheduler] Backtest error for ${sym}:`, btErr);
           }
         }
       }
     } catch (err) {
       schedulerState.errors++;
-      console.error(`[BrainScheduler] Cycle ${schedulerState.cycleCount} error:`, err);
+      logger.error(`[BrainScheduler] Cycle ${schedulerState.cycleCount} error:`, err);
     }
 
     // Schedule next tick — subtract elapsed time to maintain rhythm
@@ -587,7 +588,7 @@ export function stopBrainScheduler(): void {
     clearTimeout(schedulerTimer);
     schedulerTimer = null;
   }
-  console.log(`[BrainScheduler] Stopped after ${schedulerState.cycleCount} cycles, ${schedulerState.errors} errors`);
+  logger.info(`[BrainScheduler] Stopped after ${schedulerState.cycleCount} cycles, ${schedulerState.errors} errors`);
 }
 
 /** Get current scheduler health */

@@ -1,0 +1,62 @@
+// GodsView Divergence Strategy v1.0
+// Detects RSI and MACD divergences for reversal signals
+// Sends webhook alerts to GodsView MCP pipeline
+
+//@version=5
+strategy("GodsView Divergence", overlay=true, default_qty_type=strategy.percent_of_equity, default_qty_value=5)
+
+// ─── Inputs ───────────────────────────────────────────────────────────────
+rsiLength     = input.int(14, "RSI Length", minval=5)
+rsiOversold   = input.int(30, "RSI Oversold Level")
+rsiOverbought = input.int(70, "RSI Overbought Level")
+divLookback   = input.int(5, "Divergence Lookback", minval=3)
+atrMultiplier = input.float(2.0, "ATR Multiplier for Stop", minval=0.5)
+rrRatio       = input.float(2.0, "Risk:Reward Ratio", minval=1.0)
+passphrase    = input.string("your_secret_key", "Webhook Passphrase")
+
+// ─── Calculations ─────────────────────────────────────────────────────────
+atr = ta.atr(14)
+rsi = ta.rsi(close, rsiLength)
+
+// Price pivots
+priceLL = low < ta.lowest(low, divLookback)[1]   // price makes lower low
+priceHH = high > ta.highest(high, divLookback)[1] // price makes higher high
+
+// RSI pivots
+rsiHL = rsi > ta.valuewhen(priceLL[1], rsi, 0)  // RSI makes higher low
+rsiLH = rsi < ta.valuewhen(priceHH[1], rsi, 0)  // RSI makes lower high
+
+// Divergence signals
+bullishDiv = priceLL and rsiHL and rsi < rsiOversold + 10
+bearishDiv = priceHH and rsiLH and rsi > rsiOverbought - 10
+
+// Stops and targets
+longStop     = close - atr * atrMultiplier
+longTarget   = close + atr * atrMultiplier * rrRatio
+shortStop    = close + atr * atrMultiplier
+shortTarget  = close - atr * atrMultiplier * rrRatio
+
+// ─── Strategy Logic ───────────────────────────────────────────────────────
+if bullishDiv
+    strategy.entry("Div Long", strategy.long)
+    strategy.exit("Div Long Exit", "Div Long", stop=longStop, limit=longTarget)
+
+if bearishDiv
+    strategy.entry("Div Short", strategy.short)
+    strategy.exit("Div Short Exit", "Div Short", stop=shortStop, limit=shortTarget)
+
+// ─── Alert Conditions ─────────────────────────────────────────────────────
+alertcondition(bullishDiv, title="Bullish Divergence",
+     message='{"symbol":"{{ticker}}","signal":"divergence_bull","timeframe":"{{interval}}","price":{{close}},"timestamp":{{timenow}},"direction":"long","stop_loss":' + str.tostring(longStop) + ',"take_profit":' + str.tostring(longTarget) + ',"strategy_name":"GodsView Divergence v1","passphrase":"' + passphrase + '"}')
+
+alertcondition(bearishDiv, title="Bearish Divergence",
+     message='{"symbol":"{{ticker}}","signal":"divergence_bear","timeframe":"{{interval}}","price":{{close}},"timestamp":{{timenow}},"direction":"short","stop_loss":' + str.tostring(shortStop) + ',"take_profit":' + str.tostring(shortTarget) + ',"strategy_name":"GodsView Divergence v1","passphrase":"' + passphrase + '"}')
+
+// ─── Visual ───────────────────────────────────────────────────────────────
+plotshape(bullishDiv, title="Bull Div", style=shape.labelup,   location=location.belowbar, color=color.green, text="DIV", textcolor=color.white, size=size.small)
+plotshape(bearishDiv, title="Bear Div", style=shape.labeldown, location=location.abovebar, color=color.red,   text="DIV", textcolor=color.white, size=size.small)
+
+// RSI panel
+hline(rsiOversold, "Oversold", color=color.green)
+hline(rsiOverbought, "Overbought", color=color.red)
+plot(rsi, "RSI", color=color.purple, display=display.pane)

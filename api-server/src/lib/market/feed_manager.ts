@@ -9,6 +9,7 @@
  * - Symbol/timeframe coverage tracking
  */
 
+import { logger } from "../logger";
 import { NormalizedBar } from "./normalized_schema";
 import { DataNormalizer } from "./data_normalizer";
 
@@ -106,7 +107,7 @@ export class FeedManager {
     });
     this.latencyHistory.set(name, []);
 
-    console.log(
+    logger.info(
       `FeedManager: Registered provider "${name}" (${provider.type})`
     );
   }

@@ -30,6 +30,7 @@
  *   source: "ensemble" | "fallback"
  */
 
+import { logger } from "./logger";
 import { strategyRegistry } from "./strategy_evolution";
 import {
   saveSiModelState,
@@ -411,7 +412,7 @@ class SuperIntelligenceEngine {
     state.lastRetrainOutcomes = state.outcomes.length;
     state.version++;
 
-    console.log(`[SuperIntel v2] Retrained ${symbol} v${state.version} — acc: ${(accuracy * 100).toFixed(1)}%, brier: ${state.brier.toFixed(3)}, outcomes: ${state.outcomes.length}`);
+    logger.info(`[SuperIntel v2] Retrained ${symbol} v${state.version} — acc: ${(accuracy * 100).toFixed(1)}%, brier: ${state.brier.toFixed(3)}, outcomes: ${state.outcomes.length}`);
 
     // Persist model state to DB (fire-and-forget)
     saveSiModelState({
@@ -495,7 +496,7 @@ loadAllSiModelStates().then((rows) => {
     state.totalPredictions = row.total_outcomes;
   }
   if (rows.length > 0) {
-    console.log(`[SuperIntel v2] Warm-loaded model state for ${rows.length} symbol(s) from DB`);
+    logger.info(`[SuperIntel v2] Warm-loaded model state for ${rows.length} symbol(s) from DB`);
   }
 }).catch(() => {/* DB not available — use defaults */});
 

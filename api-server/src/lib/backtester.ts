@@ -14,6 +14,7 @@
  * - Edge decay: how quickly edge deteriorates over time
  */
 
+import { logger } from "./logger";
 import { processSuperSignal } from "./super_intelligence";
 import { computeFinalQuality } from "./strategy_engine";
 import { getBars, AlpacaBar } from "./alpaca";
@@ -689,7 +690,7 @@ export async function startContinuousBacktest(): Promise<{ success: boolean; mes
   }
 
   _continuousBacktestRunning = true;
-  console.log("[backtest] Continuous backtesting started — will test every 5 minutes");
+  logger.info("[backtest] Continuous backtesting started — will test every 5 minutes");
 
   // Perform initial backtest immediately
   await runContinuousBacktestCycle();
@@ -699,7 +700,7 @@ export async function startContinuousBacktest(): Promise<{ success: boolean; mes
     try {
       await runContinuousBacktestCycle();
     } catch (err) {
-      console.error("[backtest] Continuous cycle error:", err);
+      logger.error("[backtest] Continuous cycle error:", err);
     }
   }, 5 * 60_000);
 
@@ -720,7 +721,7 @@ export function stopContinuousBacktest(): { success: boolean; message: string } 
   }
 
   _continuousBacktestRunning = false;
-  console.log("[backtest] Continuous backtesting stopped");
+  logger.info("[backtest] Continuous backtesting stopped");
   return { success: true, message: "Continuous backtesting deactivated" };
 }
 
@@ -729,7 +730,7 @@ export function stopContinuousBacktest(): { success: boolean; message: string } 
  */
 async function runContinuousBacktestCycle(): Promise<void> {
   try {
-    console.log("[backtest] [continuous] Starting backtest cycle...");
+    logger.info("[backtest] [continuous] Starting backtest cycle...");
 
     const timeHorizons = [30, 60, 90, 180, 365];
     const results: BacktestResult[] = [];
@@ -737,7 +738,7 @@ async function runContinuousBacktestCycle(): Promise<void> {
     // Run backtest for each time horizon
     for (const days of timeHorizons) {
       try {
-        console.log(`[backtest] [continuous] Running ${days}-day backtest...`);
+        logger.info(`[backtest] [continuous] Running ${days}-day backtest...`);
         const result = await runBacktest({
           lookback_days: days,
           initial_equity: 10_000,
@@ -746,12 +747,12 @@ async function runContinuousBacktestCycle(): Promise<void> {
         });
         results.push(result);
       } catch (err) {
-        console.error(`[backtest] [continuous] ${days}-day backtest failed:`, err);
+        logger.error(`[backtest] [continuous] ${days}-day backtest failed:`, err);
       }
     }
 
     if (results.length === 0) {
-      console.log("[backtest] [continuous] No valid results from cycle");
+      logger.info("[backtest] [continuous] No valid results from cycle");
       return;
     }
 
@@ -764,9 +765,9 @@ async function runContinuousBacktestCycle(): Promise<void> {
     // Update strategy leaderboard based on results
     updateStrategyLeaderboard(results);
 
-    console.log(`[backtest] [continuous] Cycle complete: ${results.length} time horizons tested`);
+    logger.info(`[backtest] [continuous] Cycle complete: ${results.length} time horizons tested`);
   } catch (err) {
-    console.error("[backtest] [continuous] Backtest cycle failed:", err);
+    logger.error("[backtest] [continuous] Backtest cycle failed:", err);
   }
 }
 
@@ -868,9 +869,9 @@ function updateStrategyLeaderboard(results: BacktestResult[]): void {
       _strategyLeaderboard.set(key, entry);
     }
 
-    console.log(`[backtest] Updated leaderboard: ${_strategyLeaderboard.size} strategies`);
+    logger.info(`[backtest] Updated leaderboard: ${_strategyLeaderboard.size} strategies`);
   } catch (err) {
-    console.error("[backtest] [continuous] Strategy leaderboard update failed:", err);
+    logger.error("[backtest] [continuous] Strategy leaderboard update failed:", err);
   }
 }
 

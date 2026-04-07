@@ -3,6 +3,7 @@
 // Streams live trade ticks + quotes → aggregates into candles → broadcasts to SSE clients
 
 import WebSocket from "ws";
+import { logger } from "./logger";
 import { orderBookManager } from "./market/orderbook";
 import { orderBookRecorder } from "./market/orderbook_recorder";
 import { fromAlpacaSlash, isCryptoSymbol, normalizeMarketSymbol, toAlpacaSlash } from "./market/symbols";
@@ -72,7 +73,7 @@ class AlpacaStreamManager {
 
   start() {
     if (this.ws || this.stopped) return;
-    console.log("[stream] starting WS connection to Alpaca crypto stream");
+    logger.info("[stream] starting WS connection to Alpaca crypto stream");
     this.connect();
   }
 
@@ -95,20 +96,20 @@ class AlpacaStreamManager {
       return;
     }
     this.ws.send(JSON.stringify({ action: "subscribe", orderbooks: [alpacaSym] }));
-    console.log(`[stream] orderbook subscribe sent for ${alpacaSym}`);
+    logger.info(`[stream] orderbook subscribe sent for ${alpacaSym}`);
   }
 
   subscribe(symbol: string, timeframe: string, listener: TickListener) {
     const normalizedSymbol = normalizeMarketSymbol(symbol);
     if (!isCryptoSymbol(normalizedSymbol)) {
-      console.warn(`[stream] ignored non-crypto subscription request for ${symbol}`);
+      logger.warn(`[stream] ignored non-crypto subscription request for ${symbol}`);
       return;
     }
     const key = `${normalizedSymbol}:${timeframe}`;
     if (!this.listeners.has(key)) this.listeners.set(key, new Set());
     this.listeners.get(key)!.add(listener);
 
-    console.log(`[stream] subscribe ${key} | authenticated=${this.authenticated} wsState=${this.ws?.readyState} pollingMode=${this.pollingMode}`);
+    logger.info(`[stream] subscribe ${key} | authenticated=${this.authenticated} wsState=${this.ws?.readyState} pollingMode=${this.pollingMode}`);
 
     // If already connected and authenticated, subscribe the new symbol immediately
     if (!this.pollingMode && this.authenticated && this.ws?.readyState === WebSocket.OPEN) {
@@ -117,7 +118,7 @@ class AlpacaStreamManager {
       this.ensurePolling(normalizedSymbol);
     } else {
       // WS connecting or not yet authenticated — subscription will be sent after auth
-      console.log(`[stream] WS not ready yet, will subscribe ${symbol} after auth`);
+      logger.info(`[stream] WS not ready yet, will subscribe ${symbol} after auth`);
     }
   }
 
@@ -145,7 +146,7 @@ class AlpacaStreamManager {
 
   private connect() {
     if (this.stopped) return;
-    console.log(`[stream] connecting to ${WS_URL}`);
+    logger.info(`[stream] connecting to ${WS_URL}`);
     try {
       const ws = new WebSocket(WS_URL);
       this.ws = ws;
@@ -153,7 +154,7 @@ class AlpacaStreamManager {
       ws.on("open", () => {
         this.reconnectDelay = 1000;
         this.wsConnectedAt = Date.now();
-        console.log("[stream] WS open — sending auth");
+        logger.info("[stream] WS open — sending auth");
         ws.send(JSON.stringify({ action: "auth", key: KEY_ID, secret: SECRET_KEY }));
       });
 
@@ -167,16 +168,16 @@ class AlpacaStreamManager {
       });
 
       ws.on("error", (e) => {
-        console.error("[stream] WS error:", e.message);
+        logger.error("[stream] WS error:", e.message);
         this.scheduleReconnect();
       });
       ws.on("close", (code, reason) => {
         this.authenticated = false;
-        console.log(`[stream] WS closed code=${code} reason=${reason?.toString()} — reconnecting`);
+        logger.info(`[stream] WS closed code=${code} reason=${reason?.toString()} — reconnecting`);
         this.scheduleReconnect();
       });
     } catch (e) {
-      console.error("[stream] connect error:", e);
+      logger.error("[stream] connect error:", e);
       this.scheduleReconnect();
     }
   }
@@ -185,14 +186,14 @@ class AlpacaStreamManager {
     const T = msg.T as string;
 
     if (T === "success" && msg.msg === "connected") {
-      console.log("[stream] connected to Alpaca");
+      logger.info("[stream] connected to Alpaca");
       return;
     }
 
     if (T === "success" && msg.msg === "authenticated") {
       this.authenticated = true;
       this.pollingMode = false;
-      console.log("[stream] authenticated OK");
+      logger.info("[stream] authenticated OK");
 
       // Always subscribe to default crypto symbols for orderbooks, trades & quotes
       const defaultSymbols = DEFAULT_STREAM_SYMBOLS.map((symbol) => toAlpacaSlash(symbol));
@@ -204,29 +205,29 @@ class AlpacaStreamManager {
         }
       }
       const allSymbols = [...new Set([...defaultSymbols, ...listenerSymbols])];
-      console.log(`[stream] subscribing after auth: ${allSymbols.join(", ")}`);
+      logger.info(`[stream] subscribing after auth: ${allSymbols.join(", ")}`);
       this.sendSubscribe(allSymbols);
       return;
     }
 
     if (T === "subscription") {
-      console.log("[stream] subscription confirmed:", JSON.stringify(msg));
+      logger.info("[stream] subscription confirmed:", JSON.stringify(msg));
       return;
     }
 
     if (T === "error") {
       const code = msg.code as number;
       const errMsg = msg.msg as string;
-      console.error(`[stream] Alpaca error code=${code} msg=${errMsg}`);
+      logger.error(`[stream] Alpaca error code=${code} msg=${errMsg}`);
 
       // 406 = connection limit exceeded — this is our second connection attempt from outside; ignore
       if (code === 406) {
-        console.warn("[stream] connection limit error — this means a second WS connection was attempted. Ignoring.");
+        logger.warn("[stream] connection limit error — this means a second WS connection was attempted. Ignoring.");
         return;
       }
 
       // Auth failed — fall back to slower REST polling to avoid 429s
-      console.warn(`[stream] auth failed, falling back to REST polling at ${this.FALLBACK_POLL_MS}ms`);
+      logger.warn(`[stream] auth failed, falling back to REST polling at ${this.FALLBACK_POLL_MS}ms`);
       this.pollingMode = true;
       this.ws?.close();
       this.ws = null;
@@ -251,7 +252,7 @@ class AlpacaStreamManager {
 
       this.ticksReceived++;
       if (this.ticksReceived <= 5 || this.ticksReceived % 100 === 0) {
-        console.log(`[stream] TRADE tick #${this.ticksReceived} ${symbol} $${price} @ ${timestamp}`);
+        logger.info(`[stream] TRADE tick #${this.ticksReceived} ${symbol} $${price} @ ${timestamp}`);
       }
 
       orderBookRecorder.recordTradeTick({
@@ -298,7 +299,7 @@ class AlpacaStreamManager {
 
       this.quotesReceived++;
       if (this.quotesReceived <= 3 || this.quotesReceived % 200 === 0) {
-        console.log(`[stream] QUOTE tick #${this.quotesReceived} ${symbol} mid=$${price.toFixed(2)} @ ${timestamp}`);
+        logger.info(`[stream] QUOTE tick #${this.quotesReceived} ${symbol} mid=$${price.toFixed(2)} @ ${timestamp}`);
       }
 
       this.broadcastPrice(symbol, price, 0, timestamp);
@@ -338,7 +339,7 @@ class AlpacaStreamManager {
 
   private sendSubscribe(alpacaSymbols: string[]) {
     if (this.ws?.readyState !== WebSocket.OPEN) {
-      console.warn("[stream] sendSubscribe called but WS not open");
+      logger.warn("[stream] sendSubscribe called but WS not open");
       return;
     }
     // Subscribe to trades, quotes AND orderbooks on the same single connection
@@ -348,14 +349,14 @@ class AlpacaStreamManager {
       quotes:     alpacaSymbols,
       orderbooks: alpacaSymbols,
     };
-    console.log("[stream] sending subscribe:", JSON.stringify(msg));
+    logger.info("[stream] sending subscribe:", JSON.stringify(msg));
     this.ws.send(JSON.stringify(msg));
   }
 
   private scheduleReconnect() {
     if (this.stopped || this.pollingMode) return;
     if (this.reconnectTimer) return;
-    console.log(`[stream] scheduling reconnect in ${this.reconnectDelay}ms`);
+    logger.info(`[stream] scheduling reconnect in ${this.reconnectDelay}ms`);
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.ws = null;
@@ -377,7 +378,7 @@ class AlpacaStreamManager {
 
   private ensurePolling(symbol: string) {
     if (!this.pollingMode || this.pollTimers.has(symbol)) return;
-    console.log(`[stream] starting REST fallback poll for ${symbol} at ${this.FALLBACK_POLL_MS}ms`);
+    logger.info(`[stream] starting REST fallback poll for ${symbol} at ${this.FALLBACK_POLL_MS}ms`);
     const timer = setInterval(() => this.pollSymbol(symbol), this.FALLBACK_POLL_MS);
     this.pollTimers.set(symbol, timer);
   }

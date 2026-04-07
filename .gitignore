@@ -82,3 +82,4 @@ execution_idempotency_state*.json
 # Local scratch / one-off exports (do not version)
 attached_assets/
 godsview_engine_analysis_dashboard.html
+_tmp_2563_*

@@ -12,6 +12,7 @@
  * - POST /api/eval/regression-check - compare against previous results
  */
 
+import { logger } from '../lib/logger';
 import { Router, Request, Response } from 'express';
 import {
   DecisionLoopEvalHarness,
@@ -43,7 +44,7 @@ let latestLeaderboard: LeaderboardEntry[] = [];
 
 router.post('/run', async (req: Request, res: Response) => {
   try {
-    console.log('[EVAL] Starting full evaluation run...');
+    logger.info('[EVAL] Starting full evaluation run...');
     const startTime = Date.now();
 
     const harness = new DecisionLoopEvalHarness(latestEvalReport || undefined);
@@ -80,7 +81,7 @@ router.post('/run', async (req: Request, res: Response) => {
       cachedForComparison: true
     });
   } catch (error: any) {
-    console.error('[EVAL] Full run error:', error);
+    logger.error('[EVAL] Full run error:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Evaluation run failed'
@@ -104,7 +105,7 @@ router.post('/single/:testId', async (req: Request, res: Response) => {
       });
     }
 
-    console.log(`[EVAL] Running single test: ${testId}`);
+    logger.info(`[EVAL] Running single test: ${testId}`);
 
     const harness = new DecisionLoopEvalHarness();
     const result = await harness.runSingleEval(testCase);
@@ -128,7 +129,7 @@ router.post('/single/:testId', async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('[EVAL] Single test error:', error);
+    logger.error('[EVAL] Single test error:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Single test evaluation failed'
@@ -170,7 +171,7 @@ router.get('/golden-suite', (req: Request, res: Response) => {
       }))
     });
   } catch (error: any) {
-    console.error('[EVAL] Golden suite error:', error);
+    logger.error('[EVAL] Golden suite error:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to list golden suite'
@@ -191,7 +192,7 @@ router.post('/compare', async (req: Request, res: Response) => {
       });
     }
 
-    console.log('[EVAL] Starting baseline comparison...');
+    logger.info('[EVAL] Starting baseline comparison...');
     const startTime = Date.now();
 
     const comparison = new BaselineComparison();
@@ -219,7 +220,7 @@ router.post('/compare', async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('[EVAL] Comparison error:', error);
+    logger.error('[EVAL] Comparison error:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Baseline comparison failed'
@@ -252,7 +253,7 @@ router.get('/leaderboard', (req: Request, res: Response) => {
       godsviewScore: godsviewPosition?.overallScore || null
     });
   } catch (error: any) {
-    console.error('[EVAL] Leaderboard error:', error);
+    logger.error('[EVAL] Leaderboard error:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to fetch leaderboard'
@@ -296,7 +297,7 @@ router.get('/report', (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('[EVAL] Report error:', error);
+    logger.error('[EVAL] Report error:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to fetch eval report'
@@ -326,7 +327,7 @@ router.post('/regression-check', async (req: Request, res: Response) => {
       });
     }
 
-    console.log('[EVAL] Checking for regressions...');
+    logger.info('[EVAL] Checking for regressions...');
 
     const harness = new DecisionLoopEvalHarness(previousReport);
     const regressions = harness.regressionCheck(previousReport, latestEvalReport);
@@ -355,7 +356,7 @@ router.post('/regression-check', async (req: Request, res: Response) => {
                `${regressions.length} regression(s) detected`
     });
   } catch (error: any) {
-    console.error('[EVAL] Regression check error:', error);
+    logger.error('[EVAL] Regression check error:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Regression check failed'

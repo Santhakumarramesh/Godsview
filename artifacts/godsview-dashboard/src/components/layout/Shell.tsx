@@ -305,67 +305,121 @@ function useLiveTicker() {
   return { tickerBySymbol, setupBySymbol, lastUpdated, feedMode };
 }
 
-const navItems = [
-  { href: "/", label: "Mission Control", icon: "dashboard", sub: "Overview" },
-  { href: "/brain", label: "Brain", icon: "neurology", sub: "Intelligence" },
-  { href: "/alpaca", label: "Live Intelligence", icon: "psychology", sub: "Analysis" },
-  { href: "/infinity", label: "Infinity Screen", icon: "grid_view", sub: "Multi-Chart" },
-  { href: "/pipeline", label: "Pipeline Engine", icon: "hub", sub: "6-Layer AI" },
-  { href: "/candle-xray", label: "Candle X-Ray", icon: "radiology", sub: "Microstructure" },
-  { href: "/signals", label: "Signal Feed", icon: "sensors", sub: "Pipeline" },
-  { href: "/setup-explorer", label: "Setup Explorer", icon: "explore", sub: "Strategy Matrix" },
-  { href: "/trades", label: "Trade Journal", icon: "receipt_long", sub: "Execution" },
-  { href: "/war-room", label: "War Room", icon: "groups", sub: "Consensus" },
-  { href: "/proof", label: "Proof", icon: "check_circle", sub: "Performance" },
-  { href: "/checklist", label: "Checklist", icon: "task_alt", sub: "Validation" },
-  { href: "/ops", label: "Ops Monitor", icon: "monitor_heart", sub: "Health" },
-  { href: "/quant-lab", label: "Quant Lab", icon: "science", sub: "Backtest" },
-  { href: "/portfolio", label: "Portfolio", icon: "account_balance", sub: "Allocation" },
-  { href: "/execution", label: "Execution", icon: "bolt", sub: "Live Orders" },
-  { href: "/audit", label: "Audit Trail", icon: "history", sub: "Event Log" },
-  { href: "/decision-replay", label: "Decision Replay", icon: "travel_explore", sub: "Explainability" },
-  { href: "/alerts", label: "Alerts", icon: "bell", sub: "Live Alerts" },
-  { href: "/reports", label: "Session Reports", icon: "summarize", sub: "Intelligence" },
-  { href: "/risk", label: "Risk Command", icon: "shield", sub: "Safety Rails" },
-  { href: "/super-intelligence", label: "Super Intelligence", icon: "auto_awesome", sub: "AI Engine" },
-  { href: "/institutional-intelligence", label: "Inst. Intelligence", icon: "trending_up", sub: "Macro · Sentiment" },
-  { href: "/backtester", label: "Backtester", icon: "bar_chart_4_bars", sub: "Multi-TF Replay" },
-  { href: "/intelligence-center", label: "Control Center", icon: "monitor_heart", sub: "System Status" },
-  { href: "/trade-journal", label: "Trade Journal", icon: "book", sub: "PnL Attribution" },
-  { href: "/watchlist", label: "Watchlist Scanner", icon: "radar", sub: "Auto-Scan" },
-  { href: "/analytics", label: "Equity Analytics", icon: "show_chart", sub: "Equity · Circuit Breaker" },
-  { href: "/performance", label: "Analytics", icon: "analytics", sub: "Performance" },
-  { href: "/market-structure", label: "Market Structure", icon: "bar_chart", sub: "Market Microstructure" },
-  { href: "/daily-review", label: "Daily Review", icon: "calendar_today", sub: "Daily Analysis" },
-  { href: "/side-by-side", label: "Side-by-Side", icon: "compare_arrows", sub: "Comparison Tool" },
-  { href: "/decision-loop", label: "Decision Loop", icon: "route", sub: "Strategy Pipeline" },
-  { href: "/trust-surface", label: "Trust Surface", icon: "verified_user", sub: "Operator View" },
-  { href: "/eval-harness", label: "Eval Harness", icon: "science", sub: "Benchmarks" },
-  { href: "/calibration", label: "Calibration", icon: "tune", sub: "Live Truth" },
-  { href: "/system", label: "System Core", icon: "memory", sub: "Diagnostics" },
-  { href: "/stitch-lab", label: "Stitch Vault", icon: "palette", sub: "Design Pack" },
-  { href: "/brain-graph", label: "God Brain", icon: "neurology", sub: "Live Neural Graph" },
-  { href: "/mcp-signals", label: "MCP Signals", icon: "swap_vert", sub: "Signal Flow" },
-  { href: "/mcp-backtester", label: "MCP Backtester", icon: "compare", sub: "MCP vs Raw" },
-  { href: "/pipeline-status", label: "Pipeline Status", icon: "hub", sub: "Live Pipeline" },
-  { href: "/regime-intelligence", label: "Regime Intel", icon: "psychology", sub: "Adaptive Strategy" },
-  { href: "/correlation-lab", label: "Correlation Lab", icon: "grid_view", sub: "Portfolio Risk Map" },
-  { href: "/execution-control", label: "Exec Control", icon: "tune", sub: "Orders & Venues" },
-  { href: "/sentiment-intel", label: "Sentiment", icon: "trending_up", sub: "News & Social Intel" },
-  { href: "/performance-analytics", label: "Performance", icon: "leaderboard", sub: "Journal & Rankings" },
-  { href: "/alert-center", label: "Alert Center", icon: "notification_important", sub: "Rules & Anomalies" },
-  { href: "/microstructure", label: "Microstructure", icon: "candlestick_chart", sub: "Order Flow & Depth" },
-  { href: "/system-audit", label: "Truth Audit", icon: "verified", sub: "System Integrity" },
-  { href: "/data-integrity", label: "Data Integrity", icon: "fact_check", sub: "Feed & Tick Health" },
-  { href: "/backtest-credibility", label: "Backtest Lab", icon: "biotech", sub: "Credibility & Overfit" },
-  { href: "/exec-reliability", label: "Exec Reliability", icon: "security", sub: "Failsafe & Recon" },
-  { href: "/risk-command-v2", label: "Risk v2", icon: "shield", sub: "VaR & Capital Guard" },
-  { href: "/model-governance", label: "Model Gov", icon: "model_training", sub: "Registry & Drift" },
-  { href: "/decision-explainability", label: "Explainability", icon: "lightbulb", sub: "Decision Replay" },
-  { href: "/ops-security", label: "Ops & Security", icon: "admin_panel_settings", sub: "Chaos & Deploy" },
-  { href: "/paper-trading-program", label: "Paper Program", icon: "assignment_turned_in", sub: "Validation & Cert" },
-  { href: "/capital-gating", label: "Capital Gating", icon: "rocket_launch", sub: "Launch Control" },
-  { href: "/settings", label: "Settings", icon: "settings", sub: "Configuration" },
+type NavItem = { href: string; label: string; icon: string; sub: string };
+type NavSection = { section: string; items: NavItem[] };
+
+const navSections: NavSection[] = [
+  {
+    section: "Command",
+    items: [
+      { href: "/", label: "Mission Control", icon: "dashboard", sub: "Overview" },
+      { href: "/command-center", label: "Command Center", icon: "security", sub: "Unified Control" },
+      { href: "/brain", label: "Brain", icon: "neurology", sub: "Intelligence" },
+      { href: "/brain-graph", label: "God Brain", icon: "neurology", sub: "Live Neural Graph" },
+      { href: "/infinity", label: "Infinity Screen", icon: "grid_view", sub: "Multi-Chart" },
+    ],
+  },
+  {
+    section: "Intelligence",
+    items: [
+      { href: "/intelligence-center", label: "Intelligence Hub", icon: "monitor_heart", sub: "All Layers" },
+      { href: "/alpaca", label: "Live Intelligence", icon: "psychology", sub: "Analysis" },
+      { href: "/super-intelligence", label: "Super Intelligence", icon: "auto_awesome", sub: "AI Engine" },
+      { href: "/institutional-intelligence", label: "Inst. Intelligence", icon: "trending_up", sub: "Macro · Sentiment" },
+      { href: "/regime-intelligence", label: "Regime Intel", icon: "psychology", sub: "Adaptive Strategy" },
+      { href: "/sentiment-intel", label: "Sentiment", icon: "trending_up", sub: "News & Social Intel" },
+      { href: "/decision-loop", label: "Decision Loop", icon: "route", sub: "Strategy Pipeline" },
+      { href: "/decision-replay", label: "Decision Replay", icon: "travel_explore", sub: "Explainability" },
+      { href: "/decision-explainability", label: "Explainability", icon: "lightbulb", sub: "Decision Trace" },
+    ],
+  },
+  {
+    section: "Signals & Data",
+    items: [
+      { href: "/signals", label: "Signal Feed", icon: "sensors", sub: "Pipeline" },
+      { href: "/mcp-signals", label: "MCP Signals", icon: "swap_vert", sub: "Signal Flow" },
+      { href: "/pipeline", label: "Pipeline Engine", icon: "hub", sub: "6-Layer AI" },
+      { href: "/pipeline-status", label: "Pipeline Status", icon: "hub", sub: "Live Pipeline" },
+      { href: "/candle-xray", label: "Candle X-Ray", icon: "radiology", sub: "Microstructure" },
+      { href: "/microstructure", label: "Microstructure", icon: "candlestick_chart", sub: "Order Flow & Depth" },
+      { href: "/market-structure", label: "Market Structure", icon: "bar_chart", sub: "Market Analysis" },
+      { href: "/setup-explorer", label: "Setup Explorer", icon: "explore", sub: "Strategy Matrix" },
+      { href: "/watchlist", label: "Watchlist Scanner", icon: "radar", sub: "Auto-Scan" },
+      { href: "/correlation-lab", label: "Correlation Lab", icon: "grid_view", sub: "Portfolio Risk Map" },
+      { href: "/data-integrity", label: "Data Integrity", icon: "fact_check", sub: "Feed & Tick Health" },
+    ],
+  },
+  {
+    section: "Execution",
+    items: [
+      { href: "/execution", label: "Execution", icon: "bolt", sub: "Live Orders" },
+      { href: "/execution-control", label: "Exec Control", icon: "tune", sub: "Orders & Venues" },
+      { href: "/exec-reliability", label: "Exec Reliability", icon: "security", sub: "Failsafe & Recon" },
+      { href: "/trades", label: "Trade Log", icon: "receipt_long", sub: "Order History" },
+      { href: "/trade-journal", label: "Trade Journal", icon: "book", sub: "PnL Attribution" },
+      { href: "/portfolio", label: "Portfolio", icon: "account_balance", sub: "Allocation" },
+    ],
+  },
+  {
+    section: "Backtesting",
+    items: [
+      { href: "/backtester", label: "Backtester", icon: "bar_chart_4_bars", sub: "Multi-TF Replay" },
+      { href: "/mcp-backtester", label: "MCP Backtester", icon: "compare", sub: "MCP vs Raw" },
+      { href: "/backtest-credibility", label: "Backtest Lab", icon: "biotech", sub: "Credibility & Overfit" },
+      { href: "/quant-lab", label: "Quant Lab", icon: "science", sub: "Experiments" },
+      { href: "/side-by-side", label: "Side-by-Side", icon: "compare_arrows", sub: "Comparison Tool" },
+    ],
+  },
+  {
+    section: "Risk & Safety",
+    items: [
+      { href: "/risk", label: "Risk Command", icon: "shield", sub: "Safety Rails" },
+      { href: "/risk-command-v2", label: "Risk v2", icon: "shield", sub: "VaR & Capital Guard" },
+      { href: "/alerts", label: "Alerts", icon: "bell", sub: "Live Alerts" },
+      { href: "/alert-center", label: "Alert Center", icon: "notification_important", sub: "Rules & Anomalies" },
+      { href: "/capital-gating", label: "Capital Gating", icon: "rocket_launch", sub: "Launch Control" },
+      { href: "/paper-trading-program", label: "Paper Program", icon: "assignment_turned_in", sub: "Validation & Cert" },
+    ],
+  },
+  {
+    section: "Analytics",
+    items: [
+      { href: "/performance", label: "Performance", icon: "analytics", sub: "Dashboard" },
+      { href: "/performance-analytics", label: "Deep Analytics", icon: "leaderboard", sub: "Journal & Rankings" },
+      { href: "/analytics", label: "Equity Analytics", icon: "show_chart", sub: "Equity · Circuit Breaker" },
+      { href: "/reports", label: "Session Reports", icon: "summarize", sub: "Intelligence" },
+      { href: "/daily-review", label: "Daily Review", icon: "calendar_today", sub: "Daily Analysis" },
+      { href: "/proof", label: "Proof", icon: "check_circle", sub: "Verification" },
+    ],
+  },
+  {
+    section: "Operations",
+    items: [
+      { href: "/ops", label: "Ops Monitor", icon: "monitor_heart", sub: "Health" },
+      { href: "/ops-security", label: "Ops & Security", icon: "admin_panel_settings", sub: "Chaos & Deploy" },
+      { href: "/war-room", label: "War Room", icon: "groups", sub: "Consensus" },
+      { href: "/checklist", label: "Checklist", icon: "task_alt", sub: "Validation" },
+    ],
+  },
+  {
+    section: "Governance",
+    items: [
+      { href: "/model-governance", label: "Model Gov", icon: "model_training", sub: "Registry & Drift" },
+      { href: "/trust-surface", label: "Trust Surface", icon: "verified_user", sub: "Operator View" },
+      { href: "/calibration", label: "Calibration", icon: "tune", sub: "Live Truth" },
+      { href: "/eval-harness", label: "Eval Harness", icon: "science", sub: "Benchmarks" },
+      { href: "/audit", label: "Audit Trail", icon: "history", sub: "Event Log" },
+      { href: "/system-audit", label: "Truth Audit", icon: "verified", sub: "System Integrity" },
+    ],
+  },
+  {
+    section: "System",
+    items: [
+      { href: "/system", label: "System Core", icon: "memory", sub: "Diagnostics" },
+      { href: "/stitch-lab", label: "Stitch Vault", icon: "palette", sub: "Design Pack" },
+      { href: "/settings", label: "Settings", icon: "settings", sub: "Configuration" },
+    ],
+  },
 ];
 
 export function Shell({ children }: { children: React.ReactNode }) {
@@ -436,38 +490,42 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          <div style={{ fontSize: "8px", color: "#484849", letterSpacing: "0.25em", textTransform: "uppercase", fontFamily: "Space Grotesk", fontWeight: 700, padding: "0 8px 12px" }}>
-            Pipeline Control
-          </div>
-          {navItems.map((item) => {
-            const isActive = location === item.href;
-            return (
-              <Link key={item.href} href={item.href} onClick={() => setMobileMenuOpen(false)}>
-                <div className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded cursor-pointer group transition-all",
-                  isActive ? "bg-[rgba(156,255,147,0.08)] border border-[rgba(156,255,147,0.15)]" : "border border-transparent hover:bg-[rgba(255,255,255,0.03)]"
-                )}>
-                  <span
-                    className="material-symbols-outlined transition-colors"
-                    style={{
-                      fontSize: "18px",
-                      color: isActive ? "#9cff93" : "#767576",
-                    }}
-                  >
-                    {item.icon}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <div className={cn("text-xs font-medium font-headline truncate", isActive ? "text-white" : "text-[#adaaab]")}>
-                      {item.label}
+          {navSections.map((group) => (
+            <div key={group.section} className="mb-2">
+              <div style={{ fontSize: "8px", color: "#484849", letterSpacing: "0.25em", textTransform: "uppercase", fontFamily: "Space Grotesk", fontWeight: 700, padding: "8px 8px 6px" }}>
+                {group.section}
+              </div>
+              {group.items.map((item) => {
+                const isActive = location === item.href;
+                return (
+                  <Link key={item.href} href={item.href} onClick={() => setMobileMenuOpen(false)}>
+                    <div className={cn(
+                      "flex items-center gap-3 px-3 py-2.5 rounded cursor-pointer group transition-all",
+                      isActive ? "bg-[rgba(156,255,147,0.08)] border border-[rgba(156,255,147,0.15)]" : "border border-transparent hover:bg-[rgba(255,255,255,0.03)]"
+                    )}>
+                      <span
+                        className="material-symbols-outlined transition-colors"
+                        style={{
+                          fontSize: "18px",
+                          color: isActive ? "#9cff93" : "#767576",
+                        }}
+                      >
+                        {item.icon}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className={cn("text-xs font-medium font-headline truncate", isActive ? "text-white" : "text-[#adaaab]")}>
+                          {item.label}
+                        </div>
+                      </div>
+                      {isActive && (
+                        <div className="w-1 h-1 rounded-full" style={{ backgroundColor: "#9cff93" }} />
+                      )}
                     </div>
-                  </div>
-                  {isActive && (
-                    <div className="w-1 h-1 rounded-full" style={{ backgroundColor: "#9cff93" }} />
-                  )}
-                </div>
-              </Link>
-            );
-          })}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
 
           {/* Grouped Live Movers */}
           <div className="pt-3 mt-3 border-t" style={{ borderColor: "rgba(72,72,73,0.15)" }}>

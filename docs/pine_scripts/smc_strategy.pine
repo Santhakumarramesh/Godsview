@@ -1,0 +1,82 @@
+// GodsView Smart Money Concepts Strategy v1.0
+// Detects order blocks, FVGs, and liquidity sweeps
+// Sends webhook alerts to GodsView MCP pipeline
+
+//@version=5
+strategy("GodsView SMC", overlay=true, default_qty_type=strategy.percent_of_equity, default_qty_value=5)
+
+// ─── Inputs ───────────────────────────────────────────────────────────────
+obLookback    = input.int(10, "Order Block Lookback", minval=3)
+fvgMinSize    = input.float(0.5, "Min FVG Size (ATR %)", minval=0.1)
+sweepWick     = input.float(0.3, "Sweep Wick Ratio", minval=0.1)
+atrMultiplier = input.float(1.5, "ATR Multiplier for Stop", minval=0.5)
+rrRatio       = input.float(2.5, "Risk:Reward Ratio", minval=1.0)
+passphrase    = input.string("your_secret_key", "Webhook Passphrase")
+
+// ─── Calculations ─────────────────────────────────────────────────────────
+atr = ta.atr(14)
+
+// Order Block Detection (simplified)
+// Bullish OB: last red candle before a strong up move
+bullishOB = close[1] < open[1] and close > open and (close - open) > atr * 1.5
+// Bearish OB: last green candle before a strong down move
+bearishOB = close[1] > open[1] and close < open and (open - close) > atr * 1.5
+
+// Fair Value Gap Detection
+bullishFVG = low > high[2] and (low - high[2]) > atr * fvgMinSize / 100
+bearishFVG = high < low[2] and (low[2] - high) > atr * fvgMinSize / 100
+
+// Liquidity Sweep Detection
+prevHigh = ta.highest(high, obLookback)[1]
+prevLow  = ta.lowest(low, obLookback)[1]
+sweepHigh = high > prevHigh and close < prevHigh  // swept highs, closed below
+sweepLow  = low < prevLow and close > prevLow     // swept lows, closed above
+
+// Stop/Target
+longStop     = close - atr * atrMultiplier
+longTarget   = close + atr * atrMultiplier * rrRatio
+shortStop    = close + atr * atrMultiplier
+shortTarget  = close - atr * atrMultiplier * rrRatio
+
+// ─── Strategy Logic ───────────────────────────────────────────────────────
+if bullishOB
+    strategy.entry("OB Long", strategy.long)
+    strategy.exit("OB Long Exit", "OB Long", stop=longStop, limit=longTarget)
+
+if bearishOB
+    strategy.entry("OB Short", strategy.short)
+    strategy.exit("OB Short Exit", "OB Short", stop=shortStop, limit=shortTarget)
+
+if sweepLow
+    strategy.entry("Sweep Long", strategy.long)
+    strategy.exit("Sweep Exit", "Sweep Long", stop=longStop, limit=longTarget)
+
+if sweepHigh
+    strategy.entry("Sweep Short", strategy.short)
+    strategy.exit("Sweep Short Exit", "Sweep Short", stop=shortStop, limit=shortTarget)
+
+// ─── Alert Conditions ─────────────────────────────────────────────────────
+alertcondition(bullishOB, title="Bullish Order Block",
+     message='{"symbol":"{{ticker}}","signal":"order_block_entry","timeframe":"{{interval}}","price":{{close}},"timestamp":{{timenow}},"direction":"long","stop_loss":' + str.tostring(longStop) + ',"take_profit":' + str.tostring(longTarget) + ',"strategy_name":"GodsView SMC v1","passphrase":"' + passphrase + '"}')
+
+alertcondition(bearishOB, title="Bearish Order Block",
+     message='{"symbol":"{{ticker}}","signal":"order_block_entry","timeframe":"{{interval}}","price":{{close}},"timestamp":{{timenow}},"direction":"short","stop_loss":' + str.tostring(shortStop) + ',"take_profit":' + str.tostring(shortTarget) + ',"strategy_name":"GodsView SMC v1","passphrase":"' + passphrase + '"}')
+
+alertcondition(sweepLow, title="Sweep Reclaim Long",
+     message='{"symbol":"{{ticker}}","signal":"sweep_reclaim","timeframe":"{{interval}}","price":{{close}},"timestamp":{{timenow}},"direction":"long","stop_loss":' + str.tostring(longStop) + ',"take_profit":' + str.tostring(longTarget) + ',"strategy_name":"GodsView SMC v1","passphrase":"' + passphrase + '"}')
+
+alertcondition(sweepHigh, title="Sweep Reclaim Short",
+     message='{"symbol":"{{ticker}}","signal":"sweep_reclaim","timeframe":"{{interval}}","price":{{close}},"timestamp":{{timenow}},"direction":"short","stop_loss":' + str.tostring(shortStop) + ',"take_profit":' + str.tostring(shortTarget) + ',"strategy_name":"GodsView SMC v1","passphrase":"' + passphrase + '"}')
+
+alertcondition(bullishFVG, title="Bullish FVG",
+     message='{"symbol":"{{ticker}}","signal":"fvg_fill","timeframe":"{{interval}}","price":{{close}},"timestamp":{{timenow}},"direction":"long","stop_loss":' + str.tostring(longStop) + ',"take_profit":' + str.tostring(longTarget) + ',"strategy_name":"GodsView SMC v1","passphrase":"' + passphrase + '"}')
+
+alertcondition(bearishFVG, title="Bearish FVG",
+     message='{"symbol":"{{ticker}}","signal":"fvg_fill","timeframe":"{{interval}}","price":{{close}},"timestamp":{{timenow}},"direction":"short","stop_loss":' + str.tostring(shortStop) + ',"take_profit":' + str.tostring(shortTarget) + ',"strategy_name":"GodsView SMC v1","passphrase":"' + passphrase + '"}')
+
+// ─── Visual ───────────────────────────────────────────────────────────────
+plotshape(bullishOB, title="Bull OB",    style=shape.diamond,      location=location.belowbar, color=color.green, size=size.small)
+plotshape(bearishOB, title="Bear OB",    style=shape.diamond,      location=location.abovebar, color=color.red,   size=size.small)
+plotshape(sweepLow,  title="Sweep Low",  style=shape.triangleup,   location=location.belowbar, color=color.lime,  size=size.tiny)
+plotshape(sweepHigh, title="Sweep High", style=shape.triangledown, location=location.abovebar, color=color.orange, size=size.tiny)
+bgcolor(bullishFVG ? color.new(color.green, 90) : bearishFVG ? color.new(color.red, 90) : na)

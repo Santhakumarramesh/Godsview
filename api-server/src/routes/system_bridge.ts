@@ -1,6 +1,7 @@
 // system_bridge.ts - Express router for system bridge endpoints
 // Wires the 11 subsystems together at the API boundary
 
+import { logger } from '../lib/logger';
 import { Router, Request, Response, NextFunction } from 'express';
 import { SystemBridge, FullEvaluationResult, EnhancedSignalResult, PostTradeAnalysis, SystemStatus, MaintenanceReport } from '../lib/system_bridge';
 import { QuantAPIDocs } from '../lib/quant_api_docs';
@@ -69,7 +70,7 @@ export function createSystemBridgeRouter(bridge: SystemBridge, docs: QuantAPIDoc
           executionTimeMs: Date.now() - startTime
         } as ApiResponse<FullEvaluationResult>);
       } catch (error) {
-        console.error('Strategy evaluation error:', error);
+        logger.error('Strategy evaluation error:', error);
         return res.status(500).json({
           success: false,
           error: error instanceof Error ? error.message : 'Strategy evaluation failed',
@@ -116,7 +117,7 @@ export function createSystemBridgeRouter(bridge: SystemBridge, docs: QuantAPIDoc
           executionTimeMs: Date.now() - startTime
         } as ApiResponse<EnhancedSignalResult>);
       } catch (error) {
-        console.error('Signal evaluation error:', error);
+        logger.error('Signal evaluation error:', error);
         return res.status(500).json({
           success: false,
           error: error instanceof Error ? error.message : 'Signal evaluation failed',
@@ -159,7 +160,7 @@ export function createSystemBridgeRouter(bridge: SystemBridge, docs: QuantAPIDoc
           executionTimeMs: Date.now() - startTime
         } as ApiResponse<PostTradeAnalysis>);
       } catch (error) {
-        console.error('Post-trade review error:', error);
+        logger.error('Post-trade review error:', error);
         return res.status(500).json({
           success: false,
           error: error instanceof Error ? error.message : 'Post-trade review failed',
@@ -188,7 +189,7 @@ export function createSystemBridgeRouter(bridge: SystemBridge, docs: QuantAPIDoc
         timestamp: Date.now()
       } as ApiResponse<SystemStatus>);
     } catch (error) {
-      console.error('Status check error:', error);
+      logger.error('Status check error:', error);
       return res.status(500).json({
         success: false,
         error: error instanceof Error ? error.message : 'Status check failed',
@@ -248,7 +249,7 @@ export function createSystemBridgeRouter(bridge: SystemBridge, docs: QuantAPIDoc
         executionTimeMs: Date.now() - startTime
       } as ApiResponse<MaintenanceReport>);
     } catch (error) {
-      console.error('Maintenance error:', error);
+      logger.error('Maintenance error:', error);
       return res.status(500).json({
         success: false,
         error: error instanceof Error ? error.message : 'Maintenance failed',
@@ -276,7 +277,7 @@ export function createSystemBridgeRouter(bridge: SystemBridge, docs: QuantAPIDoc
         timestamp: Date.now()
       });
     } catch (error) {
-      console.error('Documentation error:', error);
+      logger.error('Documentation error:', error);
       return res.status(500).json({
         success: false,
         error: error instanceof Error ? error.message : 'Documentation retrieval failed',
@@ -300,7 +301,7 @@ export function createSystemBridgeRouter(bridge: SystemBridge, docs: QuantAPIDoc
         timestamp: Date.now()
       });
     } catch (error) {
-      console.error('OpenAPI spec error:', error);
+      logger.error('OpenAPI spec error:', error);
       return res.status(500).json({
         success: false,
         error: error instanceof Error ? error.message : 'OpenAPI spec generation failed',
@@ -334,7 +335,7 @@ export function createSystemBridgeRouter(bridge: SystemBridge, docs: QuantAPIDoc
         timestamp: Date.now()
       });
     } catch (error) {
-      console.error('Endpoint documentation error:', error);
+      logger.error('Endpoint documentation error:', error);
       return res.status(500).json({
         success: false,
         error: error instanceof Error ? error.message : 'Endpoint documentation retrieval failed',
@@ -371,17 +372,17 @@ export function attachSystemBridge(app: any, bridge: SystemBridge, docs: QuantAP
   app.use('/api/bridge', createSystemBridgeRouter(bridge, docs));
 
   // Log router attachment
-  console.log('System bridge router attached at /api/bridge');
-  console.log('Available endpoints:');
-  console.log('  POST   /api/bridge/evaluate-strategy');
-  console.log('  POST   /api/bridge/evaluate-signal');
-  console.log('  POST   /api/bridge/post-trade');
-  console.log('  GET    /api/bridge/status');
-  console.log('  GET    /api/bridge/health');
-  console.log('  POST   /api/bridge/maintenance');
-  console.log('  GET    /api/bridge/docs');
-  console.log('  GET    /api/bridge/openapi');
-  console.log('  GET    /api/bridge/docs/:path');
+  logger.info('System bridge router attached at /api/bridge');
+  logger.info('Available endpoints:');
+  logger.info('  POST   /api/bridge/evaluate-strategy');
+  logger.info('  POST   /api/bridge/evaluate-signal');
+  logger.info('  POST   /api/bridge/post-trade');
+  logger.info('  GET    /api/bridge/status');
+  logger.info('  GET    /api/bridge/health');
+  logger.info('  POST   /api/bridge/maintenance');
+  logger.info('  GET    /api/bridge/docs');
+  logger.info('  GET    /api/bridge/openapi');
+  logger.info('  GET    /api/bridge/docs/:path');
 }
 
 export default createSystemBridgeRouter;

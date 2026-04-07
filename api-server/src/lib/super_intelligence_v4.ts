@@ -1,6 +1,7 @@
 // super_intelligence_v4.ts - Extends V3 with full quant intelligence layer
 // Integrates memory, causal reasoning, self-refusal, calibration, and bounded authority
 
+import { logger } from "./logger";
 import { SuperIntelligenceV3, V3Prediction, SIFeatures } from './super_intelligence_v3';
 import { MemorySystem, MemoryContext, SimilarSetup } from './memory_system';
 import { CausalReasoningEngine, CausalEdge } from './causal_reasoning';
@@ -293,7 +294,7 @@ export class SuperIntelligenceV4 {
       // Store outcome for analysis
       await this.logOutcomeRecord(outcome);
     } catch (error) {
-      console.error('Failed to record outcome:', error);
+      logger.error('Failed to record outcome:', error);
     }
   }
 
@@ -345,7 +346,7 @@ export class SuperIntelligenceV4 {
         regimeContext: await this.memory.getRegimeContext()
       };
     } catch (error) {
-      console.error('Memory consultation failed:', error);
+      logger.error('Memory consultation failed:', error);
       return this.getDefaultMemoryContext();
     }
   }
@@ -377,7 +378,7 @@ export class SuperIntelligenceV4 {
         isStructural: edge.is_structural
       };
     } catch (error) {
-      console.error('Causal edge scoring failed:', error);
+      logger.error('Causal edge scoring failed:', error);
       return this.getDefaultCausalEdge();
     }
   }
@@ -406,7 +407,7 @@ export class SuperIntelligenceV4 {
         conditions: this.autonomous.getConditionSummary(reasons)
       };
     } catch (error) {
-      console.error('Self-refusal check failed:', error);
+      logger.error('Self-refusal check failed:', error);
       return this.getDefaultRefusalCheck();
     }
   }
@@ -434,7 +435,7 @@ export class SuperIntelligenceV4 {
         backTestVsLiveDeviation: metrics.backtest_vs_live_deviation
       };
     } catch (error) {
-      console.error('Calibration adjustment failed:', error);
+      logger.error('Calibration adjustment failed:', error);
       return this.getDefaultCalibrationAdj(v3Pred);
     }
   }
@@ -458,7 +459,7 @@ export class SuperIntelligenceV4 {
         violations
       };
     } catch (error) {
-      console.error('Authority check failed:', error);
+      logger.error('Authority check failed:', error);
       return this.getDefaultAuthorityCheck();
     }
   }
@@ -614,7 +615,7 @@ export class SuperIntelligenceV4 {
 
   private async logOutcomeRecord(outcome: OutcomeRecord): Promise<void> {
     // Could store in database or file system
-    console.log(
+    logger.info(
       `Outcome recorded: ${outcome.symbol} ${outcome.v4Score.toFixed(1)} -> ${outcome.actualPnlPercent.toFixed(2)}%`
     );
   }

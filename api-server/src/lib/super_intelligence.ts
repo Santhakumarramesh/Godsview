@@ -14,6 +14,7 @@
 
 import { predictWinProbability, getModelStatus } from "./ml_model";
 import { reasonTradeDecision } from "./reasoning_engine";
+import { logger } from "./logger";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -766,7 +767,7 @@ function featurize(row: {
  */
 export async function trainEnsemble(): Promise<void> {
   try {
-    console.log("[super] Training gradient-boosted ensemble...");
+    logger.info("[super] Training gradient-boosted ensemble...");
 
     // Dynamic import to avoid circular deps
     const { db, accuracyResultsTable } = await import("@workspace/db");
@@ -794,7 +795,7 @@ export async function trainEnsemble(): Promise<void> {
       .limit(200_000);
 
     if (rows.length < 50) {
-      console.log(`[super] Only ${rows.length} samples — need ≥50 for ensemble.`);
+      logger.info(`[super] Only ${rows.length} samples — need ≥50 for ensemble.`);
       _ensembleStatus = "untrained";
       return;
     }
@@ -853,11 +854,11 @@ export async function trainEnsemble(): Promise<void> {
       trained_at: new Date().toISOString(),
     };
 
-    console.log(`[super] Ensemble trained successfully:`);
-    console.log(`[super]   GBM accuracy: ${(gbm.accuracy * 100).toFixed(1)}%`);
-    console.log(`[super]   LR accuracy:  ${(lrAccuracy * 100).toFixed(1)}%`);
-    console.log(`[super]   Ensemble:     ${(_ensembleMeta.ensemble_accuracy * 100).toFixed(1)}%`);
-    console.log(`[super]   Samples:      ${X.length}`);
+    logger.info(`[super] Ensemble trained successfully:`);
+    logger.info(`[super]   GBM accuracy: ${(gbm.accuracy * 100).toFixed(1)}%`);
+    logger.info(`[super]   LR accuracy:  ${(lrAccuracy * 100).toFixed(1)}%`);
+    logger.info(`[super]   Ensemble:     ${(_ensembleMeta.ensemble_accuracy * 100).toFixed(1)}%`);
+    logger.info(`[super]   Samples:      ${X.length}`);
   } catch (err) {
     console.error("[super] Ensemble training failed:", err);
     _ensembleStatus = "error";
@@ -1085,7 +1086,7 @@ export async function startAutonomousMode(): Promise<{ success: boolean; message
   }
 
   _autonomousMode = true;
-  console.log("[super] Autonomous mode started — will scan every 60 seconds");
+  logger.info("[super] Autonomous mode started — will scan every 60 seconds");
 
   // Initial scan immediately
   await autonomousScan();
@@ -1116,7 +1117,7 @@ export function stopAutonomousMode(): { success: boolean; message: string } {
   }
 
   _autonomousMode = false;
-  console.log("[super] Autonomous mode stopped");
+  logger.info("[super] Autonomous mode stopped");
   return { success: true, message: "Autonomous mode deactivated" };
 }
 
@@ -1125,7 +1126,7 @@ export function stopAutonomousMode(): { success: boolean; message: string } {
  */
 async function autonomousScan(): Promise<void> {
   try {
-    console.log("[super] [autonomy] Starting scan cycle...");
+    logger.info("[super] [autonomy] Starting scan cycle...");
     const { db, accuracyResultsTable } = await import("@workspace/db");
     const { eq, isNotNull } = await import("drizzle-orm");
 
@@ -1155,7 +1156,7 @@ async function autonomousScan(): Promise<void> {
       .where(isNotNull(accuracyResultsTable.structure_score))
       .limit(200);
 
-    console.log(`[super] [autonomy] Scanned ${recentSignals.length} recent signals`);
+    logger.info(`[super] [autonomy] Scanned ${recentSignals.length} recent signals`);
 
     // Process each signal through SI pipeline
     let siApprovedCount = 0;
@@ -1181,14 +1182,14 @@ async function autonomousScan(): Promise<void> {
 
       if (result.approved) {
         siApprovedCount++;
-        console.log(`[super] [autonomy] Signal ${r.id} approved: ${r.setup_type}/${r.regime}, WP=${(result.win_probability * 100).toFixed(0)}%`);
+        logger.info(`[super] [autonomy] Signal ${r.id} approved: ${r.setup_type}/${r.regime}, WP=${(result.win_probability * 100).toFixed(0)}%`);
       }
     }
 
     // Update strategy ratings
     await updateStrategyRatings(recentSignals);
 
-    console.log(`[super] [autonomy] Cycle complete: ${siApprovedCount}/${recentSignals.length} approved`);
+    logger.info(`[super] [autonomy] Cycle complete: ${siApprovedCount}/${recentSignals.length} approved`);
   } catch (err) {
     console.error("[super] [autonomy] Scan cycle failed:", err);
   }
@@ -1263,7 +1264,7 @@ async function updateStrategyRatings(signals: any[]): Promise<void> {
       };
 
       _strategyRatings.set(key, rating);
-      console.log(`[super] Updated rating for ${key}: ${stars}★ WR=${(winRate * 100).toFixed(0)}%`);
+      logger.info(`[super] Updated rating for ${key}: ${stars}★ WR=${(winRate * 100).toFixed(0)}%`);
     }
   } catch (err) {
     console.error("[super] [autonomy] Strategy rating update failed:", err);

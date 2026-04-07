@@ -13,6 +13,7 @@
  *   - Inference: <1ms per prediction (pure math, no external deps)
  */
 
+import { logger } from "./logger";
 import { db, accuracyResultsTable } from "@workspace/db";
 import { eq, sql, and, isNotNull, or, desc } from "drizzle-orm";
 
@@ -475,7 +476,7 @@ const DRIFT_CACHE_TTL_MS = 60_000;
  */
 export async function trainModel(): Promise<void> {
   _modelStatus = "training";
-  console.log("[ml] Training ML model from accuracy_results...");
+  logger.info("[ml] Training ML model from accuracy_results...");
 
   try {
     // Fetch labeled training data (win/loss only, skip "open")
@@ -504,7 +505,7 @@ export async function trainModel(): Promise<void> {
       .limit(200_000);
 
     if (rows.length < 50) {
-      console.log(`[ml] Only ${rows.length} labeled samples — need ≥50. Keeping heuristic fallback.`);
+      logger.info(`[ml] Only ${rows.length} labeled samples — need ≥50. Keeping heuristic fallback.`);
       _modelStatus = "untrained";
       _setupModels = new Map();
       return;
@@ -513,7 +514,7 @@ export async function trainModel(): Promise<void> {
     const wins = rows.filter((r: RawTrainingRow) => r.outcome === "win").length;
     const losses = rows.filter((r: RawTrainingRow) => r.outcome === "loss").length;
     const winRate = wins / (wins + losses);
-    console.log(`[ml] Training data: ${rows.length} samples (${wins} wins, ${losses} losses, ${(winRate * 100).toFixed(1)}% win rate)`);
+    logger.info(`[ml] Training data: ${rows.length} samples (${wins} wins, ${losses} losses, ${(winRate * 100).toFixed(1)}% win rate)`);
 
     // Build feature matrix
     const X: number[][] = [];
@@ -567,26 +568,26 @@ export async function trainModel(): Promise<void> {
       trainedAt: new Date().toISOString(),
     };
 
-    console.log(`[ml] Model trained successfully:`);
-    console.log(`[ml]   Samples: ${rows.length}`);
-    console.log(`[ml]   Accuracy: ${(model.accuracy * 100).toFixed(1)}%`);
-    console.log(`[ml]   AUC-ROC: ${model.auc.toFixed(3)}`);
-    console.log(`[ml]   Win rate baseline: ${(winRate * 100).toFixed(1)}%`);
-    console.log(`[ml]   Setup models: ${setupSpecific.models.size}`);
+    logger.info(`[ml] Model trained successfully:`);
+    logger.info(`[ml]   Samples: ${rows.length}`);
+    logger.info(`[ml]   Accuracy: ${(model.accuracy * 100).toFixed(1)}%`);
+    logger.info(`[ml]   AUC-ROC: ${model.auc.toFixed(3)}`);
+    logger.info(`[ml]   Win rate baseline: ${(winRate * 100).toFixed(1)}%`);
+    logger.info(`[ml]   Setup models: ${setupSpecific.models.size}`);
     if (purgedCv) {
-      console.log(
+      logger.info(
         `[ml]   Purged CV: AUC ${purgedCv.auc.toFixed(3)} · Accuracy ${(purgedCv.accuracy * 100).toFixed(1)}% · Samples ${purgedCv.evaluatedSamples}`,
       );
     } else {
-      console.log("[ml]   Purged CV: insufficient sampled data");
+      logger.info("[ml]   Purged CV: insufficient sampled data");
     }
 
     const trainingSummary = summarizeRows(normalizedRows);
-    console.log(
+    logger.info(
       `[ml]   Summary: ${(trainingSummary.winRate * 100).toFixed(1)}% win rate across ${trainingSummary.samples} labeled rows`,
     );
   } catch (err) {
-    console.error("[ml] Training failed:", err);
+    logger.error("[ml] Training failed:", err);
     _modelStatus = "error";
     _setupModels = new Map();
   }

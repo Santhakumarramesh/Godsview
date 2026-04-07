@@ -13,6 +13,8 @@
  * - Regime-adaptive veto thresholds (stricter in volatile/chop)
  */
 
+import { logger } from "./logger";
+
 export type ClaudeVerdict = "APPROVED" | "VETOED" | "CAUTION";
 
 export interface ClaudeVetoResult {
@@ -333,7 +335,7 @@ export async function claudeVeto(ctx: SetupContext): Promise<ClaudeVetoResult> {
   // Step 1: Pre-call hard veto checks (free, zero latency)
   const hardVetoResult = preCallHardVeto(ctx);
   if (hardVetoResult) {
-    console.log(`[claude] Hard veto: ${hardVetoResult.reasoning.slice(0, 80)}`);
+    logger.info(`[claude] Hard veto: ${hardVetoResult.reasoning.slice(0, 80)}`);
     return hardVetoResult;
   }
 
@@ -485,7 +487,7 @@ Run through your veto checklist. Issue your verdict.`.trim();
       validation_status: "schema_invalid_fallback",
     };
   } catch (err) {
-    console.error("[claude] veto error:", err);
+    logger.error("[claude] veto error:", err);
     markClaudeFailure();
     return {
       verdict: "CAUTION",

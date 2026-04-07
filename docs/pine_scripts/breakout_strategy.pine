@@ -1,0 +1,51 @@
+// GodsView Breakout Strategy v1.0
+// Sends webhook alerts to GodsView MCP pipeline
+// Works on any timeframe — recommended: 5m, 15m, 1h
+
+//@version=5
+strategy("GodsView Breakout", overlay=true, default_qty_type=strategy.percent_of_equity, default_qty_value=5)
+
+// ─── Inputs ───────────────────────────────────────────────────────────────
+lookback      = input.int(20, "Lookback Period", minval=5)
+volMultiplier = input.float(1.5, "Volume Multiplier", minval=1.0)
+atrMultiplier = input.float(1.5, "ATR Multiplier for Stop", minval=0.5)
+rrRatio       = input.float(2.0, "Risk:Reward Ratio", minval=1.0)
+passphrase    = input.string("your_secret_key", "Webhook Passphrase")
+
+// ─── Calculations ─────────────────────────────────────────────────────────
+atr           = ta.atr(14)
+avgVolume     = ta.sma(volume, lookback)
+highestHigh   = ta.highest(high, lookback)
+lowestLow     = ta.lowest(low, lookback)
+
+// Breakout conditions
+breakoutUp    = close > highestHigh[1] and volume > avgVolume * volMultiplier
+breakoutDown  = close < lowestLow[1]  and volume > avgVolume * volMultiplier
+
+// Stop loss & take profit
+longStop      = close - atr * atrMultiplier
+longTarget    = close + atr * atrMultiplier * rrRatio
+shortStop     = close + atr * atrMultiplier
+shortTarget   = close - atr * atrMultiplier * rrRatio
+
+// ─── Strategy Logic ───────────────────────────────────────────────────────
+if breakoutUp
+    strategy.entry("Long", strategy.long)
+    strategy.exit("Long Exit", "Long", stop=longStop, limit=longTarget)
+
+if breakoutDown
+    strategy.entry("Short", strategy.short)
+    strategy.exit("Short Exit", "Short", stop=shortStop, limit=shortTarget)
+
+// ─── Alert Conditions ─────────────────────────────────────────────────────
+// Set these as TradingView alerts with "Webhook URL" = your GodsView endpoint
+
+alertcondition(breakoutUp, title="Breakout Long",
+     message='{"symbol":"{{ticker}}","signal":"breakout","timeframe":"{{interval}}","price":{{close}},"timestamp":{{timenow}},"direction":"long","stop_loss":' + str.tostring(longStop) + ',"take_profit":' + str.tostring(longTarget) + ',"strategy_name":"GodsView Breakout v1","passphrase":"' + passphrase + '"}')
+
+alertcondition(breakoutDown, title="Breakdown Short",
+     message='{"symbol":"{{ticker}}","signal":"breakdown","timeframe":"{{interval}}","price":{{close}},"timestamp":{{timenow}},"direction":"short","stop_loss":' + str.tostring(shortStop) + ',"take_profit":' + str.tostring(shortTarget) + ',"strategy_name":"GodsView Breakout v1","passphrase":"' + passphrase + '"}')
+
+// ─── Visual ───────────────────────────────────────────────────────────────
+plotshape(breakoutUp,  title="Breakout",  style=shape.triangleup,   location=location.belowbar, color=color.green, size=size.small)
+plotshape(breakoutDown, title="Breakdown", style=shape.triangledown, location=location.abovebar, color=color.red,   size=size.small)

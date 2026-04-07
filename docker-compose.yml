@@ -2,15 +2,49 @@
 # GodsView — Production Docker Compose Stack
 #
 # Services:
-#   postgres   — PostgreSQL 16 with persistent volume
-#   api        — GodsView API server (Express 5 + esbuild bundle)
-#   nginx      — Reverse proxy serving dashboard + API
+#   postgres       — PostgreSQL 16 with persistent volume
+#   redis          — Shared cache / message bus
+#   api            — GodsView API server (Express 5 + esbuild bundle)
+#   nginx          — Reverse proxy serving dashboard + API
+#   py-gateway     — Python v2 API Gateway (FastAPI)
+#   py-market-data — Market data service
+#   py-feature     — Feature computation service
+#   py-backtest    — Backtesting engine
+#   py-ml          — ML model training & prediction
+#   py-execution   — Trade execution service
+#   py-risk        — Risk calculations
+#   py-memory      — Vector store / retrieval (LanceDB)
+#   py-scheduler   — Task scheduling
+#   mlflow         — ML experiment tracking
 #
 # Usage:
 #   docker compose up -d              # start all
+#   docker compose up -d api nginx    # Node.js only (no Python stack)
 #   docker compose logs -f api        # tail API logs
 #   docker compose down -v            # stop + remove volumes
+#
+# Profiles:
+#   default        — postgres + api + nginx (Node.js only)
+#   --profile v2   — adds all Python microservices + Redis + MLflow
 # ─────────────────────────────────────────────────────────────────
+
+# ── Python service defaults (shared anchor) ──────────────────────
+x-py-defaults: &py-defaults
+  build:
+    context: .
+    dockerfile: services/Dockerfile
+  networks:
+    - godsview-net
+  env_file:
+    - .env
+  restart: unless-stopped
+  profiles:
+    - v2
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "50m"
+      max-file: "5"
 
 services:
   # ── PostgreSQL ─────────────────────────────────────────────────
@@ -34,9 +68,22 @@ services:
     networks:
       - godsview-net
 
-  # ── API Server ─────────────────────────────────────────────────
+  # ── Redis (shared cache, required by Python v2 stack) ──────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    profiles:
+      - v2
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - godsview-net
+
+  # ── API Server (Node.js) ───────────────────────────────────────
   api:
-    # Use pre-built image from GHCR (pushed by CI) or build locally as fallback
     image: ${GODSVIEW_IMAGE:-ghcr.io/santhakumarramesh/godsview:latest}
     build:
       context: .
@@ -71,7 +118,9 @@ services:
       GODSVIEW_OPERATOR_TOKEN: "${GODSVIEW_OPERATOR_TOKEN:-change-me}"
       CORS_ORIGIN: "${CORS_ORIGIN:-http://localhost}"
       ECON_CALENDAR_URL: "${ECON_CALENDAR_URL:-https://nfs.faireconomy.media/ff_calendar_thisweek.json}"
-    # API not exposed directly — nginx proxies it
+      # Python v2 bridge (set to enable proxy to Python services)
+      PY_GATEWAY_URL: "${PY_GATEWAY_URL:-http://py-gateway:8000}"
+      PY_SERVICES_ENABLED: "${PY_SERVICES_ENABLED:-false}"
     expose:
       - "3001"
     networks:
@@ -97,8 +146,208 @@ services:
     networks:
       - godsview-net
 
+  # ════════════════════════════════════════════════════════════════
+  # Python v2 Microservices (enabled with: docker compose --profile v2 up)
+  # ════════════════════════════════════════════════════════════════
+
+  py-gateway:
+    <<: *py-defaults
+    command: uvicorn services.api_gateway.main:app --host 0.0.0.0 --port 8000 --workers 2
+    expose:
+      - "8000"
+    depends_on:
+      - py-market-data
+      - py-feature
+      - py-backtest
+      - py-ml
+      - py-execution
+      - py-risk
+      - py-memory
+    environment:
+      API_GATEWAY_PORT: "8000"
+      MARKET_DATA_URL: "http://py-market-data:8001"
+      FEATURE_URL: "http://py-feature:8002"
+      BACKTEST_URL: "http://py-backtest:8003"
+      ML_URL: "http://py-ml:8004"
+      EXECUTION_URL: "http://py-execution:8005"
+      RISK_URL: "http://py-risk:8006"
+      MEMORY_URL: "http://py-memory:8007"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  py-market-data:
+    <<: *py-defaults
+    command: uvicorn services.market_data_service.main:app --host 0.0.0.0 --port 8001 --workers 2
+    expose:
+      - "8001"
+    volumes:
+      - py-market-data:/app/data
+    environment:
+      MARKET_DATA_PORT: "8001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  py-feature:
+    <<: *py-defaults
+    command: uvicorn services.feature_service.main:app --host 0.0.0.0 --port 8002 --workers 2
+    expose:
+      - "8002"
+    depends_on:
+      - py-market-data
+    environment:
+      FEATURE_PORT: "8002"
+      MARKET_DATA_URL: "http://py-market-data:8001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  py-backtest:
+    <<: *py-defaults
+    command: uvicorn services.backtest_service.main:app --host 0.0.0.0 --port 8003
+    expose:
+      - "8003"
+    depends_on:
+      - py-market-data
+    environment:
+      BACKTEST_PORT: "8003"
+      MARKET_DATA_URL: "http://py-market-data:8001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+
+  py-ml:
+    <<: *py-defaults
+    command: uvicorn services.ml_service.main:app --host 0.0.0.0 --port 8004
+    expose:
+      - "8004"
+    depends_on:
+      - py-market-data
+      - mlflow
+    volumes:
+      - py-models:/app/data/models
+    environment:
+      ML_PORT: "8004"
+      MARKET_DATA_URL: "http://py-market-data:8001"
+      MLFLOW_TRACKING_URI: "http://mlflow:5000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  py-execution:
+    <<: *py-defaults
+    command: uvicorn services.execution_service.main:app --host 0.0.0.0 --port 8005
+    expose:
+      - "8005"
+    environment:
+      EXECUTION_PORT: "8005"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8005/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  py-risk:
+    <<: *py-defaults
+    command: uvicorn services.risk_service.main:app --host 0.0.0.0 --port 8006
+    expose:
+      - "8006"
+    environment:
+      RISK_PORT: "8006"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8006/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  py-memory:
+    <<: *py-defaults
+    command: uvicorn services.memory_service.main:app --host 0.0.0.0 --port 8007
+    expose:
+      - "8007"
+    volumes:
+      - py-lancedb:/app/data/lancedb
+    environment:
+      MEMORY_PORT: "8007"
+      LANCEDB_URI: "/app/data/lancedb"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8007/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  py-scheduler:
+    <<: *py-defaults
+    command: uvicorn services.scheduler_service.main:app --host 0.0.0.0 --port 8008
+    expose:
+      - "8008"
+    depends_on:
+      - py-gateway
+      - py-market-data
+      - py-feature
+      - py-ml
+    environment:
+      SCHEDULER_PORT: "8008"
+      SCAN_INTERVAL_SECONDS: "300"
+      RETRAIN_HOUR_UTC: "21"
+      API_GATEWAY_PORT: "8000"
+      MARKET_DATA_PORT: "8001"
+      FEATURE_PORT: "8002"
+      ML_PORT: "8004"
+      EXECUTION_PORT: "8005"
+      RISK_PORT: "8006"
+      MEMORY_PORT: "8007"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8008/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── MLflow Tracking Server ─────────────────────────────────────
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.13.0
+    profiles:
+      - v2
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri sqlite:///mlflow.db
+      --default-artifact-root /mlflow/artifacts
+    expose:
+      - "5000"
+    volumes:
+      - py-mlflow:/mlflow
+    restart: unless-stopped
+    networks:
+      - godsview-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
 volumes:
   pgdata:
+    driver: local
+  py-market-data:
+    driver: local
+  py-models:
+    driver: local
+  py-lancedb:
+    driver: local
+  py-mlflow:
     driver: local
 
 networks:

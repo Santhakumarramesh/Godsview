@@ -125,6 +125,34 @@ if (fs.existsSync(publicDir)) {
 }
 
 const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
+  // ── Zod validation errors → 400 with field-level details ──────
+  if (err?.constructor?.name === "ZodError" || err?.name === "ZodError") {
+    const issues = Array.isArray(err.issues) ? err.issues : [];
+    logger.warn(
+      {
+        requestId: req.id,
+        method: req.method,
+        path: req.originalUrl ?? req.url,
+        issues: issues.slice(0, 10),
+      },
+      "Validation error",
+    );
+
+    if (!res.headersSent) {
+      res.status(400).json({
+        error: "validation_error",
+        message: "Invalid request data.",
+        details: issues.map((i: { path?: string[]; message?: string }) => ({
+          field: i.path?.join(".") ?? "unknown",
+          message: i.message ?? "Invalid value",
+        })),
+        request_id: req.id,
+      });
+    }
+    return;
+  }
+
+  // ── Standard errors ───────────────────────────────────────────
   const status = Number.isFinite((err as { status?: number }).status)
     ? Math.max(400, Math.min(599, Number((err as { status?: number }).status)))
     : 500;

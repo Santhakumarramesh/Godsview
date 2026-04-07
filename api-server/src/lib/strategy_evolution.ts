@@ -26,6 +26,7 @@
  * All changes are logged with reasoning for full transparency.
  */
 
+import { logger } from "./logger";
 import { brainJobQueue, BrainJobs } from "./job_queue";
 import {
   saveStrategyParams,
@@ -264,9 +265,9 @@ class StrategyRegistry {
           this.strategies.set(key, merged);
         }
       }
-      console.log(`[StrategyRegistry] Warm-loaded ${rows.length} strategy param sets from DB`);
+      logger.info(`[StrategyRegistry] Warm-loaded ${rows.length} strategy param sets from DB`);
     } catch (err) {
-      console.warn("[StrategyRegistry] warmLoad failed — using in-memory defaults:", err);
+      logger.warn("[StrategyRegistry] warmLoad failed — using in-memory defaults:", err);
     }
   }
 
