@@ -92,10 +92,17 @@ class SignalStreamHub {
 
     const payload = `id: ${event.id}\nevent: ${event.type}\ndata: ${JSON.stringify(event.data)}\n\n`;
 
+    // SSE clients
     for (const client of this.clients.values()) {
       if (client.filter && !client.filter.includes(event.type) && event.type !== "heartbeat") continue;
       try { client.res.write(payload); } catch { this.clients.delete(client.id); }
     }
+
+    // Phase 124: Bridge to WebSocket clients (dual transport)
+    try {
+      const { wsServer } = require("./ws_server");
+      wsServer.broadcast(event);
+    } catch { /* ws_server not loaded yet — safe to skip */ }
   }
 
   replay(clientId: string, afterEventId: string): void {

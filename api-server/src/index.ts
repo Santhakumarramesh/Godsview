@@ -38,6 +38,15 @@ const server = app.listen(port, (err) => {
 
   logger.info({ port }, "Server listening");
 
+  // Phase 124: Attach WebSocket server for dual-transport real-time streaming
+  try {
+    const { wsServer } = require("./lib/ws_server");
+    wsServer.attach(server);
+    logger.info("WebSocket server attached at /ws");
+  } catch (wsErr: any) {
+    logger.warn({ err: wsErr.message }, "WebSocket server failed to attach (non-fatal)");
+  }
+
   // Run preflight checks (non-blocking — logs results)
   runPreflight()
     .then((result) => {
@@ -161,6 +170,17 @@ onShutdown(async () => {
     closeAllClients();
   } catch {
     // signal_stream may not be loaded
+  }
+});
+
+// Phase 124: Register cleanup: close WebSocket connections
+onShutdown(async () => {
+  logger.info("Shutting down WebSocket server...");
+  try {
+    const { wsServer } = await import("./lib/ws_server");
+    wsServer.shutdown();
+  } catch {
+    // ws_server may not be loaded
   }
 });
 

@@ -1,56 +1,17 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { trainModel } from "./lib/ml_model";
-import { trainEnsemble } from "./lib/super_intelligence";
 import { validateEnv } from "./lib/env";
 import { setupGracefulShutdown, onShutdown } from "./lib/shutdown";
 import { closePool, checkDbHealth } from "@workspace/db";
 import { runPreflight } from "./lib/preflight";
 import { startSession, endSession } from "./lib/session_manager";
 import { alpacaStream } from "./lib/alpaca_stream";
-import { seedHistoricalData } from "./lib/historical_seeder";
-import { seedBrainEntities } from "./lib/brain_seeder";
-import { startRetrainScheduler, stopRetrainScheduler } from "./lib/retrain_scheduler";
-import { startPaperValidationLoop, stopPaperValidationLoop } from "./lib/paper_validation_loop";
-import { markMlBootstrapFailed, markMlBootstrapReady, markMlBootstrapRunning } from "./lib/startup_state";
 import { MacroContextService } from "./lib/macro_context_service";
 import { ScannerScheduler } from "./lib/scanner_scheduler";
-import { stopReconciler } from "./lib/fill_reconciler";
-import {
-  shouldAutonomySupervisorAutoStart,
-  startAutonomySupervisor,
-  stopAutonomySupervisor,
-} from "./lib/autonomy_supervisor";
-import {
-  shouldStrategyGovernorAutoStart,
-  startStrategyGovernor,
-  stopStrategyGovernor,
-} from "./lib/strategy_governor";
-import {
-  shouldStrategyAllocatorAutoStart,
-  startStrategyAllocator,
-  stopStrategyAllocator,
-} from "./lib/strategy_allocator";
-import {
-  shouldStrategyEvolutionAutoStart,
-  startStrategyEvolutionScheduler,
-  stopStrategyEvolutionScheduler,
-} from "./lib/strategy_evolution_scheduler";
-import {
-  shouldProductionWatchdogAutoStart,
-  startProductionWatchdog,
-  stopProductionWatchdog,
-} from "./lib/production_watchdog";
-import {
-  shouldExecutionSafetySupervisorAutoStart,
-  startExecutionSafetySupervisor,
-  stopExecutionSafetySupervisor,
-} from "./lib/execution_safety_supervisor";
-import {
-  shouldAutonomyDebugSchedulerAutoStart,
-  startAutonomyDebugScheduler,
-  stopAutonomyDebugScheduler,
-} from "./lib/autonomy_debug_scheduler";
+import { startReconciler, stopReconciler } from "./lib/fill_reconciler";
+import { alpacaAccountStream, wireAccountStreamToReconciler } from "./lib/alpaca_account_stream";
+import { startPaperValidationLoop, stopPaperValidationLoop } from "./lib/paper_validation_loop";
 
 // ── Validate environment before anything else ───────────────────
 validateEnv();
@@ -77,10 +38,19 @@ const server = app.listen(port, (err) => {
 
   logger.info({ port }, "Server listening");
 
+  // Phase 124: Attach WebSocket server for dual-transport real-time streaming
+  try {
+    const { wsServer } = require("./lib/ws_server");
+    wsServer.attach(server);
+    logger.info("WebSocket server attached at /ws");
+  } catch (wsErr: any) {
+    logger.warn({ err: wsErr.message }, "WebSocket server failed to attach (non-fatal)");
+  }
+
   // Run preflight checks (non-blocking — logs results)
   runPreflight()
     .then((result) => {
-      if (!result.passed) {
+      if (!!result.passed) {
         logger.warn({ checks: result.checks.filter(c => !c.passed) }, "Preflight checks had failures");
       }
     })
@@ -101,54 +71,8 @@ const server = app.listen(port, (err) => {
   const systemMode = process.env.GODSVIEW_SYSTEM_MODE || "paper";
   startSession(systemMode).catch((err) => logger.error({ err }, "Failed to start trading session"));
 
-  // ── Phase 35: Seed historical data for ML bootstrap (non-blocking) ──────────
-  seedHistoricalData()
-    .then((result) => {
-      if (!result.skipped) {
-        logger.info({ seededRows: result.seededRows, durationMs: result.durationMs }, "Historical data seeded");
-      }
-    })
-    .catch((err) => logger.error({ err }, "Historical seeder failed"))
-    .then(async () => {
-      // Train ML model AFTER ensuring seed data exists (non-blocking)
-      markMlBootstrapRunning();
-      try {
-        await trainModel();
-        markMlBootstrapReady();
-        logger.info("ML model trained from accuracy_results");
-      } catch (err) {
-        markMlBootstrapFailed(err);
-        logger.error({ err }, "ML model training failed");
-      }
-      // ── Super Intelligence: train GBM ensemble after LR model is ready ────
-      try {
-        await trainEnsemble();
-        logger.info("Super Intelligence ensemble trained");
-      } catch (err) {
-        logger.error({ err }, "Super Intelligence ensemble training failed");
-      }
-      // ── Phase 36: Start auto-retrain scheduler ────────────────────────────
-      startRetrainScheduler().catch((err) => logger.error({ err }, "Retrain scheduler failed to start"));
-
-      // ── Phase 15: Start paper validation loop (predicted vs realized) ─────
-      if ((process.env.PAPER_VALIDATION_AUTO_START ?? "true") !== "false") {
-        startPaperValidationLoop({ runImmediate: true })
-          .then((result) => logger.info({ intervalMs: result.interval_ms }, "Paper validation loop started"))
-          .catch((err) => logger.error({ err }, "Paper validation loop failed to start"));
-      }
-    });
-
-  // ── Phase 37: Initialize Brain knowledge graph (non-blocking) ───────────────
-  seedBrainEntities()
-    .then((result) => {
-      if (!result.skipped) {
-        logger.info(
-          { entitiesInserted: result.entitiesInserted, memoriesInserted: result.memoriesInserted },
-          "Brain knowledge graph initialized"
-        );
-      }
-    })
-    .catch((err) => logger.error({ err }, "Brain seeder failed"));
+  // Train ML model from accuracy_results data (non-blocking)
+  trainModel().catch((err) => logger.error({ err }, "ML model training failed"));
 
   // Start Alpaca market data stream (non-blocking — feeds candle SSE)
   if (process.env.ALPACA_API_KEY) {
@@ -158,63 +82,80 @@ const server = app.listen(port, (err) => {
     logger.warn("ALPACA_API_KEY not set — market data stream disabled");
   }
 
-  if (shouldAutonomySupervisorAutoStart()) {
-    startAutonomySupervisor({ runImmediate: true })
-      .then((result) => logger.info({ intervalMs: result.interval_ms }, "Autonomy supervisor started"))
-      .catch((err) => logger.error({ err }, "Autonomy supervisor failed to start"));
+  // Start fill reconciler (Phase 11A) — polls Alpaca for fills every 10s,
+  // matches to brain positions, computes realized PnL, feeds circuit breaker
+  if (process.env.ALPACA_API_KEY || process.env.ALPACA_KEY_ID) {
+    startReconciler();
+    logger.info("Fill reconciler started (10s poll interval)");
+
+    // Phase 12A — real-time fill events via account WebSocket (supplements polling)
+    wireAccountStreamToReconciler();
+    alpacaAccountStream.start();
+    logger.info("Alpaca account stream started (real-time trade_updates)");
   } else {
-    logger.info("Autonomy supervisor auto-start disabled");
+    logger.warn("Alpaca not configured — fill reconciler disabled");
   }
 
-  if (shouldStrategyGovernorAutoStart()) {
-    startStrategyGovernor({ runImmediate: true })
-      .then((result) => logger.info({ intervalMs: result.interval_ms }, "Strategy governor started"))
-      .catch((err) => logger.error({ err }, "Strategy governor failed to start"));
+  // Start macro intelligence background refresh (YoungTraderWealth Layer 0 + 0.5)
+  // Only starts if Alpaca is configured (needs market data for feed)
+  if (process.env.ALPACA_API_KEY || process.env.ALPACA_KEY_ID) {
+    MacroContextService.getInstance().start();
+    logger.info("Macro intelligence feed started (5-min refresh)");
   } else {
-    logger.info("Strategy governor auto-start disabled");
+    logger.warn("Alpaca not configured — macro feed running in neutral placeholder mode");
   }
 
-  if (shouldStrategyAllocatorAutoStart()) {
-    startStrategyAllocator({ runImmediate: true })
-      .then((result) => logger.info({ intervalMs: result.interval_ms }, "Strategy allocator started"))
-      .catch((err) => logger.error({ err }, "Strategy allocator failed to start"));
+  // Start autonomous watchlist scanner (Phase 19)
+  // Requires Alpaca keys to fetch live bars; skips gracefully otherwise
+  if (process.env.ALPACA_API_KEY || process.env.ALPACA_KEY_ID) {
+    ScannerScheduler.getInstance().start();
+    logger.info("Watchlist scanner started (auto-scan enabled)");
   } else {
-    logger.info("Strategy allocator auto-start disabled");
+    logger.warn("Alpaca not configured — watchlist scanner requires market data and is disabled");
   }
 
-  if (shouldStrategyEvolutionAutoStart()) {
-    startStrategyEvolutionScheduler({ runImmediate: true })
-      .then((result) => logger.info({ intervalMs: result.interval_ms }, "Strategy evolution scheduler started"))
-      .catch((err) => logger.error({ err }, "Strategy evolution scheduler failed to start"));
+  // ── Phase 10B: Autonomous Brain Auto-Start ────────────────────────────────
+  // Starts the brain automatically if BRAIN_AUTOSTART=true and Alpaca is configured.
+  // Loads symbols from the watchlist; brain will boot all Phase 8 subsystems itself.
+  if ((process.env.ALPACA_API_KEY || process.env.ALPACA_KEY_ID) &&
+      process.env.BRAIN_AUTOSTART === "true") {
+    setTimeout(async () => {
+      try {
+        const { watchlist } = await import("./lib/watchlist.js");
+        const { autonomousBrain } = await import("./lib/autonomous_brain.js");
+        const { runFullBrainCycle, runBacktestAndChartPipeline } = await import("./lib/brain_orchestrator.js");
+        const { brainRulebook } = await import("./lib/brain_rulebook.js");
+
+        // Build inputFn inline (mirrors buildCycleInput in routes/brain.ts)
+        const buildInput = async (symbol: string) => {
+          const { default: alpacaLib } = await import("./lib/alpaca.js");
+          let bars1m: any[] = [], bars5m: any[] = [];
+          try { bars1m = (await alpacaLib.getBars(symbol, "1Min", 200)) ?? []; } catch {}
+          try { bars5m = (await alpacaLib.getBars(symbol, "5Min", 200)) ?? []; } catch {}
+          return { symbol, bars1m, bars5m, orderbook: null, dna: null, marketStress: null };
+        };
+
+        const enabled = watchlist.getAll().filter((e) => e.enabled).map((e) => e.symbol);
+        const symbols = enabled.length > 0 ? enabled : ["SPY", "QQQ", "AAPL", "TSLA", "NVDA", "BTC/USD"];
+
+        if (!autonomousBrain.status.running) {
+          autonomousBrain.start(symbols, buildInput, runFullBrainCycle, runBacktestAndChartPipeline);
+          brainRulebook.start();
+          logger.info({ symbols }, "Autonomous Brain auto-started");
+        }
+      } catch (err: any) {
+        logger.warn({ err: err?.message }, "Brain auto-start failed — manual start required");
+      }
+    }, 8_000); // 8s delay — let server fully initialize first
   } else {
-    logger.info("Strategy evolution scheduler auto-start disabled");
+    logger.info("Brain auto-start disabled (set BRAIN_AUTOSTART=true to enable)");
   }
 
-  if (shouldProductionWatchdogAutoStart()) {
-    startProductionWatchdog({ runImmediate: true })
-      .then((result) => logger.info({ intervalMs: result.interval_ms }, "Production watchdog started"))
-      .catch((err) => logger.error({ err }, "Production watchdog failed to start"));
-  } else {
-    logger.info("Production watchdog auto-start disabled");
-  }
-
-  if (shouldAutonomyDebugSchedulerAutoStart()) {
-    startAutonomyDebugScheduler({ runImmediate: true })
-      .then((result) => logger.info({ intervalMs: result.interval_ms }, "Autonomy debug scheduler started"))
-      .catch((err) => logger.error({ err }, "Autonomy debug scheduler failed to start"));
-  } else {
-    logger.info("Autonomy debug scheduler auto-start disabled");
-  }
-
-  if (shouldExecutionSafetySupervisorAutoStart()) {
-    startExecutionSafetySupervisor({ runImmediate: true })
-      .then((result) => logger.info(
-        { intervalMs: result.interval_ms, heartbeatSymbol: result.heartbeat_symbol },
-        "Execution safety supervisor started",
-      ))
-      .catch((err) => logger.error({ err }, "Execution safety supervisor failed to start"));
-  } else {
-    logger.info("Execution safety supervisor auto-start disabled");
+  // Phase 15: paper validation loop (predicted vs realized in paper mode)
+  if ((process.env.PAPER_VALIDATION_AUTO_START ?? "true") !== "false") {
+    startPaperValidationLoop({ runImmediate: true })
+      .then((result) => logger.info({ intervalMs: result.interval_ms }, "Paper validation loop started"))
+      .catch((err) => logger.error({ err }, "Paper validation loop failed to start"));
   }
 });
 
@@ -232,72 +173,61 @@ onShutdown(async () => {
   }
 });
 
+// Phase 124: Register cleanup: close WebSocket connections
+onShutdown(async () => {
+  logger.info("Shutting down WebSocket server...");
+  try {
+    const { wsServer } = await import("./lib/ws_server");
+    wsServer.shutdown();
+  } catch {
+    // ws_server may not be loaded
+  }
+});
+
 // Register cleanup: stop Alpaca market data stream
 onShutdown(async () => {
   logger.info("Stopping Alpaca market data stream...");
   alpacaStream.stop();
 });
 
-// Register cleanup: stop scanner scheduler + macro service + fill reconciler
+// Register cleanup: stop macro intelligence feed
 onShutdown(async () => {
-  logger.info("Stopping scanner + macro + reconciler services...");
-  ScannerScheduler.getInstance().stop();
+  logger.info("Stopping macro intelligence feed...");
   MacroContextService.getInstance().stop();
-  stopReconciler();
 });
 
-// Register cleanup: stop retrain scheduler
+// Register cleanup: stop watchlist scanner
 onShutdown(async () => {
-  logger.info("Stopping retrain scheduler...");
-  stopRetrainScheduler();
+  logger.info("Stopping watchlist scanner...");
+  ScannerScheduler.getInstance().stop();
+});
+
+// Register cleanup: stop autonomous brain + rulebook
+onShutdown(async () => {
+  try {
+    const { autonomousBrain } = await import("./lib/autonomous_brain.js");
+    const { brainRulebook } = await import("./lib/brain_rulebook.js");
+    if (autonomousBrain.status.running) {
+      logger.info("Stopping autonomous brain...");
+      autonomousBrain.stop();
+    }
+    brainRulebook.stop();
+  } catch {
+    // May not be loaded if auto-start was disabled
+  }
+});
+
+// Register cleanup: stop fill reconciler + account stream
+onShutdown(async () => {
+  logger.info("Stopping fill reconciler + account stream...");
+  stopReconciler();
+  alpacaAccountStream.stop();
 });
 
 // Register cleanup: stop paper validation loop
 onShutdown(async () => {
   logger.info("Stopping paper validation loop...");
   stopPaperValidationLoop();
-});
-
-// Register cleanup: stop autonomy supervisor
-onShutdown(async () => {
-  logger.info("Stopping autonomy supervisor...");
-  stopAutonomySupervisor();
-});
-
-// Register cleanup: stop strategy governor
-onShutdown(async () => {
-  logger.info("Stopping strategy governor...");
-  stopStrategyGovernor();
-});
-
-// Register cleanup: stop strategy allocator
-onShutdown(async () => {
-  logger.info("Stopping strategy allocator...");
-  stopStrategyAllocator();
-});
-
-// Register cleanup: stop strategy evolution scheduler
-onShutdown(async () => {
-  logger.info("Stopping strategy evolution scheduler...");
-  stopStrategyEvolutionScheduler();
-});
-
-// Register cleanup: stop production watchdog
-onShutdown(async () => {
-  logger.info("Stopping production watchdog...");
-  stopProductionWatchdog();
-});
-
-// Register cleanup: stop autonomy debug scheduler
-onShutdown(async () => {
-  logger.info("Stopping autonomy debug scheduler...");
-  stopAutonomyDebugScheduler();
-});
-
-// Register cleanup: stop execution safety supervisor
-onShutdown(async () => {
-  logger.info("Stopping execution safety supervisor...");
-  stopExecutionSafetySupervisor();
 });
 
 // Register cleanup: end trading session

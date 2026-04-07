@@ -84,7 +84,22 @@ router.get("/api/stream", (req, res) => {
 
 // ── GET /api/stream/status — Hub stats (REST, not SSE) ───────────
 router.get("/api/stream/status", (_req, res) => {
-  res.json(signalHub.status());
+  const sseStats = signalHub.status();
+  let wsStats = { connectedClients: 0, totalConnections: 0, totalMessages: 0 };
+  try {
+    const { wsServer } = require("../lib/ws_server");
+    wsStats = wsServer.getStats();
+  } catch { /* ws not loaded */ }
+
+  res.json({
+    // Backward-compatible flat fields
+    connected_clients: sseStats.clientCount + wsStats.connectedClients,
+    ...sseStats,
+    // Phase 124: Detailed transport breakdown
+    sse: sseStats,
+    ws: wsStats,
+    totalClients: sseStats.clientCount + wsStats.connectedClients,
+  });
 });
 
 // ── GET /api/alerts/stream — Alert-only SSE ──────────────────────

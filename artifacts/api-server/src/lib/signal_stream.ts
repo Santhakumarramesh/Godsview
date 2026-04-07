@@ -17,7 +17,6 @@ import type { Response } from "express";
 
 export type StreamEventType =
   | "signal"
-  | "si_decision"
   | "candle"
   | "alert"
   | "trade"
@@ -93,10 +92,17 @@ class SignalStreamHub {
 
     const payload = `id: ${event.id}\nevent: ${event.type}\ndata: ${JSON.stringify(event.data)}\n\n`;
 
+    // SSE clients
     for (const client of this.clients.values()) {
       if (client.filter && !client.filter.includes(event.type) && event.type !== "heartbeat") continue;
       try { client.res.write(payload); } catch { this.clients.delete(client.id); }
     }
+
+    // Phase 124: Bridge to WebSocket clients (dual transport)
+    try {
+      const { wsServer } = require("./ws_server");
+      wsServer.broadcast(event);
+    } catch { /* ws_server not loaded yet — safe to skip */ }
   }
 
   replay(clientId: string, afterEventId: string): void {
@@ -172,13 +178,9 @@ export function getSSEClientCount(): number {
   return signalStreamHub.status().clientCount;
 }
 
-/**
- * Emit an SI decision as a dedicated "si_decision" SSE event.
- * The dashboard's /super-intelligence page listens for this exact event type.
- * Also aliased into the "signal" stream for backward compatibility.
- */
+/** Emit an SI decision event (alpaca.ts) */
 export function emitSIDecision(data: unknown): void {
-  publishEvent("si_decision", data);
+  publishEvent("signal", data);
 }
 
 /**
@@ -187,7 +189,6 @@ export function emitSIDecision(data: unknown): void {
  */
 export function broadcast(msg: { type: string; data: unknown }): void {
   const typeMap: Record<string, StreamEventType> = {
-    // legacy callers expect si_decision to flow through the generic signal channel
     si_decision: "signal",
     alert: "alert",
     trade: "trade",
