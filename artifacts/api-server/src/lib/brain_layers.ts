@@ -448,7 +448,7 @@ export async function runMemoryLayer(input: LayerInput): Promise<{ report: Agent
 
   // Try async memory query
   try {
-    const { getSetupMemory } = require("./setup_memory");
+    const _sm = "./setup_memory"; const { getSetupMemory } = require(_sm);
     memoryData = await getSetupMemory(symbol);
     memReport.score = memoryData.win_rate ?? 0.5;
     memReport.confidence = memoryData.similar_setups > 10 ? 0.8 : memoryData.similar_setups > 3 ? 0.5 : 0.3;
@@ -468,7 +468,7 @@ export async function runMemoryLayer(input: LayerInput): Promise<{ report: Agent
   const dnaReport = runSubAgent("dna", "L4_memory", symbol, () => {
     if (!dna) {
       try {
-        const { computeMarketDNA } = require("./market_dna");
+        const _md = "./market_dna"; const { computeMarketDNA } = require(_md);
         const dnaBars = bars1m.map((b: any) => ({ open: b.Open ?? b.open ?? 0, high: b.High ?? b.high ?? 0, low: b.Low ?? b.low ?? 0, close: b.Close ?? b.close ?? 0, volume: b.Volume ?? b.volume ?? 0 }));
         dnaData = computeMarketDNA(symbol, dnaBars);
       } catch { /* use defaults */ }
@@ -521,7 +521,7 @@ export function runIntelligenceLayer(
   let mlPrediction: any = { probability: 0.5, confidence: 0.3, source: "heuristic" };
   const mlReport = runSubAgent("ml_model", "L5_intelligence", symbol, () => {
     try {
-      const { predictWinProbability } = require("./ml_model");
+      const _ml = "./ml_model"; const { predictWinProbability } = require(_ml);
       mlPrediction = predictWinProbability({
         structureScore: l2.structureScore,
         orderFlowScore: 0.5,

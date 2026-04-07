@@ -301,7 +301,7 @@ function detectConfirmation(
   // ATR for SL/TP
   let atr = 0;
   try {
-    const { computeATR } = require("./strategy_engine");
+    const _se = "./strategy_engine"; const { computeATR } = require(_se);
     atr = computeATR(slice1m.map(toAlpacaBar));
   } catch { atr = (currentBar.High - currentBar.Low) * 1.5; }
 

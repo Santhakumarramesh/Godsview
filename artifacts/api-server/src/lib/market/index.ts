@@ -148,7 +148,7 @@ export {
 export {
   DataNormalizer,
   NormalizedOrderBook,
-  NormalizedTrade,
+  NormalizedTrade as DataNormalizerTrade,
   DataIssueType,
   type IssuesSeverity,
   type DataIssue,

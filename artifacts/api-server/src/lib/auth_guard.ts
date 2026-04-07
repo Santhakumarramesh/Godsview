@@ -113,3 +113,5 @@ function timingSafeEqual(a: string, b: string): boolean {
   }
   return result === 0;
 }
+
+export const authGuard = requireOperator;

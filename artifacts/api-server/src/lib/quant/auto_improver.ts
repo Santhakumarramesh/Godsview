@@ -570,3 +570,5 @@ export class AutoImprover {
 }
 
 export default AutoImprover;
+
+export const autoImprover = new AutoImprover();

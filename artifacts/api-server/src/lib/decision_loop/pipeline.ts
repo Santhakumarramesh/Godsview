@@ -3,7 +3,8 @@
  * Connects all 9 subsystems into one trustworthy decision pipeline
  */
 
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
+const uuidv4 = () => randomUUID();
 import { AmbiguityResolver, ResolvedInterpretation } from './ambiguity_resolver';
 import { EarlyRejector, EarlyScreenResult } from './early_rejector';
 import { CausalReasoner, CausalAnalysis } from './causal_reasoner';

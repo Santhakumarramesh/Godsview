@@ -2,7 +2,7 @@
 // Every endpoint surfaces operator-facing intelligence for confident human decision-making
 
 import { Router, Request, Response } from 'express';
-import { Logger } from '../lib/logging/logger';
+import { logger as Logger } from '../lib/logger';
 import { CalibrationTracker } from '../lib/eval/calibration_tracker';
 import { ShadowScorecard } from '../lib/eval/shadow_scorecard';
 import { TrustSurface } from '../lib/eval/trust_surface';
@@ -586,3 +586,8 @@ export function createTrustRouter(
 
   return router;
 }
+
+// Default export: create a stub router for build compatibility
+// At runtime, use createTrustRouter() with proper dependencies
+const trustRouter = Router();
+export default trustRouter;

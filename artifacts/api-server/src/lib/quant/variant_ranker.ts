@@ -517,3 +517,5 @@ export class VariantRanker {
 }
 
 export default VariantRanker;
+
+export const variantRanker = new VariantRanker();
