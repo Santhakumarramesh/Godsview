@@ -135,7 +135,7 @@ function SecurityScoreCard() {
                   {category.replace("_", " ")}
                 </span>
                 <span className="font-semibold text-zinc-900 dark:text-white">
-                  {value}
+                  {value as React.ReactNode}
                 </span>
               </div>
               <div className="h-2 bg-zinc-200 dark:bg-zinc-700 rounded-full overflow-hidden">
@@ -147,7 +147,7 @@ function SecurityScoreCard() {
                         ? "bg-amber-500"
                         : "bg-red-500"
                   }`}
-                  style={{ width: `${value}%` }}
+                  style={{ width: `${value as React.ReactNode}%` }}
                 />
               </div>
             </div>

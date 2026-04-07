@@ -466,12 +466,12 @@ export default function PaperTradingProgram() {
                 <div className="bg-slate-900/50 rounded p-4">
                   <div className="text-sm text-slate-400 mb-1">Signal Accuracy</div>
                   <div className="text-3xl font-bold text-cyan-400">{signalAccuracy}%</div>
-                  <div className="text-xs text-slate-500 mt-1">Target: >60%</div>
+                  <div className="text-xs text-slate-500 mt-1">{"Target: >60%"}</div>
                 </div>
                 <div className="bg-slate-900/50 rounded p-4">
                   <div className="text-sm text-slate-400 mb-1">Avg Latency</div>
                   <div className="text-3xl font-bold text-cyan-400">{avgLatency}ms</div>
-                  <div className="text-xs text-slate-500 mt-1">Target: <500ms</div>
+                  <div className="text-xs text-slate-500 mt-1">{"Target: <500ms"}</div>
                 </div>
               </div>
 
@@ -518,12 +518,12 @@ export default function PaperTradingProgram() {
                 <div className="bg-slate-900/50 rounded p-4">
                   <div className="text-sm text-slate-400 mb-1">Fill Rate</div>
                   <div className="text-3xl font-bold text-cyan-400">{fillRate}%</div>
-                  <div className="text-xs text-slate-500 mt-1">Target: >95%</div>
+                  <div className="text-xs text-slate-500 mt-1">{"Target: >95%"}</div>
                 </div>
                 <div className="bg-slate-900/50 rounded p-4">
                   <div className="text-sm text-slate-400 mb-1">Avg Slippage</div>
                   <div className="text-3xl font-bold text-cyan-400">{avgSlippage}%</div>
-                  <div className="text-xs text-slate-500 mt-1">Target: <0.1%</div>
+                  <div className="text-xs text-slate-500 mt-1">{"Target: <0.1%"}</div>
                 </div>
               </div>
 
@@ -641,7 +641,7 @@ export default function PaperTradingProgram() {
                   <div className="text-3xl font-bold text-cyan-400">
                     {(strategyComparison.summary.avgDeviationPct * 100).toFixed(1)}%
                   </div>
-                  <div className="text-xs text-slate-500 mt-1">Target: <15%</div>
+                  <div className="text-xs text-slate-500 mt-1">{"Target: <15%"}</div>
                 </div>
               </div>
 

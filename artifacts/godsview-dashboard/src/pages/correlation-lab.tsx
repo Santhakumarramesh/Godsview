@@ -320,7 +320,7 @@ const CorrelationMatrix = ({
     <Section
       title="Correlation Matrix"
       loading={loading}
-      error={error}
+      error={error ?? undefined}
     >
       <div
         style={{
@@ -486,7 +486,7 @@ const DangerousPairsAlert = ({
     <Section
       title="Dangerous Pairs Alert"
       loading={loading}
-      error={error}
+      error={error ?? undefined}
     >
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "16px" }}>
         {pairs.map((pair, idx) => (
@@ -591,7 +591,7 @@ const PortfolioHeatMap = ({
     <Section
       title="Portfolio Heat Map (Sector × Timeframe)"
       loading={loading}
-      error={error}
+      error={error ?? undefined}
     >
       <div
         style={{
@@ -754,7 +754,7 @@ const DrawdownTracker = ({
     <Section
       title="Drawdown Tracker"
       loading={loading}
-      error={error}
+      error={error ?? undefined}
     >
       <div
         style={{

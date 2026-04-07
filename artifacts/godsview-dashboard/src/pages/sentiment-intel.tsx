@@ -170,7 +170,7 @@ function SymbolSentimentGrid() {
     <div style={{ marginBottom: "32px" }}>
       <h3 style={{ color: C.text, fontSize: "20px", fontWeight: "bold", margin: "0 0 16px 0" }}>Top Symbols</h3>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px" }}>
-        {symbols.slice(0, 8).map((sym) => {
+        {symbols.slice(0, 8).map((sym: any) => {
           const scoreColor = sym.score > 0.2 ? C.green : sym.score < -0.2 ? C.red : C.yellow;
           const total = sym.news + sym.social + sym.analyst;
           return (
@@ -181,10 +181,10 @@ function SymbolSentimentGrid() {
               padding: "16px",
               transition: "all 0.3s",
               cursor: "pointer",
-            }} onMouseEnter={(e) => {
+            }} onMouseEnter={(e: any) => {
               e.currentTarget.style.background = C.cardAlt;
               e.currentTarget.style.borderColor = C.borderFocus;
-            }} onMouseLeave={(e) => {
+            }} onMouseLeave={(e: any) => {
               e.currentTarget.style.background = C.card;
               e.currentTarget.style.borderColor = C.border;
             }}>
@@ -375,7 +375,7 @@ function SocialPulse() {
           padding: "16px",
         }}>
           <h4 style={{ color: C.text, fontSize: "14px", fontWeight: "bold", margin: "0 0 12px 0" }}>Active Alerts</h4>
-          {social.alerts.map((a, i) => {
+          {social.alerts.map((a: any, i: any) => {
             const severityColor = a.severity === "HIGH" ? C.red : a.severity === "MED" ? C.yellow : C.green;
             return (
               <div key={i} style={{
@@ -416,7 +416,7 @@ function SocialPulse() {
         }}>
           <h4 style={{ color: C.text, fontSize: "14px", fontWeight: "bold", margin: "0 0 12px 0" }}>Bull/Bear Ratio by Platform</h4>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px" }}>
-            {Object.entries(social.platforms).map(([platform, data]) => (
+            {Object.entries(social.platforms).map(([platform, data]: any) => (
               <div key={platform}>
                 <p style={{ color: C.textMuted, fontSize: "11px", margin: "0 0 8px 0", textTransform: "capitalize" }}>{platform}</p>
                 <div style={{ display: "flex", height: "20px", borderRadius: "4px", overflow: "hidden", marginBottom: "4px" }}>
@@ -490,7 +490,7 @@ function TopMovers() {
           padding: "16px",
         }}>
           <h4 style={{ color: C.green, fontSize: "14px", fontWeight: "bold", margin: "0 0 12px 0" }}>Most Bullish</h4>
-          {movers.bullish.map((m, i) => (
+          {movers.bullish.map((m: any, i: any) => (
             <div key={i} style={{
               display: "flex",
               justifyContent: "space-between",
@@ -519,7 +519,7 @@ function TopMovers() {
           padding: "16px",
         }}>
           <h4 style={{ color: C.red, fontSize: "14px", fontWeight: "bold", margin: "0 0 12px 0" }}>Most Bearish</h4>
-          {movers.bearish.map((m, i) => (
+          {movers.bearish.map((m: any, i: any) => (
             <div key={i} style={{
               display: "flex",
               justifyContent: "space-between",
@@ -556,7 +556,7 @@ function KeywordCloud() {
   const minSize = Math.min(...keywords.map(k => k.size));
 
   // Generate word cloud layout
-  const positions = keywords.map((kw, i) => {
+  const positions = keywords.map((kw: any, i: any) => {
     const angle = (i / keywords.length) * Math.PI * 2;
     const radius = 60 + (i % 3) * 40;
     return {
@@ -580,7 +580,7 @@ function KeywordCloud() {
         alignItems: "center",
       }}>
         <svg width="100%" height="300" style={{ minHeight: "300px" }}>
-          {positions.map((kw, i) => {
+          {positions.map((kw: any, i: any) => {
             const fontSize = (((kw.size - minSize) / (maxSize - minSize)) * 24) + 12;
             const color = kw.sentiment > 0 ? C.green : kw.sentiment < 0 ? C.red : C.textDim;
             const opacity = 0.6 + ((kw.size - minSize) / (maxSize - minSize)) * 0.4;
@@ -599,11 +599,11 @@ function KeywordCloud() {
                   userSelect: "none",
                   transition: "all 0.3s",
                 }}
-                onMouseEnter={(e) => {
+                onMouseEnter={(e: any) => {
                   e.currentTarget.style.opacity = "1";
                   e.currentTarget.style.fontSize = `${fontSize * 1.2}px`;
                 }}
-                onMouseLeave={(e) => {
+                onMouseLeave={(e: any) => {
                   e.currentTarget.style.opacity = String(opacity);
                   e.currentTarget.style.fontSize = `${fontSize}px`;
                 }}

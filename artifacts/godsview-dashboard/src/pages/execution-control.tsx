@@ -441,8 +441,8 @@ function PositionBook() {
     refetchInterval: 3000,
   });
 
-  const totalSize = positions.reduce((sum, p) => sum + p.size, 0);
-  const totalPnL = positions.reduce((sum, p) => sum + p.unrealizedPnL, 0);
+  const totalSize = positions.reduce((sum: any, p: any) => sum + p.size, 0);
+  const totalPnL = positions.reduce((sum: any, p: any) => sum + p.unrealizedPnL, 0);
 
   const pnlColor = (pnl: number) => (pnl >= 0 ? C.green : C.red);
 
@@ -481,7 +481,7 @@ function PositionBook() {
             </tr>
           </thead>
           <tbody>
-            {positions.map((pos) => (
+            {positions.map((pos: any) => (
               <tr key={pos.symbol} style={{ borderBottom: `1px solid ${C.border}`, background: C.card }}>
                 <td style={{ padding: "12px 16px", fontSize: "12px", color: C.text, fontWeight: 600 }}>
                   {pos.symbol}
@@ -555,7 +555,7 @@ function VenueHealthGrid() {
     <div style={{ marginBottom: "24px" }}>
       <h3 style={{ margin: "0 0 16px 0", fontSize: "14px", fontWeight: 600, color: C.text }}>Venue Health</h3>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "16px" }}>
-        {venues.map((venue) => (
+        {venues.map((venue: any) => (
           <div
             key={venue.name}
             style={{
@@ -699,7 +699,7 @@ function RecentFillsFeed() {
       </div>
 
       <div style={{ maxHeight: "400px", overflowY: "auto" }}>
-        {fills.map((fill, i) => (
+        {fills.map((fill: any, i: any) => (
           <div
             key={i}
             style={{

@@ -155,7 +155,7 @@ const RiskLevelBadge: React.FC<{ level: 'low' | 'moderate' | 'high' | 'severe' }
     <div
       style={{
         display: 'inline-block',
-        paddingX: '8px',
+        padding: '0 8px',
         paddingY: '4px',
         borderRadius: '4px',
         backgroundColor: config.color + '20',
@@ -263,7 +263,7 @@ const AssumptionCell: React.FC<{ check: AssumptionCheck }> = ({ check }) => {
       <div
         style={{
           display: 'inline-block',
-          paddingX: '6px',
+          padding: '0 6px',
           paddingY: '3px',
           borderRadius: '3px',
           backgroundColor: color + '20',

@@ -85,7 +85,8 @@ RUN npm install -g tsx
 COPY --from=build /app/artifacts/api-server/dist ./artifacts/api-server/dist
 
 # Copy built Dashboard static assets
-COPY --from=build /app/artifacts/godsview-dashboard/dist/public ./artifacts/godsview-dashboard/dist/public
+# Copy built Dashboard static assets into API server public dir (SPA serving)
+COPY --from=build /app/artifacts/godsview-dashboard/dist/public/. ./artifacts/api-server/public/
 
 # Copy shared lib source (needed at runtime for drizzle schema + migrate)
 COPY --from=build /app/lib/db/src ./lib/db/src
@@ -106,7 +107,7 @@ ENV PORT=3001
 EXPOSE 3001
 
 # Health check — hits the liveness probe every 30s
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD curl -f http://localhost:3001/healthz || exit 1
 
 # Use tini as PID 1 for proper signal handling

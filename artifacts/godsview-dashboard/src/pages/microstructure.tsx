@@ -430,7 +430,7 @@ const OrderBookDepth: React.FC<{ symbol: string }> = ({ symbol }) => {
         ))}
 
         {/* Bids (left side - green) */}
-        {data.bids.map((bid, i) => {
+        {data.bids.map((bid: any, i: any) => {
           const width = (bid.size / maxSize) * 50;
           const x = 50 - width;
           const y = (i * 250) / data.bids.length;
@@ -461,7 +461,7 @@ const OrderBookDepth: React.FC<{ symbol: string }> = ({ symbol }) => {
         })}
 
         {/* Asks (right side - red) */}
-        {data.asks.map((ask, i) => {
+        {data.asks.map((ask: any, i: any) => {
           const width = (ask.size / maxSize) * 50;
           const y = (i * 250) / data.asks.length;
           return (
@@ -498,13 +498,13 @@ const OrderBookDepth: React.FC<{ symbol: string }> = ({ symbol }) => {
         <div>
           <p style={{ color: C.textMuted, fontSize: 11, margin: '0 0 4px 0' }}>BID SIDE</p>
           <p style={{ color: C.green, fontSize: 14, fontWeight: 600, margin: 0 }}>
-            {data.bids.reduce((a, b) => a + b.size, 0).toLocaleString()}
+            {data.bids.reduce((a: any, b: any) => a + b.size, 0).toLocaleString()}
           </p>
         </div>
         <div>
           <p style={{ color: C.textMuted, fontSize: 11, margin: '0 0 4px 0' }}>ASK SIDE</p>
           <p style={{ color: C.red, fontSize: 14, fontWeight: 600, margin: 0 }}>
-            {data.asks.reduce((a, b) => a + b.size, 0).toLocaleString()}
+            {data.asks.reduce((a: any, b: any) => a + b.size, 0).toLocaleString()}
           </p>
         </div>
       </div>
@@ -704,7 +704,7 @@ const LiquidityHeatmap: React.FC<{ symbol: string }> = ({ symbol }) => {
           ))}
 
           {/* Heatmap cells */}
-          {data.cells.map((cell, idx) => (
+          {data.cells.map((cell: any, idx: any) => (
             <rect
               key={`cell-${idx}`}
               x={cell.time * (cellSize + cellPadding) + 30}
@@ -721,7 +721,7 @@ const LiquidityHeatmap: React.FC<{ symbol: string }> = ({ symbol }) => {
       </div>
 
       {/* Legend */}
-      <div style{{ display: 'flex', gap: 16, fontSize: 11, alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 16, fontSize: 11, alignItems: 'center' }}>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           <div style={{ width: 12, height: 12, background: C.cardAlt, borderRadius: 2 }} />
           <span style={{ color: C.textMuted }}>Low</span>
@@ -785,7 +785,7 @@ const ImbalanceSignalsFeed: React.FC<{ symbol: string }> = ({ symbol }) => {
       </h3>
 
       <div style={{ maxHeight: 500, overflowY: 'auto' }}>
-        {data.signals.map((signal) => (
+        {data.signals.map((signal: any) => (
           <div
             key={signal.id}
             style={{

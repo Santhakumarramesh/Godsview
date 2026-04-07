@@ -310,8 +310,7 @@ const CapabilityMatrix: React.FC<{ capabilities: Capability[] }> = ({ capabiliti
                 key={cap.id}
                 style={{
                   borderBottom: `1px solid ${C.borderLight}`,
-                  '&:hover': { backgroundColor: C.cardAlt },
-                }}
+                                  }}
               >
                 <td style={{ padding: '16px', color: C.textDim }}>{cap.category}</td>
                 <td style={{ padding: '16px', color: C.text, fontWeight: 500 }}>{cap.name}</td>
@@ -660,7 +659,7 @@ const TestTaxonomyChart: React.FC<{ data: TestTaxonomy }> = ({ data }) => {
     { name: 'Paper', value: data.paper, color: C.amber },
     { name: 'Chaos', value: data.chaos, color: C.red },
     { name: 'Soak', value: data.soak, color: C.textMuted },
-    { name: 'E2E', value: data.e2e, color: C.cyan },
+    { name: 'E2E', value: data.e2e, color: C.blue },
   ];
 
   const max = Math.max(...testTypes.map((t) => t.value), 1);

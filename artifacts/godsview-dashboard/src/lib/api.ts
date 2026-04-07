@@ -3822,6 +3822,9 @@ export interface MCPDecisionSummary {
   entryPrice: number | null; stopLoss: number | null; takeProfit: number | null;
   positionSize: number | null; thesis: string; rejectionReasons: string[];
   processingMs: number; timestamp: string;
+  scoreBreakdown?: Record<string, number>;
+  warnings?: string[];
+  boosters?: string[];
 }
 
 export interface MCPStats {

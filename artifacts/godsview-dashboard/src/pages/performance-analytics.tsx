@@ -554,8 +554,7 @@ function DailyPnLCalendar() {
                   cursor: 'pointer',
                   transition: 'all 0.2s',
                   position: 'relative',
-                  group: 'hover',
-                }}
+                                  }}
                 title={`Date: ${day.date}\nPnL: $${day.pnl.toFixed(0)}\nTrades: ${day.trades}\nWin Rate: ${(day.winRate * 100).toFixed(0)}%`}
               >
                 <div style={{ fontSize: '11px', color: C.textDim, marginBottom: '4px' }}>
@@ -701,7 +700,7 @@ function RiskMetricsPanel() {
           padding: '20px',
         }}>
           <div style={{ marginBottom: '16px' }}>
-            <div style={{ fontSize: '12px', color: C.textDim', marginBottom: '8px' }}>Return Distribution</div>
+            <div style={{ fontSize: '12px', color: C.textDim, marginBottom: '8px' }}>Return Distribution</div>
             <svg width="100%" height="180" viewBox="0 0 300 180" style={{ minHeight: '180px' }}>
               {/* Normal curve overlay */}
               <path

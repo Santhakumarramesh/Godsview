@@ -154,7 +154,7 @@ export default function MCPSignalsPage() {
     .slice(0, 10);
 
   // Action colors
-  const actionColorMap = {
+  const actionColorMap: Record<string, string> = {
     approve: C.primary,
     reject: C.tertiary,
     modify: C.gold,
@@ -174,7 +174,6 @@ export default function MCPSignalsPage() {
         <p style={{
           fontSize: "11px",
           color: C.muted,
-          marginTop: "8px",
           maxWidth: "780px",
           margin: 0,
           marginTop: "8px",
@@ -349,7 +348,7 @@ export default function MCPSignalsPage() {
                               <div>
                                 <Label>Warnings</Label>
                                 <div style={{ marginTop: "8px", display: "flex", flexDirection: "column", gap: "4px" }}>
-                                  {decision.warnings.map((w, idx) => (
+                                  {decision.warnings.map((w: any, idx: any) => (
                                     <div key={idx} style={{ fontSize: "10px", color: C.tertiary, display: "flex", gap: "4px" }}>
                                       <span>⚠</span>
                                       <span>{w}</span>
@@ -364,7 +363,7 @@ export default function MCPSignalsPage() {
                               <div>
                                 <Label>Boosters</Label>
                                 <div style={{ marginTop: "8px", display: "flex", flexDirection: "column", gap: "4px" }}>
-                                  {decision.boosters.map((b, idx) => (
+                                  {decision.boosters.map((b: any, idx: any) => (
                                     <div key={idx} style={{ fontSize: "10px", color: C.primary, display: "flex", gap: "4px" }}>
                                       <span>✓</span>
                                       <span>{b}</span>

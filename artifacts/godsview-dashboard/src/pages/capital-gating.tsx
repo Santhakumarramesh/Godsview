@@ -442,7 +442,7 @@ function LaunchControlCenter({
     }
   };
 
-  const statusColor = {
+  const statusColorMap: Record<string, string> = {
     pre_launch: C.outline,
     ramping: C.warning,
     steady_state: C.success,

@@ -418,7 +418,7 @@ export default function PipelineStatusPage() {
       {/* Section 2: Subsystem Grid */}
       {pipelineData && (
         <div style={{ marginBottom: "24px" }}>
-          <Label style={{ display: "block", marginBottom: "12px" }}>
+          <Label>
             Subsystems
           </Label>
           <div
@@ -533,7 +533,7 @@ export default function PipelineStatusPage() {
             marginBottom: "24px",
           }}
         >
-          <Label style={{ display: "block", marginBottom: "16px" }}>
+          <Label>
             Live Signal Flow
           </Label>
           <div
@@ -600,7 +600,7 @@ export default function PipelineStatusPage() {
             marginBottom: "24px",
           }}
         >
-          <Label style={{ display: "block", marginBottom: "12px" }}>
+          <Label>
             Active Positions
           </Label>
           <table
@@ -769,7 +769,7 @@ export default function PipelineStatusPage() {
             borderRadius: "8px",
           }}
         >
-          <Label style={{ display: "block", marginBottom: "12px" }}>
+          <Label>
             Recent Lessons
           </Label>
           <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>

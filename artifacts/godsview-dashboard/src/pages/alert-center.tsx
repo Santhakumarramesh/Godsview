@@ -252,7 +252,7 @@ const ActiveAlertsFeed = () => {
               fontSize: '11px',
               flexShrink: 0,
             }}>{alert.priority}</div>
-            <div style({
+            <div style({{
               padding: '2px 6px',
               background: C.border,
               color: C.textDim,

@@ -388,7 +388,7 @@ const ScoreBreakdown: React.FC<{ signal: SignalEvent }> = ({ signal }) => {
 export default function BrainGraphPage() {
   const canvasRef = useRef<HTMLDivElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
-  const rafRef = useRef<number>();
+  const rafRef = useRef<number | undefined>(undefined);
 
   const [nodes, setNodes] = useState<Record<NodeId, NodeState>>({
     tick: { id: 'tick', label: 'Tick', score: 0, layer: 1, ...NODE_POSITIONS.tick },
