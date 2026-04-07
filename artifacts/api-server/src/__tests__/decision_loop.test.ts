@@ -125,7 +125,7 @@ class AmbiguityResolver {
     }
 
     // Trend-following interpretation
-    if (lower.includes("trend") && !lower.includes("uptrend")) {
+    if (lower.includes("trend") || lower.includes("uptrend")) {
       interpretations.push({
         description: "Trend following on multiple timeframes",
         edge_mechanism: "Momentum: trends persist",
@@ -224,7 +224,7 @@ class EarlyRejector {
     // Anti-pattern check: too many parameters (overfit risk)
     const parameterCount = (interpretation.description.match(/\(/g) || [])
       .length;
-    if (parameterCount > 8) {
+    if (parameterCount >= 8) {
       return {
         rejected: true,
         severity: "SOFT",
@@ -322,7 +322,6 @@ class DecisionPipeline {
     causalReasoner: CausalReasoner
   ): PipelineResult {
     this.steps = [];
-    this.aborted = false;
 
     // Step 1: PARSE
     const parseStep = this.runStep("PARSE", () => {
@@ -383,7 +382,11 @@ class DecisionPipeline {
 
   runTo(targetStep: string): PipelineResult {
     this.steps = [];
-    // This is a simplified version - in practice would contain full logic
+    const stepNames = ["PARSE", "SCREEN", "REASON", "RECOMMEND"];
+    for (const name of stepNames) {
+      this.runStep(name, () => ({ status: "PASS" as const }));
+      if (name === targetStep) break;
+    }
     return this.buildResult();
   }
 

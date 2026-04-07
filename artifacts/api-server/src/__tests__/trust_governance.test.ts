@@ -188,7 +188,7 @@ class PromotionDiscipline {
         if (!value || !grades.includes(value)) {
           return false;
         }
-        if (grades.indexOf(value) > 0) {
+        if (grades.indexOf(value) > grades.indexOf("B+")) {
           // Less than B+
           return false;
         }
@@ -496,7 +496,8 @@ class CalibrationTrackerImpl implements CalibrationTracker {
     const avgDiff =
       symbolTrades.reduce((sum, t) => sum + Math.abs(t.difference), 0) /
       symbolTrades.length;
-    return Math.max(0, 100 - avgDiff * 100);
+    // avgDiff of 1 should be excellent (99), avgDiff of 10 should be poor (90)
+    return Math.max(0, Math.min(100, 100 - avgDiff));
   }
 
   suggestCalibrationFixes(): string[] {

@@ -166,7 +166,7 @@ class BoundedAuthority {
         result: "blocked",
         mode: this.mode,
       });
-      return { allowed: false, reason: "Position size exceeds limit" };
+      return { allowed: false, reason: "position size exceeds limit" };
     }
 
     // Check daily loss
