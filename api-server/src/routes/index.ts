@@ -104,4 +104,74 @@ import opsQuantRouter from "./ops_quant";
 router.use("/api/bridge", systemBridgeRouter);   // Phase 91 — Unified system bridge
 router.use("/api/ops", opsQuantRouter);          // Phase 91 — Operational runbook + briefs
 
+// ── Phase 97-98: TradingView MCP Integration ────────────────────────────
+import tradingviewMcpRouter from "./tradingview_mcp";
+import mcpBacktestRouter from "./mcp_backtest";
+router.use("/api/tradingview", tradingviewMcpRouter); // Phase 97 — MCP signal pipeline
+router.use("/api", mcpBacktestRouter);                // Phase 98 — MCP backtesting
+
+// ── Phase 99: Pipeline Orchestrator ─────────────────────────────────────
+import pipelineStatusRouter from "./pipeline_status";
+router.use("/api", pipelineStatusRouter);             // Phase 99 — Live pipeline status & control
+
+// ── MCP Streaming Events ────────────────────────────────────────────────────
+import mcpStreamRouter from "./mcp_stream";
+router.use("/api", mcpStreamRouter);                  // MCP SSE streaming endpoints
+
+// ── Phase 101: Regime-Adaptive Intelligence ─────────────────────────────────
+import intelligenceRouter from "./intelligence";
+router.use("/api/intelligence", intelligenceRouter);  // Phase 101 — Regime router, MTF, optimizer
+
+// ── Phase 102: Correlation & Portfolio Heat Map ─────────────────────────────
+import correlationRouter from "./correlation";
+router.use("/api/correlation", correlationRouter);    // Phase 102 — Strategy correlation, heatmap, drawdown
+
+// ── Phase 103: Execution Control ────────────────────────────────────────────
+import executionControlRouter from "./execution_control";
+router.use("/api/execution", executionControlRouter); // Phase 103 — Order lifecycle, positions, venue routing
+
+// ── Phase 104: Sentiment & News Intelligence ────────────────────────────────
+import sentimentRouter from "./sentiment";
+router.use("/api/sentiment", sentimentRouter);        // Phase 104 — Sentiment aggregation, news, social
+
+// ── Phase 105: Performance Analytics ────────────────────────────────────────
+import perfAnalyticsRouter from "./perf_analytics";
+router.use("/api/perf", perfAnalyticsRouter);         // Phase 105 — Trade journal, leaderboard, risk metrics
+
+// ── Phase 106: Alert Engine & Anomaly Detection ─────────────────────────────
+import alertCenterRouter from "./alert_center";
+router.use("/api/alert-center", alertCenterRouter);   // Phase 106 — Alert rules, notifications, anomalies
+
+// ── Phase 107: Market Microstructure ────────────────────────────────────────
+import microstructureRouter from "./microstructure";
+router.use("/api/microstructure", microstructureRouter); // Phase 107 — Order flow, book depth, liquidity
+
+// ── Phase 108: Truth Phase — System Integrity Audit ────────────────────────
+import truthAuditRouter from "./truth_audit";
+router.use("/api/truth-audit", truthAuditRouter);        // Phase 108 — Capability matrix, endpoint audit, code health
+
+// ── Phase 109: Market Data Integrity Layer ─────────────────────────────────
+import dataIntegrityRouter from "./data_integrity";
+router.use("/api/data-integrity", dataIntegrityRouter);  // Phase 109 — Feed health, tick validation, replay store
+
+// ── Phase 110: Backtest Credibility Upgrade ────────────────────────────────
+import backtestV2Router from "./backtest_v2";
+router.use("/api/backtest-v2", backtestV2Router);        // Phase 110 — Event-driven backtest, overfit, credibility
+
+// ── Phase 111: Execution Reliability Layer ─────────────────────────────────
+import execReliabilityRouter from "./exec_reliability";
+router.use("/api/exec-reliability", execReliabilityRouter); // Phase 111 — Order state machine, reconciliation, failsafe
+
+// ── Phase 112: Risk Engine v2 — Capital Protection ─────────────────────────
+import riskV2Router from "./risk_v2";
+router.use("/api/risk-v2", riskV2Router);                // Phase 112 — Portfolio VaR, exposure, macro lockouts
+
+// ── Phase 113: Model Governance & Learning Discipline ──────────────────────
+import modelGovRouter from "./model_gov";
+router.use("/api/model-gov", modelGovRouter);            // Phase 113 — Model registry, drift, shadow deploy
+
+// ── Phase 114: Decision Explainability & Replay Gold Standard ──────────────
+import explainabilityRouter from "./explainability";
+router.use("/api/explainability", explainabilityRouter);    // Phase 114 — Decision packets, replay, post-mortems
+
 export default router;

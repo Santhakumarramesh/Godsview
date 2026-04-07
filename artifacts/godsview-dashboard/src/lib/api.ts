@@ -3804,3 +3804,91 @@ export function useStopSideBySide() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["side-by-side"] }); },
   });
 }
+
+// ─── TradingView MCP ────────────────────────────────────────────────────────
+
+// Types
+export interface MCPSignalScore {
+  structureScore: number; orderflowScore: number; contextScore: number;
+  memoryScore: number; sentimentScore: number; dataQualityScore: number;
+  confirmationScore: number; confidenceScore: number;
+  grade: string; overallScore: number;
+  explanation: string; warnings: string[]; boosters: string[];
+}
+
+export interface MCPDecisionSummary {
+  signalId: string; symbol: string; action: string; direction: string;
+  confidence: number; grade: string; overallScore: number;
+  entryPrice: number | null; stopLoss: number | null; takeProfit: number | null;
+  positionSize: number | null; thesis: string; rejectionReasons: string[];
+  processingMs: number; timestamp: string;
+}
+
+export interface MCPStats {
+  ok: boolean;
+  ingestion: { totalReceived: number; totalAccepted: number; totalRejected: number; avgProcessingMs: number; bySource: Record<string, number>; bySignalType: Record<string, number>; bySymbol: Record<string, number> };
+  approvalRate: number;
+  recentDecisions: MCPDecisionSummary[];
+}
+
+export interface MCPBacktestRunResult {
+  runId: string;
+  totalSignals: number; approvedSignals: number; rejectedSignals: number;
+  approvalRate: number; avgConfirmationScore: number; avgOverallScore: number;
+  mcpMetrics: Record<string, number>;
+  baselineMetrics: Record<string, number> | null;
+  comparison: MCPComparison | null;
+}
+
+export interface MCPComparison {
+  baselineTotalTrades: number; baselineWinRate: number; baselineSharpe: number; baselineProfitFactor: number; baselineTotalPnl: number;
+  mcpTotalTrades: number; mcpWinRate: number; mcpSharpe: number; mcpProfitFactor: number; mcpTotalPnl: number;
+  winRateImprovement: number; sharpeImprovement: number; profitFactorImprovement: number; pnlImprovement: number;
+  tradesFiltered: number; tradesFilteredPct: number; mcpAddedValue: boolean; summary: string;
+}
+
+export interface MCPBacktestHistory {
+  runId: string; symbol: string; timeframe: string; status: string;
+  totalSignals: number; approvedSignals: number;
+  mcpSharpe: number; baselineSharpe: number | null;
+  startedAt: string; completedAt: string | null;
+}
+
+// Hooks
+
+export function useMCPStats() {
+  return useQuery({ queryKey: ["mcp", "stats"], queryFn: () => apiFetch<MCPStats>("/tradingview/stats"), refetchInterval: 5_000 });
+}
+
+export function useMCPDecisions(limit = 50) {
+  return useQuery({ queryKey: ["mcp", "decisions", limit], queryFn: () => apiFetch<{ ok: boolean; count: number; decisions: MCPDecisionSummary[] }>(`/tradingview/decisions?limit=${limit}`) });
+}
+
+export function useMCPDecision(signalId: string) {
+  return useQuery({ queryKey: ["mcp", "decision", signalId], queryFn: () => apiFetch<{ ok: boolean; decision: any }>(`/tradingview/decision/${signalId}`), enabled: !!signalId });
+}
+
+export function useMCPHealth() {
+  return useQuery({ queryKey: ["mcp", "health"], queryFn: () => apiFetch<any>("/tradingview/health"), refetchInterval: 10_000 });
+}
+
+export function useRunMCPBacktest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { symbol: string; timeframe: string; startDate: string; endDate: string; signalType?: string; initialCapital?: number; runBaseline?: boolean }) =>
+      apiFetch<MCPBacktestRunResult>("/mcp-backtest/run", { method: "POST", body: JSON.stringify(params) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["mcp-backtest"] }); },
+  });
+}
+
+export function useMCPBacktestHistory() {
+  return useQuery({ queryKey: ["mcp-backtest", "history"], queryFn: () => apiFetch<{ ok: boolean; runs: MCPBacktestHistory[] }>("/mcp-backtest/history") });
+}
+
+export function useMCPBacktestComparison(runId: string) {
+  return useQuery({ queryKey: ["mcp-backtest", "compare", runId], queryFn: () => apiFetch<any>(`/mcp-backtest/compare/${runId}`), enabled: !!runId });
+}
+
+export function useMCPBacktestSignalLog(runId: string, limit = 100, offset = 0) {
+  return useQuery({ queryKey: ["mcp-backtest", "signal-log", runId, limit, offset], queryFn: () => apiFetch<any>(`/mcp-backtest/signal-log/${runId}?limit=${limit}&offset=${offset}`), enabled: !!runId });
+}

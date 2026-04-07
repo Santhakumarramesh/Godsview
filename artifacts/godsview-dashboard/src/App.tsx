@@ -50,6 +50,24 @@ const DecisionLoopPage    = React.lazy(() => import("@/pages/decision-loop"));
 const TrustSurfacePage    = React.lazy(() => import("@/pages/trust-surface"));
 const EvalHarnessPage     = React.lazy(() => import("@/pages/eval-harness"));
 const CalibrationPage     = React.lazy(() => import("@/pages/calibration"));
+const MCPSignalsPage      = React.lazy(() => import("@/pages/mcp-signals"));
+const MCPBacktesterPage   = React.lazy(() => import("@/pages/mcp-backtester"));
+const PipelineStatusPage  = React.lazy(() => import("@/pages/pipeline-status"));
+const BrainGraphPage      = React.lazy(() => import("@/pages/brain-graph"));
+const RegimeIntelligencePage = React.lazy(() => import("@/pages/regime-intelligence"));
+const CorrelationLabPage  = React.lazy(() => import("@/pages/correlation-lab"));
+const ExecutionControlPage = React.lazy(() => import("@/pages/execution-control"));
+const SentimentIntelPage  = React.lazy(() => import("@/pages/sentiment-intel"));
+const PerformanceAnalyticsPage = React.lazy(() => import("@/pages/performance-analytics"));
+const AlertCenterPage     = React.lazy(() => import("@/pages/alert-center"));
+const MicrostructurePage  = React.lazy(() => import("@/pages/microstructure"));
+const SystemAuditPage    = React.lazy(() => import("@/pages/system-audit"));
+const DataIntegrityPage  = React.lazy(() => import("@/pages/data-integrity"));
+const BacktestCredibilityPage = React.lazy(() => import("@/pages/backtest-credibility"));
+const ExecReliabilityPage = React.lazy(() => import("@/pages/exec-reliability"));
+const RiskCommandV2Page  = React.lazy(() => import("@/pages/risk-command-v2"));
+const ModelGovernancePage = React.lazy(() => import("@/pages/model-governance"));
+const DecisionExplainabilityPage = React.lazy(() => import("@/pages/decision-explainability"));
 const NotFound           = React.lazy(() => import("@/pages/not-found"));
 
 // ── QueryClient ─────────────────────────────────────────────────────────────
@@ -188,6 +206,24 @@ function Router() {
         <RoutedPage path="/trust-surface"    component={TrustSurfacePage}      scope="page:trust-surface" />
         <RoutedPage path="/eval-harness"     component={EvalHarnessPage}       scope="page:eval-harness" />
         <RoutedPage path="/calibration"      component={CalibrationPage}       scope="page:calibration" />
+        <RoutedPage path="/mcp-signals"      component={MCPSignalsPage}        scope="page:mcp-signals" />
+        <RoutedPage path="/mcp-backtester"   component={MCPBacktesterPage}     scope="page:mcp-backtester" />
+        <RoutedPage path="/pipeline-status"  component={PipelineStatusPage}    scope="page:pipeline-status" />
+        <RoutedPage path="/brain-graph"      component={BrainGraphPage}        scope="page:brain-graph" />
+        <RoutedPage path="/regime-intelligence" component={RegimeIntelligencePage} scope="page:regime-intelligence" />
+        <RoutedPage path="/correlation-lab" component={CorrelationLabPage} scope="page:correlation-lab" />
+        <RoutedPage path="/execution-control" component={ExecutionControlPage} scope="page:execution-control" />
+        <RoutedPage path="/sentiment-intel" component={SentimentIntelPage} scope="page:sentiment-intel" />
+        <RoutedPage path="/performance-analytics" component={PerformanceAnalyticsPage} scope="page:performance-analytics" />
+        <RoutedPage path="/alert-center" component={AlertCenterPage} scope="page:alert-center" />
+        <RoutedPage path="/microstructure" component={MicrostructurePage} scope="page:microstructure" />
+        <RoutedPage path="/system-audit" component={SystemAuditPage} scope="page:system-audit" />
+        <RoutedPage path="/data-integrity" component={DataIntegrityPage} scope="page:data-integrity" />
+        <RoutedPage path="/backtest-credibility" component={BacktestCredibilityPage} scope="page:backtest-credibility" />
+        <RoutedPage path="/exec-reliability" component={ExecReliabilityPage} scope="page:exec-reliability" />
+        <RoutedPage path="/risk-command-v2" component={RiskCommandV2Page} scope="page:risk-command-v2" />
+        <RoutedPage path="/model-governance" component={ModelGovernancePage} scope="page:model-governance" />
+        <RoutedPage path="/decision-explainability" component={DecisionExplainabilityPage} scope="page:decision-explainability" />
 
         <Route>
           <AppErrorBoundary scope="page:not-found">
