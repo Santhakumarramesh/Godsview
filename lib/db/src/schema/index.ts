@@ -9,3 +9,4 @@ export * from "./data_engine";
 export * from "./orders";
 export * from "./positions";
 export * from "./risk_assessments";
+export * from "./strategies";
