@@ -378,8 +378,16 @@ export async function getHistoricalBars(
     "1hour": 60, "4hour": 240, "1day": 1440,
   };
   const count = Math.min(Math.floor((lookback_days * 24 * 60) / minsPerBar[tf]), 10_000);
-  logger.warn({ symbol, tf, count }, "[tiingo-client] All APIs failed — using synthetic data");
-  return { bars: generateSyntheticBars(symbol, tf, count), source: "synthetic", has_real_data: false };
+  // GUARDED: block synthetic fallback in live mode
+  const { guardSyntheticData } = await import("./data_safety_guard.js");
+  return guardSyntheticData(
+    `tiingo:${symbol}:${tf}`,
+    () => {
+      logger.warn({ symbol, tf, count }, "[tiingo-client] All APIs failed — using synthetic data");
+      return { bars: generateSyntheticBars(symbol, tf, count), source: "synthetic" as const, has_real_data: false };
+    },
+    `All market data APIs failed for ${symbol}/${tf}. Synthetic data blocked in live mode.`,
+  );
 }
 
 // ── Batch fetch: multiple symbols ─────────────────────────────────────────
@@ -398,7 +406,14 @@ export async function getBarsForSymbols(
       await new Promise(r => setTimeout(r, 300));
     } catch (err) {
       logger.error({ err, symbol }, "[tiingo-client] Failed to fetch bars");
-      results.set(symbol, { bars: generateSyntheticBars(symbol, tf, 500), source: "synthetic", has_real_data: false });
+      // GUARDED: block synthetic fallback in live mode
+      const { guardSyntheticData } = await import("./data_safety_guard.js");
+      const fallback = guardSyntheticData(
+        `tiingo_batch:${symbol}:${tf}`,
+        () => ({ bars: generateSyntheticBars(symbol, tf, 500), source: "synthetic" as const, has_real_data: false }),
+        `Batch fetch failed for ${symbol}/${tf}. Synthetic data blocked in live mode.`,
+      );
+      results.set(symbol, fallback);
     }
   }
 

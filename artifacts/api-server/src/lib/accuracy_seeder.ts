@@ -68,6 +68,14 @@ function genScore(tier: "high" | "medium" | "low"): number {
 }
 
 export async function seedAccuracyBootstrap(): Promise<{ seeded: number; skipped: boolean }> {
+  // GUARDED: block synthetic ML training data in live mode
+  const { allowSyntheticFallback, logSyntheticUsage } = await import("./data_safety_guard.js");
+  if (!allowSyntheticFallback("accuracy_seeder:bootstrap")) {
+    logger.info("Synthetic bootstrap skipped — live mode requires real training data");
+    return { seeded: 0, skipped: true };
+  }
+  logSyntheticUsage("accuracy_seeder:bootstrap");
+
   try {
     const { db, accuracyResultsTable } = await import("@workspace/db");
     const { count: drizzleCount } = await import("drizzle-orm");

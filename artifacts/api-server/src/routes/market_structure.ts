@@ -79,13 +79,17 @@ async function fetchBarsForSymbol(
       return bars;
     }
   } catch {
-    // Fallback to synthetic
+    // Fallback to synthetic — GUARDED: blocked in live mode
   }
 
-  // Synthetic fallback for demo/testing
+  const { guardSyntheticData } = await import("../lib/data_safety_guard.js");
   const seed = symbol.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
   const basePrice = symbol.includes("BTC") ? 60000 : symbol.includes("ETH") ? 3000 : 450;
-  return generateSyntheticBars(200, basePrice, seed + TIMEFRAMES.indexOf(timeframe) * 100);
+  return guardSyntheticData(
+    `market_structure:${symbol}:${timeframe}`,
+    () => generateSyntheticBars(200, basePrice, seed + TIMEFRAMES.indexOf(timeframe) * 100),
+    `Market structure analysis requires real data for ${symbol}. Synthetic data blocked in live mode.`,
+  );
 }
 
 function aggregateBars(bars: Bar[], period: number): Bar[] {

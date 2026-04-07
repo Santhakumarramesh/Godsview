@@ -474,7 +474,13 @@ export async function runBacktest(config: BacktestConfig): Promise<BacktestResul
       bars = await getBars(symbol, "1Min", 240, barTime.toISOString());
     } catch {
       // No Alpaca key or API error — generate synthetic 1m bars for replay
-      bars = generateSyntheticBars(APPROX_PRICES[symbol] ?? 100, 240, direction);
+      // GUARDED: blocked in live mode to prevent fake data contaminating decisions
+      const { guardSyntheticData } = await import("./data_safety_guard.js");
+      bars = guardSyntheticData(
+        `backtester:${symbol}`,
+        () => generateSyntheticBars(APPROX_PRICES[symbol] ?? 100, 240, direction),
+        `Cannot backtest ${symbol}: real market data unavailable and synthetic data blocked in live mode`,
+      );
     }
     if (bars.length === 0) return null;
 
