@@ -80,6 +80,7 @@ const NewsMonitorPage    = React.lazy(() => import("@/pages/news-monitor"));
 const BrainNodesPage     = React.lazy(() => import("@/pages/brain-nodes"));
 const AdvancedRiskPage   = React.lazy(() => import("@/pages/advanced-risk"));
 const EconomicCalendarPage = React.lazy(() => import("@/pages/economic-calendar"));
+const AutonomousBrainPage = React.lazy(() => import("@/pages/autonomous-brain")); // Phase 148
 const NotFound           = React.lazy(() => import("@/pages/not-found"));
 
 // ── QueryClient ─────────────────────────────────────────────────────────────
@@ -248,6 +249,7 @@ function Router() {
         <RoutedPage path="/brain-nodes" component={BrainNodesPage} scope="page:brain-nodes" />
         <RoutedPage path="/advanced-risk" component={AdvancedRiskPage} scope="page:advanced-risk" />
         <RoutedPage path="/economic-calendar" component={EconomicCalendarPage} scope="page:economic-calendar" />
+        <RoutedPage path="/autonomous-brain" component={AutonomousBrainPage} scope="page:autonomous-brain" />
 
         <Route>
           <AppErrorBoundary scope="page:not-found">

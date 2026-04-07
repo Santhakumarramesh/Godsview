@@ -12,7 +12,9 @@
  *   - AI signal annotations
  */
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from "react";
+
+const BookmapHeatmap = lazy(() => import("../components/bookmap-heatmap"));
 import {
   createChart,
   type IChartApi,
@@ -104,6 +106,7 @@ export default function TradingViewChart() {
   const [wsConnected, setWsConnected] = useState(false);
   const [lastPrice, setLastPrice] = useState<number | null>(null);
   const [showSignals, setShowSignals] = useState(true);
+  const [viewMode, setViewMode] = useState<"chart" | "bookmap">("chart");
   const wsRef = useRef<WebSocket | null>(null);
 
   // ── Initialize chart ────────────────────────────────────────────────────────
@@ -332,6 +335,22 @@ export default function TradingViewChart() {
           {showSignals ? "Signals ON" : "Signals OFF"}
         </button>
 
+        {/* ONE-CLICK: Chart ↔ Bookmap toggle */}
+        <button
+          onClick={() => setViewMode(viewMode === "chart" ? "bookmap" : "chart")}
+          style={{
+            background: viewMode === "bookmap" ? "#f59e0b" : "#1e293b",
+            color: viewMode === "bookmap" ? "#000" : "#9ca3af",
+            border: "none", borderRadius: 4, padding: "6px 14px",
+            fontSize: 13, cursor: "pointer", fontWeight: 700,
+            transition: "all 0.15s ease",
+            boxShadow: viewMode === "bookmap" ? "0 0 12px rgba(245,158,11,0.4)" : "none",
+          }}
+          title="Toggle between Candlestick Chart and Bookmap Order Book Heatmap"
+        >
+          {viewMode === "chart" ? "📊 Bookmap" : "🕯️ Chart"}
+        </button>
+
         {/* Spacer */}
         <div style={{ flex: 1 }} />
 
@@ -371,8 +390,18 @@ export default function TradingViewChart() {
         </div>
       )}
 
-      {/* ── Chart Container ──────────────────────────────────────── */}
-      <div ref={chartContainerRef} style={{ flex: 1, minHeight: 0 }} />
+      {/* ── Chart / Bookmap Container ────────────────────────────── */}
+      {viewMode === "chart" ? (
+        <div ref={chartContainerRef} style={{ flex: 1, minHeight: 0 }} />
+      ) : (
+        <Suspense fallback={
+          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#f59e0b" }}>
+            Loading Bookmap Heatmap…
+          </div>
+        }>
+          <BookmapHeatmap symbol={symbol} />
+        </Suspense>
+      )}
 
       {/* ── Bottom Status Bar ────────────────────────────────────── */}
       <div style={{
@@ -380,8 +409,8 @@ export default function TradingViewChart() {
         padding: "6px 16px", borderTop: "1px solid #1e293b", background: "#0f1629",
         fontSize: 11, color: "#64748b",
       }}>
-        <span>Godsview TradingView MCP — lightweight-charts v5</span>
-        <span>{symbol} · {timeframe} · Phase 125</span>
+        <span>Godsview TradingView MCP — {viewMode === "chart" ? "lightweight-charts v5" : "Bookmap Order Book Heatmap"}</span>
+        <span>{symbol} · {timeframe} · {viewMode === "chart" ? "Candlestick" : "Bookmap"}</span>
       </div>
     </div>
   );

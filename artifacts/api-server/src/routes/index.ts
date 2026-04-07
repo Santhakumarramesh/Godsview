@@ -205,4 +205,12 @@ router.use("/api", newsMonitorRouter);                        // Phase 140 — R
 import brainNodesWsRouter from "./brain_nodes_ws";
 router.use("/api", brainNodesWsRouter);                       // Phase 142 — Brain subsystem live status
 
+// ── Phase 147: Autonomous Symbol Brain Engine ────────────────────────────────
+import autonomousBrainRouter from "./autonomous_brain";
+router.use("/api/autonomous", autonomousBrainRouter);         // Phase 147 — Per-symbol human-like brain nodes
+
+// ── Phase 149: Strategy Prompt Engine ────────────────────────────────────────
+import strategyPromptRouter from "./strategy_prompt";
+router.use("/api/strategy-prompt", strategyPromptRouter);     // Phase 149 — NLP to multi-TF quant backtest
+
 export default router;
