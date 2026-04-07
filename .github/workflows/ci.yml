@@ -69,10 +69,10 @@ jobs:
           pip install ruff pytest pytest-asyncio
 
       - name: Ruff lint
-        run: ruff check services/ godsview-openbb/ --select=E,W,F,I --ignore=E501,F401 --exit-zero
+        run: ruff check services/ godsview-openbb/ --select=E,W,F,I --ignore=E501,F401 || true
 
       - name: Ruff format check
-        run: ruff format --check services/ godsview-openbb/ --exit-zero
+        run: ruff format --check services/ godsview-openbb/ || true
 
       - name: MyPy typecheck (shared contracts)
         run: |
