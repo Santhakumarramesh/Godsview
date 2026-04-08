@@ -10,3 +10,7 @@ export * from "./orders";
 export * from "./positions";
 export * from "./risk_assessments";
 export * from "./strategies";
+export * from "./execution";
+export * from "./alignment";
+export * from "./ml_operations";
+export * from "./certification";

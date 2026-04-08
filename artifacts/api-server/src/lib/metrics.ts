@@ -112,6 +112,29 @@ export const dailyPnl = new Gauge();
 export const openPositions = new Gauge();
 export const uptime = new Gauge();
 
+// Phase 12: Execution truth metrics
+export const ordersCreatedTotal = new Counter();
+export const ordersFilled = new Counter();
+export const ordersRejected = new Counter();
+export const fillsRecorded = new Counter();
+export const reconciliationsRun = new Counter();
+export const reconciliationDiscrepancies = new Gauge();  // gauge: current discrepancy count
+export const avgSlippageBps = new Gauge();
+export const executionLatencyMs = new Histogram([10, 50, 100, 250, 500, 1000, 2500, 5000]);
+
+// Phase 13: Alignment metrics
+export const alignmentChecksTotal = new Counter();
+export const alignmentScore = new Gauge();       // latest composite alignment score
+export const driftEventsTotal = new Counter();
+export const unresolvedDriftEvents = new Gauge();
+
+// Phase 14: ML operations metrics
+export const modelRetrainsTotal = new Counter();
+export const modelEvaluationsTotal = new Counter();
+export const championAccuracy = new Gauge();
+export const challengerAccuracy = new Gauge();
+export const modelVersionCount = new Gauge();
+
 /** Collect all metrics as Prometheus text exposition */
 export function collectMetrics(): string {
   uptime.set(process.uptime());
@@ -130,6 +153,29 @@ export function collectMetrics(): string {
     dailyPnl.collect("godsview_daily_pnl_usd", "Daily P&L in USD"),
     openPositions.collect("godsview_open_positions", "Number of open positions"),
     uptime.collect("godsview_uptime_seconds", "Server uptime in seconds"),
+
+    // Phase 12: Execution truth
+    ordersCreatedTotal.collect("godsview_orders_created_total", "Total orders created in execution truth layer"),
+    ordersFilled.collect("godsview_orders_filled_total", "Total orders that reached filled status"),
+    ordersRejected.collect("godsview_orders_rejected_total", "Total orders rejected"),
+    fillsRecorded.collect("godsview_fills_recorded_total", "Total fills recorded from broker"),
+    reconciliationsRun.collect("godsview_reconciliations_total", "Total EOD reconciliations run"),
+    reconciliationDiscrepancies.collect("godsview_reconciliation_discrepancies", "Current reconciliation discrepancy count"),
+    avgSlippageBps.collect("godsview_avg_slippage_bps", "Average slippage in basis points"),
+    executionLatencyMs.collect("godsview_execution_latency_ms", "Order execution latency (submit to first fill)"),
+
+    // Phase 13: Alignment
+    alignmentChecksTotal.collect("godsview_alignment_checks_total", "Total alignment checks run"),
+    alignmentScore.collect("godsview_alignment_score", "Latest composite alignment score (0-1)"),
+    driftEventsTotal.collect("godsview_drift_events_total", "Total drift events detected"),
+    unresolvedDriftEvents.collect("godsview_unresolved_drift_events", "Current unresolved drift events"),
+
+    // Phase 14: ML operations
+    modelRetrainsTotal.collect("godsview_model_retrains_total", "Total model retraining events"),
+    modelEvaluationsTotal.collect("godsview_model_evaluations_total", "Total model evaluations run"),
+    championAccuracy.collect("godsview_champion_accuracy", "Current champion model accuracy"),
+    challengerAccuracy.collect("godsview_challenger_accuracy", "Current challenger model accuracy"),
+    modelVersionCount.collect("godsview_model_version_count", "Total model versions registered"),
   ];
 
   return sections.join("\n\n") + "\n";
