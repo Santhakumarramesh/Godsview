@@ -221,6 +221,45 @@ LIVE_TRADING_ENABLED=true
 - `GET /api/system/audit` — Audit trail summary
 - `GET /api/system/audit/replay` — Replay decision by ID
 
+### Assisted Live Trading (Phase 21)
+- `POST /api/assisted-live/sessions` — Create supervised live session
+- `POST /api/assisted-live/queue` — Submit order for approval
+- `POST /api/assisted-live/approve/:id` — Approve pending order
+- `POST /api/assisted-live/reject/:id` — Reject pending order
+- `POST /api/assisted-live/flatten/:id` — Emergency flatten session
+- `GET /api/assisted-live/incidents` — List safety incidents
+
+### Autonomous Trading (Phase 22)
+- `POST /api/autonomy/candidates` — Register autonomous candidate
+- `POST /api/autonomy/candidates/:id/activate` — Activate candidate
+- `POST /api/autonomy/revoke/:id` — Revoke autonomy
+- `GET /api/autonomy/status` — Global autonomy status
+- `GET /api/autonomy/budget` — Budget allocation
+
+### Portfolio Intelligence (Phase 23)
+- `GET /api/portfolio-intelligence/summary` — Full portfolio view
+- `GET /api/portfolio-intelligence/exposure` — Exposure snapshot
+- `GET /api/portfolio-intelligence/correlations` — Correlation matrix
+- `POST /api/portfolio-intelligence/rebalance` — Trigger rebalance
+
+### Enterprise Admin (Phase 24)
+- `GET /api/admin/users` — User management
+- `GET /api/admin/audit` — Audit trail
+- `GET /api/admin/incidents/open` — Open incidents
+- `GET /api/admin/slos/summary` — SLO compliance
+
+### God Brain (Phase 25)
+- `GET /api/god-brain/status` — Unified brain health
+- `GET /api/god-brain/terminal` — Quanta Terminal data
+- `POST /api/god-brain/decisions` — Create decision packet
+- `GET /api/god-brain/packets` — Query decision packets
+
+### Terminal (Phase 26)
+- `GET /api/terminal/layout` — Terminal layout config
+- `GET /api/terminal/commands` — Command palette
+- `GET /api/terminal/watchlist` — Watchlist
+- `GET /api/terminal/mcp/status` — MCP bridge status
+
 See `docs/ARCHITECTURE.md` for complete API reference.
 
 ## Dashboard Pages
@@ -229,17 +268,20 @@ See `docs/ARCHITECTURE.md` for complete API reference.
 |------|-------|---------|
 | Mission Control | `/` | Real-time P&L, win rate, engine health, live chart |
 | Brain | `/brain` | Intelligence state visualization, entity tracking |
+| God Brain | `/god-brain` | Unified operator control surface |
+| Quanta Terminal | `/quanta-terminal` | Bloomberg-style multi-panel operator terminal |
+| Assisted Live | `/assisted-live` | Supervised live trading with approval queue |
+| Autonomous Candidates | `/autonomous-candidates` | Autonomous strategy management |
+| Portfolio Intelligence | `/portfolio-intelligence` | Multi-strategy portfolio view |
+| Enterprise Admin | `/enterprise-admin` | RBAC, incidents, SLOs, audit |
 | Live Intelligence | `/alpaca` | Real-time Alpaca analysis with chart overlays |
-| Infinity Screen | `/infinity` | Multi-chart grid for simultaneous monitoring |
 | Strategy Lab | `/lab` | Prompt-to-backtest strategy creation |
 | Setup Matrix | `/setup-explorer` | Strategy performance matrix by type/regime |
 | Signal Feed | `/signals` | Real-time signals with quality scores |
 | Trade Journal | `/trades` | Execution log with entry/exit analysis |
-| Daily Review | `/reports` | HTML + Markdown daily reports |
 | Risk Control | `/risk` | Kill switch, guards, drawdown tracking |
 | Analytics | `/performance` | Equity curves, win rates, by-setup breakdown |
 | System Core | `/system` | Diagnostics, audit trail, engine health |
-| Settings | `/settings` | API credentials, risk parameters |
 
 ## Monitoring & Observability
 

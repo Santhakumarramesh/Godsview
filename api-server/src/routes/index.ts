@@ -193,4 +193,28 @@ router.use("/api/v2", pyBridgeRouter);                        // Phase 120 — P
 import openapiRouter from "./openapi";
 router.use("/api/docs", openapiRouter);                       // Phase 123 — Scalar API reference UI + spec.json
 
+// ── Phase 21: Assisted Live Mode ───────────────────────────────────────
+import assistedLiveRouter from "./assisted_live";
+router.use("/api/assisted-live", assistedLiveRouter);          // Phase 21 — Supervised live trading
+
+// ── Phase 22: Autonomous Candidate Mode ────────────────────────────────
+import autonomyRouter from "./autonomy";
+router.use("/api/autonomy", autonomyRouter);                   // Phase 22 — Autonomous candidates
+
+// ── Phase 23: Portfolio Intelligence ───────────────────────────────────
+import portfolioIntelligenceRouter from "./portfolio_intelligence";
+router.use("/api/portfolio-intelligence", portfolioIntelligenceRouter); // Phase 23
+
+// ── Phase 24: Enterprise Production ────────────────────────────────────
+import enterpriseAdminRouter from "./enterprise_admin";
+router.use("/api/admin", enterpriseAdminRouter);               // Phase 24
+
+// ── Phase 25: God Brain / Quanta Terminal ──────────────────────────────
+import godBrainRouter from "./god_brain";
+router.use("/api/god-brain", godBrainRouter);                  // Phase 25
+
+// ── Phase 26: Terminal + MCP Polish ────────────────────────────────────
+import terminalRouter from "./terminal";
+router.use("/api/terminal", terminalRouter);                   // Phase 26
+
 export default router;
