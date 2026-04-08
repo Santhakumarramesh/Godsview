@@ -70,6 +70,9 @@ import alignmentRouter from "./alignment";
 import mlOperationsRouter from "./ml_operations";
 import productionHealthRouter from "./production_health";
 import certificationRouter from "./certification";
+import deploymentTruthRouter from "./deployment_truth";
+import dataTruthRouter from "./data_truth";
+import executionValidationRouter from "./execution_validation";
 
 const router: IRouter = Router();
 
@@ -143,6 +146,10 @@ router.use("/api/alignment", alignmentRouter);
 router.use("/api/ml-ops", mlOperationsRouter);
 router.use("/api/production-health", productionHealthRouter);
 router.use("/api/certification", certificationRouter);
+
+router.use("/api/deployment", deploymentTruthRouter);
+router.use("/api/data-truth", dataTruthRouter);
+router.use("/api/execution-validation", executionValidationRouter);
 
 // Python v2 microservices proxy — shadow routes at /v2/*
 router.use(pythonV2Router);
