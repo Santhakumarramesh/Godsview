@@ -253,80 +253,28 @@ router.use("/api/recovery", recoveryRouter);                   // Phase 35 — R
 import certificationGateRouter from "./certification_gate";
 router.use("/api/certification-gate", certificationGateRouter); // Phase 36 — Pre-production certification audit
 
-// ── Phase 37: Strategy Evidence Packets ────────────────────────────────
-import evidencePacketRouter from "./evidence_packet";
-router.use("/api/evidence-packets", evidencePacketRouter);     // Phase 37 — Evidence compilation, locking, verdicts
-
-// ── Phase 38: Operator Dashboard API ──────────────────────────────────
+// ── Phase 38: Operator Dashboard API ──────────────────────────────────────
 import operatorDashboardRouter from "./operator_dashboard";
-router.use("/api/operator", operatorDashboardRouter);          // Phase 38 — System overview, alerts, strategy cards
+router.use("/api/operator", operatorDashboardRouter);           // Phase 38 — System overview, strategies, alerts, briefs
 
-// ── Phase 39: System Manifest & Configuration Registry ────────────────
-import systemManifestRouter from "./system_manifest";
-router.use("/api/manifest", systemManifestRouter);             // Phase 39 — Subsystems, config, dependency graph
+// ── Phase 118: Advanced Observability & Distributed Tracing ──────────────
+import observabilityRouter from "./observability";
+router.use(observabilityRouter);                                  // Phase 118 — Traces, metrics, alerts, correlation IDs
 
-// ── Phase 40: Deployment Pipeline Control ─────────────────────────────
-import deployPipelineRouter from "./deploy_pipeline";
-router.use("/api/deploy", deployPipelineRouter);               // Phase 40 — Releases, gates, rollback, environments
+// ── Phase 119: Multi-Tenant Organization System ──────────────────────────
+import multiTenantRouter from "./multi_tenant";
+router.use(multiTenantRouter);                                    // Phase 119 — Orgs, RBAC, workspaces, teams
 
-// ── Phase 41: Multi-Broker Adapter Framework ──────────────────────────
-import brokerAdapterRouter from "./broker_adapter";
-router.use("/api/brokers", brokerAdapterRouter);               // Phase 41 — Broker mgmt, routing, circuit breakers
+// ── Phase 120: Strategy Marketplace & Sharing ────────────────────────────
+import strategyMarketplaceRouter from "./strategy_marketplace";
+router.use(strategyMarketplaceRouter);                            // Phase 120 — Listings, subscriptions, reputation, forks
 
-// ── Phase 42: Execution Quality Analytics ─────────────────────────────
-import execQualityRouter from "./exec_quality";
-router.use("/api/exec-quality", execQualityRouter);            // Phase 42 — Slippage, scoring, venue comparison
+// ── Phase 121: Chaos Engineering & Resilience Testing ────────────────────
+import chaosEngineeringRouter from "./chaos_engineering";
+router.use(chaosEngineeringRouter);                               // Phase 121 — Chaos experiments, resilience, rollback, faults
 
-// ── Phase 43: Event-Driven News Pipeline ──────────────────────────────
-import newsPipelineRouter from "./news_pipeline";
-router.use("/api/news", newsPipelineRouter);                   // Phase 43 — News ingestion, signals, sentiment
-
-// ── Phase 44: Portfolio Risk Engine ───────────────────────────────────
-import portfolioRiskRouter from "./portfolio_risk";
-router.use("/api/portfolio-risk", portfolioRiskRouter);        // Phase 44 — Positions, correlations, hedging, alerts
-
-// ── Phase 45: Audit Trail & Compliance ────────────────────────────────
-import auditTrailRouter from "./audit_trail";
-router.use("/api/audit", auditTrailRouter);                    // Phase 45 — Immutable audit log, compliance, export
-
-// ── Phase 46: Execution Reconciliation Engine v2 ──────────────────────
-import execReconciliationRouter from "./exec_reconciliation";
-router.use("/api/reconciliation", execReconciliationRouter);   // Phase 46 — Position sync, fill verification, P&L recon
-
-// ── Phase 47: Data Latency & Feed Validator v2 ───────────────────────
-import dataValidatorRouter from "./data_validator";
-router.use("/api/data-validator", dataValidatorRouter);        // Phase 47 — Feed health, tick validation, decision audit
-
-// ── Phase 48: Shadow Trading Mode v2 ─────────────────────────────────
-import shadowTradingRouter from "./shadow_trading";
-router.use("/api/shadow-trading", shadowTradingRouter);        // Phase 48 — Shadow execution, comparison, stat testing
-
-// ── Phase 49: Failure Recovery Engine v2 ─────────────────────────────
-import failureRecoveryRouter from "./failure_recovery";
-router.use("/api/failure-recovery", failureRecoveryRouter);    // Phase 49 — State recovery, drills, broker/feed outage
-
-// ── Phase 50: Go-Live Certification Gate v2 ──────────────────────────
-import certificationV2Router from "./certification_v2";
-router.use("/api/certification-v2", certificationV2Router);    // Phase 50 — 10-dimension certification, policies, history
-
-// ── Phase 51: Strategy DSL Interpreter ────────────────────────────────
-import strategyDslRouter from "./strategy_dsl";
-router.use("/api/strategy-dsl", strategyDslRouter);            // Phase 51 — DSL parsing, validation, templates, evaluation
-
-// ── Phase 52: Real-Time Event Bus ─────────────────────────────────────
-import eventBusRouter from "./event_bus";
-router.use("/api/events", eventBusRouter);                     // Phase 52 — Pub/sub, subscriptions, rules, replay
-
-// ── Phase 53: Multi-Timeframe Analysis Engine ─────────────────────────
-import mtfAnalysisRouter from "./mtf_analysis";
-router.use("/api/mtf", mtfAnalysisRouter);                     // Phase 53 — MTF analysis, confluence, divergence, scans
-
-// ── Phase 54: Regime Detection Engine ─────────────────────────────────
-import regimeDetectionRouter from "./regime_detection";
-router.use("/api/regime", regimeDetectionRouter);              // Phase 54 — Regime detection, transitions, adaptations
-
-// ── Phase 55: Strategy Backtest Engine v2 ─────────────────────────────
-import backtestV2EngineRouter from "./backtest_v2_engine";
-router.use("/api/backtest-v2-engine", backtestV2EngineRouter); // Phase 55 — Backtest, walk-forward, Monte Carlo, stress
+// ── Phase 122: Launch Readiness & Staging Gates ──────────────────────────
+import launchReadinessRouter from "./launch_readiness";
+router.use(launchReadinessRouter);                                // Phase 122 — Staging, checklists, go/no-go, rehearsals
 
 export default router;
