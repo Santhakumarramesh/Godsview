@@ -309,4 +309,24 @@ router.use("/api/failure-recovery", failureRecoveryRouter);    // Phase 49 — S
 import certificationV2Router from "./certification_v2";
 router.use("/api/certification-v2", certificationV2Router);    // Phase 50 — 10-dimension certification, policies, history
 
+// ── Phase 51: Strategy DSL Interpreter ────────────────────────────────
+import strategyDslRouter from "./strategy_dsl";
+router.use("/api/strategy-dsl", strategyDslRouter);            // Phase 51 — DSL parsing, validation, templates, evaluation
+
+// ── Phase 52: Real-Time Event Bus ─────────────────────────────────────
+import eventBusRouter from "./event_bus";
+router.use("/api/events", eventBusRouter);                     // Phase 52 — Pub/sub, subscriptions, rules, replay
+
+// ── Phase 53: Multi-Timeframe Analysis Engine ─────────────────────────
+import mtfAnalysisRouter from "./mtf_analysis";
+router.use("/api/mtf", mtfAnalysisRouter);                     // Phase 53 — MTF analysis, confluence, divergence, scans
+
+// ── Phase 54: Regime Detection Engine ─────────────────────────────────
+import regimeDetectionRouter from "./regime_detection";
+router.use("/api/regime", regimeDetectionRouter);              // Phase 54 — Regime detection, transitions, adaptations
+
+// ── Phase 55: Strategy Backtest Engine v2 ─────────────────────────────
+import backtestV2EngineRouter from "./backtest_v2_engine";
+router.use("/api/backtest-v2-engine", backtestV2EngineRouter); // Phase 55 — Backtest, walk-forward, Monte Carlo, stress
+
 export default router;
