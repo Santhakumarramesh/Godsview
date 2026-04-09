@@ -189,10 +189,6 @@ router.use("/api/capital-gating", capitalGatingRouter);      // Phase 117 — Ti
 import pyBridgeRouter from "./py_bridge";
 router.use("/api/v2", pyBridgeRouter);                        // Phase 120 — Proxy to Python microservices
 
-// ── Phase 123: OpenAPI Documentation ────────────────────────────────────────
-import openapiRouter from "./openapi";
-router.use("/api/docs", openapiRouter);                       // Phase 123 — Scalar API reference UI + spec.json
-
 // ── Phase 21: Assisted Live Mode ───────────────────────────────────────
 import assistedLiveRouter from "./assisted_live";
 router.use("/api/assisted-live", assistedLiveRouter);          // Phase 21 — Supervised live trading
@@ -216,5 +212,9 @@ router.use("/api/god-brain", godBrainRouter);                  // Phase 25
 // ── Phase 26: Terminal + MCP Polish ────────────────────────────────────
 import terminalRouter from "./terminal";
 router.use("/api/terminal", terminalRouter);                   // Phase 26
+
+// ── Phase 27: Production Validation Backbone ──────────────────────────
+import validationRouter from "./production_validation";
+router.use("/api/validation", validationRouter);               // Phase 27 — Validation sessions, comparison, readiness
 
 export default router;
