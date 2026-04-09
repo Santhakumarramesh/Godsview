@@ -217,4 +217,40 @@ router.use("/api/terminal", terminalRouter);                   // Phase 26
 import validationRouter from "./production_validation";
 router.use("/api/validation", validationRouter);               // Phase 27 — Validation sessions, comparison, readiness
 
+// ── Phase 28: Execution Ledger + Broker Reconciliation ────────────────
+import executionLedgerRouter from "./execution_ledger";
+router.use("/api/execution-ledger", executionLedgerRouter);    // Phase 28 — Order lifecycle, reconciliation, mismatches
+
+// ── Phase 29: Market Data Truth + Latency Observability ───────────────
+import dataTruthRouter from "./data_truth";
+router.use("/api/data-truth", dataTruthRouter);                // Phase 29 — Timestamp chains, quality checks, truth scores
+
+// ── Phase 30: Shadow Mode + Canary Autonomy ───────────────────────────
+import shadowCanaryRouter from "./shadow_canary";
+router.use("/api/shadow-canary", shadowCanaryRouter);          // Phase 30 — Shadow sessions, canary deployments
+
+// ── Phase 31: Secrets, Auth & Control-Plane Hardening ─────────────────
+import securityAdminRouter from "./security_admin";
+router.use("/api/security", securityAdminRouter);              // Phase 31 — Secrets, operator auth, env validation
+
+// ── Phase 32: Natural Language Strategy Compiler v2 ───────────────────
+import strategyCompilerRouter from "./strategy_compiler";
+router.use("/api/strategy-compiler", strategyCompilerRouter);  // Phase 32 — NL to DSL compilation
+
+// ── Phase 33: Macro / News / Event Risk Intelligence ──────────────────
+import macroIntelligenceRouter from "./macro_intelligence";
+router.use("/api/macro-intelligence", macroIntelligenceRouter); // Phase 33 — Economic events, lockouts, risk scoring
+
+// ── Phase 34: Portfolio + Capital Allocation Live Control ─────────────
+import capitalControlRouter from "./capital_control";
+router.use("/api/capital-control", capitalControlRouter);      // Phase 34 — Capital buckets, guardrails, allocation
+
+// ── Phase 35: Failure Recovery + Disaster Readiness ───────────────────
+import recoveryRouter from "./recovery";
+router.use("/api/recovery", recoveryRouter);                   // Phase 35 — Recovery plans, incident drills, readiness
+
+// ── Phase 36: Go-Live Certification Gate ──────────────────────────────
+import certificationGateRouter from "./certification_gate";
+router.use("/api/certification-gate", certificationGateRouter); // Phase 36 — Pre-production certification audit
+
 export default router;
