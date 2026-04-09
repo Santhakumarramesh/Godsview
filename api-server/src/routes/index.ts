@@ -289,4 +289,24 @@ router.use("/api/portfolio-risk", portfolioRiskRouter);        // Phase 44 — P
 import auditTrailRouter from "./audit_trail";
 router.use("/api/audit", auditTrailRouter);                    // Phase 45 — Immutable audit log, compliance, export
 
+// ── Phase 46: Execution Reconciliation Engine v2 ──────────────────────
+import execReconciliationRouter from "./exec_reconciliation";
+router.use("/api/reconciliation", execReconciliationRouter);   // Phase 46 — Position sync, fill verification, P&L recon
+
+// ── Phase 47: Data Latency & Feed Validator v2 ───────────────────────
+import dataValidatorRouter from "./data_validator";
+router.use("/api/data-validator", dataValidatorRouter);        // Phase 47 — Feed health, tick validation, decision audit
+
+// ── Phase 48: Shadow Trading Mode v2 ─────────────────────────────────
+import shadowTradingRouter from "./shadow_trading";
+router.use("/api/shadow-trading", shadowTradingRouter);        // Phase 48 — Shadow execution, comparison, stat testing
+
+// ── Phase 49: Failure Recovery Engine v2 ─────────────────────────────
+import failureRecoveryRouter from "./failure_recovery";
+router.use("/api/failure-recovery", failureRecoveryRouter);    // Phase 49 — State recovery, drills, broker/feed outage
+
+// ── Phase 50: Go-Live Certification Gate v2 ──────────────────────────
+import certificationV2Router from "./certification_v2";
+router.use("/api/certification-v2", certificationV2Router);    // Phase 50 — 10-dimension certification, policies, history
+
 export default router;

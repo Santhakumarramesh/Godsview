@@ -1,624 +1,673 @@
-/**
- * failure_recovery.test.ts — Phase 35: Failure Recovery + Disaster Readiness
- *
- * Comprehensive test suite (22+ tests):
- * - Recovery plan lifecycle and state transitions
- * - Position, session, and pending action restoration
- * - Crash-safe broker reconciliation
- * - Incident drill creation, execution, and results
- * - Pre-built drill scenarios (kill switch, breaker, data outage, etc.)
- * - Drill step pass/fail tracking
- * - Query operations for history and drill data
- * - State cleanup and reset
- */
-
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
-  createRecoveryPlan,
-  executeRecoveryStep,
-  restoreOpenPositions,
-  restoreActiveSessions,
-  restorePendingActions,
-  crashSafeReconcile,
-  getRecoveryPlan,
-  getRecoveryHistory,
-  clearRecoveryManager,
-  createDrill,
-  startDrill,
-  executeDrillStep,
-  completeDrill,
-  getDrill,
-  getRecentDrills,
-  getDrillsByType,
-  _clearDrills,
-} from "../lib/recovery";
-import type {
-  MockPosition,
-  MockSession,
-  MockPendingAction,
-} from "../lib/recovery";
+  FailureRecoveryEngine,
+  type SystemState,
+  type PositionSnapshot,
+  type PendingOrderSnapshot,
+  type BrokerConnectionState,
+} from "../lib/failure_recovery";
 
-// ── Mocks ────────────────────────────────────────────────────────────
-
-vi.mock("../lib/logger", () => ({
-  logger: {
+vi.mock("pino", () => ({
+  default: () => ({
     info: vi.fn(),
-    warn: vi.fn(),
     error: vi.fn(),
+    warn: vi.fn(),
     debug: vi.fn(),
-  },
+  }),
 }));
 
-// ── Recovery Plan Tests ──────────────────────────────────────────────
+vi.mock("pino-pretty", () => ({
+  default: vi.fn(),
+}));
 
-describe("Recovery Manager — Plan Lifecycle", () => {
+vi.mock("../../lib/risk_engine", () => ({
+  evaluateRisk: vi.fn(),
+}));
+
+vi.mock("../../lib/drawdown_breaker", () => ({
+  checkDrawdown: vi.fn(),
+}));
+
+describe("FailureRecoveryEngine", () => {
+  let engine: FailureRecoveryEngine;
+
   beforeEach(() => {
-    clearRecoveryManager();
+    engine = new FailureRecoveryEngine();
   });
 
-  it("should create a recovery plan with correct structure", () => {
-    const result = createRecoveryPlan();
+  describe("System State Capture", () => {
+    it("should capture system state with generated ID and timestamp", () => {
+      const positions: PositionSnapshot[] = [
+        {
+          symbol: "AAPL",
+          strategy_id: "strat_123",
+          quantity: 100,
+          avg_price: 150.5,
+          side: "long",
+          unrealized_pnl: 500,
+        },
+      ];
 
-    expect(result.success).toBe(true);
-    expect(result.data).toBeDefined();
-    expect(result.data?.plan_id).toMatch(/^recovery_/);
-    expect(result.data?.steps).toEqual([
-      "restore_positions",
-      "restore_sessions",
-      "restore_pending_actions",
-      "reconcile_broker",
-      "verify_state",
-    ]);
-    expect(result.data?.current_step).toBe(0);
-    expect(result.data?.overall_status).toBe("pending");
-    expect(result.data?.started_at).toBeDefined();
-    expect(result.data?.completed_at).toBeNull();
+      const state = engine.captureSystemState({
+        open_positions: positions,
+        pending_orders: [],
+        active_sessions: ["sess_1"],
+        broker_connections: [
+          {
+            broker_id: "broker_1",
+            name: "Interactive Brokers",
+            connected: true,
+            last_seen: new Date().toISOString(),
+          },
+        ],
+        last_heartbeat: new Date().toISOString(),
+        market_phase: "market_open",
+      });
+
+      expect(state.id).toMatch(/^state_/);
+      expect(state.captured_at).toBeTruthy();
+      expect(state.open_positions).toEqual(positions);
+      expect(state.market_phase).toBe("market_open");
+    });
+
+    it("should retrieve the latest captured state", () => {
+      const state1 = engine.captureSystemState({
+        open_positions: [],
+        pending_orders: [],
+        active_sessions: [],
+        broker_connections: [],
+        last_heartbeat: new Date().toISOString(),
+        market_phase: "pre_market",
+      });
+
+      // Wait a bit to ensure different timestamps
+      const state2 = engine.captureSystemState({
+        open_positions: [],
+        pending_orders: [],
+        active_sessions: [],
+        broker_connections: [],
+        last_heartbeat: new Date().toISOString(),
+        market_phase: "market_open",
+      });
+
+      const latest = engine.getLatestState();
+      expect(latest?.id).toBe(state2.id);
+      expect(latest?.market_phase).toBe("market_open");
+      expect(new Date(latest!.captured_at).getTime()).toBeGreaterThanOrEqual(
+        new Date(state1.captured_at).getTime()
+      );
+    });
+
+    it("should return undefined when no state has been captured", () => {
+      const latest = engine.getLatestState();
+      expect(latest).toBeUndefined();
+    });
   });
 
-  it("should execute recovery plan steps sequentially", () => {
-    const planResult = createRecoveryPlan();
-    expect(planResult.success).toBe(true);
-    const planId = planResult.data!.plan_id;
+  describe("Recovery Plan Creation", () => {
+    let preState: SystemState;
 
-    const step1 = executeRecoveryStep(planId);
-    expect(step1.success).toBe(true);
-    expect(step1.data?.step).toBe("restore_positions");
-    expect(step1.data?.status).toBe("completed");
+    beforeEach(() => {
+      preState = engine.captureSystemState({
+        open_positions: [],
+        pending_orders: [],
+        active_sessions: [],
+        broker_connections: [],
+        last_heartbeat: new Date().toISOString(),
+        market_phase: "market_open",
+      });
+    });
 
-    const step2 = executeRecoveryStep(planId);
-    expect(step2.success).toBe(true);
-    expect(step2.data?.step).toBe("restore_sessions");
+    it("should create recovery plan for system restart", () => {
+      const plan = engine.createRecoveryPlan("system_restart", preState);
 
-    const step3 = executeRecoveryStep(planId);
-    expect(step3.success).toBe(true);
-    expect(step3.data?.step).toBe("restore_pending_actions");
+      expect(plan.id).toMatch(/^rp_/);
+      expect(plan.trigger).toBe("system_restart");
+      expect(plan.status).toBe("pending");
+      expect(plan.steps.length).toBeGreaterThan(0);
+      expect(plan.steps[0].name).toBe("capture_state");
+      expect(plan.steps[plan.steps.length - 1].name).toBe("resume_operations");
+    });
 
-    const step4 = executeRecoveryStep(planId);
-    expect(step4.success).toBe(true);
-    expect(step4.data?.step).toBe("reconcile_broker");
+    it("should create recovery plan for broker outage", () => {
+      const plan = engine.createRecoveryPlan("broker_outage", preState);
 
-    const step5 = executeRecoveryStep(planId);
-    expect(step5.success).toBe(true);
-    expect(step5.data?.step).toBe("verify_state");
+      expect(plan.trigger).toBe("broker_outage");
+      const stepNames = plan.steps.map((s) => s.name);
+      expect(stepNames).toContain("detect_outage");
+      expect(stepNames).toContain("pause_strategies");
+      expect(stepNames).toContain("switch_to_backup");
+    });
+
+    it("should create recovery plan for feed outage", () => {
+      const plan = engine.createRecoveryPlan("feed_outage", preState);
+
+      expect(plan.trigger).toBe("feed_outage");
+      const stepNames = plan.steps.map((s) => s.name);
+      expect(stepNames).toContain("detect_stale_feeds");
+      expect(stepNames).toContain("switch_feed_source");
+    });
+
+    it("should create recovery plan for partial fill stuck", () => {
+      const plan = engine.createRecoveryPlan("partial_fill_stuck", preState);
+
+      expect(plan.trigger).toBe("partial_fill_stuck");
+      const stepNames = plan.steps.map((s) => s.name);
+      expect(stepNames).toContain("identify_stuck_orders");
+      expect(stepNames).toContain("attempt_cancel");
+    });
+
+    it("should create recovery plan for network failure", () => {
+      const plan = engine.createRecoveryPlan("network_failure", preState);
+
+      expect(plan.trigger).toBe("network_failure");
+      const stepNames = plan.steps.map((s) => s.name);
+      expect(stepNames).toContain("detect_disconnection");
+      expect(stepNames).toContain("enter_safe_mode");
+    });
+
+    it("should create recovery plan for process crash", () => {
+      const plan = engine.createRecoveryPlan("process_crash", preState);
+
+      expect(plan.trigger).toBe("process_crash");
+      const stepNames = plan.steps.map((s) => s.name);
+      expect(stepNames.length).toBeGreaterThan(0);
+    });
+
+    it("should create recovery plan for memory pressure", () => {
+      const plan = engine.createRecoveryPlan("memory_pressure", preState);
+
+      expect(plan.trigger).toBe("memory_pressure");
+      const stepNames = plan.steps.map((s) => s.name);
+      expect(stepNames).toContain("detect_memory_pressure");
+    });
+
+    it("should create recovery plan for manual trigger", () => {
+      const plan = engine.createRecoveryPlan("manual", preState);
+
+      expect(plan.trigger).toBe("manual");
+      const stepNames = plan.steps.map((s) => s.name);
+      expect(stepNames).toContain("operator_initiated");
+    });
   });
 
-  it("should transition plan status from pending to in_progress to completed", () => {
-    const planResult = createRecoveryPlan();
-    const planId = planResult.data!.plan_id;
+  describe("Recovery Plan Step Execution", () => {
+    let preState: SystemState;
+    let planId: string;
 
-    let plan = getRecoveryPlan(planId);
-    expect(plan?.overall_status).toBe("pending");
+    beforeEach(() => {
+      preState = engine.captureSystemState({
+        open_positions: [],
+        pending_orders: [],
+        active_sessions: [],
+        broker_connections: [],
+        last_heartbeat: new Date().toISOString(),
+        market_phase: "market_open",
+      });
 
-    executeRecoveryStep(planId);
-    plan = getRecoveryPlan(planId);
-    expect(plan?.overall_status).toBe("in_progress");
+      const plan = engine.createRecoveryPlan("system_restart", preState);
+      planId = plan.id;
+    });
 
-    // Execute remaining steps
-    executeRecoveryStep(planId);
-    executeRecoveryStep(planId);
-    executeRecoveryStep(planId);
-    executeRecoveryStep(planId);
+    it("should execute recovery step successfully", () => {
+      const result = engine.executeRecoveryStep(planId, "capture_state");
 
-    plan = getRecoveryPlan(planId);
-    expect(plan?.overall_status).toBe("completed");
-    expect(plan?.completed_at).toBeDefined();
+      expect(result.success).toBe(true);
+      expect(result.error).toBeUndefined();
+
+      const plan = engine.getRecoveryPlan(planId);
+      const step = plan?.steps.find((s) => s.name === "capture_state");
+      expect(step?.status).toBe("completed");
+      expect(step?.started_at).toBeTruthy();
+      expect(step?.completed_at).toBeTruthy();
+    });
+
+    it("should fail when plan does not exist", () => {
+      const result = engine.executeRecoveryStep("nonexistent", "capture_state");
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe("Plan not found");
+    });
+
+    it("should fail when step does not exist", () => {
+      const result = engine.executeRecoveryStep(planId, "nonexistent_step");
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe("Step not found");
+    });
+
+    it("should change plan status to executing on first step", () => {
+      let plan = engine.getRecoveryPlan(planId);
+      expect(plan?.status).toBe("pending");
+
+      engine.executeRecoveryStep(planId, "capture_state");
+
+      plan = engine.getRecoveryPlan(planId);
+      expect(plan?.status).toBe("executing");
+    });
   });
 
-  it("should reject executing steps on non-existent plan", () => {
-    const result = executeRecoveryStep("nonexistent_plan");
-    expect(result.success).toBe(false);
-    expect(result.error).toContain("not found");
+  describe("Recovery Plan Completion", () => {
+    let preState: SystemState;
+    let postState: SystemState;
+    let planId: string;
+
+    beforeEach(() => {
+      preState = engine.captureSystemState({
+        open_positions: [],
+        pending_orders: [],
+        active_sessions: [],
+        broker_connections: [],
+        last_heartbeat: new Date().toISOString(),
+        market_phase: "market_open",
+      });
+
+      postState = engine.captureSystemState({
+        open_positions: [],
+        pending_orders: [],
+        active_sessions: [],
+        broker_connections: [],
+        last_heartbeat: new Date().toISOString(),
+        market_phase: "market_open",
+      });
+
+      const plan = engine.createRecoveryPlan("system_restart", preState);
+      planId = plan.id;
+    });
+
+    it("should complete recovery plan with post state", () => {
+      const result = engine.completeRecoveryPlan(planId, postState);
+
+      expect(result.success).toBe(true);
+
+      const plan = engine.getRecoveryPlan(planId);
+      expect(plan?.status).toBe("completed");
+      expect(plan?.post_state).toEqual(postState);
+      expect(plan?.duration_ms).toBeGreaterThanOrEqual(0);
+    });
+
+    it("should fail when plan does not exist", () => {
+      const result = engine.completeRecoveryPlan("nonexistent", postState);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe("Plan not found");
+    });
   });
 
-  it("should prevent step execution on completed plan", () => {
-    const planResult = createRecoveryPlan();
-    const planId = planResult.data!.plan_id;
+  describe("Recovery Plan Failure", () => {
+    let preState: SystemState;
+    let planId: string;
 
-    // Execute all steps
-    for (let i = 0; i < 5; i++) {
-      executeRecoveryStep(planId);
-    }
+    beforeEach(() => {
+      preState = engine.captureSystemState({
+        open_positions: [],
+        pending_orders: [],
+        active_sessions: [],
+        broker_connections: [],
+        last_heartbeat: new Date().toISOString(),
+        market_phase: "market_open",
+      });
 
-    const nextAttempt = executeRecoveryStep(planId);
-    expect(nextAttempt.success).toBe(false);
-    expect(nextAttempt.error).toContain("completed");
-  });
-});
+      const plan = engine.createRecoveryPlan("system_restart", preState);
+      planId = plan.id;
+    });
 
-// ── Position Restoration Tests ───────────────────────────────────────
+    it("should fail recovery plan with error message", () => {
+      engine.executeRecoveryStep(planId, "capture_state");
 
-describe("Recovery Manager — Position Restoration", () => {
-  beforeEach(() => {
-    clearRecoveryManager();
-  });
+      const result = engine.failRecoveryPlan(
+        planId,
+        "Broker connection failed"
+      );
 
-  it("should restore open positions successfully", () => {
-    const positions: MockPosition[] = [
-      {
-        id: "pos1",
-        symbol: "BTCUSD",
-        qty: 1,
-        entry_price: 45000,
-        entry_time: "2026-04-08T10:00:00Z",
-      },
-      {
-        id: "pos2",
-        symbol: "ETHUSD",
-        qty: 10,
-        entry_price: 2500,
-        entry_time: "2026-04-08T10:15:00Z",
-      },
-    ];
+      expect(result.success).toBe(true);
 
-    const result = restoreOpenPositions(positions);
+      const plan = engine.getRecoveryPlan(planId);
+      expect(plan?.status).toBe("failed");
+    });
 
-    expect(result.success).toBe(true);
-    expect(result.data?.state_id).toMatch(/^recovery_/);
-    expect(result.data?.type).toBe("positions");
-    expect(result.data?.items_recovered.length).toBe(2);
-    expect(result.data?.items_failed.length).toBe(0);
-    expect(result.data?.recovery_status).toBe("completed");
-    expect(result.data?.completed_at).toBeDefined();
+    it("should mark running step as failed", () => {
+      engine.executeRecoveryStep(planId, "capture_state");
+
+      engine.failRecoveryPlan(planId, "Step failed");
+
+      const plan = engine.getRecoveryPlan(planId);
+      const step = plan?.steps.find((s) => s.name === "capture_state");
+      expect(step?.status).toBe("failed");
+      expect(step?.error).toBe("Step failed");
+    });
   });
 
-  it("should handle empty position list", () => {
-    const result = restoreOpenPositions([]);
+  describe("Recovery Plan Retrieval", () => {
+    let preState: SystemState;
 
-    expect(result.success).toBe(true);
-    expect(result.data?.items_recovered.length).toBe(0);
-    expect(result.data?.items_failed.length).toBe(0);
-    expect(result.data?.recovery_status).toBe("completed");
+    beforeEach(() => {
+      preState = engine.captureSystemState({
+        open_positions: [],
+        pending_orders: [],
+        active_sessions: [],
+        broker_connections: [],
+        last_heartbeat: new Date().toISOString(),
+        market_phase: "market_open",
+      });
+    });
+
+    it("should retrieve plan by ID", () => {
+      const created = engine.createRecoveryPlan("system_restart", preState);
+      const retrieved = engine.getRecoveryPlan(created.id);
+
+      expect(retrieved).toEqual(created);
+    });
+
+    it("should return undefined for nonexistent plan", () => {
+      const plan = engine.getRecoveryPlan("nonexistent");
+      expect(plan).toBeUndefined();
+    });
+
+    it("should get all recovery plans", () => {
+      engine.createRecoveryPlan("system_restart", preState);
+      engine.createRecoveryPlan("broker_outage", preState);
+
+      const plans = engine.getAllRecoveryPlans();
+
+      expect(plans.length).toBe(2);
+      expect(plans[0].created_at >= plans[1].created_at).toBe(true);
+    });
+
+    it("should apply limit when getting all plans", () => {
+      engine.createRecoveryPlan("system_restart", preState);
+      engine.createRecoveryPlan("broker_outage", preState);
+      engine.createRecoveryPlan("feed_outage", preState);
+
+      const plans = engine.getAllRecoveryPlans(2);
+
+      expect(plans.length).toBe(2);
+    });
   });
 
-  it("should track both recovered and failed items", () => {
-    const positions: MockPosition[] = [
-      {
-        id: "pos1",
-        symbol: "BTCUSD",
-        qty: 1,
-        entry_price: 45000,
-        entry_time: "2026-04-08T10:00:00Z",
-      },
-    ];
+  describe("Active Recovery Plan", () => {
+    let preState: SystemState;
 
-    const result = restoreOpenPositions(positions);
-    expect(result.data?.items_recovered[0]?.status).toBe("restored");
-    expect(result.data?.items_recovered[0]?.symbol).toBe("BTCUSD");
-  });
-});
+    beforeEach(() => {
+      preState = engine.captureSystemState({
+        open_positions: [],
+        pending_orders: [],
+        active_sessions: [],
+        broker_connections: [],
+        last_heartbeat: new Date().toISOString(),
+        market_phase: "market_open",
+      });
+    });
 
-// ── Session Restoration Tests ────────────────────────────────────────
+    it("should return active recovery plan", () => {
+      const plan = engine.createRecoveryPlan("system_restart", preState);
+      const active = engine.getActiveRecoveryPlan();
 
-describe("Recovery Manager — Session Restoration", () => {
-  beforeEach(() => {
-    clearRecoveryManager();
-  });
+      expect(active?.id).toBe(plan.id);
+    });
 
-  it("should restore active sessions", () => {
-    const sessions: MockSession[] = [
-      {
-        session_id: "sess1",
-        account_id: "acct123",
-        mode: "paper",
-        started_at: "2026-04-08T09:00:00Z",
-      },
-      {
-        session_id: "sess2",
-        account_id: "acct456",
-        mode: "live",
-        started_at: "2026-04-08T09:30:00Z",
-      },
-    ];
+    it("should return undefined when no active plan", () => {
+      const postState = engine.captureSystemState({
+        open_positions: [],
+        pending_orders: [],
+        active_sessions: [],
+        broker_connections: [],
+        last_heartbeat: new Date().toISOString(),
+        market_phase: "market_open",
+      });
 
-    const result = restoreActiveSessions(sessions);
+      const plan = engine.createRecoveryPlan("system_restart", preState);
+      engine.completeRecoveryPlan(plan.id, postState);
 
-    expect(result.success).toBe(true);
-    expect(result.data?.type).toBe("sessions");
-    expect(result.data?.items_recovered.length).toBe(2);
-    expect(result.data?.items_failed.length).toBe(0);
+      const active = engine.getActiveRecoveryPlan();
+
+      expect(active).toBeUndefined();
+    });
   });
 
-  it("should handle empty session list", () => {
-    const result = restoreActiveSessions([]);
+  describe("Failure Drill Lifecycle", () => {
+    it("should schedule a failure drill", () => {
+      const criteria = [
+        "All positions reconciled",
+        "Orders verified",
+      ];
 
-    expect(result.success).toBe(true);
-    expect(result.data?.items_recovered.length).toBe(0);
-  });
-});
+      const drill = engine.scheduleDrill("system_restart", criteria);
 
-// ── Pending Action Restoration Tests ─────────────────────────────────
+      expect(drill.id).toMatch(/^drill_/);
+      expect(drill.drill_type).toBe("system_restart");
+      expect(drill.status).toBe("scheduled");
+      expect(drill.scheduled_at).toBeTruthy();
+      expect(drill.pass_criteria).toEqual(criteria);
+      expect(drill.criteria_met).toBe(false);
+      expect(drill.steps_completed).toBe(0);
+      expect(drill.steps_total).toBeGreaterThan(0);
+    });
 
-describe("Recovery Manager — Pending Action Restoration", () => {
-  beforeEach(() => {
-    clearRecoveryManager();
-  });
+    it("should start a scheduled drill", () => {
+      const drill = engine.scheduleDrill("broker_outage", []);
+      const result = engine.startDrill(drill.id);
 
-  it("should restore pending orders and actions", () => {
-    const actions: MockPendingAction[] = [
-      {
-        action_id: "act1",
-        type: "order",
-        symbol: "AAPL",
-        qty: 100,
-        created_at: "2026-04-08T10:00:00Z",
-        status: "pending",
-      },
-      {
-        action_id: "act2",
-        type: "liquidation",
-        symbol: "GOOGL",
-        qty: 50,
-        created_at: "2026-04-08T10:05:00Z",
-        status: "pending",
-      },
-    ];
+      expect(result.success).toBe(true);
 
-    const result = restorePendingActions(actions);
+      const updated = engine.getDrill(drill.id);
+      expect(updated?.status).toBe("running");
+      expect(updated?.started_at).toBeTruthy();
+    });
 
-    expect(result.success).toBe(true);
-    expect(result.data?.type).toBe("pending_actions");
-    expect(result.data?.items_recovered.length).toBe(2);
-    expect(result.data?.items_failed.length).toBe(0);
-  });
+    it("should fail to start a drill that is not scheduled", () => {
+      const drill = engine.scheduleDrill("feed_outage", []);
+      engine.startDrill(drill.id);
 
-  it("should skip failed actions during restoration", () => {
-    const actions: MockPendingAction[] = [
-      {
-        action_id: "act1",
-        type: "order",
-        symbol: "AAPL",
-        qty: 100,
-        created_at: "2026-04-08T10:00:00Z",
-        status: "failed",
-      },
-      {
-        action_id: "act2",
-        type: "order",
-        symbol: "GOOGL",
-        qty: 50,
-        created_at: "2026-04-08T10:05:00Z",
-        status: "pending",
-      },
-    ];
+      const result = engine.startDrill(drill.id);
 
-    const result = restorePendingActions(actions);
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("not in scheduled state");
+    });
 
-    expect(result.data?.items_recovered.length).toBe(1);
-  });
-});
+    it("should advance drill and track steps", () => {
+      const drill = engine.scheduleDrill("network_failure", []);
+      engine.startDrill(drill.id);
 
-// ── Crash-Safe Reconciliation Tests ──────────────────────────────────
+      engine.advanceDrill(drill.id, "Disconnection detected");
+      engine.advanceDrill(drill.id, "Entered safe mode");
 
-describe("Recovery Manager — Crash-Safe Reconciliation", () => {
-  beforeEach(() => {
-    clearRecoveryManager();
-  });
+      const updated = engine.getDrill(drill.id);
+      expect(updated?.steps_completed).toBe(2);
+      expect(updated?.findings).toEqual([
+        "Disconnection detected",
+        "Entered safe mode",
+      ]);
+    });
 
-  it("should perform broker reconciliation successfully", () => {
-    const result = crashSafeReconcile();
+    it("should fail to advance drill that is not running", () => {
+      const drill = engine.scheduleDrill("partial_fill_stuck", []);
 
-    expect(result.success).toBe(true);
-    expect(result.data?.reconciled).toBeGreaterThanOrEqual(0);
-    expect(result.data?.mismatches_found).toBeGreaterThanOrEqual(0);
-    expect(result.data?.corrections_applied).toBeGreaterThanOrEqual(0);
-  });
+      const result = engine.advanceDrill(drill.id);
 
-  it("should return numeric reconciliation metrics", () => {
-    const result = crashSafeReconcile();
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("not running");
+    });
 
-    expect(typeof result.data?.reconciled).toBe("number");
-    expect(typeof result.data?.mismatches_found).toBe("number");
-    expect(typeof result.data?.corrections_applied).toBe("number");
-  });
-});
+    it("should complete drill with pass criteria met", () => {
+      const criteria = ["Positions verified", "Orders reconciled"];
+      const drill = engine.scheduleDrill("system_restart", criteria);
+      engine.startDrill(drill.id);
 
-// ── Recovery History Tests ───────────────────────────────────────────
+      const result = engine.completeDrill(drill.id, true);
 
-describe("Recovery Manager — History & Queries", () => {
-  beforeEach(() => {
-    clearRecoveryManager();
-  });
+      expect(result.success).toBe(true);
 
-  it("should track recovery history", () => {
-    restoreOpenPositions([
-      {
-        id: "pos1",
-        symbol: "BTCUSD",
-        qty: 1,
-        entry_price: 45000,
-        entry_time: "2026-04-08T10:00:00Z",
-      },
-    ]);
+      const updated = engine.getDrill(drill.id);
+      expect(updated?.status).toBe("passed");
+      expect(updated?.completed_at).toBeTruthy();
+      expect(updated?.criteria_met).toBe(true);
+    });
 
-    restoreActiveSessions([
-      {
-        session_id: "sess1",
-        account_id: "acct123",
-        mode: "paper",
-        started_at: "2026-04-08T09:00:00Z",
-      },
-    ]);
+    it("should complete drill with pass criteria not met", () => {
+      const drill = engine.scheduleDrill("broker_outage", ["All systems OK"]);
+      engine.startDrill(drill.id);
 
-    const history = getRecoveryHistory();
-    expect(history.length).toBe(2);
-    expect(history[0]?.type).toBe("positions");
-    expect(history[1]?.type).toBe("sessions");
+      const result = engine.completeDrill(drill.id, false);
+
+      expect(result.success).toBe(true);
+
+      const updated = engine.getDrill(drill.id);
+      expect(updated?.status).toBe("failed");
+      expect(updated?.criteria_met).toBe(false);
+    });
+
+    it("should abort running drill", () => {
+      const drill = engine.scheduleDrill("feed_outage", []);
+      engine.startDrill(drill.id);
+
+      const result = engine.abortDrill(drill.id);
+
+      expect(result.success).toBe(true);
+
+      const updated = engine.getDrill(drill.id);
+      expect(updated?.status).toBe("aborted");
+      expect(updated?.completed_at).toBeTruthy();
+    });
+
+    it("should fail to abort completed drill", () => {
+      const drill = engine.scheduleDrill("manual", []);
+      engine.startDrill(drill.id);
+      engine.completeDrill(drill.id, true);
+
+      const result = engine.abortDrill(drill.id);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("Cannot abort");
+    });
   });
 
-  it("should return null for non-existent plan", () => {
-    const plan = getRecoveryPlan("nonexistent");
-    expect(plan).toBeNull();
-  });
-});
+  describe("Drill Retrieval", () => {
+    it("should retrieve drill by ID", () => {
+      const created = engine.scheduleDrill("system_restart", []);
+      const retrieved = engine.getDrill(created.id);
 
-// ── Incident Drill Tests ─────────────────────────────────────────────
+      expect(retrieved).toEqual(created);
+    });
 
-describe("Incident Drills — Creation & Lifecycle", () => {
-  beforeEach(() => {
-    _clearDrills();
-  });
+    it("should return undefined for nonexistent drill", () => {
+      const drill = engine.getDrill("nonexistent");
+      expect(drill).toBeUndefined();
+    });
 
-  it("should create a kill switch drill", () => {
-    const result = createDrill("kill_switch");
+    it("should get all drills", () => {
+      engine.scheduleDrill("system_restart", []);
+      engine.scheduleDrill("broker_outage", []);
 
-    expect(result.success).toBe(true);
-    expect(result.data?.drill_id).toMatch(/^drill_/);
-    expect(result.data?.type).toBe("kill_switch");
-    expect(result.data?.status).toBe("pending");
-    expect(result.data?.started_at).toBeDefined();
-    expect(result.data?.completed_at).toBeNull();
-  });
+      const drills = engine.getAllDrills();
 
-  it("should create a circuit breaker drill", () => {
-    const result = createDrill("breaker");
+      expect(drills.length).toBe(2);
+      expect(drills[0].scheduled_at >= drills[1].scheduled_at).toBe(true);
+    });
 
-    expect(result.success).toBe(true);
-    expect(result.data?.type).toBe("breaker");
-    expect(result.data?.scenario_config).toBeDefined();
-  });
+    it("should apply limit when getting all drills", () => {
+      engine.scheduleDrill("system_restart", []);
+      engine.scheduleDrill("broker_outage", []);
+      engine.scheduleDrill("feed_outage", []);
 
-  it("should create a data outage drill", () => {
-    const result = createDrill("data_outage");
+      const drills = engine.getAllDrills(2);
 
-    expect(result.success).toBe(true);
-    expect(result.data?.type).toBe("data_outage");
-  });
+      expect(drills.length).toBe(2);
+    });
 
-  it("should create a broker outage drill", () => {
-    const result = createDrill("broker_outage");
+    it("should get only passed drills", () => {
+      const drill1 = engine.scheduleDrill("system_restart", []);
+      const drill2 = engine.scheduleDrill("broker_outage", []);
+      const drill3 = engine.scheduleDrill("feed_outage", []);
 
-    expect(result.success).toBe(true);
-    expect(result.data?.type).toBe("broker_outage");
-  });
+      engine.startDrill(drill1.id);
+      engine.completeDrill(drill1.id, true);
 
-  it("should create a database outage drill", () => {
-    const result = createDrill("db_outage");
+      engine.startDrill(drill2.id);
+      engine.completeDrill(drill2.id, false);
 
-    expect(result.success).toBe(true);
-    expect(result.data?.type).toBe("db_outage");
-  });
+      engine.startDrill(drill3.id);
+      engine.completeDrill(drill3.id, true);
 
-  it("should create a partial execution drill", () => {
-    const result = createDrill("partial_execution");
+      const passed = engine.getPassedDrills();
 
-    expect(result.success).toBe(true);
-    expect(result.data?.type).toBe("partial_execution");
+      expect(passed.length).toBe(2);
+      expect(passed.every((d) => d.status === "passed")).toBe(true);
+    });
   });
 
-  it("should create a restart during market drill", () => {
-    const result = createDrill("restart_during_market");
+  describe("Recovery Steps Order", () => {
+    let preState: SystemState;
 
-    expect(result.success).toBe(true);
-    expect(result.data?.type).toBe("restart_during_market");
+    beforeEach(() => {
+      preState = engine.captureSystemState({
+        open_positions: [],
+        pending_orders: [],
+        active_sessions: [],
+        broker_connections: [],
+        last_heartbeat: new Date().toISOString(),
+        market_phase: "market_open",
+      });
+    });
+
+    it("should maintain step order for system restart", () => {
+      const plan = engine.createRecoveryPlan("system_restart", preState);
+
+      const expectedOrder = [
+        "capture_state",
+        "halt_new_orders",
+        "verify_broker_connection",
+        "reconcile_positions",
+        "reconcile_pending_orders",
+        "restore_sessions",
+        "resume_operations",
+      ];
+
+      plan.steps.forEach((step, index) => {
+        expect(step.name).toBe(expectedOrder[index]);
+        expect(step.order).toBe(index + 1);
+      });
+    });
+
+    it("should maintain step order for broker outage", () => {
+      const plan = engine.createRecoveryPlan("broker_outage", preState);
+
+      const expectedOrder = [
+        "detect_outage",
+        "pause_strategies",
+        "switch_to_backup",
+        "verify_positions",
+        "resume_when_connected",
+      ];
+
+      plan.steps.forEach((step, index) => {
+        expect(step.name).toBe(expectedOrder[index]);
+      });
+    });
   });
 
-  it("should allow custom scenario config", () => {
-    const config = { trigger_after_steps: 5, auto_recover: false };
-    const result = createDrill("kill_switch", config);
+  describe("Clear Recovery", () => {
+    it("should clear all recovery data", () => {
+      const preState = engine.captureSystemState({
+        open_positions: [],
+        pending_orders: [],
+        active_sessions: [],
+        broker_connections: [],
+        last_heartbeat: new Date().toISOString(),
+        market_phase: "market_open",
+      });
 
-    expect(result.success).toBe(true);
-    expect(result.data?.scenario_config.trigger_after_steps).toBe(5);
-    expect(result.data?.scenario_config.auto_recover).toBe(false);
-  });
-});
+      engine.createRecoveryPlan("system_restart", preState);
+      engine.scheduleDrill("broker_outage", []);
 
-// ── Drill Execution Tests ────────────────────────────────────────────
+      expect(engine.getAllRecoveryPlans().length).toBe(1);
+      expect(engine.getAllDrills().length).toBe(1);
 
-describe("Incident Drills — Execution", () => {
-  beforeEach(() => {
-    _clearDrills();
-  });
+      engine._clearRecovery();
 
-  it("should start a drill", () => {
-    const drillResult = createDrill("kill_switch");
-    const drillId = drillResult.data!.drill_id;
-
-    const startResult = startDrill(drillId);
-
-    expect(startResult.success).toBe(true);
-    expect(startResult.data?.status).toBe("running");
-  });
-
-  it("should execute drill steps", () => {
-    const drillResult = createDrill("kill_switch");
-    const drillId = drillResult.data!.drill_id;
-
-    startDrill(drillId);
-    const stepResult = executeDrillStep(drillId, "verify_initial_state");
-
-    expect(stepResult.success).toBe(true);
-    expect(stepResult.data?.name).toBe("verify_initial_state");
-    expect(stepResult.data?.passed).toBeDefined();
-  });
-
-  it("should track passed and failed steps", () => {
-    const drillResult = createDrill("kill_switch");
-    const drillId = drillResult.data!.drill_id;
-
-    startDrill(drillId);
-    executeDrillStep(drillId, "verify_initial_state");
-    executeDrillStep(drillId, "trigger_kill_switch");
-
-    const drill = getDrill(drillId);
-    expect(drill?.steps_executed.length).toBe(2);
-    expect(drill?.results.passed_steps).toBeGreaterThanOrEqual(0);
-    expect(drill?.results.failed_steps).toBeGreaterThanOrEqual(0);
-  });
-
-  it("should complete a drill", () => {
-    const drillResult = createDrill("kill_switch");
-    const drillId = drillResult.data!.drill_id;
-
-    startDrill(drillId);
-    executeDrillStep(drillId, "verify_initial_state");
-
-    const completeResult = completeDrill(drillId);
-
-    expect(completeResult.success).toBe(true);
-    expect(completeResult.data?.status).toBe("completed");
-
-    const drill = getDrill(drillId);
-    expect(drill?.completed_at).toBeDefined();
-    expect(drill?.results.duration_ms).toBeGreaterThanOrEqual(0);
-  });
-
-  it("should reject step execution on non-running drill", () => {
-    const drillResult = createDrill("kill_switch");
-    const drillId = drillResult.data!.drill_id;
-
-    const stepResult = executeDrillStep(drillId, "verify_initial_state");
-
-    expect(stepResult.success).toBe(false);
-    expect(stepResult.error).toContain("not running");
-  });
-
-  it("should reject step execution with invalid step name", () => {
-    const drillResult = createDrill("kill_switch");
-    const drillId = drillResult.data!.drill_id;
-
-    startDrill(drillId);
-    const stepResult = executeDrillStep(drillId, "nonexistent_step");
-
-    expect(stepResult.success).toBe(false);
-    expect(stepResult.error).toContain("not found");
-  });
-});
-
-// ── Drill Queries Tests ──────────────────────────────────────────────
-
-describe("Incident Drills — Queries", () => {
-  beforeEach(() => {
-    _clearDrills();
-  });
-
-  it("should retrieve a drill by ID", () => {
-    const drillResult = createDrill("kill_switch");
-    const drillId = drillResult.data!.drill_id;
-
-    const retrieved = getDrill(drillId);
-
-    expect(retrieved).toBeDefined();
-    expect(retrieved?.drill_id).toBe(drillId);
-    expect(retrieved?.type).toBe("kill_switch");
-  });
-
-  it("should return null for non-existent drill", () => {
-    const retrieved = getDrill("nonexistent_drill");
-    expect(retrieved).toBeNull();
-  });
-
-  it("should get recent drills", () => {
-    createDrill("kill_switch");
-    createDrill("breaker");
-    createDrill("data_outage");
-
-    const drillResult = createDrill("broker_outage");
-    const drillId = drillResult.data!.drill_id;
-
-    startDrill(drillId);
-    completeDrill(drillId);
-
-    const recent = getRecentDrills(2);
-
-    expect(recent.length).toBeGreaterThanOrEqual(1);
-    expect(recent[0]?.status).toBe("completed");
-  });
-
-  it("should filter drills by type", () => {
-    const drill1 = createDrill("kill_switch");
-    const drill2 = createDrill("kill_switch");
-    createDrill("breaker");
-
-    // Complete drills to add them to history
-    startDrill(drill1.data!.drill_id);
-    completeDrill(drill1.data!.drill_id);
-    startDrill(drill2.data!.drill_id);
-    completeDrill(drill2.data!.drill_id);
-
-    const killSwitchDrills = getDrillsByType("kill_switch");
-
-    expect(killSwitchDrills.length).toBe(2);
-    expect(killSwitchDrills.every((d) => d.type === "kill_switch")).toBe(true);
-  });
-
-  it("should return empty array for non-existent drill type", () => {
-    createDrill("kill_switch");
-
-    const drills = getDrillsByType("breaker");
-
-    expect(Array.isArray(drills)).toBe(true);
-  });
-});
-
-// ── State Cleanup Tests ──────────────────────────────────────────────
-
-describe("Recovery & Drill Managers — State Cleanup", () => {
-  it("should clear recovery manager state", () => {
-    createRecoveryPlan();
-    restoreOpenPositions([
-      {
-        id: "pos1",
-        symbol: "BTCUSD",
-        qty: 1,
-        entry_price: 45000,
-        entry_time: "2026-04-08T10:00:00Z",
-      },
-    ]);
-
-    clearRecoveryManager();
-
-    const history = getRecoveryHistory();
-    expect(history.length).toBe(0);
-  });
-
-  it("should clear drill manager state", () => {
-    createDrill("kill_switch");
-    createDrill("breaker");
-    createDrill("data_outage");
-
-    _clearDrills();
-
-    const recent = getRecentDrills();
-    expect(recent.length).toBe(0);
+      expect(engine.getAllRecoveryPlans().length).toBe(0);
+      expect(engine.getAllDrills().length).toBe(0);
+      expect(engine.getLatestState()).toBeUndefined();
+    });
   });
 });
