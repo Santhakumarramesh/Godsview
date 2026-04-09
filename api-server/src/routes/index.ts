@@ -253,4 +253,40 @@ router.use("/api/recovery", recoveryRouter);                   // Phase 35 — R
 import certificationGateRouter from "./certification_gate";
 router.use("/api/certification-gate", certificationGateRouter); // Phase 36 — Pre-production certification audit
 
+// ── Phase 37: Strategy Evidence Packets ────────────────────────────────
+import evidencePacketRouter from "./evidence_packet";
+router.use("/api/evidence-packets", evidencePacketRouter);     // Phase 37 — Evidence compilation, locking, verdicts
+
+// ── Phase 38: Operator Dashboard API ──────────────────────────────────
+import operatorDashboardRouter from "./operator_dashboard";
+router.use("/api/operator", operatorDashboardRouter);          // Phase 38 — System overview, alerts, strategy cards
+
+// ── Phase 39: System Manifest & Configuration Registry ────────────────
+import systemManifestRouter from "./system_manifest";
+router.use("/api/manifest", systemManifestRouter);             // Phase 39 — Subsystems, config, dependency graph
+
+// ── Phase 40: Deployment Pipeline Control ─────────────────────────────
+import deployPipelineRouter from "./deploy_pipeline";
+router.use("/api/deploy", deployPipelineRouter);               // Phase 40 — Releases, gates, rollback, environments
+
+// ── Phase 41: Multi-Broker Adapter Framework ──────────────────────────
+import brokerAdapterRouter from "./broker_adapter";
+router.use("/api/brokers", brokerAdapterRouter);               // Phase 41 — Broker mgmt, routing, circuit breakers
+
+// ── Phase 42: Execution Quality Analytics ─────────────────────────────
+import execQualityRouter from "./exec_quality";
+router.use("/api/exec-quality", execQualityRouter);            // Phase 42 — Slippage, scoring, venue comparison
+
+// ── Phase 43: Event-Driven News Pipeline ──────────────────────────────
+import newsPipelineRouter from "./news_pipeline";
+router.use("/api/news", newsPipelineRouter);                   // Phase 43 — News ingestion, signals, sentiment
+
+// ── Phase 44: Portfolio Risk Engine ───────────────────────────────────
+import portfolioRiskRouter from "./portfolio_risk";
+router.use("/api/portfolio-risk", portfolioRiskRouter);        // Phase 44 — Positions, correlations, hedging, alerts
+
+// ── Phase 45: Audit Trail & Compliance ────────────────────────────────
+import auditTrailRouter from "./audit_trail";
+router.use("/api/audit", auditTrailRouter);                    // Phase 45 — Immutable audit log, compliance, export
+
 export default router;
