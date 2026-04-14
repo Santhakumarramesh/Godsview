@@ -200,4 +200,8 @@ router.use(costObservabilityRouter);
 import incidentManagementRouter from "./incident_management";
 router.use(incidentManagementRouter);
 
+// ── Phase 69: Release Management ──────────────────────────────────────────
+import releaseManagementRouter from "./release_management";
+router.use(releaseManagementRouter);
+
 export default router;
