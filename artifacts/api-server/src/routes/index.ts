@@ -240,4 +240,8 @@ router.use(eventSourcingRouter);
 import searchRouter from "./search";
 router.use(searchRouter);
 
+// ── Phase 79: Real-Time Pub/Sub Bus ───────────────────────────────────────
+import pubsubRouter from "./pubsub";
+router.use(pubsubRouter);
+
 export default router;
