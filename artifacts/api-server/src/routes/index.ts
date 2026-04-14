@@ -244,4 +244,8 @@ router.use(searchRouter);
 import pubsubRouter from "./pubsub";
 router.use(pubsubRouter);
 
+// ── Phase 80: Job Scheduler + Background Tasks ────────────────────────────
+import jobSchedulerRouter from "./job_scheduler";
+router.use(jobSchedulerRouter);
+
 export default router;
