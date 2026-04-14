@@ -196,4 +196,8 @@ router.use(disasterRecoveryRouter);
 import costObservabilityRouter from "./cost_observability";
 router.use(costObservabilityRouter);
 
+// ── Phase 68: Incident Management ─────────────────────────────────────────
+import incidentManagementRouter from "./incident_management";
+router.use(incidentManagementRouter);
+
 export default router;
