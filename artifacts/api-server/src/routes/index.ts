@@ -208,4 +208,8 @@ router.use(releaseManagementRouter);
 import developerPlatformRouter from "./developer_platform";
 router.use(developerPlatformRouter);
 
+// ── Phase 71: Notifications & Communication Hub ───────────────────────────
+import notificationsRouter from "./notifications";
+router.use(notificationsRouter);
+
 export default router;
