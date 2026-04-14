@@ -188,4 +188,8 @@ router.use(dataLineageRouter);
 import capacityPlanningRouter from "./capacity_planning";
 router.use(capacityPlanningRouter);
 
+// ── Phase 66: Disaster Recovery ───────────────────────────────────────────
+import disasterRecoveryRouter from "./disaster_recovery";
+router.use(disasterRecoveryRouter);
+
 export default router;
