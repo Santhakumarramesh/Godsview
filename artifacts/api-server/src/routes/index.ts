@@ -216,4 +216,8 @@ router.use(notificationsRouter);
 import privacyProtectionRouter from "./privacy_protection";
 router.use(privacyProtectionRouter);
 
+// ── Phase 73: Advanced Risk Analytics ─────────────────────────────────────
+import riskAnalyticsRouter from "./risk_analytics";
+router.use(riskAnalyticsRouter);
+
 export default router;
