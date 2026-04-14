@@ -168,4 +168,8 @@ router.use(strategyMarketplaceRouter);
 router.use(chaosEngineeringRouter);
 router.use(launchReadinessRouter);
 
+// ── Phase 61: SLO Monitoring + Dashboards ─────────────────────────────────
+import sloMonitoringRouter from "./slo_monitoring";
+router.use(sloMonitoringRouter);
+
 export default router;
