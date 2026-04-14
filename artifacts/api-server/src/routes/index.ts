@@ -264,4 +264,8 @@ router.use(strategyBanditRouter);
 import reportingRouter from "./reporting";
 router.use(reportingRouter);
 
+// ── Phase 85: Anomaly Detection ───────────────────────────────────────────
+import anomalyDetectionRouter from "./anomaly_detection";
+router.use(anomalyDetectionRouter);
+
 export default router;
