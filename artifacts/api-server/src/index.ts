@@ -46,6 +46,30 @@ const server = app.listen(port, (err) => {
   // Phase 6: Enhanced graceful shutdown with priority hooks
   try { initGracefulShutdown(server); } catch (e: any) { logger.warn({ err: e.message }, "Enhanced graceful shutdown unavailable"); }
 
+  // Phase 95: Self-register the api-server's logical services into the
+  // service mesh registry so /api/mesh/services reports something useful
+  // out of the box. Each in-process subsystem becomes a registered instance
+  // tagged "in-process". External MCP servers can still register themselves
+  // via POST /api/mesh/services.
+  try {
+    const { serviceRegistry } = require("./lib/service_mesh");
+    const host = "127.0.0.1";
+    const baseUrl = `http://${host}:${port}`;
+    const subsystems = [
+      { serviceName: "api-server", tags: ["http", "primary"], version: "1.0.0" },
+      { serviceName: "tradingview-mcp-webhook", tags: ["webhook", "in-process"], version: "1.0.0" },
+      { serviceName: "engine-health", tags: ["health", "in-process"], version: "1.0.0" },
+      { serviceName: "self-heal", tags: ["diagnostics", "in-process"], version: "1.0.0" },
+      { serviceName: "service-mesh", tags: ["registry", "in-process"], version: "1.0.0" },
+    ];
+    for (const s of subsystems) {
+      serviceRegistry.register({ ...s, host, port });
+    }
+    logger.info({ count: subsystems.length, baseUrl }, "Service mesh seeded with in-process services");
+  } catch (e: any) {
+    logger.warn({ err: e.message }, "Service mesh seeding skipped (non-fatal)");
+  }
+
   // Phase 124: Attach WebSocket server for dual-transport real-time streaming
   try {
     const { wsServer } = require("./lib/ws_server");
