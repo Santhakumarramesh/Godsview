@@ -172,4 +172,8 @@ router.use(launchReadinessRouter);
 import sloMonitoringRouter from "./slo_monitoring";
 router.use(sloMonitoringRouter);
 
+// ── Phase 62: Audit Trail + Compliance ────────────────────────────────────
+import auditTrailRouter from "./audit_trail";
+router.use(auditTrailRouter);
+
 export default router;
