@@ -276,4 +276,8 @@ router.use(portfolioOptimizerRouter);
 import taxTrackingRouter from "./tax_tracking";
 router.use(taxTrackingRouter);
 
+// ── Phase 88: Order Book L2 + Imbalance + Spread ──────────────────────────
+import orderbookL2Router from "./orderbook_l2";
+router.use(orderbookL2Router);
+
 export default router;
