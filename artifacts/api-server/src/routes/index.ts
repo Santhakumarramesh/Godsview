@@ -192,4 +192,8 @@ router.use(capacityPlanningRouter);
 import disasterRecoveryRouter from "./disaster_recovery";
 router.use(disasterRecoveryRouter);
 
+// ── Phase 67: Cost Observability ──────────────────────────────────────────
+import costObservabilityRouter from "./cost_observability";
+router.use(costObservabilityRouter);
+
 export default router;
