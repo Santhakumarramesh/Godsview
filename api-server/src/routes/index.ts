@@ -329,4 +329,8 @@ router.use("/api/regime", regimeDetectionRouter);              // Phase 54 — R
 import backtestV2EngineRouter from "./backtest_v2_engine";
 router.use("/api/backtest-v2-engine", backtestV2EngineRouter); // Phase 55 — Backtest, walk-forward, Monte Carlo, stress
 
+// ── Phase 103: Market-Ready Completion Suite ─────────────────────────
+import phase103Router from "./phase103/index";
+router.use("/api/phase103", phase103Router);                   // Phase 103 — broker reality, recall, agents, quant lab, fusion+explain, L2 flow, E2E, gates
+
 export default router;
