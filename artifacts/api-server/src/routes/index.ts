@@ -204,4 +204,8 @@ router.use(incidentManagementRouter);
 import releaseManagementRouter from "./release_management";
 router.use(releaseManagementRouter);
 
+// ── Phase 70: Developer Platform ──────────────────────────────────────────
+import developerPlatformRouter from "./developer_platform";
+router.use(developerPlatformRouter);
+
 export default router;
