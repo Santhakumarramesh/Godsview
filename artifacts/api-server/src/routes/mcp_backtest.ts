@@ -397,31 +397,11 @@ router.post("/mcp-backtest/run", async (req: Request, res: Response): Promise<vo
       return;
     }
 
-    // Use provided pipeline config or create default
-    let config: MCPPipelineConfig = {
-      enableEnrichment: true,
-      enableScoring: true,
-      enableDecision: true,
-      scoringWeights: {
-        confirmationScore: 0.4,
-        regimeScore: 0.2,
-        recallScore: 0.2,
-        microstructureScore: 0.2,
-      },
-      decisionThresholds: {
-        approvalThreshold: 0.6,
-        modificationThreshold: 0.5,
-        rejectionThreshold: 0.4,
-      },
-      riskLimits: {
-        maxPositionSize: 100,
-        maxDrawdown: 0.3,
-        maxRiskPerTrade: 0.02,
-      },
-    };
+    // Use provided pipeline config or create default (zod fills defaults)
+    let config: MCPPipelineConfig = MCPPipelineConfigSchema.parse({});
 
     if (pipelineConfig) {
-      config = { ...config, ...pipelineConfig };
+      config = MCPPipelineConfigSchema.parse({ ...config, ...pipelineConfig });
     }
 
     // Generate synthetic bars
@@ -522,7 +502,7 @@ router.post("/mcp-backtest/run", async (req: Request, res: Response): Promise<vo
  */
 router.get("/mcp-backtest/compare/:runId", (req: Request, res: Response): void => {
   try {
-    const { runId } = req.params;
+    const runId = req.params.runId as string;
 
     const run = backtestRuns.get(runId);
     if (!run) {
@@ -595,7 +575,7 @@ router.get("/mcp-backtest/compare/:runId", (req: Request, res: Response): void =
  */
 router.get("/mcp-backtest/signal-log/:runId", (req: Request, res: Response): void => {
   try {
-    const { runId } = req.params;
+    const runId = req.params.runId as string;
     const limit = Math.min(parseInt(req.query.limit as string) || 100, 1000);
     const offset = parseInt(req.query.offset as string) || 0;
 
@@ -646,7 +626,7 @@ router.get("/mcp-backtest/signal-log/:runId", (req: Request, res: Response): voi
         decision: {
           action: entry.decision.action,
           confidence: entry.decision.confidence,
-          reason: entry.decision.reason,
+          reason: (entry.decision as any).reason,
           positionSize: entry.decision.positionSize,
           stopLoss: entry.decision.stopLoss,
           takeProfit: entry.decision.takeProfit,

@@ -2,7 +2,7 @@
 // Compares expected (backtest) vs actual (live) across all dimensions
 // Single source of truth for model fidelity and drift detection
 
-import { Logger } from '../logging/logger';
+import { Logger } from '../logger.js';
 
 export interface SlippageMetric {
   expectedBps: number;

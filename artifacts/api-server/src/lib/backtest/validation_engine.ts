@@ -435,7 +435,7 @@ export class BacktestValidator {
 
     trades.forEach((trade) => {
       for (const regime of regimes) {
-        if (trade.barIndex >= regime.startIdx) {
+        if ((trade.barIndex ?? 0) >= regime.startIdx) {
           regimeMap.get(regime.regime)?.push(trade);
           break;
         }

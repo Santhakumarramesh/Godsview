@@ -2,7 +2,7 @@
 // Single source of truth for WHAT, WHY, and WHAT_NEXT across entire strategy lifecycle
 // Generates plain-English briefs that enable confident human approval
 
-import { Logger } from '../logging/logger';
+import { Logger } from '../logger.js';
 
 export type TrafficLight = 'GREEN' | 'YELLOW' | 'RED';
 
@@ -710,7 +710,12 @@ export class TrustSurface {
     }>;
   } {
     return {
-      topRisks: this.highlightRisks(result),
+      topRisks: this.highlightRisks(result).map((r) => ({
+        risk: r.risk,
+        probability: r.likelihood,
+        impact: r.impact,
+        mitigation: r.mitigation,
+      })),
     };
   }
 

@@ -136,7 +136,7 @@ export class TradeAnalytics {
     const sortino = this.computeSortino(pnls);
     const calmar = this.computeCalmar(pnls, trades);
 
-    const durations = trades.map((t) => (t.exitBarIndex || t.barIndex) - t.barIndex);
+    const durations = trades.map((t) => t.barsHeld);
     const avgDuration = durations.reduce((a, b) => a + b) / durations.length;
     const sortedDurations = [...durations].sort((a, b) => a - b);
     const medianDuration = sortedDurations[Math.floor(sortedDurations.length / 2)];
@@ -279,35 +279,35 @@ export class TradeAnalytics {
     const byDirection: Record<string, number> = {};
 
     // Size segments
-    const sizes = trades.map((t) => Math.abs(t.size));
+    const sizes = trades.map((t) => Math.abs(t.pnlPrice));
     const sizePercentile33 = sizes.sort((a, b) => a - b)[Math.floor(sizes.length / 3)];
     const sizePercentile66 = sizes[Math.floor((sizes.length * 2) / 3)];
 
-    const smallTrades = trades.filter((t) => Math.abs(t.size) <= sizePercentile33);
+    const smallTrades = trades.filter((t) => Math.abs(t.pnlPrice) <= sizePercentile33);
     const mediumTrades = trades.filter(
-      (t) => Math.abs(t.size) > sizePercentile33 && Math.abs(t.size) <= sizePercentile66
+      (t) => Math.abs(t.pnlPrice) > sizePercentile33 && Math.abs(t.pnlPrice) <= sizePercentile66
     );
-    const largeTrades = trades.filter((t) => Math.abs(t.size) > sizePercentile66);
+    const largeTrades = trades.filter((t) => Math.abs(t.pnlPrice) > sizePercentile66);
 
     bySize["small"] = smallTrades.filter((t) => t.pnlPrice > 0).length / smallTrades.length || 0;
     bySize["medium"] = mediumTrades.filter((t) => t.pnlPrice > 0).length / mediumTrades.length || 0;
     bySize["large"] = largeTrades.filter((t) => t.pnlPrice > 0).length / largeTrades.length || 0;
 
     // Duration segments
-    const durations = trades.map((t) => (t.exitBarIndex || t.barIndex) - t.barIndex);
+    const durations = trades.map((t) => t.barsHeld);
     const durationPercentile33 = durations.sort((a, b) => a - b)[Math.floor(durations.length / 3)];
     const durationPercentile66 = durations[Math.floor((durations.length * 2) / 3)];
 
     const fastTrades = trades.filter(
-      (t) => ((t.exitBarIndex || t.barIndex) - t.barIndex) <= durationPercentile33
+      (t) => (t.barsHeld) <= durationPercentile33
     );
     const mediumDuration = trades.filter(
       (t) =>
-        ((t.exitBarIndex || t.barIndex) - t.barIndex) > durationPercentile33 &&
-        ((t.exitBarIndex || t.barIndex) - t.barIndex) <= durationPercentile66
+        (t.barsHeld) > durationPercentile33 &&
+        (t.barsHeld) <= durationPercentile66
     );
     const slowTrades = trades.filter(
-      (t) => ((t.exitBarIndex || t.barIndex) - t.barIndex) > durationPercentile66
+      (t) => (t.barsHeld) > durationPercentile66
     );
 
     byDuration["fast"] = fastTrades.filter((t) => t.pnlPrice > 0).length / fastTrades.length || 0;
@@ -347,7 +347,7 @@ export class TradeAnalytics {
       });
     }
 
-    const durations = trades.map((t) => (t.exitBarIndex || t.barIndex) - t.barIndex);
+    const durations = trades.map((t) => t.barsHeld);
     const durationDistribution = [
       { range: "1-5", count: durations.filter((d) => d >= 1 && d <= 5).length },
       { range: "6-20", count: durations.filter((d) => d >= 6 && d <= 20).length },
@@ -355,7 +355,7 @@ export class TradeAnalytics {
       { range: "50+", count: durations.filter((d) => d > 50).length },
     ];
 
-    const sizes = trades.map((t) => Math.abs(t.size));
+    const sizes = trades.map((t) => Math.abs(t.pnlPrice));
     const sizeMin = Math.min(...sizes);
     const sizeMax = Math.max(...sizes);
     const sizeRange = sizeMax - sizeMin;

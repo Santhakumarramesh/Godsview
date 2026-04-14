@@ -483,7 +483,7 @@ export class CausalReasoner {
     return Math.min(Math.max(confidence, 0.1), 0.95);
   }
 
-  assessPersistence(edge: {
+  assessEdgePersistence(edge: {
     mechanism: string;
     robustness: number;
   }): {
@@ -512,7 +512,7 @@ export class CausalReasoner {
     return { estimate_months, confidence };
   }
 
-  assessCapacity(edge: {
+  assessEdgeCapacity(edge: {
     mechanism: string;
     robustness: number;
   }): {

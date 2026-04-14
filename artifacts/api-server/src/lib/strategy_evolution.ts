@@ -242,32 +242,40 @@ class StrategyRegistry {
   /** Warm-load all strategy params from DB on brain startup */
   async warmLoad(): Promise<void> {
     try {
-      const rows = await loadAllStrategyParams();
+      const rows = (await loadAllStrategyParams()) as Array<Record<string, any>>;
       for (const row of rows) {
-        const key = this.getKey(row.strategy_id, row.symbol);
+        const key = this.getKey(String(row.strategy_id ?? ""), String(row.symbol ?? ""));
         if (!this.strategies.has(key)) {
-          const defaultParams = createDefaultStrategy(row.strategy_id, row.symbol, row.strategy_id);
+          const defaultParams = createDefaultStrategy(
+            String(row.strategy_id ?? ""),
+            String(row.symbol ?? ""),
+            String(row.strategy_id ?? ""),
+          );
           const merged: StrategyParams = {
             ...defaultParams,
             minConfirmationScore: Number(row.min_confirmation_score),
-            requireMTFAlignment: row.require_mtf_alignment,
-            requireBOS: row.require_bos,
+            requireMTFAlignment: Boolean(row.require_mtf_alignment),
+            requireBOS: Boolean(row.require_bos),
             minOBQuality: Number(row.min_ob_quality),
             stopATRMultiplier: Number(row.stop_atr_multiplier),
             takeProfitATRMultiplier: Number(row.take_profit_atr_multiplier),
             maxKellyFraction: Number(row.max_kelly_fraction),
-            allowedRegimes: row.allowed_regimes ? JSON.parse(row.allowed_regimes) : defaultParams.allowedRegimes,
-            blacklistedRegimes: row.blacklisted_regimes ? JSON.parse(row.blacklisted_regimes) : [],
-            changelog: row.changelog ? JSON.parse(row.changelog) : [],
+            allowedRegimes: row.allowed_regimes
+              ? JSON.parse(String(row.allowed_regimes))
+              : defaultParams.allowedRegimes,
+            blacklistedRegimes: row.blacklisted_regimes
+              ? JSON.parse(String(row.blacklisted_regimes))
+              : [],
+            changelog: row.changelog ? JSON.parse(String(row.changelog)) : [],
             tier: (row.tier as StrategyParams["tier"]) ?? "SEED",
-            version: row.version,
+            version: Number(row.version ?? 1),
           };
           this.strategies.set(key, merged);
         }
       }
       logger.info(`[StrategyRegistry] Warm-loaded ${rows.length} strategy param sets from DB`);
     } catch (err) {
-      logger.warn("[StrategyRegistry] warmLoad failed — using in-memory defaults:", err);
+      logger.warn({ err }, "[StrategyRegistry] warmLoad failed — using in-memory defaults");
     }
   }
 

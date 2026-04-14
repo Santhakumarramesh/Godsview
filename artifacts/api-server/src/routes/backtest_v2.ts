@@ -181,33 +181,38 @@ router.get("/results", (_req: Request, res: Response) => {
 });
 
 router.get("/credibility/:id", (req: Request, res: Response) => {
-  const report = CREDIBILITY[req.params.id];
+  const id = req.params.id as string;
+  const report = CREDIBILITY[id];
   if (!report) return res.status(404).json({ error: "Backtest not found" });
-  res.json(report);
+  return res.json(report);
 });
 
 router.get("/overfit/:id", (req: Request, res: Response) => {
-  const report = OVERFIT[req.params.id];
+  const id = req.params.id as string;
+  const report = OVERFIT[id];
   if (!report) return res.status(404).json({ error: "Backtest not found" });
-  res.json(report);
+  return res.json(report);
 });
 
 router.get("/leakage/:id", (req: Request, res: Response) => {
-  const report = LEAKAGE[req.params.id];
+  const id = req.params.id as string;
+  const report = LEAKAGE[id];
   if (!report) return res.status(404).json({ error: "Backtest not found" });
-  res.json(report);
+  return res.json(report);
 });
 
 router.get("/walk-forward/:id", (req: Request, res: Response) => {
-  const report = WALK_FORWARD[req.params.id];
+  const id = req.params.id as string;
+  const report = WALK_FORWARD[id];
   if (!report) return res.status(404).json({ error: "Walk-forward not available" });
-  res.json(report);
+  return res.json(report);
 });
 
 router.get("/comparison/:id", (req: Request, res: Response) => {
-  const report = COMPARISON[req.params.id];
+  const id = req.params.id as string;
+  const report = COMPARISON[id];
   if (!report) return res.status(404).json({ error: "Paper comparison not available" });
-  res.json(report);
+  return res.json(report);
 });
 
 router.get("/health", (_req: Request, res: Response) => {

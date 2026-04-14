@@ -441,7 +441,7 @@ export class TradeJournal extends EventEmitter {
     const grouped = new Map<string, JournalEntry[]>();
 
     for (const trade of trades) {
-      const value = (trade as Record<string, unknown>)[dimension] as string;
+      const value = (trade as unknown as Record<string, unknown>)[dimension] as string;
       if (!grouped.has(value)) {
         grouped.set(value, []);
       }

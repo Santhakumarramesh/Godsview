@@ -13,10 +13,6 @@
 // ─── Normalized Schema Module ─────────────────────────────────────────────────
 export {
   DataSource,
-  NormalizedBar,
-  NormalizedQuote,
-  NormalizedTrade,
-  DataSourceSchema,
   NormalizedBarSchema,
   NormalizedQuoteSchema,
   NormalizedTradeSchema,
@@ -26,31 +22,34 @@ export {
   isValidBar,
   isValidQuote,
   isValidTrade,
-  type ValidatedBar,
-  type ValidatedQuote,
-  type ValidatedTrade,
+} from "./normalized_schema";
+export type {
+  NormalizedBar,
+  NormalizedQuote,
+  NormalizedTrade,
+  ValidatedBar,
+  ValidatedQuote,
+  ValidatedTrade,
 } from "./normalized_schema";
 
 // ─── Data Quality Module ───────────────────────────────────────────────────────
 export {
-  QualityIssueSeverity,
-  QualityIssue,
-  BarQualityAnalysis,
-  QualityReport,
-  QualityConfig,
   analyzeBarQuality,
   analyzeSeriesQuality,
   formatQualityReport,
   createQualityConfig,
   getDefaultQualityConfig,
 } from "./data_quality";
+export type {
+  QualityIssueSeverity,
+  QualityIssue,
+  BarQualityAnalysis,
+  QualityReport,
+  QualityConfig,
+} from "./data_quality";
 
 // ─── Provider Failover Module ──────────────────────────────────────────────────
 export {
-  ProviderHealth,
-  FailoverDecision,
-  FailoverConfig,
-  FailoverStatus,
   recordSuccess,
   recordFailure,
   getProviderHealth,
@@ -67,12 +66,15 @@ export {
   getFailoverStatus,
   probeRecovery,
 } from "./provider_failover";
+export type {
+  ProviderHealth,
+  FailoverDecision,
+  FailoverConfig,
+  FailoverStatus,
+} from "./provider_failover";
 
 // ─── Timestamp Synchronization Module ──────────────────────────────────────────
 export {
-  MarketSession,
-  SyncResult,
-  BatchSyncResult,
   parseISOTimestamp,
   formatUTCISO,
   normalizeTimestamp,
@@ -88,14 +90,14 @@ export {
   isTradingDay,
   getMarketSession,
 } from "./timestamp_sync";
+export type {
+  MarketSession,
+  SyncResult,
+  BatchSyncResult,
+} from "./timestamp_sync";
 
 // ─── Replay Storage Module ─────────────────────────────────────────────────────
 export {
-  OrderBookLevel,
-  OrderBookSnapshot,
-  StorageMetrics,
-  CompressionStats,
-  ReplayStorageConfig,
   storeBar,
   getBarsInRange,
   getLatestBar,
@@ -117,13 +119,16 @@ export {
   flush,
   getTotalStored,
 } from "./replay_storage";
+export type {
+  OrderBookLevel,
+  OrderBookSnapshot,
+  StorageMetrics,
+  CompressionStats,
+  ReplayStorageConfig,
+} from "./replay_storage";
 
 // ─── Cache Layer Module ────────────────────────────────────────────────────────
 export {
-  CacheMetrics,
-  CacheConfig,
-  EvictionPolicy,
-  CacheWarmerFn,
   get as cacheGet,
   set as cacheSet,
   has as cacheHas,
@@ -139,60 +144,75 @@ export {
   setSizeLimits,
   setDefaultTtl,
   evictByPolicy,
-  flushExpired,
-  getStatistics as getCacheStatistics,
-  resetMetrics as resetCacheMetrics,
+} from "./cache_layer";
+export type {
+  CacheMetrics,
+  CacheConfig,
+  EvictionPolicy,
+  CacheWarmerFn,
 } from "./cache_layer";
 
 // ─── Data Normalizer Module (Phase 5) ──────────────────────────────────────
 export {
   DataNormalizer,
+  dataNormalizer,
+  DataIssueType,
+} from "./data_normalizer";
+export type {
   NormalizedOrderBook,
   NormalizedTrade as DataNormalizerTrade,
-  DataIssueType,
-  type IssuesSeverity,
-  type DataIssue,
-  type CleanedData,
-  type AlignedData,
+  IssuesSeverity,
+  DataIssue,
+  CleanedData,
+  AlignedData,
 } from "./data_normalizer";
 
 // ─── Feed Manager Module (Phase 5) ────────────────────────────────────────
 export {
   FeedManager,
+  feedManager,
   ProviderStatus,
-  type ProviderHealth,
-  type DataProvider,
-  type PriceSnapshot,
-  type FeedHealthReport,
-  type LatencyReport,
-  type DegradationAction,
+} from "./feed_manager";
+export type {
+  ProviderHealth as FeedProviderHealth,
+  DataProvider,
+  PriceSnapshot,
+  FeedHealthReport,
+  LatencyReport,
+  DegradationAction,
 } from "./feed_manager";
 
 // ─── Execution Simulator Module (Phase 5) ────────────────────────────────
 export {
   ExecutionSimulator,
-  type Order,
-  type MarketState,
-  type Fill,
-  type ExecutionResult,
-  type OrderBookModel,
-  type TransactionCosts,
-  type ExecutionStats,
-  type ExecutionQualityReport,
+  executionSimulator,
+} from "./execution_simulator";
+export type {
+  Order,
+  MarketState,
+  Fill,
+  ExecutionResult,
+  OrderBookModel,
+  TransactionCosts,
+  ExecutionStats,
+  ExecutionQualityReport,
 } from "./execution_simulator";
 
 // ─── Replay Store Module (Phase 5) ────────────────────────────────────────
 export {
   ReplayStore,
+  replayStore,
   DecisionType,
-  type DecisionSnapshot,
-  type WhatIfScenario,
-  type WhatIfResult,
-  type ReplayStoreStats,
+} from "./replay_store";
+export type {
+  DecisionSnapshot,
+  WhatIfScenario,
+  WhatIfResult,
+  ReplayStoreStats,
 } from "./replay_store";
 
 // ─── Existing Market Modules ──────────────────────────────────────────────────
-export {
+export type {
   PriceLevel,
   OrderBookSnapshot as OrderBookSnapshotLegacy,
   OrderBookUpdate,
@@ -201,4 +221,4 @@ export {
   OrderBookListener,
 } from "./types";
 
-export { symbols, normalizeMarketSymbol, toAlpacaSlash } from "./symbols";
+export { normalizeMarketSymbol, toAlpacaSlash } from "./symbols";

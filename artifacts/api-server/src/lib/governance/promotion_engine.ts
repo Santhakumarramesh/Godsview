@@ -482,13 +482,17 @@ export class PromotionEngine {
       signals.push(`Win rate ${(metrics.winRate * 100).toFixed(1)}% critically low`);
       severity = "critical";
     }
+    const severityRank = (s: "low" | "medium" | "high" | "critical"): number =>
+      ({ low: 0, medium: 1, high: 2, critical: 3 } as const)[s];
+    const rankToSeverity = (r: number): "low" | "medium" | "high" | "critical" =>
+      (["low", "medium", "high", "critical"] as const)[Math.max(0, Math.min(3, r))];
     if ((metrics.sharpeRatio ?? 0) < 0.5) {
       signals.push(`Sharpe ratio ${metrics.sharpeRatio.toFixed(2)} degraded`);
-      severity = Math.max(severity as any, "medium");
+      severity = rankToSeverity(Math.max(severityRank(severity), severityRank("medium")));
     }
     if ((metrics.maxDrawdown ?? 0) > 0.25) {
       signals.push(`Max drawdown ${(metrics.maxDrawdown * 100).toFixed(1)}% exceeded safety limit`);
-      severity = Math.max(severity as any, "high");
+      severity = rankToSeverity(Math.max(severityRank(severity), severityRank("high")));
     }
     if ((metrics.daysUnderwater ?? 0) > 60) {
       signals.push(`${metrics.daysUnderwater} days underwater — recovery stalled`);

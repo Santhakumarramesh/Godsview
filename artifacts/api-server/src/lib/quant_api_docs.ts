@@ -1,7 +1,11 @@
 // quant_api_docs.ts - Live API documentation generator for all subsystems
 // Generates OpenAPI 3.0 spec and structured endpoint documentation
 
-import { OpenAPIObject, PathItemObject, OperationObject, SchemaObject } from 'openapi3-ts';
+// openapi3-ts is not installed; use local minimal types to keep the docs generator typecheck-clean.
+type SchemaObject = Record<string, unknown>;
+type OperationObject = Record<string, unknown>;
+type PathItemObject = Record<string, unknown>;
+type OpenAPIObject = Record<string, unknown>;
 
 // ============================================================================
 // Types and Interfaces
@@ -26,7 +30,7 @@ export interface RequestBodySchema {
   contentType: string;
   schema: SchemaObject;
   description: string;
-  required: boolean;
+  required?: boolean;
   examples?: Record<string, unknown>;
 }
 

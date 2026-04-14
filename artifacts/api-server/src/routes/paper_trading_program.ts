@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { logger } from "../lib/logger";
 import {
   startProgram,
   advanceDay,
@@ -49,7 +50,7 @@ router.get("/paper-program/status", (_req, res) => {
     const status = getProgramStatus();
     res.json(status);
   } catch (err) {
-    req.log.error({ err }, "Failed to get program status");
+    logger.error({ err }, "Failed to get program status");
     res.status(500).json({ error: "status_failed", message: String(err) });
   }
 });
@@ -90,7 +91,7 @@ router.post("/paper-program/start", (req, res) => {
 
     res.json(result);
   } catch (err) {
-    req.log.error({ err }, "Failed to start paper program");
+    logger.error({ err }, "Failed to start paper program");
     res.status(500).json({ error: "start_failed", message: String(err) });
   }
 });
@@ -104,7 +105,7 @@ router.post("/paper-program/advance", (_req, res) => {
     const result = advanceDay();
     res.json(result);
   } catch (err) {
-    req.log.error({ err }, "Failed to advance paper program day");
+    logger.error({ err }, "Failed to advance paper program day");
     res.status(500).json({ error: "advance_failed", message: String(err) });
   }
 });
@@ -122,7 +123,7 @@ router.post("/paper-program/pause", (_req, res) => {
       res.status(400).json(result);
     }
   } catch (err) {
-    req.log.error({ err }, "Failed to pause paper program");
+    logger.error({ err }, "Failed to pause paper program");
     res.status(500).json({ error: "pause_failed", message: String(err) });
   }
 });
@@ -140,7 +141,7 @@ router.post("/paper-program/resume", (_req, res) => {
       res.status(400).json(result);
     }
   } catch (err) {
-    req.log.error({ err }, "Failed to resume paper program");
+    logger.error({ err }, "Failed to resume paper program");
     res.status(500).json({ error: "resume_failed", message: String(err) });
   }
 });
@@ -161,7 +162,7 @@ router.get("/paper-program/phase/:phase", (req, res) => {
     const report = getPhaseReport(phase);
     res.json(report);
   } catch (err) {
-    req.log.error({ err }, "Failed to get phase report");
+    logger.error({ err }, "Failed to get phase report");
     res.status(500).json({ error: "phase_failed", message: String(err) });
   }
 });
@@ -176,7 +177,7 @@ router.get("/paper-program/signals", (req, res) => {
     const signals = getSignalLog(Math.min(500, Math.max(1, limit)));
     res.json({ count: signals.length, signals });
   } catch (err) {
-    req.log.error({ err }, "Failed to get signal log");
+    logger.error({ err }, "Failed to get signal log");
     res.status(500).json({ error: "signals_failed", message: String(err) });
   }
 });
@@ -191,7 +192,7 @@ router.get("/paper-program/executions", (req, res) => {
     const executions = getExecutionLog(Math.min(500, Math.max(1, limit)));
     res.json({ count: executions.length, executions });
   } catch (err) {
-    req.log.error({ err }, "Failed to get execution log");
+    logger.error({ err }, "Failed to get execution log");
     res.status(500).json({ error: "executions_failed", message: String(err) });
   }
 });
@@ -205,7 +206,7 @@ router.get("/paper-program/risk-compliance", (_req, res) => {
     const report = getRiskComplianceReport();
     res.json(report);
   } catch (err) {
-    req.log.error({ err }, "Failed to get risk compliance report");
+    logger.error({ err }, "Failed to get risk compliance report");
     res.status(500).json({ error: "risk_failed", message: String(err) });
   }
 });
@@ -219,7 +220,7 @@ router.get("/paper-program/strategy-comparison", (_req, res) => {
     const report = getStrategyComparisonReport();
     res.json(report);
   } catch (err) {
-    req.log.error({ err }, "Failed to get strategy comparison report");
+    logger.error({ err }, "Failed to get strategy comparison report");
     res.status(500).json({ error: "comparison_failed", message: String(err) });
   }
 });
@@ -233,7 +234,7 @@ router.get("/paper-program/certification", (_req, res) => {
     const status = getCertificationStatus();
     res.json(status);
   } catch (err) {
-    req.log.error({ err }, "Failed to get certification status");
+    logger.error({ err }, "Failed to get certification status");
     res.status(500).json({ error: "certification_failed", message: String(err) });
   }
 });
@@ -251,7 +252,7 @@ router.post("/paper-program/certify", (_req, res) => {
       res.status(400).json(result);
     }
   } catch (err) {
-    req.log.error({ err }, "Failed to generate certificate");
+    logger.error({ err }, "Failed to generate certificate");
     res.status(500).json({ error: "certify_failed", message: String(err) });
   }
 });
@@ -265,7 +266,7 @@ router.get("/paper-program/report", (_req, res) => {
     const report = getFullReport();
     res.json(report);
   } catch (err) {
-    req.log.error({ err }, "Failed to get full report");
+    logger.error({ err }, "Failed to get full report");
     res.status(500).json({ error: "report_failed", message: String(err) });
   }
 });

@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
-import Database from "better-sqlite3";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Database = any;
 import {
   ExecutionValidator,
   SlippageAnalyzer,
@@ -13,7 +14,7 @@ import {
 const router = Router();
 
 // Injectable database instance (provided by app initialization)
-let db: Database.Database;
+let db: Database;
 let validator: ExecutionValidator;
 let analyzer: SlippageAnalyzer;
 let detector: ExecutionDriftDetector;
@@ -23,7 +24,7 @@ let feedbackLoop: ExecutionFeedbackLoop;
  * Initialize routes with database connection
  */
 export function initializeExecutionValidationRoutes(
-  database: Database.Database
+  database: Database
 ): Router {
   db = database;
   validator = new ExecutionValidator(db);

@@ -11,15 +11,21 @@ export type DataSource = (typeof DataSource)[keyof typeof DataSource];
 
 export interface NormalizedBar {
   symbol: string;
-  timestamp: number;
+  /** Bar start time — stored as number (epoch ms) or ISO-8601 string depending on provider. */
+  timestamp: number | string;
   open: number;
   high: number;
   low: number;
   close: number;
   volume: number;
   vwap?: number;
+  /** Trade count for the bar (Polygon / some Alpaca feeds). */
+  trades?: number;
   source: DataSource;
-  timeframe: string;
+  /** Timeframe label, e.g. "1m", "5m", "1h". Optional for raw normalized bars. */
+  timeframe?: string;
+  /** Data-quality score or annotation. */
+  quality?: unknown;
 }
 
 export interface NormalizedQuote {

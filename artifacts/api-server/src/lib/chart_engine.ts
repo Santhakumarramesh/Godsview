@@ -506,7 +506,7 @@ function drawInfoPanel(
   parts.push(svgText(chartLeft + chartWidth - 200, infoTop + 9, `Score: ${score}%  |  R:R: 1:${rr.toFixed(2)}  |  Flow: ${flowBias}`, colors.text, 9, "start"));
 
   // Row 2 — supporting reasons (word-wrapped across up to 2 lines)
-  const evidence = Array.isArray(c.supportingEvidence) ? c.supportingEvidence : [(c as any).confirmationReason ?? "No evidence recorded"];
+  const evidence = Array.isArray((c as any).supportingEvidence) ? (c as any).supportingEvidence : [(c as any).confirmationReason ?? "No evidence recorded"];
   const reasons = evidence.join("  •  ");
   const maxLen = 140;
   const line1 = reasons.slice(0, maxLen);
@@ -692,8 +692,8 @@ ${layers.join("\n")}
   const orderflowBiasStr = typeof (confirmation as any).orderflowBias === "string"
     ? (confirmation as any).orderflowBias
     : (confirmation as any).orderflow?.bias ?? "neutral";
-  const supportingEvidenceArr = Array.isArray(confirmation.supportingEvidence)
-    ? confirmation.supportingEvidence
+  const supportingEvidenceArr = Array.isArray((confirmation as any).supportingEvidence)
+    ? (confirmation as any).supportingEvidence
     : [(confirmation as any).confirmationReason ?? "No evidence"];
 
   return {

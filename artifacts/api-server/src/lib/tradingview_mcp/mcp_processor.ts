@@ -513,14 +513,15 @@ export class MCPProcessor extends EventEmitter {
 
   private buildExplanation(
     signal: StandardSignal,
-    scores: Record<string, number>,
+    scores: Record<string, number | string>,
   ): string {
+    const n = (key: string): number => Number(scores[key] ?? 0);
     return `${signal.signalType} on ${signal.symbol} ${signal.timeframe}: ` +
-      `Structure ${(scores.structureScore * 100).toFixed(0)}%, ` +
-      `Flow ${(scores.orderflowScore * 100).toFixed(0)}%, ` +
-      `Context ${(scores.contextScore * 100).toFixed(0)}%, ` +
-      `Memory ${(scores.memoryScore * 100).toFixed(0)}% → ` +
-      `Grade ${scores.grade} (${scores.overallScore}/100)`;
+      `Structure ${(n("structureScore") * 100).toFixed(0)}%, ` +
+      `Flow ${(n("orderflowScore") * 100).toFixed(0)}%, ` +
+      `Context ${(n("contextScore") * 100).toFixed(0)}%, ` +
+      `Memory ${(n("memoryScore") * 100).toFixed(0)}% → ` +
+      `Grade ${String(scores.grade ?? "")} (${String(scores.overallScore ?? "")}/100)`;
   }
 
   private buildThesis(

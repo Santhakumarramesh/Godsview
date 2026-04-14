@@ -18,7 +18,7 @@
  *   • Can escalate to emergency stop
  */
 
-import { logger as _logger } from "./logger";
+import { logger as _logger } from "../logger.js";
 
 const logger = _logger.child({ module: "safety_boundaries" });
 

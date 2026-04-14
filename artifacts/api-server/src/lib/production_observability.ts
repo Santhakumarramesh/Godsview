@@ -209,7 +209,7 @@ export function generateHealthReport(): ProductionHealthReport {
   let overallStatus: SubsystemStatus = "healthy";
   for (const sys of subsystems) {
     if (sys.status === "critical") { overallStatus = "critical"; break; }
-    if (sys.status === "degraded" && overallStatus !== "critical") overallStatus = "degraded";
+    if (sys.status === "degraded") overallStatus = "degraded";
   }
 
   return {

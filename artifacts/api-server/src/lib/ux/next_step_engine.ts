@@ -42,8 +42,8 @@ export interface ActionItem {
   ownerResponsibility: string;
   estimatedTime: string;
   expectedOutcome: string;
-  blockedBy?: string;
-  unblocks?: string[];
+  blockedBy?: string | number;
+  unblocks?: Array<string | number>;
   priority: 'critical' | 'high' | 'medium' | 'low';
 }
 

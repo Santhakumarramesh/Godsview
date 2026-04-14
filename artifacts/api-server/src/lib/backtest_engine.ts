@@ -135,6 +135,8 @@ export interface TradeOutcome {
   entryRegime: string;
   /** Setup type */
   setupType: string;
+  /** Optional bar index used by walk-forward / replay analytics */
+  barIndex?: number;
 }
 
 // ── Quant Performance Metrics ──────────────────────────────────────────────

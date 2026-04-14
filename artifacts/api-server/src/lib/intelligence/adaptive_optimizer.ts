@@ -572,10 +572,4 @@ export class AdaptiveOptimizer {
   }
 }
 
-// Export all types
-export type {
-  TradeOutcome,
-  DimensionPerformance,
-  ParameterChange,
-  OptimizationState,
-};
+// Types are already exported inline at their declaration above.

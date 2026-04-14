@@ -379,31 +379,31 @@ export class QuantDecisionPipeline {
       if (this.state.abort_requested) return this.getResultSnapshot();
 
       const improvement_result = await this.step_improvement(
-        ranking_result.data?.variants_ranked?.[0]?.strategy || best_strategy,
+        (ranking_result.data?.variants_ranked?.[0] as any)?.strategy || best_strategy,
         critique_result.data
       );
       if (this.state.abort_requested) return this.getResultSnapshot();
 
       const explain_result = await this.step_explain(
-        ranking_result.data?.variants_ranked?.[0]?.strategy || best_strategy,
+        (ranking_result.data?.variants_ranked?.[0] as any)?.strategy || best_strategy,
         backtest_result.data
       );
       if (this.state.abort_requested) return this.getResultSnapshot();
 
       const governance_result = await this.step_governance_gate(
-        ranking_result.data?.variants_ranked?.[0]?.strategy || best_strategy,
+        (ranking_result.data?.variants_ranked?.[0] as any)?.strategy || best_strategy,
         backtest_result.data
       );
       if (this.state.abort_requested) return this.getResultSnapshot();
 
       await this.step_memory_learn(
-        ranking_result.data?.variants_ranked?.[0]?.strategy || best_strategy,
+        (ranking_result.data?.variants_ranked?.[0] as any)?.strategy || best_strategy,
         backtest_result.data
       );
       if (this.state.abort_requested) return this.getResultSnapshot();
 
       const recommendation = await this.step_recommend(
-        ranking_result.data?.variants_ranked?.[0]?.strategy || best_strategy,
+        (ranking_result.data?.variants_ranked?.[0] as any)?.strategy || best_strategy,
         governance_result.data?.promotion_level,
         critique_result.data
       );

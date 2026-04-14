@@ -472,10 +472,11 @@ export class MacroEventGuard extends EventEmitter {
       return null;
     }
 
+    const ev = nextEvent as MacroEvent;
     return {
-      event: nextEvent,
-      lockoutStart: nextEvent.scheduledAt - nextEvent.lockoutBefore,
-      lockoutEnd: nextEvent.scheduledAt + nextEvent.lockoutAfter,
+      event: ev,
+      lockoutStart: ev.scheduledAt - ev.lockoutBefore,
+      lockoutEnd: ev.scheduledAt + ev.lockoutAfter,
     };
   }
 

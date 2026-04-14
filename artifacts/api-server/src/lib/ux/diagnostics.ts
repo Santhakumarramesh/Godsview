@@ -184,25 +184,26 @@ export class Diagnostics {
    * System-wide health check
    */
   systemCheck(): SystemCheckReport {
-    const components = [
-      { name: 'Market Data Feed', status: 'ok' as const, message: 'Connected and streaming' },
-      { name: 'Broker Connection', status: 'ok' as const, message: 'API responding normally' },
+    type ComponentStatus = 'ok' | 'warning' | 'error';
+    const components: Array<{ name: string; status: ComponentStatus; message: string }> = [
+      { name: 'Market Data Feed', status: 'ok', message: 'Connected and streaming' },
+      { name: 'Broker Connection', status: 'ok', message: 'API responding normally' },
       {
         name: 'Strategy Engine',
-        status: 'warning' as const,
+        status: 'warning',
         message: '3 strategies in recovery',
       },
       {
         name: 'Risk Management',
-        status: 'ok' as const,
+        status: 'ok',
         message: 'All limits within bounds',
       },
       {
         name: 'Database',
-        status: 'ok' as const,
+        status: 'ok',
         message: 'Responsive, healthy',
       },
-      { name: 'Signal Generation', status: 'ok' as const, message: 'Processing normally' },
+      { name: 'Signal Generation', status: 'ok', message: 'Processing normally' },
     ];
 
     const issues = components

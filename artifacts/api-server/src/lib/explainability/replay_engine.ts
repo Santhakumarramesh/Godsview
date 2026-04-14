@@ -259,6 +259,7 @@ export class ReplayEngine extends EventEmitter {
       originalP_L: this.estimateOriginalP_L(packet),
       p_LDifference: counterfactualP_L - this.estimateOriginalP_L(packet),
       timestamp: Date.now(),
+      executionTime: 0,
       notes: 'Full replay with exact state reconstruction',
     };
   }
@@ -301,6 +302,7 @@ export class ReplayEngine extends EventEmitter {
       originalP_L: this.estimateOriginalP_L(packet),
       p_LDifference: counterfactualP_L - this.estimateOriginalP_L(packet),
       timestamp: Date.now(),
+      executionTime: 0,
       notes: `What-if replay with ${Object.keys(modifications || {}).length} modifications`,
     };
   }
@@ -351,6 +353,7 @@ export class ReplayEngine extends EventEmitter {
       originalP_L: this.estimateOriginalP_L(packet),
       p_LDifference: counterfactualP_L - this.estimateOriginalP_L(packet),
       timestamp: Date.now(),
+      executionTime: 0,
       notes: `Speed replay with ${speedFactor}x acceleration`,
     };
   }
@@ -392,6 +395,7 @@ export class ReplayEngine extends EventEmitter {
       originalP_L: this.estimateOriginalP_L(packet),
       p_LDifference: counterfactualP_L - this.estimateOriginalP_L(packet),
       timestamp: Date.now(),
+      executionTime: 0,
       notes: `Comparative replay across ${strategyVersions.length} strategy versions`,
     };
   }

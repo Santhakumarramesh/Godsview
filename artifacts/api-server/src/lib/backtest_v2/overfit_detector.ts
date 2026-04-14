@@ -200,7 +200,7 @@ export class OverfitDetector extends EventEmitter {
         data.backtestId,
         data.isResults,
         data.oosResults,
-        data.params,
+        data.params as unknown as Record<string, number>,
         data.strategy
       );
     }

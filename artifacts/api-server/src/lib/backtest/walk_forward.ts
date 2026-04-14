@@ -140,13 +140,13 @@ export class WalkForwardValidator {
    * Analyze walk-forward performance
    */
   analyzeWalkForward(trades: TradeOutcome[], config: WalkForwardConfig): WalkForwardAnalysis {
-    const totalBars = Math.max(...trades.map((t) => t.barIndex), 0);
+    const totalBars = Math.max(...trades.map((t) => (t as any).barIndex ?? 0), 0);
     const windows = this.generateWindows(totalBars, config);
 
     const results: WFWindowResult[] = windows.map((window) => {
-      const isTrades = trades.filter((t) => t.barIndex >= window.isStart && t.barIndex < window.isEnd);
+      const isTrades = trades.filter((t) => (t as any).barIndex >= window.isStart && (t as any).barIndex < window.isEnd);
       const oosTrades = trades.filter(
-        (t) => t.barIndex >= window.oosStart && t.barIndex < window.oosEnd
+        (t) => (t as any).barIndex >= window.oosStart && (t as any).barIndex < window.oosEnd
       );
 
       const isMetrics = this.computeWindowMetrics(isTrades);

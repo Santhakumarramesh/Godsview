@@ -99,7 +99,7 @@ export {
   type SweepConfig,
   type SweepResult,
   type OverfitReport,
-  type MonteCarloResult,
+  type MonteCarloResult as SensitivityMonteCarloResult,
   type RegimeSplitResult,
   type RollingResult,
   type ConfidenceInterval,

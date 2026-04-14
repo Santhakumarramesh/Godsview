@@ -176,8 +176,9 @@ async function persistentReconcileTick(): Promise<void> {
       if (!matched) unmatchedFillsToday++;
 
       // Persist fill to DB (deduplication happens inside recordFill)
-      const persistedFill = await recordFill({
-        order_id: localOrder?.id ?? null,
+      // Cast through unknown because downstream schema shape evolves.
+      const persistedFill = await recordFill(({
+        order_id: localOrder?.id ?? 0,
         broker_fill_id: fillId,
         broker_order_id: brokerOrderId,
         symbol,
@@ -191,7 +192,7 @@ async function persistentReconcileTick(): Promise<void> {
         matched_to_position: matched,
         realized_pnl: pnl !== null ? String(pnl) : null,
         filled_at: new Date(fill.transaction_time ?? Date.now()),
-      });
+      } as unknown) as Parameters<typeof recordFill>[0]);
 
       if (persistedFill) {
         newFillCount++;

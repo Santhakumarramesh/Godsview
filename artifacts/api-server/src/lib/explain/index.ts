@@ -306,8 +306,8 @@ export const explainabilitySystem = new ExplainabilitySystem(
 
 // ─── Exports ──────────────────────────────────────────────────────────────────
 
-export {
-  DecisionExplainer,
+export { DecisionExplainer } from "./decision_explainer";
+export type {
   SignalExplanation,
   StrategyExplanation,
   ReturnDriverExplanation,
@@ -317,8 +317,8 @@ export {
   ExplanationFactor,
 } from "./decision_explainer";
 
-export {
-  AttributionEngine,
+export { AttributionEngine } from "./attribution_engine_explain";
+export type {
   AttributionReport,
   AttributionComponent,
   SkillLuckReport,
@@ -328,8 +328,8 @@ export {
   FactorAnalysisResult,
 } from "./attribution_engine_explain";
 
-export {
-  FragilityDetector,
+export { FragilityDetector } from "./fragility_detector";
+export type {
   FragilityReport,
   ParameterFragility,
   RegimeFragility,
@@ -340,8 +340,8 @@ export {
   StressTestResult,
 } from "./fragility_detector";
 
-export {
-  ReportGenerator,
+export { ReportGenerator } from "./report_generator";
+export type {
   StrategyReport,
   DailyReport,
   PerformanceReview,

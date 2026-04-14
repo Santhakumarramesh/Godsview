@@ -127,16 +127,16 @@ class BrainPerformanceEngine {
    */
   async warmLoad(symbol: string): Promise<void> {
     try {
-      const rows = await loadRecentOutcomes(symbol, 500);
+      const rows = (await loadRecentOutcomes(symbol, 500)) as Array<Record<string, any>>;
       for (const row of rows) {
         if (row.outcome && row.pnl_r) {
           this.recordOutcome({
-            symbol: row.symbol,
-            direction: row.direction,
-            regime: row.regime ?? "unknown",
+            symbol: String(row.symbol ?? symbol),
+            direction: String(row.direction ?? "long") as "long" | "short",
+            regime: String(row.regime ?? "unknown"),
             pnlR: Number(row.pnl_r),
             won: row.outcome === "WIN",
-            timestamp: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+            timestamp: row.created_at ? new Date(String(row.created_at)).getTime() : Date.now(),
           });
         }
       }
@@ -338,9 +338,9 @@ class BrainPerformanceEngine {
     const dbStats = await getPortfolioStats().catch(() => []);
     const bySymbol = dbStats.map((s) => ({
       symbol: s.symbol,
-      totalTrades: s.totalTrades,
-      winRate: s.winRate,
-      totalPnlR: s.totalPnlR,
+      totalTrades: Number(s.totalTrades ?? s.trades ?? 0),
+      winRate: Number(s.winRate ?? (s.trades ? s.wins / s.trades : 0)),
+      totalPnlR: Number(s.totalPnlR ?? s.pnlR ?? 0),
       sharpe: this.getReport(s.symbol).sharpeRatio,
     }));
 

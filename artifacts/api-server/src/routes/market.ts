@@ -58,7 +58,7 @@ function initializeFeedManager() {
 
 router.get("/bars/:symbol", async (req: Request, res: Response) => {
   try {
-    const { symbol } = req.params;
+    const symbol = req.params.symbol as string;
     const { timeframe = "1d", limit = 100, provider } = req.query;
 
     if (!symbol) {
@@ -97,7 +97,7 @@ router.get("/bars/:symbol", async (req: Request, res: Response) => {
 
 router.get("/price/:symbol", async (req: Request, res: Response) => {
   try {
-    const { symbol } = req.params;
+    const symbol = req.params.symbol as string;
 
     if (!symbol) {
       return res.status(400).json({ error: "symbol required" });
@@ -207,7 +207,7 @@ router.get("/latency", (req: Request, res: Response) => {
 
 router.get("/replay/:id", (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
 
     const decision = replayStore.replay(id);
     if (!decision) {

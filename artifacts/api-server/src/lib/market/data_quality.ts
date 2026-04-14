@@ -295,7 +295,7 @@ export function analyzeBarQuality(
 
   return {
     symbol: bar.symbol,
-    timestamp: bar.timestamp,
+    timestamp: String(bar.timestamp),
     score,
     issues,
     isValid: score >= 70,
@@ -337,8 +337,8 @@ export function analyzeSeriesQuality(
   const analyses = bars.map(bar => analyzeBarQuality(bar, config));
 
   const symbol = bars[0].symbol;
-  const periodStart = bars[0].timestamp;
-  const periodEnd = bars[bars.length - 1].timestamp;
+  const periodStart = String(bars[0].timestamp);
+  const periodEnd = String(bars[bars.length - 1].timestamp);
   const barCount = bars.length;
 
   // Calculate aggregates

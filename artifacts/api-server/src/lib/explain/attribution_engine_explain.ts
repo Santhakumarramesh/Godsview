@@ -478,27 +478,45 @@ export class AttributionEngine {
       profitable: (t.pnl || 0) > 0,
     }));
 
-    const bestEntry = Object.entries(
-      entryQualities.reduce((acc: Record<string, { score: number; count: number; wins: number }>, e) => {
+    type QStats = { score: number; count: number; wins: number };
+    type QBest = [string, QStats];
+    const bestEntry: QBest = Object.entries(
+      entryQualities.reduce((acc: Record<string, QStats>, e) => {
         if (!acc[e.type]) acc[e.type] = { score: 0, count: 0, wins: 0 };
-        acc[e.type].score += e.captured;
-        acc[e.type].count++;
-        if (e.profitable) acc[e.type].wins++;
+        acc[e.type]!.score += e.captured;
+        acc[e.type]!.count++;
+        if (e.profitable) acc[e.type]!.wins++;
         return acc;
       }, {}),
-    ).reduce((best, [type, data]) => (data.score / data.count > best[1] ? [type, data] : best), ["N/A", { score: 0, count: 0, wins: 0 }]);
+    ).reduce<QBest>(
+      (best, [type, data]) => {
+        const dataAvg = data.count > 0 ? data.score / data.count : 0;
+        const bestAvg = best[1].count > 0 ? best[1].score / best[1].count : 0;
+        return dataAvg > bestAvg ? [type, data] : best;
+      },
+      ["N/A", { score: 0, count: 0, wins: 0 }],
+    );
 
     // Exit quality
-    const bestExit = Object.entries(
-      trades.reduce((acc: Record<string, { score: number; count: number; wins: number }>, t) => {
+    const exitMap: Record<string, QStats> = trades.reduce(
+      (acc: Record<string, QStats>, t: any) => {
         const exitType = t.exitType || "Target";
         if (!acc[exitType]) acc[exitType] = { score: 0, count: 0, wins: 0 };
-        acc[exitType].score += t.exitQualityScore || 0.5;
-        acc[exitType].count++;
-        if ((t.pnl || 0) > 0) acc[exitType].wins++;
+        acc[exitType]!.score += t.exitQualityScore || 0.5;
+        acc[exitType]!.count++;
+        if ((t.pnl || 0) > 0) acc[exitType]!.wins++;
         return acc;
-      }, {}),
-    ).reduce((best, [type, data]) => (data.score / data.count > best[1] ? [type, data] : best), ["N/A", { score: 0, count: 0, wins: 0 }]);
+      },
+      {} as Record<string, QStats>,
+    );
+    const bestExit: QBest = (Object.entries(exitMap) as QBest[]).reduce<QBest>(
+      (best, [type, data]) => {
+        const dataAvg = data.count > 0 ? data.score / data.count : 0;
+        const bestAvg = best[1].count > 0 ? best[1].score / best[1].count : 0;
+        return dataAvg > bestAvg ? [type, data] : best;
+      },
+      ["N/A", { score: 0, count: 0, wins: 0 }],
+    );
 
     const avgTimeToProfit = trades.reduce((sum, t) => sum + (t.barsToProfit || 5), 0) / trades.length;
     const percentCaptured = trades.reduce((sum, t) => sum + (t.percentOfMoveCapured || 0.6), 0) / trades.length;

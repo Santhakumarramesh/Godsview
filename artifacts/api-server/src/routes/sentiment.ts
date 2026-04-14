@@ -185,7 +185,7 @@ router.get("/keywords", (_req: Request, res: Response) => {
 
 // ── GET /symbol/:symbol ─────────────────────────────────────────────────────
 router.get("/symbol/:symbol", (req: Request, res: Response) => {
-  const sym = req.params.symbol.toUpperCase();
+  const sym = (req.params.symbol as string).toUpperCase();
   const bias = biases[sym] ?? 0;
   const sentiment = mockSentiment(sym, bias);
   const articles = newsArticles.filter((a) => a.symbols.includes(sym));

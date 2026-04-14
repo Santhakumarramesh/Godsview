@@ -66,7 +66,7 @@ router.get("/tiers", (req: Request, res: Response) => {
  */
 router.get("/tiers/:strategyId", (req: Request, res: Response) => {
   try {
-    const { strategyId } = req.params;
+    const strategyId = req.params.strategyId as string;
     const tierInfo = capitalGateEngine.getStrategyTier(strategyId);
 
     if (!tierInfo) {
@@ -76,14 +76,14 @@ router.get("/tiers/:strategyId", (req: Request, res: Response) => {
       });
     }
 
-    res.json({
+    return res.json({
       success: true,
       data: tierInfo,
       timestamp: Date.now(),
     });
   } catch (error) {
     logger.error({ error }, "Error getting strategy tier");
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: "Failed to get strategy tier",
     });
@@ -96,7 +96,7 @@ router.get("/tiers/:strategyId", (req: Request, res: Response) => {
  */
 router.post("/tiers/:strategyId/promote", (req: Request, res: Response) => {
   try {
-    const { strategyId } = req.params;
+    const strategyId = req.params.strategyId as string;
     const result = capitalGateEngine.requestPromotion(strategyId);
 
     res.json({
@@ -120,7 +120,7 @@ router.post("/tiers/:strategyId/promote", (req: Request, res: Response) => {
  */
 router.post("/tiers/:strategyId/demote", (req: Request, res: Response) => {
   try {
-    const { strategyId } = req.params;
+    const strategyId = req.params.strategyId as string;
     const { reason } = req.body;
 
     if (!reason) {
@@ -132,14 +132,14 @@ router.post("/tiers/:strategyId/demote", (req: Request, res: Response) => {
 
     const result = capitalGateEngine.demoteStrategy(strategyId, reason);
 
-    res.json({
+    return res.json({
       success: result.success,
       message: result.message,
       timestamp: Date.now(),
     });
   } catch (error) {
     logger.error({ error }, "Error demoting strategy");
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: "Failed to demote strategy",
     });
@@ -152,7 +152,7 @@ router.post("/tiers/:strategyId/demote", (req: Request, res: Response) => {
  */
 router.get("/tiers/:strategyId/history", (req: Request, res: Response) => {
   try {
-    const { strategyId } = req.params;
+    const strategyId = req.params.strategyId as string;
     const history = capitalGateEngine.getPromotionHistory(strategyId);
 
     res.json({
@@ -238,14 +238,14 @@ router.post("/launch/plan", (req: Request, res: Response) => {
       rampSchedule,
     });
 
-    res.json({
+    return res.json({
       success: result.success,
       message: result.message,
       timestamp: Date.now(),
     });
   } catch (error) {
     logger.error({ error }, "Error creating launch plan");
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: "Failed to create launch plan",
     });
@@ -318,14 +318,14 @@ router.post("/launch/pause", (req: Request, res: Response) => {
 
     const result = controlledLaunchEngine.pauseLaunch(reason);
 
-    res.json({
+    return res.json({
       success: result.success,
       message: result.message,
       timestamp: Date.now(),
     });
   } catch (error) {
     logger.error({ error }, "Error pausing launch");
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: "Failed to pause launch",
     });
@@ -349,14 +349,14 @@ router.post("/launch/abort", (req: Request, res: Response) => {
 
     const result = controlledLaunchEngine.abortLaunch(reason);
 
-    res.json({
+    return res.json({
       success: result.success,
       message: result.message,
       timestamp: Date.now(),
     });
   } catch (error) {
     logger.error({ error }, "Error aborting launch");
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: "Failed to abort launch",
     });
@@ -511,14 +511,14 @@ router.post("/protection/max-drawdown", (req: Request, res: Response) => {
 
     const result = capitalProtectionEngine.setMaxDrawdown(amount);
 
-    res.json({
+    return res.json({
       success: result.success,
       message: result.message,
       timestamp: Date.now(),
     });
   } catch (error) {
     logger.error({ error }, "Error setting max drawdown");
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: "Failed to set max drawdown",
     });
@@ -542,14 +542,14 @@ router.post("/protection/emergency-halt", (req: Request, res: Response) => {
 
     const result = capitalProtectionEngine.triggerEmergencyHalt(reason);
 
-    res.json({
+    return res.json({
       success: result.success,
       message: result.message,
       timestamp: Date.now(),
     });
   } catch (error) {
     logger.error({ error }, "Error triggering emergency halt");
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: "Failed to trigger emergency halt",
     });

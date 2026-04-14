@@ -135,7 +135,7 @@ router.get("/decisions", (req: Request, res: Response) => {
 // ── GET /tradingview/decision/:signalId — Single decision detail ──────────
 
 router.get("/decision/:signalId", (req: Request, res: Response) => {
-  const decision = processor.getDecision(req.params.signalId);
+  const decision = processor.getDecision(req.params.signalId as string);
   if (!decision) {
     res.status(404).json({ ok: false, error: "Decision not found" });
     return;

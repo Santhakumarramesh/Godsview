@@ -147,7 +147,7 @@ router.use("/api/ml-ops", mlOperationsRouter);
 router.use("/api/production-health", productionHealthRouter);
 router.use("/api/certification", certificationRouter);
 
-router.use("/api/deployment", deploymentTruthRouter);
+deploymentTruthRouter(router);
 router.use("/api/data-truth", dataTruthRouter);
 router.use("/api/execution-validation", executionValidationRouter);
 

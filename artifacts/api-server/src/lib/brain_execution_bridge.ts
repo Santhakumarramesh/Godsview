@@ -456,9 +456,9 @@ class BrainExecutionBridge {
 
     // ── Emit TP/SL alert ─────────────────────────────────────────────────────
     if (reason === "TP_HIT") {
-      brainAlerts.tpHit(symbol, pnlR).catch(() => {});
+      brainAlerts.tpHit(symbol, pnlR);
     } else if (reason === "SL_HIT") {
-      brainAlerts.slHit(symbol, pnlR).catch(() => {});
+      brainAlerts.slHit(symbol, pnlR);
     }
 
     // Feed V3 super intelligence with outcome (also feeds V2 internally)
@@ -483,13 +483,14 @@ class BrainExecutionBridge {
     });
 
     // Feed autonomous brain for streak tracking + defensive mode
-    autonomousBrain.recordTradeOutcome({
+    autonomousBrain.recordTradeOutcome(
       symbol,
+      pos.direction,
       won,
       pnlR,
-      strategyId: pos.strategyId,
-      regime: "unknown",
-    });
+      "unknown",
+      pos.winProbAtEntry ?? 0.5,
+    );
 
     // Emit event to UI
     brainEventBus.agentReport({

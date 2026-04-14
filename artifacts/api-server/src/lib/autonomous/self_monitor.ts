@@ -15,7 +15,7 @@
  * Daily assessments provide accountability and improvement signals.
  */
 
-import { logger as _logger } from "./logger";
+import { logger as _logger } from "../logger.js";
 
 const logger = _logger.child({ module: "self_monitor" });
 

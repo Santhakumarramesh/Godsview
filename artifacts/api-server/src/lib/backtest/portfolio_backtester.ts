@@ -116,7 +116,7 @@ export class PortfolioBacktester {
     });
 
     // Sort by timestamp
-    allTrades.sort((a, b) => a.barIndex - b.barIndex);
+    allTrades.sort((a, b) => (a.barIndex ?? 0) - (b.barIndex ?? 0));
 
     // Build equity curve (equal-weight initial)
     const weights = this.equalWeightAllocation(strategies);

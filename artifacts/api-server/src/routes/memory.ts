@@ -43,13 +43,13 @@ router.get("/advice", authGuard, async (req: Request, res: Response) => {
 
     const advice = await memorySystem.consultMemory(JSON.parse(setup as string), JSON.parse(marketState as string));
 
-    res.json({
+    return res.json({
       success: true,
       advice,
     });
   } catch (error: any) {
     logger.error({ error }, "Failed to get memory advice");
-    res.status(500).json({
+    return res.status(500).json({
       error: error.message,
     });
   }
@@ -66,7 +66,7 @@ router.get("/failures", authGuard, async (req: Request, res: Response) => {
     const lessons = failureMemory.generateFailureLessons();
     const stats = failureMemory.getStats();
 
-    res.json({
+    return res.json({
       success: true,
       patterns,
       antiPatterns,
@@ -75,7 +75,7 @@ router.get("/failures", authGuard, async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error({ error }, "Failed to get failure patterns");
-    res.status(500).json({
+    return res.status(500).json({
       error: error.message,
     });
   }
@@ -90,14 +90,14 @@ router.get("/improvements", authGuard, async (req: Request, res: Response) => {
     const effectiveness = improvementMemory.getImprovementEffectiveness();
     const stats = improvementMemory.getStats();
 
-    res.json({
+    return res.json({
       success: true,
       effectiveness,
       stats,
     });
   } catch (error: any) {
     logger.error({ error }, "Failed to get improvements");
-    res.status(500).json({
+    return res.status(500).json({
       error: error.message,
     });
   }
@@ -120,7 +120,7 @@ router.get("/context", authGuard, async (req: Request, res: Response) => {
     const context = JSON.parse(marketContext as string);
     const prediction = contextMemory.queryContext(context);
 
-    let recommendations = [];
+    let recommendations: unknown[] = [];
     if (symbol) {
       const patterns = contextMemory.getTemporalPatterns(symbol as string);
       recommendations = contextMemory.getBestStrategiesForContext(context);
@@ -128,7 +128,7 @@ router.get("/context", authGuard, async (req: Request, res: Response) => {
 
     const stats = contextMemory.getStats();
 
-    res.json({
+    return res.json({
       success: true,
       prediction,
       recommendations,
@@ -136,7 +136,7 @@ router.get("/context", authGuard, async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error({ error }, "Failed to query context");
-    res.status(500).json({
+    return res.status(500).json({
       error: error.message,
     });
   }
@@ -162,14 +162,14 @@ router.get("/similar", authGuard, async (req: Request, res: Response) => {
     const similar = marketEmbeddings.findSimilar(state, count);
     const clusters = marketEmbeddings.clusterStates([state]);
 
-    res.json({
+    return res.json({
       success: true,
       similar,
       clusters,
     });
   } catch (error: any) {
     logger.error({ error }, "Failed to find similar states");
-    res.status(500).json({
+    return res.status(500).json({
       error: error.message,
     });
   }
@@ -184,14 +184,14 @@ router.get("/stats", authGuard, async (req: Request, res: Response) => {
     const stats = await memorySystem.getStats();
     const storeStats = memoryStore.getStats();
 
-    res.json({
+    return res.json({
       success: true,
       systemStats: stats,
       storeStats,
     });
   } catch (error: any) {
     logger.error({ error }, "Failed to get memory stats");
-    res.status(500).json({
+    return res.status(500).json({
       error: error.message,
     });
   }
@@ -224,13 +224,13 @@ router.post("/learn", authGuard, async (req: Request, res: Response) => {
 
     logger.info({ eventType }, message);
 
-    res.json({
+    return res.json({
       success: true,
       message,
     });
   } catch (error: any) {
     logger.error({ error }, "Failed to record learning");
-    res.status(500).json({
+    return res.status(500).json({
       error: error.message,
     });
   }
@@ -253,13 +253,13 @@ router.get("/suggestions", authGuard, async (req: Request, res: Response) => {
     const ctx = JSON.parse(context as string);
     const suggestions = await memorySystem.getSuggestions(ctx);
 
-    res.json({
+    return res.json({
       success: true,
       suggestions,
     });
   } catch (error: any) {
     logger.error({ error }, "Failed to get suggestions");
-    res.status(500).json({
+    return res.status(500).json({
       error: error.message,
     });
   }
@@ -283,13 +283,13 @@ router.post("/regime-transition", authGuard, async (req: Request, res: Response)
 
     logger.info({ from, to }, "Regime transition recorded");
 
-    res.json({
+    return res.json({
       success: true,
       message: "Regime transition recorded",
     });
   } catch (error: any) {
     logger.error({ error }, "Failed to record regime transition");
-    res.status(500).json({
+    return res.status(500).json({
       error: error.message,
     });
   }
@@ -312,7 +312,7 @@ router.get("/regime-transitions", authGuard, async (req: Request, res: Response)
       }
     }
 
-    res.json({
+    return res.json({
       success: true,
       regimes: transitions.regimes,
       probabilities: probabilitiesObj,
@@ -320,7 +320,7 @@ router.get("/regime-transitions", authGuard, async (req: Request, res: Response)
     });
   } catch (error: any) {
     logger.error({ error }, "Failed to get regime transitions");
-    res.status(500).json({
+    return res.status(500).json({
       error: error.message,
     });
   }
@@ -339,14 +339,14 @@ router.post("/prune", authGuard, async (req: Request, res: Response) => {
 
     logger.info({ prunedCount, maxAgeDays }, "Memory pruned");
 
-    res.json({
+    return res.json({
       success: true,
       prunedCount,
       message: `Pruned ${prunedCount} old entries`,
     });
   } catch (error: any) {
     logger.error({ error }, "Failed to prune memory");
-    res.status(500).json({
+    return res.status(500).json({
       error: error.message,
     });
   }
@@ -360,14 +360,14 @@ router.get("/export", authGuard, async (req: Request, res: Response) => {
   try {
     const exportData = memoryStore.exportAll();
 
-    res.json({
+    return res.json({
       success: true,
       data: exportData,
       timestamp: Date.now(),
     });
   } catch (error: any) {
     logger.error({ error }, "Failed to export memory");
-    res.status(500).json({
+    return res.status(500).json({
       error: error.message,
     });
   }
@@ -391,13 +391,13 @@ router.post("/import", authGuard, async (req: Request, res: Response) => {
 
     logger.info({ collections: Object.keys(data).length }, "Memory imported");
 
-    res.json({
+    return res.json({
       success: true,
       message: "Memory imported successfully",
     });
   } catch (error: any) {
     logger.error({ error }, "Failed to import memory");
-    res.status(500).json({
+    return res.status(500).json({
       error: error.message,
     });
   }

@@ -3,7 +3,7 @@
  * Prevents trading in unfavorable environments and auto-downgrades modes
  */
 
-export type RefusalReason =
+export type RefusalReasonCode =
   | 'LOW_EDGE_REGIME'
   | 'DRIFT_EXCEEDED'
   | 'CORRELATION_SPIKE'
@@ -23,7 +23,7 @@ export type StrategyMode =
   | 'PAUSED';
 
 export interface RefusalReason {
-  code: RefusalReason;
+  code: RefusalReasonCode;
   severity: 'critical' | 'warning' | 'caution';
   message: string;
   currentValue: number;
@@ -36,7 +36,7 @@ export interface RefusalReason {
 export interface RefusalDecision {
   refuse: boolean;
   reasons: Array<{
-    code: RefusalReason;
+    code: RefusalReasonCode;
     severity: 'critical' | 'warning' | 'caution';
     message: string;
     currentValue: number;
@@ -95,7 +95,7 @@ export class SelfRefusal {
 
     if (!currentConditions.isInEdgeRegime) {
       reasons.push({
-        code: 'LOW_EDGE_REGIME' as RefusalReason,
+        code: 'LOW_EDGE_REGIME' as RefusalReasonCode,
         severity: 'warning',
         message: 'Current market regime does not match strategy edge',
         currentValue: currentConditions.regimeScore,
@@ -106,7 +106,7 @@ export class SelfRefusal {
 
     if (currentConditions.liveVsBacktestDrift > strategy.expectedDriftTolerance) {
       reasons.push({
-        code: 'DRIFT_EXCEEDED' as RefusalReason,
+        code: 'DRIFT_EXCEEDED' as RefusalReasonCode,
         severity: 'critical',
         message: 'Live results diverging too much from backtest expectations',
         currentValue: currentConditions.liveVsBacktestDrift,
@@ -117,7 +117,7 @@ export class SelfRefusal {
 
     if (currentConditions.portfolioCorrelation > 0.8) {
       reasons.push({
-        code: 'CORRELATION_SPIKE' as RefusalReason,
+        code: 'CORRELATION_SPIKE' as RefusalReasonCode,
         severity: 'warning',
         message: 'Portfolio correlations above threshold. Diversification broken.',
         currentValue: currentConditions.portfolioCorrelation,
@@ -131,7 +131,7 @@ export class SelfRefusal {
       currentConditions.marketVolatility > strategy.volatilityRange.max
     ) {
       reasons.push({
-        code: 'VOLATILITY_EXTREME' as RefusalReason,
+        code: 'VOLATILITY_EXTREME' as RefusalReasonCode,
         severity: 'warning',
         message: `Volatility outside strategy range: ${currentConditions.marketVolatility.toFixed(1)}% vs [${strategy.volatilityRange.min}-${strategy.volatilityRange.max}%]`,
         currentValue: currentConditions.marketVolatility,
@@ -145,7 +145,7 @@ export class SelfRefusal {
       currentConditions.liquidityScore < strategy.minLiquidityScore
     ) {
       reasons.push({
-        code: 'LIQUIDITY_DROUGHT' as RefusalReason,
+        code: 'LIQUIDITY_DROUGHT' as RefusalReasonCode,
         severity: 'warning',
         message: 'Insufficient market depth for planned position sizes',
         currentValue: currentConditions.liquidityScore,
@@ -156,7 +156,7 @@ export class SelfRefusal {
 
     if (currentConditions.systemHealth.dataFeedStatus === 'failed') {
       reasons.push({
-        code: 'DATA_QUALITY' as RefusalReason,
+        code: 'DATA_QUALITY' as RefusalReasonCode,
         severity: 'critical',
         message: 'Data feed offline or severely degraded',
         currentValue: 0,
@@ -170,7 +170,7 @@ export class SelfRefusal {
       currentConditions.maxAllowedDrawdown * 0.9
     ) {
       reasons.push({
-        code: 'DRAWDOWN_PROXIMITY' as RefusalReason,
+        code: 'DRAWDOWN_PROXIMITY' as RefusalReasonCode,
         severity: 'critical',
         message: `Approaching max drawdown limit: ${(currentConditions.currentDrawdown * 100).toFixed(1)}% of ${(currentConditions.maxAllowedDrawdown * 100).toFixed(1)}%`,
         currentValue: currentConditions.currentDrawdown,
@@ -184,7 +184,7 @@ export class SelfRefusal {
       strategy.minConfidenceThreshold
     ) {
       reasons.push({
-        code: 'CONFIDENCE_DECAY' as RefusalReason,
+        code: 'CONFIDENCE_DECAY' as RefusalReasonCode,
         severity: 'warning',
         message: `Strategy confidence decayed below threshold: ${currentConditions.confidenceScore.toFixed(2)} vs ${strategy.minConfidenceThreshold.toFixed(2)}`,
         currentValue: currentConditions.confidenceScore,
@@ -195,7 +195,7 @@ export class SelfRefusal {
 
     if (currentConditions.newsEventImminent) {
       reasons.push({
-        code: 'NEWS_BLACKOUT' as RefusalReason,
+        code: 'NEWS_BLACKOUT' as RefusalReasonCode,
         severity: 'caution',
         message: 'Major economic event imminent (FOMC, earnings, etc.)',
         currentValue: 1,
@@ -205,7 +205,7 @@ export class SelfRefusal {
 
     if (currentConditions.systemHealth.latency > 100) {
       reasons.push({
-        code: 'SYSTEM_HEALTH' as RefusalReason,
+        code: 'SYSTEM_HEALTH' as RefusalReasonCode,
         severity: 'warning',
         message: `High order router latency: ${currentConditions.systemHealth.latency}ms`,
         currentValue: currentConditions.systemHealth.latency,
@@ -250,7 +250,7 @@ export class SelfRefusal {
 
   private generateResumeConditions(
     reasons: Array<{
-      code: RefusalReason;
+      code: RefusalReasonCode;
       severity: string;
       message: string;
     }>
@@ -299,7 +299,7 @@ export class SelfRefusal {
 
   private estimateResumption(
     reasons: Array<{
-      code: RefusalReason;
+      code: RefusalReasonCode;
       severity: string;
     }>
   ): number | null {

@@ -457,13 +457,14 @@ export class MicrostructureAnalyzer extends EventEmitter {
    */
   public getVolatilityProfile(symbol: string): VolatilityProfile {
     const snapshot = this.snapshots.get(symbol);
+    const tracker = this.impactTrackers.get(symbol);
     if (!snapshot) {
       return { micro: 0, realized: 0, ratio: 0 };
     }
 
     const micro = snapshot.volatilityMicro;
     const realized = Math.sqrt(
-      snapshot.priceChanges?.reduce((sum, pc) => sum + pc * pc, 0) ?? 0
+      (tracker?.priceChanges ?? []).reduce((sum: number, pc: number) => sum + pc * pc, 0)
     );
 
     return {

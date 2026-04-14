@@ -4,19 +4,21 @@
  */
 
 export {
-  GoldenTestCase,
-  Difficulty,
-  Verdict,
-  EdgeMechanism,
   GOLDEN_STRATEGIES,
   getGoldenStrategyById,
   getGoldenStrategiesByDifficulty,
   getGoldenStrategiesByTag,
-  getGoldenStrategiesStats
+  getGoldenStrategiesStats,
+} from './golden_strategies';
+export type {
+  GoldenTestCase,
+  Difficulty,
+  Verdict,
+  EdgeMechanism,
 } from './golden_strategies';
 
-export {
-  DecisionLoopEvalHarness,
+export { DecisionLoopEvalHarness } from './eval_harness';
+export type {
   AmbiguityMetrics,
   RejectionMetrics,
   CritiqueMetrics,
@@ -26,16 +28,16 @@ export {
   RecommendationMetrics,
   FullMetrics,
   SingleTestResult,
-  EvalReport
+  EvalReport,
 } from './eval_harness';
 
-export {
-  BaselineComparison,
+export { BaselineComparison } from './baseline_comparison';
+export type {
   BaselineType,
   BaselineResult,
   HeadToHeadComparison,
   LeaderboardEntry,
-  ComparisonReport
+  ComparisonReport,
 } from './baseline_comparison';
 
 /**

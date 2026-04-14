@@ -480,9 +480,10 @@ class SuperIntelligenceEngine {
 export const superIntelligenceV2 = new SuperIntelligenceEngine();
 
 // ── Warm-load from DB on module init ──────────────────────────────────────
-loadAllSiModelStates().then((rows) => {
+loadAllSiModelStates().then((rowsRaw) => {
+  const rows = rowsRaw as Array<Record<string, any>>;
   for (const row of rows) {
-    const state = (superIntelligenceV2 as any).getState(row.symbol) as EnsembleState;
+    const state = (superIntelligenceV2 as any).getState(String(row.symbol ?? "")) as EnsembleState;
     state.weights.m1 = Number(row.weight_m1);
     state.weights.m2 = Number(row.weight_m2);
     state.weights.m3 = Number(row.weight_m3);
@@ -491,9 +492,9 @@ loadAllSiModelStates().then((rows) => {
     state.plattA.m1 = Number(row.platt_a);
     state.plattB.m1 = Number(row.platt_b);
     state.brier = Number(row.brier_score ?? 0.25);
-    state.version = row.model_version;
-    state.regimeCalibration = row.regime_calibration ? JSON.parse(row.regime_calibration) : {};
-    state.totalPredictions = row.total_outcomes;
+    state.version = Number(row.model_version ?? 1);
+    state.regimeCalibration = row.regime_calibration ? JSON.parse(String(row.regime_calibration)) : {};
+    state.totalPredictions = Number(row.total_outcomes ?? 0);
   }
   if (rows.length > 0) {
     logger.info(`[SuperIntel v2] Warm-loaded model state for ${rows.length} symbol(s) from DB`);

@@ -55,7 +55,7 @@ router.post('/run', async (req: Request, res: Response) => {
     // Cache the results
     latestEvalReport = evalReport;
 
-    res.json({
+    return res.json({
       success: true,
       message: `Full evaluation completed in ${elapsedSeconds.toFixed(2)}s`,
       report: {
@@ -82,7 +82,7 @@ router.post('/run', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error('[EVAL] Full run error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: error.message || 'Evaluation run failed'
     });
@@ -95,7 +95,7 @@ router.post('/run', async (req: Request, res: Response) => {
 
 router.post('/single/:testId', async (req: Request, res: Response) => {
   try {
-    const { testId } = req.params;
+    const testId = req.params.testId as string;
 
     const testCase = getGoldenStrategyById(testId);
     if (!testCase) {
@@ -110,7 +110,7 @@ router.post('/single/:testId', async (req: Request, res: Response) => {
     const harness = new DecisionLoopEvalHarness();
     const result = await harness.runSingleEval(testCase);
 
-    res.json({
+    return res.json({
       success: true,
       testId,
       result: {
@@ -130,7 +130,7 @@ router.post('/single/:testId', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error('[EVAL] Single test error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: error.message || 'Single test evaluation failed'
     });
@@ -157,7 +157,7 @@ router.get('/golden-suite', (req: Request, res: Response) => {
 
     const stats = getGoldenStrategiesStats();
 
-    res.json({
+    return res.json({
       success: true,
       count: tests.length,
       stats,
@@ -172,7 +172,7 @@ router.get('/golden-suite', (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error('[EVAL] Golden suite error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: error.message || 'Failed to list golden suite'
     });
@@ -207,7 +207,7 @@ router.post('/compare', async (req: Request, res: Response) => {
     latestComparisonReport = comparisonReport;
     latestLeaderboard = comparisonReport.leaderboard;
 
-    res.json({
+    return res.json({
       success: true,
       message: `Baseline comparison completed in ${elapsedSeconds.toFixed(2)}s`,
       report: {
@@ -221,7 +221,7 @@ router.post('/compare', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error('[EVAL] Comparison error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: error.message || 'Baseline comparison failed'
     });
@@ -245,7 +245,7 @@ router.get('/leaderboard', (req: Request, res: Response) => {
     const leaderboard = latestComparisonReport.leaderboard;
     const godsviewPosition = leaderboard.find(e => e.baseline === 'GODSVIEW');
 
-    res.json({
+    return res.json({
       success: true,
       timestamp: latestComparisonReport.timestamp,
       leaderboard,
@@ -254,7 +254,7 @@ router.get('/leaderboard', (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error('[EVAL] Leaderboard error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: error.message || 'Failed to fetch leaderboard'
     });
@@ -274,7 +274,7 @@ router.get('/report', (req: Request, res: Response) => {
       });
     }
 
-    res.json({
+    return res.json({
       success: true,
       report: {
         timestamp: latestEvalReport.timestamp,
@@ -298,7 +298,7 @@ router.get('/report', (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error('[EVAL] Report error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: error.message || 'Failed to fetch eval report'
     });
@@ -339,7 +339,7 @@ router.post('/regression-check', async (req: Request, res: Response) => {
     const status = regressions.length === 0 ? 'PASS' : 
                    Math.abs(passRateDelta) < 5 ? 'WARN' : 'FAIL';
 
-    res.json({
+    return res.json({
       success: true,
       status,
       summary: {
@@ -357,7 +357,7 @@ router.post('/regression-check', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error('[EVAL] Regression check error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: error.message || 'Regression check failed'
     });
@@ -369,7 +369,7 @@ router.post('/regression-check', async (req: Request, res: Response) => {
 // ============================================================================
 
 router.get('/status', (req: Request, res: Response) => {
-  res.json({
+  return res.json({
     success: true,
     status: {
       latestEvalReport: latestEvalReport ? {

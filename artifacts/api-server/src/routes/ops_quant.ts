@@ -180,7 +180,7 @@ router.get('/runbook', (req: Request, res: Response, next: NextFunction) => {
  */
 router.get('/runbook/:procedure', (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { procedure } = req.params;
+    const procedure = req.params.procedure as string;
     const proc = getRunbookProcedure(procedure);
 
     if (!proc) {
@@ -236,7 +236,7 @@ router.get('/maintenance', (req: Request, res: Response, next: NextFunction) => 
  */
 router.get('/maintenance/:frequency', (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { frequency } = req.params;
+    const frequency = req.params.frequency as string;
     const validFrequencies = ['daily', 'weekly', 'monthly', 'quarterly'];
 
     if (!validFrequencies.includes(frequency)) {

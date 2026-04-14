@@ -314,7 +314,7 @@ export class SensitivityAnalyzer {
     // Assign trades to regimes
     trades.forEach((trade) => {
       for (const regime of regimes) {
-        if (trade.barIndex >= regime.startIdx && trade.barIndex <= regime.endIdx) {
+        if ((trade.barIndex ?? 0) >= regime.startIdx && (trade.barIndex ?? 0) <= regime.endIdx) {
           if (!regimeMap.has(regime.regime)) {
             regimeMap.set(regime.regime, []);
           }

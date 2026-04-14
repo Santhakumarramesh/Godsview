@@ -111,7 +111,7 @@ class BrainDailyCircuitBreaker {
   manualReset(): void {
     this.state = "OPEN";
     logger.info("[CircuitBreaker] Manually reset to OPEN");
-    brainAlerts.custom("CUSTOM", "info", "Circuit Breaker Reset", "Daily risk circuit breaker manually reset").catch(() => {});
+    brainAlerts.custom("INFO", "Circuit Breaker Reset", "Daily risk circuit breaker manually reset");
   }
 
   // ── Daily reset ────────────────────────────────────────────────────────────
@@ -179,10 +179,10 @@ class BrainDailyCircuitBreaker {
         }, "[CircuitBreaker] Entering HALF_OPEN — approaching daily limits");
 
         brainAlerts.custom(
-          "RISK_LIMIT_HIT", "warning",
+          "WARNING",
           "Approaching Daily Risk Limit",
           `PnL: ${this.dailyPnlR.toFixed(2)}R | Trades: ${this.dailyTrades} | Mode → DEFENSIVE`
-        ).catch(() => {});
+        );
       }
     }
   }
@@ -206,10 +206,10 @@ class BrainDailyCircuitBreaker {
     logger.error({ event }, "[CircuitBreaker] TRIPPED — brain paused");
 
     brainAlerts.custom(
-      "RISK_LIMIT_HIT", "critical",
+      "CRITICAL",
       `🚨 Brain Circuit Tripped — ${reason}`,
       `${details} | Daily P&L: ${this.dailyPnlR.toFixed(2)}R | Trades: ${this.dailyTrades}`
-    ).catch(() => {});
+    );
 
     // Auto-pause the brain
     import("./autonomous_brain.js").then(({ autonomousBrain }) => {

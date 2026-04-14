@@ -14,7 +14,7 @@
  * when live performance materially diverges from expectations.
  */
 
-import { logger as _logger } from "./logger";
+import { logger as _logger } from "../logger.js";
 
 const logger = _logger.child({ module: "drift_detector" });
 
@@ -593,8 +593,8 @@ export class DriftDetector {
   private analyzeRegimeDrift(strategyId: string): { score: number; details: string; currentRegime: string; trainedRegime: string } {
     // In production, would compare market regime indicators
     // For now, simplified check
-    const currentRegime = "trending";
-    const trainedRegime = "mean_reversion";
+    const currentRegime: string = "trending";
+    const trainedRegime: string = "mean_reversion";
     const score = currentRegime !== trainedRegime ? 0.25 : 0;
 
     return {

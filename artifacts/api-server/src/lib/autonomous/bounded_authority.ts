@@ -227,7 +227,7 @@ export class BoundedAuthority {
     );
 
     const authorized =
-      violations.length === 0 && currentMode !== 'PAPER';
+      violations.length === 0 && (currentMode as StrategyMode) !== 'PAPER';
     const escalationRequired =
       violations.length > 0 || currentMode === 'ASSISTED';
 

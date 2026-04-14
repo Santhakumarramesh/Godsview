@@ -174,12 +174,12 @@ export class DecisionExplainer {
 
     // Brain state factors
     if (brainOutput?.mode) {
-      const modeContribution = {
+      const modeContribution = ({
         AGGRESSIVE: 0.15,
         NORMAL: 0,
         DEFENSIVE: -0.2,
         PAUSED: -1,
-      }[brainOutput.mode] || 0;
+      } as Record<string, number>)[brainOutput.mode as string] || 0;
       factors.push({
         name: "Brain Mode",
         contribution: modeContribution,
@@ -562,7 +562,7 @@ export class DecisionExplainer {
       });
     }
 
-    if (!(marketState?.trend || "flat") === "flat") {
+    if ((marketState?.trend || "flat") === "flat") {
       reasons.push({
         reason: "Flat Market Regime",
         importance: 0.6,
@@ -608,30 +608,30 @@ export class DecisionExplainer {
     const fromTier = promotionResult.fromTier || "L2";
     const toTier = promotionResult.toTier || "L2";
 
-    const keyMetrics = [
+    const keyMetrics: Array<{ metric: string; value: number; threshold: number; status: "met" | "missed" }> = [
       {
         metric: "Win Rate",
-        value: metrics.winRate || 0,
+        value: Number(metrics.winRate) || 0,
         threshold: 0.52,
-        status: (metrics.winRate || 0) > 0.52 ? "met" : "missed",
+        status: (Number(metrics.winRate) || 0) > 0.52 ? "met" : "missed",
       },
       {
         metric: "Sharpe Ratio",
-        value: metrics.sharpeRatio || 0,
+        value: Number(metrics.sharpeRatio) || 0,
         threshold: 0.8,
-        status: (metrics.sharpeRatio || 0) > 0.8 ? "met" : "missed",
+        status: (Number(metrics.sharpeRatio) || 0) > 0.8 ? "met" : "missed",
       },
       {
         metric: "Max Drawdown",
-        value: metrics.maxDrawdown || 0.5,
+        value: Number(metrics.maxDrawdown) || 0.5,
         threshold: 0.2,
-        status: (metrics.maxDrawdown || 0.5) < 0.2 ? "met" : "missed",
+        status: (Number(metrics.maxDrawdown) || 0.5) < 0.2 ? "met" : "missed",
       },
       {
         metric: "Profit Factor",
-        value: metrics.profitFactor || 1,
+        value: Number(metrics.profitFactor) || 1,
         threshold: 1.3,
-        status: (metrics.profitFactor || 1) > 1.3 ? "met" : "missed",
+        status: (Number(metrics.profitFactor) || 1) > 1.3 ? "met" : "missed",
       },
     ];
 

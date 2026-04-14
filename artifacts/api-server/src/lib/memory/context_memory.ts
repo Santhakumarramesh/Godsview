@@ -222,7 +222,7 @@ class ContextMemory {
    */
   getTransitionProbabilities(): TransitionMatrix {
     const regimeMap = new Map<string, Map<string, number>>();
-    const durationMap: Record<string, number[]> = {};
+    const durationMap: Record<string, number> = {};
 
     // Count transitions
     for (const transition of this.transitions) {
@@ -254,7 +254,7 @@ class ContextMemory {
     }
 
     for (const regime of allRegimes) {
-      durationMap[regime] = [3600000]; // Default 1 hour
+      durationMap[regime] = 3600000; // Default 1 hour
     }
 
     return {

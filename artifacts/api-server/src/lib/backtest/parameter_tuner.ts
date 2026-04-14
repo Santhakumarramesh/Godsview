@@ -253,7 +253,7 @@ export class ParameterTuner {
         const sensitivity = valueDelta > 0 ? scoreDelta / valueDelta : 0;
 
         sensitivityData.push({
-          parameterName,
+          parameterName: paramName,
           value: paramValue,
           score,
           sensitivity,

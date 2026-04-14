@@ -65,7 +65,7 @@ export async function runEodReconciliation(): Promise<ReconciliationResult> {
         avg_entry_price: Number(p.avg_entry_price) || 0,
       }));
 
-      const orders = await getOrders({ status: "open" });
+      const orders = await getOrders("open");
       for (const o of orders) {
         if (o.id) brokerOrderIds.add(o.id);
       }
@@ -83,10 +83,8 @@ export async function runEodReconciliation(): Promise<ReconciliationResult> {
       await recordReconciliationEvent({
         event_type: "eod_reconciliation",
         status: "error",
-        local_position_count: localOrders.length,
-        broker_position_count: 0,
-        details_json: JSON.stringify({ error: String(err) }),
-      });
+        details: { error: String(err), local_position_count: localOrders.length },
+      } as any);
       return result;
     }
 
@@ -144,13 +142,15 @@ export async function runEodReconciliation(): Promise<ReconciliationResult> {
     await recordReconciliationEvent({
       event_type: "eod_reconciliation",
       status,
-      local_position_count: localOrders.length,
-      broker_position_count: brokerPositions.length,
       orphaned_local_orders: orphaned.length,
       unknown_broker_positions: unknown.length,
-      quantity_mismatches: mismatches.length,
-      details_json: JSON.stringify(result.details),
-    });
+      mismatched_orders: mismatches.length,
+      details: {
+        local_position_count: localOrders.length,
+        broker_position_count: brokerPositions.length,
+        ...result.details,
+      },
+    } as any);
 
     const duration = Date.now() - startTime;
     if (hasDiscrepancy) {

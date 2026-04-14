@@ -1,3 +1,14 @@
+/**
+ * Strategy Lab Orchestrator
+ *
+ * Manages the full pipeline: NL parsing → DSL → critique → variant generation.
+ * Provides high-level operations for strategy development and refinement.
+ *
+ * Rewritten against the canonical StrategyDSL shape (FilterSpec is a single
+ * object, EntrySpec uses `minConfirmationsRequired`, ExitSpec uses
+ * `takeProfit.targets`/`takeProfit.minRR`).
+ */
+
 import { StrategyDSL } from './strategy_dsl';
 import {
   NaturalLanguageStrategyParser,
@@ -11,9 +22,8 @@ import {
   StrategyVariant,
 } from './variant_generator';
 
-/**
- * Lab processing result
- */
+// ─── Result Types ─────────────────────────────────────────────────────────────
+
 export interface LabProcessResult {
   originalIdea: string;
   strategy: StrategyDSL;
@@ -23,9 +33,6 @@ export interface LabProcessResult {
   timestamp: string;
 }
 
-/**
- * Lab refinement result
- */
 export interface RefinementResult {
   originalStrategy: StrategyDSL;
   refinedStrategy: StrategyDSL;
@@ -34,9 +41,6 @@ export interface RefinementResult {
   timestamp: string;
 }
 
-/**
- * Strategy comparison
- */
 export interface StrategyComparison {
   strategyA: StrategyDSL;
   strategyB: StrategyDSL;
@@ -50,9 +54,6 @@ export interface StrategyComparison {
   recommendation: string;
 }
 
-/**
- * Ranked variant
- */
 export interface RankedVariant {
   variant: StrategyVariant;
   score: number;
@@ -60,9 +61,6 @@ export interface RankedVariant {
   critique: CritiqueResult;
 }
 
-/**
- * Lab status
- */
 export interface LabStatus {
   totalStrategiesProcessed: number;
   totalVariantsGenerated: number;
@@ -72,11 +70,18 @@ export interface LabStatus {
   lastUpdated: string;
 }
 
-/**
- * Strategy Lab Orchestrator
- * Manages the full pipeline: NL parsing → DSL → critique → variant generation
- * Provides high-level operations for strategy development and refinement
- */
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function clone<T>(v: T): T {
+  return JSON.parse(JSON.stringify(v)) as T;
+}
+
+function lower(s: string): string {
+  return s.toLowerCase();
+}
+
+// ─── Strategy Lab ─────────────────────────────────────────────────────────────
+
 export class StrategyLab {
   private parser: NaturalLanguageStrategyParser;
   private critique: StrategyCritique;
@@ -90,17 +95,13 @@ export class StrategyLab {
     this.variantGenerator = new VariantGenerator();
   }
 
-  /**
-   * Main pipeline: description → strategy → critique → variants
-   */
+  /** Main pipeline: description → strategy → critique → variants */
   public processIdea(description: string): LabProcessResult {
     const startTime = Date.now();
 
     const strategy = this.parser.parse(description);
     const critiqueResult = this.critique.fullCritique(strategy);
-    const variants = this.variantGenerator.generateVariants(
-      strategy
-    );
+    const variants = this.variantGenerator.generateVariants(strategy);
 
     const processingTime = Date.now() - startTime;
 
@@ -119,140 +120,90 @@ export class StrategyLab {
     return result;
   }
 
-  /**
-   * Apply user feedback to refine strategy
-   */
-  public refineStrategy(
-    strategy: StrategyDSL,
-    feedback: string
-  ): RefinementResult {
-    const originalCritique =
-      this.critique.fullCritique(strategy);
+  /** Apply user feedback to refine strategy */
+  public refineStrategy(strategy: StrategyDSL, feedback: string): RefinementResult {
+    const fb = lower(feedback);
     const changesSummary: string[] = [];
+    const refinedStrategy = clone(strategy);
 
-    let refinedStrategy = JSON.parse(
-      JSON.stringify(strategy)
-    ) as StrategyDSL;
-
-    if (
-      feedback.toLowerCase().includes('tight') ||
-      feedback.toLowerCase().includes('reduce stop')
-    ) {
-      if (
-        refinedStrategy.exit.stopLoss &&
-        typeof refinedStrategy.exit.stopLoss === 'object'
-      ) {
+    // ─── Stop loss adjustments ──────────────────────────────────────────────
+    if (fb.includes('tight') || fb.includes('reduce stop')) {
+      if (refinedStrategy.exit.stopLoss) {
         const currentStop = refinedStrategy.exit.stopLoss.value || 2;
-        refinedStrategy.exit.stopLoss.value = Math.max(
-          0.5,
-          currentStop * 0.7
-        );
+        refinedStrategy.exit.stopLoss.value = Math.max(0.5, currentStop * 0.7);
         changesSummary.push(
-          `Tightened stop loss from ${currentStop}% to ${refinedStrategy.exit.stopLoss.value.toFixed(2)}%`
+          `Tightened stop loss from ${currentStop}% to ${refinedStrategy.exit.stopLoss.value.toFixed(2)}%`,
         );
       }
     }
 
-    if (
-      feedback.toLowerCase().includes('loose') ||
-      feedback.toLowerCase().includes('wider stop')
-    ) {
-      if (
-        refinedStrategy.exit.stopLoss &&
-        typeof refinedStrategy.exit.stopLoss === 'object'
-      ) {
+    if (fb.includes('loose') || fb.includes('wider stop')) {
+      if (refinedStrategy.exit.stopLoss) {
         const currentStop = refinedStrategy.exit.stopLoss.value || 2;
         refinedStrategy.exit.stopLoss.value = currentStop * 1.3;
         changesSummary.push(
-          `Widened stop loss from ${currentStop}% to ${refinedStrategy.exit.stopLoss.value.toFixed(2)}%`
+          `Widened stop loss from ${currentStop}% to ${refinedStrategy.exit.stopLoss.value.toFixed(2)}%`,
         );
       }
     }
 
-    if (
-      feedback.toLowerCase().includes('conservative') ||
-      feedback.toLowerCase().includes('more confirmation')
-    ) {
-      refinedStrategy.entry.confirmationBars =
-        (refinedStrategy.entry.confirmationBars || 1) + 1;
+    // ─── Entry confirmation adjustments ────────────────────────────────────
+    if (fb.includes('conservative') || fb.includes('more confirmation')) {
+      const current = refinedStrategy.entry.minConfirmationsRequired ?? 1;
+      refinedStrategy.entry.minConfirmationsRequired = current + 1;
+      refinedStrategy.entry.aggressiveness = 'conservative';
       changesSummary.push(
-        `Increased confirmation bars to ${refinedStrategy.entry.confirmationBars}`
+        `Increased minConfirmationsRequired to ${refinedStrategy.entry.minConfirmationsRequired}`,
       );
     }
 
-    if (
-      feedback.toLowerCase().includes('aggressive') ||
-      feedback.toLowerCase().includes('faster entry')
-    ) {
-      refinedStrategy.entry.confirmationBars = Math.max(
-        1,
-        (refinedStrategy.entry.confirmationBars || 2) - 1
-      );
+    if (fb.includes('aggressive') || fb.includes('faster entry')) {
+      const current = refinedStrategy.entry.minConfirmationsRequired ?? 2;
+      refinedStrategy.entry.minConfirmationsRequired = Math.max(1, current - 1);
+      refinedStrategy.entry.aggressiveness = 'aggressive';
       changesSummary.push(
-        `Reduced confirmation bars to ${refinedStrategy.entry.confirmationBars}`
+        `Reduced minConfirmationsRequired to ${refinedStrategy.entry.minConfirmationsRequired}`,
       );
     }
 
-    if (
-      feedback.toLowerCase().includes('filter') ||
-      feedback.toLowerCase().includes('volatility')
-    ) {
-      const hasVolatilityFilter = refinedStrategy.filters?.some(
-        (f) => f.type === 'volatility'
-      );
-      if (!hasVolatilityFilter) {
-        refinedStrategy.filters = refinedStrategy.filters || [];
-        refinedStrategy.filters.push({
-          type: 'volatility',
-          minAtr: 0.3,
-          maxAtr: 2.5,
-        });
-        changesSummary.push('Added volatility filter');
+    // ─── Volatility filter adjustments (via marketContext) ────────────────
+    if (fb.includes('filter') || fb.includes('volatility')) {
+      const vf = refinedStrategy.marketContext.volatilityFilter;
+      if (vf.minATR === undefined && vf.maxATR === undefined) {
+        vf.minATR = 0.3;
+        vf.maxATR = 2.5;
+        changesSummary.push('Added volatility filter (ATR 0.3–2.5)');
       }
     }
 
-    if (
-      feedback.toLowerCase().includes('simplify') ||
-      feedback.toLowerCase().includes('complex')
-    ) {
-      if (
-        refinedStrategy.filters &&
-        refinedStrategy.filters.length > 2
-      ) {
-        refinedStrategy.filters = refinedStrategy.filters.slice(
-          0,
-          2
-        );
-        changesSummary.push('Simplified filters (reduced to 2)');
+    // ─── Filter simplification ────────────────────────────────────────────
+    if (fb.includes('simplify') || fb.includes('complex')) {
+      const filters = refinedStrategy.filters;
+      // Relax the least-critical filters
+      if (filters.cooldownBars > 0 || filters.maxCorrelation < 1) {
+        filters.cooldownBars = 0;
+        filters.maxCorrelation = 1;
+        changesSummary.push('Simplified filters (removed cooldown and correlation cap)');
       }
     }
 
-    if (
-      feedback.toLowerCase().includes('profit') ||
-      feedback.toLowerCase().includes('target')
-    ) {
-      if (refinedStrategy.exit.profitTargets.length === 0) {
-        refinedStrategy.exit.profitTargets = [
-          {
-            threshold: 3,
-            percentPosition: 1.0,
-          },
-        ];
-        changesSummary.push('Added default profit target at 3%');
+    // ─── Profit target adjustments ───────────────────────────────────────
+    if (fb.includes('profit') || fb.includes('target')) {
+      const tp = refinedStrategy.exit.takeProfit;
+      if (!tp.targets || tp.targets.length === 0) {
+        tp.targets = [{ ratio: 3.0, closePercent: 1.0 }];
+        tp.minRR = 3.0;
+        changesSummary.push('Added default profit target at 3R');
       } else {
-        refinedStrategy.exit.profitTargets[0].threshold =
-          refinedStrategy.exit.profitTargets[0].threshold *
-          1.2;
-        changesSummary.push(
-          `Increased profit target to ${refinedStrategy.exit.profitTargets[0].threshold.toFixed(2)}%`
-        );
+        const first = tp.targets[0];
+        first.ratio = first.ratio * 1.2;
+        tp.minRR = Math.max(tp.minRR, first.ratio);
+        changesSummary.push(`Increased profit target to ${first.ratio.toFixed(2)}R`);
       }
     }
 
     refinedStrategy.name = `${strategy.name} (Refined)`;
-
-    const newCritique =
-      this.critique.fullCritique(refinedStrategy);
+    const newCritique = this.critique.fullCritique(refinedStrategy);
 
     return {
       originalStrategy: strategy,
@@ -263,13 +214,8 @@ export class StrategyLab {
     };
   }
 
-  /**
-   * Compare two strategies side-by-side
-   */
-  public compareStrategies(
-    a: StrategyDSL,
-    b: StrategyDSL
-  ): StrategyComparison {
+  /** Compare two strategies side-by-side */
+  public compareStrategies(a: StrategyDSL, b: StrategyDSL): StrategyComparison {
     const critiqueA = this.critique.fullCritique(a);
     const critiqueB = this.critique.fullCritique(b);
     const differences: StrategyComparison['differences'] = [];
@@ -283,36 +229,27 @@ export class StrategyLab {
     } else if (critiqueB.edge.expectancy > critiqueA.edge.expectancy) {
       differences.push({
         category: 'Edge',
-        description: `Strategy B has better expectancy`,
+        description: 'Strategy B has better expectancy',
         advantage: 'B',
       });
     }
 
-    if (
-      critiqueA.riskReward.riskRewardRatio >
-      critiqueB.riskReward.riskRewardRatio
-    ) {
+    if (critiqueA.riskReward.riskRewardRatio > critiqueB.riskReward.riskRewardRatio) {
       differences.push({
         category: 'Risk/Reward',
         description: `Strategy A has better ratio (${critiqueA.riskReward.riskRewardRatio.toFixed(2)} vs ${critiqueB.riskReward.riskRewardRatio.toFixed(2)})`,
         advantage: 'A',
       });
-    } else if (
-      critiqueB.riskReward.riskRewardRatio >
-      critiqueA.riskReward.riskRewardRatio
-    ) {
+    } else if (critiqueB.riskReward.riskRewardRatio > critiqueA.riskReward.riskRewardRatio) {
       differences.push({
         category: 'Risk/Reward',
-        description: `Strategy B has better ratio`,
+        description: 'Strategy B has better ratio',
         advantage: 'B',
       });
     }
 
-    if (
-      critiqueA.overfit.overallRisk !== critiqueB.overfit.overallRisk
-    ) {
-      const betterFitness =
-        critiqueA.overfit.overallRisk === 'low' ? 'A' : 'B';
+    if (critiqueA.overfit.overallRisk !== critiqueB.overfit.overallRisk) {
+      const betterFitness = critiqueA.overfit.overallRisk === 'low' ? 'A' : 'B';
       differences.push({
         category: 'Overfit Risk',
         description: `Strategy ${betterFitness} has lower overfit risk`,
@@ -323,22 +260,18 @@ export class StrategyLab {
     if (critiqueA.complexity.complexityScore < critiqueB.complexity.complexityScore) {
       differences.push({
         category: 'Complexity',
-        description: `Strategy A is simpler`,
+        description: 'Strategy A is simpler',
         advantage: 'A',
       });
-    } else if (
-      critiqueB.complexity.complexityScore <
-      critiqueA.complexity.complexityScore
-    ) {
+    } else if (critiqueB.complexity.complexityScore < critiqueA.complexity.complexityScore) {
       differences.push({
         category: 'Complexity',
-        description: `Strategy B is simpler`,
+        description: 'Strategy B is simpler',
         advantage: 'B',
       });
     }
 
-    const recommendedStrategy =
-      critiqueA.overallScore > critiqueB.overallScore ? 'A' : 'B';
+    const recommendedStrategy = critiqueA.overallScore > critiqueB.overallScore ? 'A' : 'B';
     const recommendation = `Strategy ${recommendedStrategy} is recommended (Score: ${Math.max(critiqueA.overallScore, critiqueB.overallScore).toFixed(2)}/10)`;
 
     return {
@@ -351,9 +284,7 @@ export class StrategyLab {
     };
   }
 
-  /**
-   * Score and rank variants
-   */
+  /** Score and rank variants by overall critique score */
   public rankVariants(variants: StrategyVariant[]): RankedVariant[] {
     const ranked: RankedVariant[] = variants.map((variant) => ({
       variant,
@@ -367,7 +298,6 @@ export class StrategyLab {
     });
 
     ranked.sort((a, b) => b.score - a.score);
-
     ranked.forEach((rv, index) => {
       rv.rank = index + 1;
     });
@@ -375,27 +305,18 @@ export class StrategyLab {
     return ranked;
   }
 
-  /**
-   * Get current lab status and statistics
-   */
+  /** Get current lab status and statistics */
   public getLabStatus(): LabStatus {
-    const scores = this.processHistory.map(
-      (p) => p.critique.overallScore
-    );
-    const avgScore =
-      scores.length > 0
-        ? scores.reduce((a, b) => a + b, 0) / scores.length
-        : 0;
+    const scores = this.processHistory.map((p) => p.critique.overallScore);
+    const avgScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
 
-    const topStrategies = Array.from(
-      this.strategyCache.values()
-    ).slice(0, 5);
+    const topStrategies = Array.from(this.strategyCache.values()).slice(0, 5);
 
     return {
       totalStrategiesProcessed: this.processHistory.length,
       totalVariantsGenerated: this.processHistory.reduce(
         (sum, p) => sum + p.variants.length,
-        0
+        0,
       ),
       averageCritiqueScore: avgScore,
       topStrategies,
@@ -404,32 +325,22 @@ export class StrategyLab {
     };
   }
 
-  /**
-   * Clear processing history
-   */
   public clearHistory(): void {
     this.processHistory = [];
     this.strategyCache.clear();
   }
 
-  /**
-   * Get strategy from cache
-   */
   public getCachedStrategy(name: string): StrategyDSL | undefined {
     return this.strategyCache.get(name);
   }
 
-  /**
-   * Get full processing history
-   */
   public getProcessHistory(): LabProcessResult[] {
     return this.processHistory;
   }
 }
 
-/**
- * Export all classes and interfaces for public use
- */
+// ─── Re-exports ───────────────────────────────────────────────────────────────
+
 export {
   NaturalLanguageStrategyParser,
   StrategyCritique,

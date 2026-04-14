@@ -1,4 +1,4 @@
-import { StrategyDSL, FilterSpec } from './strategy_dsl';
+import { StrategyDSL } from './strategy_dsl';
 
 /**
  * Variant metadata describing modifications
@@ -24,8 +24,9 @@ export interface StrategyVariant extends StrategyDSL {
 
 /**
  * Variant Generator
- * Generates multiple strategy variants from a base strategy DSL
- * Each variant modifies specific parameters in systematic ways
+ * Generates multiple strategy variants from a base strategy DSL.
+ * Each variant modifies specific parameters in systematic ways to explore
+ * the strategy design space while staying within valid DSL constraints.
  */
 export class VariantGenerator {
   /**
@@ -46,24 +47,24 @@ export class VariantGenerator {
     return variants;
   }
 
+  private clone(strategy: StrategyDSL): StrategyDSL {
+    return JSON.parse(JSON.stringify(strategy)) as StrategyDSL;
+  }
+
   /**
    * Variant: tighter stops (2% below base)
-   * Lower exit threshold, higher % of winning trades but smaller profits
    */
   public tighterStops(strategy: StrategyDSL): StrategyVariant {
-    const newStrategy = JSON.parse(
-      JSON.stringify(strategy)
-    ) as StrategyDSL;
+    const newStrategy = this.clone(strategy);
 
-    if (newStrategy.exit.stopLoss && typeof newStrategy.exit.stopLoss === 'object') {
-      const currentStop = newStrategy.exit.stopLoss.value || 2;
-      newStrategy.exit.stopLoss.value = Math.max(0.5, currentStop * 0.5);
+    const originalStop = newStrategy.exit.stopLoss?.value ?? 2;
+    if (newStrategy.exit.stopLoss) {
+      newStrategy.exit.stopLoss.value = Math.max(0.5, originalStop * 0.5);
     }
 
-    const modifications: string[] = [];
-    modifications.push(
-      `Stop loss reduced from ${strategy.exit.stopLoss?.value || 2}% to ${newStrategy.exit.stopLoss?.value || 1}%`
-    );
+    const modifications: string[] = [
+      `Stop loss reduced from ${originalStop}% to ${newStrategy.exit.stopLoss?.value ?? 1}%`,
+    ];
 
     return {
       ...newStrategy,
@@ -85,22 +86,18 @@ export class VariantGenerator {
 
   /**
    * Variant: wider stops (2x base)
-   * Higher threshold, larger stop but more patience for trades
    */
   public widerStops(strategy: StrategyDSL): StrategyVariant {
-    const newStrategy = JSON.parse(
-      JSON.stringify(strategy)
-    ) as StrategyDSL;
+    const newStrategy = this.clone(strategy);
 
-    if (newStrategy.exit.stopLoss && typeof newStrategy.exit.stopLoss === 'object') {
-      const currentStop = newStrategy.exit.stopLoss.value || 2;
-      newStrategy.exit.stopLoss.value = currentStop * 2;
+    const originalStop = newStrategy.exit.stopLoss?.value ?? 2;
+    if (newStrategy.exit.stopLoss) {
+      newStrategy.exit.stopLoss.value = originalStop * 2;
     }
 
-    const modifications: string[] = [];
-    modifications.push(
-      `Stop loss increased from ${strategy.exit.stopLoss?.value || 2}% to ${newStrategy.exit.stopLoss?.value || 4}%`
-    );
+    const modifications: string[] = [
+      `Stop loss increased from ${originalStop}% to ${newStrategy.exit.stopLoss?.value ?? 4}%`,
+    ];
 
     return {
       ...newStrategy,
@@ -122,31 +119,27 @@ export class VariantGenerator {
 
   /**
    * Variant: aggressive entry
-   * Removes some confirmation requirements, enters sooner
+   * Lowers minConfirmationsRequired to enter faster.
    */
   public aggressiveEntry(strategy: StrategyDSL): StrategyVariant {
-    const newStrategy = JSON.parse(
-      JSON.stringify(strategy)
-    ) as StrategyDSL;
+    const newStrategy = this.clone(strategy);
 
-    if (newStrategy.entry.confirmationBars > 1) {
-      newStrategy.entry.confirmationBars = Math.max(
-        1,
-        newStrategy.entry.confirmationBars - 1
-      );
-    }
+    const originalMin = newStrategy.entry.minConfirmationsRequired ?? 1;
+    newStrategy.entry.minConfirmationsRequired = Math.max(1, originalMin - 1);
+    newStrategy.entry.aggressiveness = 'aggressive';
 
-    const modifications: string[] = [];
-    modifications.push(
-      `Confirmation bars reduced from ${strategy.entry.confirmationBars} to ${newStrategy.entry.confirmationBars}`
-    );
+    const modifications: string[] = [
+      `Minimum confirmations reduced from ${originalMin} to ${newStrategy.entry.minConfirmationsRequired}`,
+      'Entry aggressiveness set to aggressive',
+    ];
 
-    if (newStrategy.filters && newStrategy.filters.length > 0) {
-      newStrategy.filters = newStrategy.filters.slice(
-        0,
-        Math.max(0, newStrategy.filters.length - 1)
-      );
-      modifications.push('Removed 1 filter for faster entries');
+    // Relax quality thresholds for faster entries
+    if (newStrategy.filters) {
+      const originalQ = newStrategy.filters.minQualityScore;
+      const originalE = newStrategy.filters.minEdgeScore;
+      newStrategy.filters.minQualityScore = Math.max(0, originalQ - 0.1);
+      newStrategy.filters.minEdgeScore = Math.max(0, originalE - 0.1);
+      modifications.push('Lowered minimum quality and edge scores by 0.1');
     }
 
     return {
@@ -156,7 +149,7 @@ export class VariantGenerator {
         baseStrategyName: strategy.name,
         variantType: 'aggressive_entry',
         description:
-          'Reduces confirmation requirements to enter trades faster with less filter restrictions',
+          'Reduces confirmation requirements and quality thresholds to enter trades faster',
         modificationsApplied: modifications,
         expectedImpact: {
           winRate: -0.08,
@@ -169,32 +162,30 @@ export class VariantGenerator {
 
   /**
    * Variant: conservative entry
-   * Adds confirmation bars and stricter filters
+   * Requires more confirmations and tightens filters.
    */
   public conservativeEntry(strategy: StrategyDSL): StrategyVariant {
-    const newStrategy = JSON.parse(
-      JSON.stringify(strategy)
-    ) as StrategyDSL;
+    const newStrategy = this.clone(strategy);
 
-    newStrategy.entry.confirmationBars =
-      (newStrategy.entry.confirmationBars || 1) + 1;
+    const originalMin = newStrategy.entry.minConfirmationsRequired ?? 1;
+    newStrategy.entry.minConfirmationsRequired = originalMin + 1;
+    newStrategy.entry.aggressiveness = 'conservative';
 
-    const modifications: string[] = [];
-    modifications.push(
-      `Confirmation bars increased from ${strategy.entry.confirmationBars} to ${newStrategy.entry.confirmationBars}`
-    );
+    const modifications: string[] = [
+      `Minimum confirmations increased from ${originalMin} to ${newStrategy.entry.minConfirmationsRequired}`,
+      'Entry aggressiveness set to conservative',
+    ];
 
-    const hasVolatilityFilter = newStrategy.filters?.some(
-      (f) => f.type === 'volatility'
-    );
-    if (!hasVolatilityFilter) {
-      newStrategy.filters = newStrategy.filters || [];
-      newStrategy.filters.push({
-        type: 'volatility',
-        minAtr: 0.5,
-        maxAtr: 2.0,
-      });
-      modifications.push('Added volatility filter for stable entries');
+    if (newStrategy.filters) {
+      newStrategy.filters.minQualityScore = Math.min(
+        1,
+        newStrategy.filters.minQualityScore + 0.1,
+      );
+      newStrategy.filters.minEdgeScore = Math.min(
+        1,
+        newStrategy.filters.minEdgeScore + 0.1,
+      );
+      modifications.push('Raised minimum quality and edge scores by 0.1');
     }
 
     return {
@@ -204,7 +195,7 @@ export class VariantGenerator {
         baseStrategyName: strategy.name,
         variantType: 'conservative_entry',
         description:
-          'Increases confirmation bars and adds filters to reduce false signals',
+          'Increases confirmation requirements and filter quality to reduce false signals',
         modificationsApplied: modifications,
         expectedImpact: {
           winRate: 0.12,
@@ -217,37 +208,25 @@ export class VariantGenerator {
 
   /**
    * Variant: regime adapted
-   * Adds trend and volatility filters for better regime alignment
+   * Adjusts marketContext regime filter to prefer stronger trends.
    */
   public regimeAdapted(strategy: StrategyDSL): StrategyVariant {
-    const newStrategy = JSON.parse(
-      JSON.stringify(strategy)
-    ) as StrategyDSL;
-
-    newStrategy.filters = newStrategy.filters || [];
+    const newStrategy = this.clone(strategy);
     const modifications: string[] = [];
 
-    const hasTrendFilter = newStrategy.filters.some(
-      (f) => f.type === 'trend'
-    );
-    if (!hasTrendFilter) {
-      newStrategy.filters.push({
-        type: 'trend',
-        direction: 'any',
-        strength: 'moderate',
-      });
-      modifications.push('Added trend detection filter');
+    if (newStrategy.marketContext?.regimeFilter) {
+      const rf = newStrategy.marketContext.regimeFilter;
+      rf.minStrength = Math.min(1, (rf.minStrength ?? 0.5) + 0.15);
+      modifications.push(
+        `Regime minimum strength raised to ${rf.minStrength.toFixed(2)}`,
+      );
     }
-
-    const hasVolumeFilter = newStrategy.filters.some(
-      (f) => f.type === 'volume'
-    );
-    if (!hasVolumeFilter) {
-      newStrategy.filters.push({
-        type: 'volume',
-        minVolume: 1000000,
-      });
-      modifications.push('Added minimum volume filter');
+    if (newStrategy.marketContext?.trendFilter) {
+      newStrategy.marketContext.trendFilter.mtfAlignment = true;
+      newStrategy.marketContext.trendFilter.minTrendStrength = 0.6;
+      modifications.push(
+        'Enabled multi-timeframe alignment with 0.6 minimum trend strength',
+      );
     }
 
     return {
@@ -257,7 +236,7 @@ export class VariantGenerator {
         baseStrategyName: strategy.name,
         variantType: 'regime_adapted',
         description:
-          'Adds regime and volume filters to improve market condition alignment',
+          'Tightens regime and trend filters to improve market condition alignment',
         modificationsApplied: modifications,
         expectedImpact: {
           winRate: 0.08,
@@ -270,32 +249,32 @@ export class VariantGenerator {
 
   /**
    * Variant: scaled down
-   * Smaller position sizes, tighter stops, focus on preservation
+   * Smaller position sizes, tighter stops, focus on capital preservation.
    */
   public scaledDown(strategy: StrategyDSL): StrategyVariant {
-    const newStrategy = JSON.parse(
-      JSON.stringify(strategy)
-    ) as StrategyDSL;
+    const newStrategy = this.clone(strategy);
+    const modifications: string[] = [];
 
     if (newStrategy.sizing) {
-      newStrategy.sizing.baseSize =
-        (newStrategy.sizing.baseSize || 1) * 0.5;
-      newStrategy.sizing.maxSize =
-        (newStrategy.sizing.maxSize || 0.02) * 0.5;
+      const origRisk = newStrategy.sizing.maxRiskPercent;
+      const origPos = newStrategy.sizing.maxPositionPercent;
+      newStrategy.sizing.maxRiskPercent = origRisk * 0.5;
+      newStrategy.sizing.maxPositionPercent = origPos * 0.5;
+      modifications.push(
+        `Max risk reduced from ${origRisk}% to ${newStrategy.sizing.maxRiskPercent}%`,
+      );
+      modifications.push(
+        `Max position reduced from ${origPos}% to ${newStrategy.sizing.maxPositionPercent}%`,
+      );
     }
 
-    if (newStrategy.exit.stopLoss && typeof newStrategy.exit.stopLoss === 'object') {
-      newStrategy.exit.stopLoss.value =
-        (newStrategy.exit.stopLoss.value || 2) * 0.75;
+    if (newStrategy.exit.stopLoss) {
+      const origStop = newStrategy.exit.stopLoss.value ?? 2;
+      newStrategy.exit.stopLoss.value = origStop * 0.75;
+      modifications.push(
+        `Stop loss tightened to ${newStrategy.exit.stopLoss.value}%`,
+      );
     }
-
-    const modifications: string[] = [];
-    modifications.push(
-      'Position size reduced by 50% for capital preservation'
-    );
-    modifications.push(
-      `Stop loss tightened to ${newStrategy.exit.stopLoss?.value || 1.5}%`
-    );
 
     return {
       ...newStrategy,
@@ -317,32 +296,32 @@ export class VariantGenerator {
 
   /**
    * Variant: scaled up
-   * Larger position sizes with wider stops, aggressive growth mode
+   * Larger position sizes with wider stops, aggressive growth mode.
    */
   public scaledUp(strategy: StrategyDSL): StrategyVariant {
-    const newStrategy = JSON.parse(
-      JSON.stringify(strategy)
-    ) as StrategyDSL;
+    const newStrategy = this.clone(strategy);
+    const modifications: string[] = [];
 
     if (newStrategy.sizing) {
-      newStrategy.sizing.baseSize =
-        (newStrategy.sizing.baseSize || 1) * 1.5;
-      newStrategy.sizing.maxSize =
-        Math.min((newStrategy.sizing.maxSize || 0.02) * 1.5, 0.1);
+      const origRisk = newStrategy.sizing.maxRiskPercent;
+      const origPos = newStrategy.sizing.maxPositionPercent;
+      newStrategy.sizing.maxRiskPercent = Math.min(origRisk * 1.5, 5);
+      newStrategy.sizing.maxPositionPercent = Math.min(origPos * 1.5, 25);
+      modifications.push(
+        `Max risk increased from ${origRisk}% to ${newStrategy.sizing.maxRiskPercent}%`,
+      );
+      modifications.push(
+        `Max position increased from ${origPos}% to ${newStrategy.sizing.maxPositionPercent}%`,
+      );
     }
 
-    if (newStrategy.exit.stopLoss && typeof newStrategy.exit.stopLoss === 'object') {
-      newStrategy.exit.stopLoss.value =
-        (newStrategy.exit.stopLoss.value || 2) * 1.5;
+    if (newStrategy.exit.stopLoss) {
+      const origStop = newStrategy.exit.stopLoss.value ?? 2;
+      newStrategy.exit.stopLoss.value = origStop * 1.5;
+      modifications.push(
+        `Stop loss widened to ${newStrategy.exit.stopLoss.value}%`,
+      );
     }
-
-    const modifications: string[] = [];
-    modifications.push(
-      'Position size increased by 50% for aggressive growth'
-    );
-    modifications.push(
-      `Stop loss widened to ${newStrategy.exit.stopLoss?.value || 3}%`
-    );
 
     return {
       ...newStrategy,
@@ -364,53 +343,48 @@ export class VariantGenerator {
 
   /**
    * Variant: filtered high quality
-   * Adds comprehensive filters to reduce false signals
+   * Tightens FilterSpec thresholds and adds cooldown.
    */
-  public filteredHighQuality(
-    strategy: StrategyDSL
-  ): StrategyVariant {
-    const newStrategy = JSON.parse(
-      JSON.stringify(strategy)
-    ) as StrategyDSL;
-
-    newStrategy.filters = newStrategy.filters || [];
+  public filteredHighQuality(strategy: StrategyDSL): StrategyVariant {
+    const newStrategy = this.clone(strategy);
     const modifications: string[] = [];
 
-    const requiredFilters: FilterSpec[] = [
-      {
-        type: 'trend',
-        direction: 'any',
-        strength: 'moderate',
-      },
-      {
-        type: 'volatility',
-        minAtr: 0.3,
-        maxAtr: 3.0,
-      },
-      {
-        type: 'volume',
-        minVolume: 1000000,
-      },
-      {
-        type: 'time',
-        allowedHours: [9, 16],
-        excludeWeekends: true,
-      },
-    ];
-
-    requiredFilters.forEach((newFilter) => {
-      const exists = newStrategy.filters?.some(
-        (f) => f.type === newFilter.type
+    if (newStrategy.filters) {
+      newStrategy.filters.minQualityScore = Math.min(
+        1,
+        Math.max(newStrategy.filters.minQualityScore, 0.75),
       );
-      if (!exists) {
-        newStrategy.filters?.push(newFilter);
-        modifications.push(`Added ${newFilter.type} filter`);
-      }
-    });
+      newStrategy.filters.minEdgeScore = Math.min(
+        1,
+        Math.max(newStrategy.filters.minEdgeScore, 0.7),
+      );
+      newStrategy.filters.maxCorrelation = Math.min(
+        newStrategy.filters.maxCorrelation,
+        0.5,
+      );
+      newStrategy.filters.cooldownBars = Math.max(
+        newStrategy.filters.cooldownBars,
+        3,
+      );
+      modifications.push(
+        `Quality score threshold set to ${newStrategy.filters.minQualityScore}`,
+      );
+      modifications.push(
+        `Edge score threshold set to ${newStrategy.filters.minEdgeScore}`,
+      );
+      modifications.push(
+        `Max correlation tightened to ${newStrategy.filters.maxCorrelation}`,
+      );
+      modifications.push(
+        `Cooldown bars raised to ${newStrategy.filters.cooldownBars}`,
+      );
+    }
 
-    newStrategy.entry.confirmationBars =
-      Math.max(newStrategy.entry.confirmationBars || 1, 2);
-    modifications.push('Increased confirmation bars to 2 minimum');
+    const originalMin = newStrategy.entry.minConfirmationsRequired ?? 1;
+    newStrategy.entry.minConfirmationsRequired = Math.max(originalMin, 2);
+    modifications.push(
+      `Minimum confirmations raised to ${newStrategy.entry.minConfirmationsRequired}`,
+    );
 
     return {
       ...newStrategy,
@@ -419,7 +393,7 @@ export class VariantGenerator {
         baseStrategyName: strategy.name,
         variantType: 'filtered_high_quality',
         description:
-          'Comprehensive filters targeting only highest quality setups with strong confirmations',
+          'Tightens filter thresholds and confirmations for highest-quality setups only',
         modificationsApplied: modifications,
         expectedImpact: {
           winRate: 0.15,
@@ -432,33 +406,57 @@ export class VariantGenerator {
 
   /**
    * Generate variants with risk profiling
-   * Returns variants tuned to different risk tolerance levels
    */
   public generateRiskProfileVariants(
-    strategy: StrategyDSL
+    strategy: StrategyDSL,
   ): Map<string, StrategyVariant> {
     const variants = new Map<string, StrategyVariant>();
 
     variants.set('conservative', this.scaledDown(strategy));
-    variants.set('moderate', strategy as any);
+    variants.set('moderate', this.identityVariant(strategy));
     variants.set('aggressive', this.scaledUp(strategy));
     variants.set('quality_focused', this.filteredHighQuality(strategy));
 
     return variants;
   }
 
+  private identityVariant(strategy: StrategyDSL): StrategyVariant {
+    return {
+      ...this.clone(strategy),
+      variantMetadata: {
+        baseStrategyName: strategy.name,
+        variantType: 'identity',
+        description: 'Base strategy with no modifications',
+        modificationsApplied: [],
+        expectedImpact: { winRate: 0, riskReward: 0, drawdown: 0 },
+      },
+    };
+  }
+
   /**
-   * Combine two variant types to create hybrid
+   * Combine two variant types to create a hybrid.
    */
   public createHybridVariant(
     strategy: StrategyDSL,
-    type1: 'tight' | 'wide' | 'aggressive' | 'conservative' | 'regime' | 'scaled_down' | 'scaled_up' | 'quality',
-    type2: 'tight' | 'wide' | 'aggressive' | 'conservative' | 'regime' | 'scaled_down' | 'scaled_up' | 'quality'
+    type1:
+      | 'tight'
+      | 'wide'
+      | 'aggressive'
+      | 'conservative'
+      | 'regime'
+      | 'scaled_down'
+      | 'scaled_up'
+      | 'quality',
+    type2:
+      | 'tight'
+      | 'wide'
+      | 'aggressive'
+      | 'conservative'
+      | 'regime'
+      | 'scaled_down'
+      | 'scaled_up'
+      | 'quality',
   ): StrategyVariant {
-    let hybrid = JSON.parse(
-      JSON.stringify(strategy)
-    ) as StrategyDSL;
-
     const getVariant = (t: string): StrategyVariant => {
       switch (t) {
         case 'tight':
@@ -478,33 +476,43 @@ export class VariantGenerator {
         case 'quality':
           return this.filteredHighQuality(strategy);
         default:
-          return strategy as any;
+          return this.identityVariant(strategy);
       }
     };
 
     const v1 = getVariant(type1);
     const v2 = getVariant(type2);
 
-    hybrid = JSON.parse(JSON.stringify(v1)) as StrategyDSL;
+    const hybrid = JSON.parse(JSON.stringify(v1)) as StrategyDSL;
 
-    if (v2.exit.stopLoss && typeof v2.exit.stopLoss === 'object') {
-      hybrid.exit.stopLoss = v2.exit.stopLoss;
+    // Merge: take v2's stop loss, sizing, and filter tightenings.
+    if (v2.exit.stopLoss) {
+      hybrid.exit.stopLoss = JSON.parse(
+        JSON.stringify(v2.exit.stopLoss),
+      );
     }
 
     if (v2.sizing) {
-      hybrid.sizing = v2.sizing;
+      hybrid.sizing = JSON.parse(JSON.stringify(v2.sizing));
     }
 
-    if (v2.filters) {
-      v2.filters.forEach((f) => {
-        if (
-          !hybrid.filters?.some(
-            (existing) => existing.type === f.type
-          )
-        ) {
-          hybrid.filters?.push(f);
-        }
-      });
+    if (v2.filters && hybrid.filters) {
+      hybrid.filters.minQualityScore = Math.max(
+        hybrid.filters.minQualityScore,
+        v2.filters.minQualityScore,
+      );
+      hybrid.filters.minEdgeScore = Math.max(
+        hybrid.filters.minEdgeScore,
+        v2.filters.minEdgeScore,
+      );
+      hybrid.filters.maxCorrelation = Math.min(
+        hybrid.filters.maxCorrelation,
+        v2.filters.maxCorrelation,
+      );
+      hybrid.filters.cooldownBars = Math.max(
+        hybrid.filters.cooldownBars,
+        v2.filters.cooldownBars,
+      );
     }
 
     return {

@@ -68,7 +68,7 @@ const validateInput = (req: Request, res: Response, next: NextFunction) => {
       timestamp: Date.now(),
     } as ApiResponse<null>);
   }
-  next();
+  return next();
 };
 
 const errorHandler = (
@@ -132,7 +132,7 @@ router.post('/run', async (req: Request, res: Response, next: NextFunction) => {
       timestamp: Date.now(),
     } as ApiResponse<DecisionLoopResult>);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 });
 
@@ -144,7 +144,7 @@ router.post(
   '/run-to/:step',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { step } = req.params;
+      const step = req.params.step as PipelineStep;
       const { input, memory_db, backtest_engine, governance_rules, explain_engine } =
         req.body as RunToRequest;
 
@@ -198,7 +198,7 @@ router.post(
         timestamp: Date.now(),
       } as ApiResponse<DecisionLoopResult>);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 );
@@ -251,7 +251,7 @@ router.post('/resume', async (req: Request, res: Response, next: NextFunction) =
       timestamp: Date.now(),
     } as ApiResponse<DecisionLoopResult>);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 });
 
@@ -263,7 +263,7 @@ router.get(
   '/status/:pipelineId',
   (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { pipelineId } = req.params;
+      const pipelineId = req.params.pipelineId as string;
 
       const state = pipelineStates.get(pipelineId);
       if (!state) {
@@ -280,7 +280,7 @@ router.get(
         timestamp: Date.now(),
       } as ApiResponse<PipelineState>);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 );
@@ -293,7 +293,7 @@ router.post(
   '/abort/:pipelineId',
   (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { pipelineId } = req.params;
+      const pipelineId = req.params.pipelineId as string;
 
       const state = pipelineStates.get(pipelineId);
       if (!state) {
@@ -312,7 +312,7 @@ router.post(
         timestamp: Date.now(),
       } as ApiResponse<any>);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 );
@@ -347,7 +347,7 @@ router.post('/interpret', async (req: Request, res: Response, next: NextFunction
       timestamp: Date.now(),
     } as ApiResponse<any>);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 });
 
@@ -377,7 +377,7 @@ router.post('/screen', async (req: Request, res: Response, next: NextFunction) =
       timestamp: Date.now(),
     } as ApiResponse<any>);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 });
 
@@ -409,7 +409,7 @@ router.post(
         timestamp: Date.now(),
       } as ApiResponse<any>);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 );
@@ -441,7 +441,7 @@ router.get('/history', (req: Request, res: Response, next: NextFunction) => {
       timestamp: Date.now(),
     } as ApiResponse<any>);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 });
 
@@ -453,7 +453,7 @@ router.delete(
   '/history/:pipelineId',
   (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { pipelineId } = req.params;
+      const pipelineId = req.params.pipelineId as string;
 
       if (pipelineStates.has(pipelineId)) {
         pipelineStates.delete(pipelineId);
@@ -470,7 +470,7 @@ router.delete(
         timestamp: Date.now(),
       } as ApiResponse<null>);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 );

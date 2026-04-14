@@ -302,7 +302,7 @@ async function _autoEvaluateSignal(
     // Circuit breaker check
     if (!brainCircuitBreaker.allowSignal()) {
       brainEventBus.agentReport({
-        agentId: "bridge",
+        agentId: "brain",
         symbol: decision.symbol,
         status: "done",
         confidence: 0,
@@ -322,7 +322,7 @@ async function _autoEvaluateSignal(
     const rulebookCheck = brainRulebook.evaluate(decision.symbol, direction, regime);
     if (!rulebookCheck.allowed) {
       brainEventBus.agentReport({
-        agentId: "bridge",
+        agentId: "brain",
         symbol: decision.symbol,
         status: "done",
         confidence: 0,
@@ -341,12 +341,12 @@ async function _autoEvaluateSignal(
     const entryPrice = lastBar?.Close ?? lastBar?.close ?? 0;
     if (entryPrice <= 0) return;
 
-    const atr = structureOut.atr ?? entryPrice * 0.01;
+    const atr = (structureOut as any).atr ?? entryPrice * 0.01;
     const strategy = await import("./strategy_evolution.js").then(({ strategyRegistry }) =>
       strategyRegistry.get("smc_ob_fvg", decision.symbol)
     );
-    const stopMult = strategy?.stopAtrMultiplier ?? 1.5;
-    const tpMult = strategy?.takeProfitAtrMultiplier ?? 3.0;
+    const stopMult = strategy?.stopATRMultiplier ?? 1.5;
+    const tpMult = strategy?.takeProfitATRMultiplier ?? 3.0;
     const isLong = direction === "LONG";
 
     const signal: import("./brain_execution_bridge.js").BrainSignal = {
@@ -361,14 +361,14 @@ async function _autoEvaluateSignal(
       strategyId: strategy?.strategyId ?? "smc_ob_fvg",
       winProbability: intelOut.winProbability,
       siConfidence: intelOut.winProbability,
-      mtfAligned: structureOut.mtfAlignment?.aligned ?? false,
+      mtfAligned: (structureOut as any).mtfAlignment?.aligned ?? false,
       layerContext: { readinessScore: decision.readinessScore, action: decision.action },
     };
 
     const result = await brainExecutionBridge.evaluate(signal);
     if (result.approved) {
       brainEventBus.agentReport({
-        agentId: "bridge",
+        agentId: "brain",
         symbol: decision.symbol,
         status: "done",
         confidence: signal.winProbability ?? signal.confirmationScore,
@@ -559,13 +559,13 @@ export function startBrainScheduler(
               schedulerState.lastBacktestAt[sym] = Date.now();
             }
           } catch (btErr) {
-            logger.error(`[BrainScheduler] Backtest error for ${sym}:`, btErr);
+            logger.error({ err: btErr }, `[BrainScheduler] Backtest error for ${sym}`);
           }
         }
       }
     } catch (err) {
       schedulerState.errors++;
-      logger.error(`[BrainScheduler] Cycle ${schedulerState.cycleCount} error:`, err);
+      logger.error({ err }, `[BrainScheduler] Cycle ${schedulerState.cycleCount} error`);
     }
 
     // Schedule next tick — subtract elapsed time to maintain rhythm

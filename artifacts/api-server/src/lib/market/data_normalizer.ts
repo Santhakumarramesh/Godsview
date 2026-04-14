@@ -262,14 +262,14 @@ export class DataNormalizer {
         price: Number(typeof b === "object" ? b.price : b[0]),
         size: Number(typeof b === "object" ? b.size : b[1]),
       }))
-      .filter((b) => isFinite(b.price) && isFinite(b.size));
+      .filter((b: any) => isFinite(b.price) && isFinite(b.size));
 
     const asks = (raw.asks || [])
       .map((a: any) => ({
         price: Number(typeof a === "object" ? a.price : a[0]),
         size: Number(typeof a === "object" ? a.size : a[1]),
       }))
-      .filter((a) => isFinite(a.price) && isFinite(a.size));
+      .filter((a: any) => isFinite(a.price) && isFinite(a.size));
 
     return this.computeOrderBookMetrics(timestamp, "UNKNOWN", bids, asks);
   }

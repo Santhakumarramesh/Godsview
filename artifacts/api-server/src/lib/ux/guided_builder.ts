@@ -685,7 +685,7 @@ export class GuidedBuilder {
 
     const key = answerMap[questionId as keyof typeof answerMap];
     if (key) {
-      session.strategy[key as keyof typeof session.strategy] = answer as any;
+      (session.strategy as Record<string, unknown>)[key as string] = answer;
     }
   }
 }

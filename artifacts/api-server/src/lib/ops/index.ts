@@ -127,6 +127,9 @@ export type {
   MaintenanceTask,
   MaintenanceSchedule,
   IncidentReport,
+} from './quant_runbook';
+
+export type {
   DailyBrief,
   WeeklyBrief,
   SystemHealth,
@@ -139,7 +142,7 @@ export type {
   EvaluationStatus,
   ActionItem,
   RiskSummary,
-} from './quant_runbook';
+} from './daily_operator_brief';
 
 export type {
   SystemHealth as BriefSystemHealth,

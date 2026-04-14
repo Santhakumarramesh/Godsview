@@ -232,6 +232,7 @@ export class StrategyFamily {
         strategyId,
         shouldRetire: false,
         reason: "Not in a family — no comparison baseline",
+        estSavings: 0,
       };
     }
 
@@ -240,6 +241,7 @@ export class StrategyFamily {
         strategyId,
         shouldRetire: false,
         reason: "Only member of family — keep for diversification",
+        estSavings: 0,
       };
     }
 
@@ -250,6 +252,7 @@ export class StrategyFamily {
         strategyId,
         shouldRetire: false,
         reason: "Strategy not found",
+        estSavings: 0,
       };
     }
 
@@ -262,6 +265,7 @@ export class StrategyFamily {
         strategyId,
         shouldRetire: false,
         reason: "Could not evaluate against best member",
+        estSavings: 0,
       };
     }
 

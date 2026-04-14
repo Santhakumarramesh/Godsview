@@ -267,9 +267,10 @@ export function wireAccountStreamToReconciler(): void {
       const { registerCostBasis } = await import("./fill_reconciler.js");
       // The reconciler handles deduplication via execution_id
       // We inject directly into the reconciler's tick processing:
-      const { _injectFill } = await import("./fill_reconciler.js");
-      if (typeof _injectFill === "function") {
-        _injectFill({
+      const reconcilerMod = await import("./fill_reconciler.js");
+      const inject = (reconcilerMod as any)._injectFill;
+      if (typeof inject === "function") {
+        inject({
           id: fill.execution_id || fill.order_id,
           order_id: fill.order_id,
           symbol: fill.symbol,
@@ -284,7 +285,7 @@ export function wireAccountStreamToReconciler(): void {
     // 2. Emit to brain event bus
     try {
       const { brainEventBus } = await import("./brain_event_bus.js");
-      brainEventBus.emit("fill", {
+      (brainEventBus as any).emit?.("fill", {
         symbol: fill.symbol,
         side: fill.side,
         qty: fill.qty,
@@ -311,9 +312,9 @@ export function wireAccountStreamToReconciler(): void {
           const distToTP = Math.abs(fill.price - pos.takeProfit);
           const distToSL = Math.abs(fill.price - pos.stopLoss);
           if (distToTP < distToSL) {
-            brainAlerts.tpHit(fill.symbol, pnlR).catch(() => {});
+            brainAlerts.tpHit(fill.symbol, pnlR);
           } else {
-            brainAlerts.slHit(fill.symbol, pnlR).catch(() => {});
+            brainAlerts.slHit(fill.symbol, pnlR);
           }
         }
       }

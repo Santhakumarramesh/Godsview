@@ -449,7 +449,7 @@ export class DriftMonitor extends EventEmitter {
    */
   private calculateSlidingWindows(model: MonitoredModel): WindowMetrics[] {
     const now = Date.now();
-    const windows = [];
+    const windows: WindowMetrics[] = [];
 
     const windowConfigs = [
       { size: '7d', days: 7 },

@@ -1,4 +1,6 @@
-import { Strategy, BacktestResult } from '../types';
+// Local type shims — the former '../types' module was retired.
+type Strategy = any;
+type BacktestResult = any;
 
 export interface RobustnessScores {
   edgeStability: number;
@@ -56,8 +58,8 @@ export class VariantRanker {
     }
 
     const windows = backtestResults.rollingWindowSharpe;
-    const mean = windows.reduce((a, b) => a + b) / windows.length;
-    const variance = windows.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / windows.length;
+    const mean = windows.reduce((a: number, b: number) => a + b) / windows.length;
+    const variance = windows.reduce((sum: number, v: number) => sum + Math.pow(v - mean, 2), 0) / windows.length;
     const stdDev = Math.sqrt(variance);
 
     // Lower coefficient of variation = more stable
@@ -174,7 +176,7 @@ export class VariantRanker {
 
     // Order execution realism
     const orderType = strategy.orderType || 'market';
-    if (orderType === 'limit' || strategy.entryRules?.some(r => r.type?.includes('limit'))) {
+    if (orderType === 'limit' || strategy.entryRules?.some((r: any) => r.type?.includes('limit'))) {
       score += 0.15;
     }
 
@@ -204,7 +206,7 @@ export class VariantRanker {
     }
 
     // Penalize for custom/complex indicators
-    const customIndicators = strategy.indicators?.filter(i => i.type.includes('Custom')).length || 0;
+    const customIndicators = strategy.indicators?.filter((i: any) => i.type.includes('Custom')).length || 0;
     if (customIndicators > 0) {
       score -= 0.1;
     }
