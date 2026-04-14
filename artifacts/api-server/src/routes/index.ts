@@ -212,4 +212,8 @@ router.use(developerPlatformRouter);
 import notificationsRouter from "./notifications";
 router.use(notificationsRouter);
 
+// ── Phase 72: Privacy & PII Protection ────────────────────────────────────
+import privacyProtectionRouter from "./privacy_protection";
+router.use(privacyProtectionRouter);
+
 export default router;
