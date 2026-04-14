@@ -176,4 +176,8 @@ router.use(sloMonitoringRouter);
 import auditTrailRouter from "./audit_trail";
 router.use(auditTrailRouter);
 
+// ── Phase 63: Feature Flags + Progressive Rollout ─────────────────────────
+import featureFlagsRouter from "./feature_flags";
+router.use(featureFlagsRouter);
+
 export default router;
