@@ -232,4 +232,8 @@ router.use(workflowEngineRouter);
 import serviceMeshRouter from "./service_mesh";
 router.use(serviceMeshRouter);
 
+// ── Phase 77: Event Sourcing + Time Travel ────────────────────────────────
+import eventSourcingRouter from "./event_sourcing";
+router.use(eventSourcingRouter);
+
 export default router;
