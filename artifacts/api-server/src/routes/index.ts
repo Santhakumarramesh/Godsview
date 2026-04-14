@@ -280,4 +280,8 @@ router.use(taxTrackingRouter);
 import orderbookL2Router from "./orderbook_l2";
 router.use(orderbookL2Router);
 
+// ── Phase 89: News + Sentiment ────────────────────────────────────────────
+import newsSentimentRouter from "./news_sentiment";
+router.use(newsSentimentRouter);
+
 export default router;
