@@ -220,4 +220,8 @@ router.use(privacyProtectionRouter);
 import riskAnalyticsRouter from "./risk_analytics";
 router.use(riskAnalyticsRouter);
 
+// ── Phase 74: ML Model Lifecycle ──────────────────────────────────────────
+import mlLifecycleRouter from "./ml_lifecycle";
+router.use(mlLifecycleRouter);
+
 export default router;
