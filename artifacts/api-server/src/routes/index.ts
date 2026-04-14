@@ -252,4 +252,8 @@ router.use(jobSchedulerRouter);
 import cacheLayerRouter from "./cache_layer";
 router.use(cacheLayerRouter);
 
+// ── Phase 82: Knowledge Base + Embeddings ─────────────────────────────────
+import knowledgeBaseRouter from "./knowledge_base";
+router.use(knowledgeBaseRouter);
+
 export default router;
