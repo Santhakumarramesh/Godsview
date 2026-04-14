@@ -268,4 +268,8 @@ router.use(reportingRouter);
 import anomalyDetectionRouter from "./anomaly_detection";
 router.use(anomalyDetectionRouter);
 
+// ── Phase 86: Portfolio Optimizer ─────────────────────────────────────────
+import portfolioOptimizerRouter from "./portfolio_optimizer";
+router.use(portfolioOptimizerRouter);
+
 export default router;
