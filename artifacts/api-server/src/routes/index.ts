@@ -256,4 +256,8 @@ router.use(cacheLayerRouter);
 import knowledgeBaseRouter from "./knowledge_base";
 router.use(knowledgeBaseRouter);
 
+// ── Phase 83: Strategy Bandit + Significance Testing ──────────────────────
+import strategyBanditRouter from "./strategy_bandit";
+router.use(strategyBanditRouter);
+
 export default router;
