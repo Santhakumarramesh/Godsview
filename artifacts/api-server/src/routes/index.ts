@@ -288,6 +288,10 @@ router.use(newsSentimentRouter);
 import selfHealRouter from "./self_heal";
 router.use(selfHealRouter);
 
+// ── Phase 97: Unified risk-breakers summary at /api/risk/breakers ──
+import riskBreakersSummaryRouter from "./risk_breakers_summary";
+router.use(riskBreakersSummaryRouter);
+
 // ── Phase 92: TradingView MCP webhook (/tradingview/webhook, aliased as /tv-webhook) ──
 import tradingviewMcpRouter from "./tradingview_mcp";
 router.use("/tradingview", tradingviewMcpRouter);

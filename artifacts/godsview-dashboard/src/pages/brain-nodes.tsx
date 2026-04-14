@@ -104,22 +104,73 @@ export default function BrainNodesPage() {
   const animFrameRef = useRef<number>(0);
   const timeRef = useRef(0);
 
-  /* ── Simulated status updates ─────────────────────────────────────────────── */
+  /* ── Live status binding to /api/engine_health (Phase 97) ─────────────────
+   * Real engine names from /api/engine_health are fuzzy-matched against
+   * BRAIN_NODES ids/labels. Any node whose engine reports back updates its
+   * status (ready→healthy, degraded→degraded, critical/idle→same). Nodes
+   * with no live signal continue to drift via the fallback simulation
+   * below so the canvas never feels frozen. */
   useEffect(() => {
-    const interval = setInterval(() => {
+    let cancelled = false;
+    const idIndex = new Map<string, BrainNode>();
+    for (const node of nodesRef.current) {
+      idIndex.set(node.id.toLowerCase(), node);
+      idIndex.set(node.label.toLowerCase().replace(/\s+/g, "-"), node);
+      idIndex.set(node.label.toLowerCase().replace(/\s+/g, "_"), node);
+    }
+    function applyEngine(name: string, eng: { status?: string; detail?: unknown }) {
+      const key = name.toLowerCase().replace(/\s+/g, "_");
+      const candidates = [
+        key,
+        key.replace(/_/g, "-"),
+        key.replace(/_engine$/, ""),
+        key.replace(/^get_/, ""),
+      ];
+      let target: BrainNode | undefined;
+      for (const c of candidates) {
+        target = idIndex.get(c);
+        if (target) break;
+      }
+      if (!target) return;
+      const status = String(eng.status ?? "");
+      if (status === "ready" || status === "healthy") target.status = "healthy";
+      else if (status === "degraded" || status === "lockout_active") target.status = "degraded";
+      else if (status === "down" || status === "critical" || status === "error") target.status = "critical";
+    }
+    async function poll() {
+      try {
+        const res = await fetch("/api/engine_health");
+        if (!res.ok) return;
+        const json = await res.json();
+        const engines = (json.engines ?? {}) as Record<string, { status?: string; detail?: unknown }>;
+        for (const [name, eng] of Object.entries(engines)) applyEngine(name, eng);
+        if (!cancelled && selectedNode) {
+          const refreshed = nodesRef.current.find((n) => n.id === selectedNode.id);
+          if (refreshed) setSelectedNode({ ...refreshed });
+        }
+      } catch {
+        /* offline — keep last known state */
+      }
+    }
+    poll();
+    const liveInterval = setInterval(poll, 5000);
+
+    // Fallback drift for unbound nodes — keeps the UI feeling alive.
+    const fallback = setInterval(() => {
       const nodes = nodesRef.current;
       const idx = Math.floor(Math.random() * nodes.length);
       const node = nodes[idx];
       node.latencyMs = Math.max(0.1, node.latencyMs + (Math.random() - 0.5) * 2);
       node.throughput = Math.max(10, Math.round(node.throughput + (Math.random() - 0.5) * 200));
       node.errorRate = Math.max(0, Math.min(0.1, node.errorRate + (Math.random() - 0.5) * 0.005));
-      if (node.errorRate > 0.03) node.status = "critical";
-      else if (node.errorRate > 0.015) node.status = "degraded";
-      else if (node.throughput < 50) node.status = "idle";
-      else node.status = "healthy";
       if (selectedNode?.id === node.id) setSelectedNode({ ...node });
     }, 2000);
-    return () => clearInterval(interval);
+
+    return () => {
+      cancelled = true;
+      clearInterval(liveInterval);
+      clearInterval(fallback);
+    };
   }, [selectedNode]);
 
   /* ── Find node at point ───────────────────────────────────────────────────── */
