@@ -288,4 +288,19 @@ router.use(newsSentimentRouter);
 import selfHealRouter from "./self_heal";
 router.use(selfHealRouter);
 
+// ── Phase 92: TradingView MCP webhook (/tradingview/webhook, aliased as /tv-webhook) ──
+import tradingviewMcpRouter from "./tradingview_mcp";
+router.use("/tradingview", tradingviewMcpRouter);
+// Alias routers so external tools (Chrome extension, TradingView alerts) can POST
+// to /api/tv-webhook directly. We mount the same router at /tv-webhook so
+// POST /api/tv-webhook/webhook works, and also register a root-path alias.
+import { Router as ExpressRouter } from "express";
+const tvAliasRouter = ExpressRouter();
+tvAliasRouter.post("/", (req, res, next) => {
+  // Re-route root POST to the /webhook handler inside tradingviewMcpRouter
+  req.url = "/webhook";
+  return (tradingviewMcpRouter as unknown as (req: unknown, res: unknown, next: unknown) => void)(req, res, next);
+});
+router.use("/tv-webhook", tvAliasRouter);
+
 export default router;
