@@ -224,4 +224,8 @@ router.use(riskAnalyticsRouter);
 import mlLifecycleRouter from "./ml_lifecycle";
 router.use(mlLifecycleRouter);
 
+// ── Phase 75: Workflow Engine ─────────────────────────────────────────────
+import workflowEngineRouter from "./workflow_engine";
+router.use(workflowEngineRouter);
+
 export default router;
