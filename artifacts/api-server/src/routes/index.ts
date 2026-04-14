@@ -180,4 +180,8 @@ router.use(auditTrailRouter);
 import featureFlagsRouter from "./feature_flags";
 router.use(featureFlagsRouter);
 
+// ── Phase 64: Data Lineage + Quality ──────────────────────────────────────
+import dataLineageRouter from "./data_lineage";
+router.use(dataLineageRouter);
+
 export default router;
