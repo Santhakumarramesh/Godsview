@@ -11,7 +11,7 @@ const router = Router();
  * Unified endpoint that checks all GodsView engines and returns
  * a composite health status for monitoring / deployment checks.
  */
-router.get("/engine-health", (_req: Request, res: Response): void => {
+const engineHealthHandler = (_req: Request, res: Response): void => {
   try {
     const start = Date.now();
 
@@ -77,6 +77,9 @@ router.get("/engine-health", (_req: Request, res: Response): void => {
       error: error instanceof Error ? error.message : "Internal error",
     });
   }
-});
+};
+router.get("/engine-health", engineHealthHandler);
+// Production-readiness alias (matches NEXT_SESSION_PROMPT gate /api/engine_health)
+router.get("/engine_health", engineHealthHandler);
 
 export default router;

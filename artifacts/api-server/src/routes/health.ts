@@ -36,7 +36,7 @@ function extractPayloadError(payload: unknown): string | null {
 const startedAt = new Date().toISOString();
 
 /* ── Liveness: is the process running? ────────────────────────────── */
-router.get("/healthz", (_req, res) => {
+const livenessHandler = (_req: import("express").Request, res: import("express").Response): void => {
   const data = HealthCheckResponse.parse({ status: "ok" });
   res.json({
     ...data,
@@ -44,7 +44,10 @@ router.get("/healthz", (_req, res) => {
     startedAt,
     memoryMB: Math.round(process.memoryUsage.rss() / 1024 / 1024),
   });
-});
+};
+router.get("/healthz", livenessHandler);
+// Production-readiness alias (matches NEXT_SESSION_PROMPT gate /api/health)
+router.get("/health", livenessHandler);
 
 /* ── Readiness: are dependencies healthy? ─────────────────────────── */
 router.get("/readyz", async (_req, res) => {
