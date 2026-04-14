@@ -272,4 +272,8 @@ router.use(anomalyDetectionRouter);
 import portfolioOptimizerRouter from "./portfolio_optimizer";
 router.use(portfolioOptimizerRouter);
 
+// ── Phase 87: Tax Lot Tracking + Wash Sale ────────────────────────────────
+import taxTrackingRouter from "./tax_tracking";
+router.use(taxTrackingRouter);
+
 export default router;
