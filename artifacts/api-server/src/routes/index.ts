@@ -260,4 +260,8 @@ router.use(knowledgeBaseRouter);
 import strategyBanditRouter from "./strategy_bandit";
 router.use(strategyBanditRouter);
 
+// ── Phase 84: Reporting Engine ────────────────────────────────────────────
+import reportingRouter from "./reporting";
+router.use(reportingRouter);
+
 export default router;
