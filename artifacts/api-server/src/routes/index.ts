@@ -248,4 +248,8 @@ router.use(pubsubRouter);
 import jobSchedulerRouter from "./job_scheduler";
 router.use(jobSchedulerRouter);
 
+// ── Phase 81: Cache Layer ─────────────────────────────────────────────────
+import cacheLayerRouter from "./cache_layer";
+router.use(cacheLayerRouter);
+
 export default router;
