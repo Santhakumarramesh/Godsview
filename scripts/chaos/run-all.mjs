@@ -15,6 +15,7 @@ const drills = [
   "breaker-trip-blocks-orders.mjs",
   "probe-self-heal.mjs",
   "mesh-degradation.mjs",
+  "backtest-roundtrip.mjs",
 ];
 
 let failed = 0;
