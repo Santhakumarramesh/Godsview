@@ -292,6 +292,14 @@ router.use(selfHealRouter);
 import riskBreakersSummaryRouter from "./risk_breakers_summary";
 router.use(riskBreakersSummaryRouter);
 
+// ── Phase 99: MCP backtest router — previously defined but not mounted ──
+//   POST /api/mcp-backtest/run  → full backtest with synthetic bars
+//   GET  /api/mcp-backtest/compare/:runId
+//   GET  /api/mcp-backtest/signal-log/:runId
+//   GET  /api/mcp-backtest/history
+import mcpBacktestRouter from "./mcp_backtest";
+router.use(mcpBacktestRouter);
+
 // ── Phase 92: TradingView MCP webhook (/tradingview/webhook, aliased as /tv-webhook) ──
 import tradingviewMcpRouter from "./tradingview_mcp";
 router.use("/tradingview", tradingviewMcpRouter);
