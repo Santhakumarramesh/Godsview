@@ -158,4 +158,14 @@ router.use(pythonV2Router);
 import opsV2Router from "./ops_v2";
 router.use("/api/ops/v2", opsV2Router);              // Operator brief, kill switch, exposure, drift, startup
 
+// ── Phase 57-60: Multi-Tenant, Marketplace, Chaos, Launch Readiness ───────
+import multiTenantRouter from "./multi_tenant";
+import strategyMarketplaceRouter from "./strategy_marketplace";
+import chaosEngineeringRouter from "./chaos_engineering";
+import launchReadinessRouter from "./launch_readiness";
+router.use(multiTenantRouter);
+router.use(strategyMarketplaceRouter);
+router.use(chaosEngineeringRouter);
+router.use(launchReadinessRouter);
+
 export default router;
