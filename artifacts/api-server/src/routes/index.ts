@@ -236,4 +236,8 @@ router.use(serviceMeshRouter);
 import eventSourcingRouter from "./event_sourcing";
 router.use(eventSourcingRouter);
 
+// ── Phase 78: Search + Indexing ───────────────────────────────────────────
+import searchRouter from "./search";
+router.use(searchRouter);
+
 export default router;
