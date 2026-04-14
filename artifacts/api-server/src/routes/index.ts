@@ -184,4 +184,8 @@ router.use(featureFlagsRouter);
 import dataLineageRouter from "./data_lineage";
 router.use(dataLineageRouter);
 
+// ── Phase 65: Capacity Planning + Auto-Scaling ────────────────────────────
+import capacityPlanningRouter from "./capacity_planning";
+router.use(capacityPlanningRouter);
+
 export default router;
