@@ -284,4 +284,8 @@ router.use(orderbookL2Router);
 import newsSentimentRouter from "./news_sentiment";
 router.use(newsSentimentRouter);
 
+// ── Phase 90: Self-Heal Diagnostics + Recommender ─────────────────────────
+import selfHealRouter from "./self_heal";
+router.use(selfHealRouter);
+
 export default router;
