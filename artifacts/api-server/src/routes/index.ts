@@ -228,4 +228,8 @@ router.use(mlLifecycleRouter);
 import workflowEngineRouter from "./workflow_engine";
 router.use(workflowEngineRouter);
 
+// ── Phase 76: Service Mesh ────────────────────────────────────────────────
+import serviceMeshRouter from "./service_mesh";
+router.use(serviceMeshRouter);
+
 export default router;
