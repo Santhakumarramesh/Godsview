@@ -277,14 +277,24 @@ describe("Phase 103 — Order Flow L2 Engine", () => {
     // OrderFlowL2Engine.WALL_RATIO = 4 (resting size vs average level size).
     // Make the 100-level bid clearly >4x the average of the other levels so
     // wall detection fires deterministically.
+    // OrderFlowL2Engine.WALL_RATIO = 4 and detectWalls computes avg across
+    // ALL levels including the wall itself. With just 4 levels ({X, a, a, a}),
+    // ratio = X / ((X+3a)/4) = 4X / (X+3a), which approaches 4 but never
+    // reaches it regardless of X/a. Need N >= 5 tiny levels around the big
+    // one so avg is dominated by smalls:
+    //   N=8 tinies of 50 (sum=350) + wall of 5000 -> avg=669, ratio=7.47.
     eng.ingestBook({
       symbol: "AAPL",
       ts: Date.now(),
       bids: [
         { price: 100, size: 5000 },
-        { price: 99, size: 100 },
-        { price: 98, size: 100 },
-        { price: 97, size: 100 },
+        { price: 99.5, size: 50 },
+        { price: 99, size: 50 },
+        { price: 98.5, size: 50 },
+        { price: 98, size: 50 },
+        { price: 97.5, size: 50 },
+        { price: 97, size: 50 },
+        { price: 96.5, size: 50 },
       ],
       asks: [
         { price: 101, size: 100 },
