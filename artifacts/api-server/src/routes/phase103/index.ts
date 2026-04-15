@@ -129,24 +129,25 @@ router.get("/agents/stream", (req: Request, res: Response) => {
   const onEvt = (evt: unknown) => {
     res.write(`event: agent\ndata: ${JSON.stringify(evt)}\n\n`);
   };
-  const anyBus = bus as any;
-  if (typeof anyBus.onAny === "function") {
-    anyBus.onAny(onEvt);
-  } else if (typeof anyBus.on === "function") {
-    for (const ev of [
-      "signal.emitted",
-      "validation.approved",
-      "validation.rejected",
-      "risk.decided",
-      "governance.allowed",
-      "governance.vetoed",
-      "execution.requested",
-      "execution.fill",
-      "execution.failed",
-      "learning.recorded",
-    ]) {
-      anyBus.on(ev, onEvt);
-    }
+  // AgentBus.on returns an unsubscribe function; capture them all so req.close
+  // cleans up cleanly. The union in agent_bus.ts is the source of truth.
+  const AGENT_EVENT_TYPES = [
+    "signal.new",
+    "signal.validated",
+    "signal.rejected",
+    "risk.approved",
+    "risk.reduced",
+    "risk.blocked",
+    "execution.requested",
+    "execution.fill",
+    "execution.failed",
+    "learning.update",
+    "governance.veto",
+    "governance.audit",
+  ] as const;
+  const unsubscribers: Array<() => void> = [];
+  for (const t of AGENT_EVENT_TYPES) {
+    unsubscribers.push(bus.on(t as any, onEvt));
   }
 
   const heartbeat = setInterval(() => {
@@ -155,10 +156,12 @@ router.get("/agents/stream", (req: Request, res: Response) => {
 
   req.on("close", () => {
     clearInterval(heartbeat);
-    try {
-      if (typeof anyBus.offAny === "function") anyBus.offAny(onEvt);
-    } catch {
-      /* ignore */
+    for (const u of unsubscribers) {
+      try {
+        u();
+      } catch {
+        /* ignore */
+      }
     }
   });
 });

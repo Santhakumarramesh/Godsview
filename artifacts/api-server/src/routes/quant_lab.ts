@@ -58,13 +58,17 @@ router.get("/strategies/:id/promotion", (req: Request, res: Response) => {
 
 router.post("/backtest/run", async (req: Request, res: Response) => {
   try {
-    const { runBacktest } = await import("../lib/backtest_engine");
+    // Use the same backtester module that the legacy /api/backtest/run route
+    // uses so behaviour and result shape are identical; the only difference
+    // here is the URL and that QuantLabUnified records the run.
+    const { runBacktest } = await import("../lib/backtester");
     const payload = req.body ?? {};
-    const result = await runBacktest({
+    const config = {
       lookback_days: Number(payload.lookback_days ?? 30),
       initial_equity: Number(payload.initial_equity ?? 10_000),
-      mode: payload.mode ?? "comparison",
-    } as any);
+      mode: String(payload.mode ?? "comparison"),
+    };
+    const result = await runBacktest(config as any);
     res.json(result);
   } catch (err: any) {
     logger.error({ err }, "quant-lab backtest run failed");
@@ -74,7 +78,7 @@ router.post("/backtest/run", async (req: Request, res: Response) => {
 
 router.get("/backtest/quick", async (_req: Request, res: Response) => {
   try {
-    const { runBacktest } = await import("../lib/backtest_engine");
+    const { runBacktest } = await import("../lib/backtester");
     const result = await runBacktest({
       lookback_days: 30,
       initial_equity: 10_000,

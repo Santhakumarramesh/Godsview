@@ -17,6 +17,7 @@ import { initGracefulShutdown } from "./lib/ops/graceful_shutdown";
 // P0-1 / P1-8: runtimeConfig port + 10s Phase 103 reconciliation cron.
 import { runtimeConfig } from "./lib/runtime_config";
 import { createReconciliationService } from "./lib/phase103/broker_reality/reconciliation_service";
+import { getOrderLifecycle } from "./lib/phase103/broker_reality/order_lifecycle";
 import { logAuditEvent } from "./lib/audit_logger";
 
 // ── Validate environment before anything else ───────────────────
@@ -142,10 +143,38 @@ const server = app.listen(port, (err) => {
 
     // P1-8: 10s Phase 103 ReconciliationService cron — pulls Alpaca positions
     // + orders, feeds the reconciler, emits critical drifts to audit.
+    // * lifecycle: shared OrderLifecycle singleton (submits routed through the
+    //   multi-agent pipeline land here).
+    // * internalPositions: brainPositions.getAll() normalised to InternalPosition
+    //   shape so drift is real-vs-tracked, not real-vs-empty.
+    // * expectedPnL: running unrealized R across brain-tracked positions (best
+    //   available proxy; ReconciliationService tolerates drift here).
+    const p103Lifecycle = getOrderLifecycle();
     const phase103Reconciler = createReconciliationService(
-      { getAllOrders: () => [] } as any,
-      () => [],
-      () => 0,
+      p103Lifecycle,
+      () => {
+        try {
+          // Lazy require — brain_execution_bridge has side effects at module load.
+          const { brainPositions } = require("./lib/brain_execution_bridge.js");
+          return brainPositions.getAll().map((p: any) => ({
+            symbol: p.symbol,
+            qty: (p.direction === "short" ? -1 : 1) * Number(p.quantity ?? 0),
+            avg_price: Number(p.entryPrice ?? 0) || 0,
+          }));
+        } catch {
+          return [];
+        }
+      },
+      () => {
+        try {
+          const { brainPositions } = require("./lib/brain_execution_bridge.js");
+          return brainPositions
+            .getAll()
+            .reduce((s: number, p: any) => s + (Number(p.currentR ?? 0) || 0), 0);
+        } catch {
+          return 0;
+        }
+      },
     );
     const phase103Cron = setInterval(async () => {
       try {
@@ -176,8 +205,7 @@ const server = app.listen(port, (err) => {
         const report = phase103Reconciler.reconcile(snapshot as any);
         if (report.critical_count > 0) {
           await logAuditEvent({
-            event_type: "RECONCILIATION_DRIFT" as any,
-            severity: "critical",
+            event_type: "reconciliation_drift",
             actor: "phase103_reconciler",
             payload: report as unknown as Record<string, unknown>,
           }).catch(() => void 0);

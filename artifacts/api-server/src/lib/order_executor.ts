@@ -369,9 +369,32 @@ export async function executeOrder(req: ExecutionRequest): Promise<ExecutionResu
     symbol: req.symbol,
     side: req.side,
     contributions: [
-      { name: "edge_score", weight: 0.4, confidence: Number(req.decision.meta?.edge_score ?? 0) },
-      { name: "kelly", weight: 0.3, confidence: Number(req.decision.meta?.kelly_pct ?? 0) },
-      { name: "win_probability", weight: 0.3, confidence: Number(req.decision.meta?.win_probability ?? 0) },
+      // edge_score is an unbounded score; clamp to [0,1] so FusionExplain's
+      // confidence-weighted average stays in-range.
+      {
+        name: "edge_score",
+        weight: 0.4,
+        confidence: Math.max(0, Math.min(1, Number(req.decision.meta?.edge_score ?? 0))),
+      },
+      // kelly_pct is a formatted string ("15.23%") on this codebase; strip
+      // trailing "%", then convert percent to fraction [0,1].
+      {
+        name: "kelly",
+        weight: 0.3,
+        confidence: Math.max(
+          0,
+          Math.min(
+            1,
+            Number(String(req.decision.meta?.kelly_pct ?? "0").replace(/%$/, "")) / 100,
+          ),
+        ),
+      },
+      // win_probability is already a fraction in [0,1].
+      {
+        name: "win_probability",
+        weight: 0.3,
+        confidence: Math.max(0, Math.min(1, Number(req.decision.meta?.win_probability ?? 0))),
+      },
     ],
     regime: req.regime,
     size_multiplier: 1,
@@ -380,8 +403,9 @@ export async function executeOrder(req: ExecutionRequest): Promise<ExecutionResu
   try {
     const explain = getFusionExplain().fuse(fusionInputs);
     await logAuditEvent({
-      event_type: "FUSION_EXPLAIN" as any,
-      severity: "info",
+      event_type: "fusion_explain",
+      symbol: req.symbol,
+      setup_type: req.setup_type,
       actor: "order_executor",
       payload: explain as unknown as Record<string, unknown>,
     }).catch(() => void 0);
@@ -496,12 +520,15 @@ const agentSystem = bootstrapAgentSystem({
   submitOrder: async (plan) => {
     try {
       const { placeOrder } = await import("./alpaca");
+      // ExecutionPlan carries reference_price (the quote at sizing time);
+      // use it as the limit when present, otherwise fall back to market.
+      const hasRef = Number.isFinite(plan.reference_price) && plan.reference_price > 0;
       const order = await placeOrder({
         symbol: plan.symbol,
         qty: plan.final_qty,
         side: plan.side,
-        type: "limit",
-        limit_price: plan.entry_price ?? undefined,
+        type: hasRef ? "limit" : "market",
+        limit_price: hasRef ? plan.reference_price : undefined,
         time_in_force: "day",
       });
       return {
