@@ -333,4 +333,8 @@ router.use("/api/backtest-v2-engine", backtestV2EngineRouter); // Phase 55 — B
 import phase103Router from "./phase103/index";
 router.use("/api/phase103", phase103Router);                   // Phase 103 — broker reality, recall, agents, quant lab, fusion+explain, L2 flow, E2E, gates
 
+// ── P1-12: Unified Quant Lab route backed by Phase 103 QuantLabUnified ─
+import quantLabRouter from "./quant_lab";
+router.use("/api/quant-lab", quantLabRouter);
+
 export default router;

@@ -49,7 +49,8 @@ export default function QuantLabPage() {
 
   const runMutation = useMutation({
     mutationFn: async () => {
-      const res = await fetch("/api/backtest/run", {
+      // P1-12: migrated to unified /api/quant-lab route.
+      const res = await fetch("/api/quant-lab/backtest/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ lookback_days: lookback, initial_equity: equity, mode: "comparison" }),
@@ -63,7 +64,7 @@ export default function QuantLabPage() {
   const { data: quickData } = useQuery({
     queryKey: ["backtest-quick"],
     queryFn: async () => {
-      const res = await fetch("/api/backtest/quick");
+      const res = await fetch("/api/quant-lab/backtest/quick");
       if (!res.ok) return null;
       return res.json();
     },

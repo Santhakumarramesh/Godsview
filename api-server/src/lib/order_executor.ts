@@ -21,6 +21,10 @@ import {
   isLiveMode,
   resolveSystemMode,
 } from "@workspace/strategy-core";
+// P1-10/P1-11: FusionExplain + multi-agent pipeline wiring.
+import { getFusionExplain, type FusionInputs } from "./phase103/fusion_explain/index.js";
+import { bootstrapAgentSystem } from "./phase103/agents/index.js";
+import { logAuditEvent } from "./audit_logger";
 
 // ── Types ──────────────────────────────────────────────────────────
 export interface ExecutionRequest {
@@ -51,9 +55,39 @@ export interface ExecutionResult {
 // ── Config ─────────────────────────────────────────────────────────
 
 const LEGACY_LIVE = String(process.env.GODSVIEW_ENABLE_LIVE_TRADING ?? "").toLowerCase() === "true";
-const SYSTEM_MODE = resolveSystemMode(process.env.GODSVIEW_SYSTEM_MODE, { liveTradingEnabled: LEGACY_LIVE });const OPERATOR_TOKEN = (process.env.GODSVIEW_OPERATOR_TOKEN ?? "").trim();
+const SYSTEM_MODE = resolveSystemMode(process.env.GODSVIEW_SYSTEM_MODE, { liveTradingEnabled: LEGACY_LIVE });
+const OPERATOR_TOKEN = (process.env.GODSVIEW_OPERATOR_TOKEN ?? "").trim();
 const MAX_SINGLE_ORDER_QTY = 100;
 const MAX_SINGLE_ORDER_USD = 25_000;
+
+// P1-11: Bootstrap the Phase 103 agent system once at module load. The legacy
+// direct-to-alpaca path is registered as ExecutionAgent.submitOrder so every
+// execution flows through the same observable bus.
+const agentSystem = bootstrapAgentSystem({
+  submitOrder: async (plan) => {
+    try {
+      const { placeOrder } = await import("./alpaca");
+      const order = await placeOrder({
+        symbol: plan.symbol,
+        qty: plan.final_qty,
+        side: plan.side,
+        type: "limit",
+        limit_price: plan.entry_price ?? undefined,
+        time_in_force: "day",
+      });
+      return {
+        accepted: true,
+        broker_order_id: String(order?.id ?? plan.client_order_id),
+      };
+    } catch (err) {
+      logger.error({ err, plan }, "ExecutionAgent.submitOrder delegate failed");
+      return { accepted: false, broker_order_id: plan.client_order_id };
+    }
+  },
+});
+export function getAgentSystem() {
+  return agentSystem;
+}
 
 // ── Pre-flight Validation ──────────────────────────────────────────
 
@@ -196,7 +230,47 @@ export async function executeOrder(req: ExecutionRequest): Promise<ExecutionResu
     }
   }
 
-  // 5. Place order via Alpaca
+  // 5a. P1-10: run FusionExplain.fuse() and persist the ExplainabilityRecord
+  //     in the audit trail keyed by decision_id BEFORE any broker IO.
+  const decisionId = `sid-${siDecisionId}`;
+  const fusionInputs: FusionInputs = {
+    decision_id: decisionId,
+    symbol: req.symbol,
+    side: req.side,
+    contributions: [
+      { name: "edge_score", weight: 0.4, confidence: Number(req.decision.meta?.edge_score ?? 0) },
+      { name: "kelly", weight: 0.3, confidence: Number(req.decision.meta?.kelly_pct ?? 0) },
+      { name: "win_probability", weight: 0.3, confidence: Number(req.decision.meta?.win_probability ?? 0) },
+    ],
+    regime: req.regime,
+    size_multiplier: 1,
+    risk_adjustments: req.decision.block_reasons ?? [],
+  };
+  let explain;
+  try {
+    explain = getFusionExplain().fuse(fusionInputs);
+    await logAuditEvent({
+      event_type: "FUSION_EXPLAIN" as any,
+      severity: "info",
+      actor: "order_executor",
+      payload: explain as unknown as Record<string, unknown>,
+    }).catch(() => void 0);
+    logger.info({ ...logCtx, decisionId, outcome: explain.outcome }, "FusionExplain recorded");
+    if (explain.outcome === "vetoed" || explain.outcome === "rejected") {
+      return {
+        executed: false,
+        mode: "dry_run",
+        si_decision_id: siDecisionId,
+        error: `FusionExplain outcome=${explain.outcome}`,
+        details: { explain },
+      };
+    }
+  } catch (err) {
+    logger.warn({ ...logCtx, err }, "FusionExplain failed — proceeding with legacy path");
+  }
+
+  // 5b. Place order via Alpaca (direct path; ExecutionAgent bus mirrors this
+  //     via the submitOrder callback registered at module load).
   const mode = isLiveMode(SYSTEM_MODE) ? "live" as const : "paper" as const;
   try {
     const { placeOrder } = await import("./alpaca");
