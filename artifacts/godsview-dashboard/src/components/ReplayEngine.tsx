@@ -72,10 +72,78 @@ export default function ReplayEngine({ symbol = "BTCUSD", timeframe = "5Min", ba
   const [loaded,    setLoaded]    = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // P2-15: source replay from real trades + Phase 103 explainability records,
+  // not the synthetic candle-intelligence stream. Each trade becomes a 1-bar
+  // candle so the existing playback UI continues to work.
   const { data, isLoading, refetch } = useQuery<IntelData>({
     queryKey: ["replay-bars", symbol, timeframe, barCount],
-    queryFn: () => fetch(`${BASE}/market/candle-intelligence?symbol=${symbol}&timeframe=${timeframe}&bars=${barCount}`).then((r) => r.json()),
-    staleTime: Infinity,   // don't auto-refresh — user controls this
+    queryFn: async () => {
+      const [tradesRes, explainsRes] = await Promise.all([
+        fetch(`${BASE}/trades?symbol=${encodeURIComponent(symbol)}&limit=${barCount}`).then((r) =>
+          r.ok ? r.json() : { trades: [] },
+        ),
+        fetch(`${BASE}/phase103/explain/recent?limit=${barCount}`).then((r) =>
+          r.ok ? r.json() : [],
+        ),
+      ]);
+      const rawTrades = Array.isArray(tradesRes?.trades) ? tradesRes.trades : Array.isArray(tradesRes) ? tradesRes : [];
+      const explains = Array.isArray(explainsRes) ? explainsRes : [];
+      const explainsByTs = explains
+        .map((e: any) => ({ ts: Number(e.ts ?? 0), record: e }))
+        .filter((e) => e.ts > 0)
+        .sort((a, b) => a.ts - b.ts);
+      const nearestExplain = (ts: number) => {
+        if (explainsByTs.length === 0) return null;
+        let best = explainsByTs[0];
+        let bestDelta = Math.abs(best.ts - ts);
+        for (const e of explainsByTs) {
+          const d = Math.abs(e.ts - ts);
+          if (d < bestDelta) {
+            best = e;
+            bestDelta = d;
+          }
+        }
+        return bestDelta < 60_000 ? best.record : null;
+      };
+      const bars: CandleBar[] = rawTrades
+        .map((t: any) => {
+          const price = Number(t.entry_price ?? t.fill_price ?? t.price ?? 0) || 0;
+          const ts = Number(t.entered_at ?? t.executed_at ?? t.ts ?? Date.now());
+          const explain = nearestExplain(ts);
+          const reduced = explain?.outcome === "reduced";
+          const vetoed = explain?.outcome === "vetoed" || explain?.outcome === "rejected";
+          return {
+            time: ts,
+            open: price,
+            high: price,
+            low: price,
+            close: price,
+            volume: Number(t.quantity ?? t.qty ?? 0) || 0,
+            imbalance: Number(explain?.confidence?.final ?? 0),
+            absorption: 0,
+            liquidity_strength: 0,
+            reversal_score: vetoed ? -1 : reduced ? 0 : 1,
+            direction: String(t.side ?? "buy") === "sell" ? "bear" : "bull",
+            is_doji: false,
+            is_high_vol: false,
+            is_absorption: false,
+            is_reversal_signal: vetoed,
+          } as CandleBar;
+        })
+        .filter((b: CandleBar) => b.time > 0 && b.close > 0);
+      return {
+        symbol,
+        timeframe,
+        bars,
+        summary: {
+          total_bars: bars.length,
+          reversal_signals: bars.filter((b) => b.is_reversal_signal).length,
+          absorption_zones: 0,
+          high_vol_events: 0,
+        },
+      };
+    },
+    staleTime: Infinity,
     enabled: loaded,
   });
 

@@ -3,9 +3,13 @@
  *
  * Unified broker integration layer that abstracts the specifics of
  * different brokers (Alpaca, Interactive Brokers, etc.) behind a
- * common interface. Handles order routing, fill confirmation,
- * and account state synchronization.
+ * common interface.
+ *
+ * P0-5: When valid Alpaca trading keys are present, submitOrder()
+ * delegates to api-server/src/lib/alpaca.ts::placeOrder. When no keys
+ * are present, simulateFill remains as the fallback so demo/tests work.
  */
+import { hasValidTradingKey, placeOrder as alpacaPlaceOrder } from "../alpaca.js";
 
 export type OrderSide = "buy" | "sell";
 export type OrderType = "market" | "limit" | "stop" | "stop_limit" | "trailing_stop";
@@ -156,11 +160,11 @@ export class BrokerBridge {
     this.validateOrder(request);
 
     this.orderCounter++;
-    const orderId = `order_${Date.now()}_${this.orderCounter}`;
-    const clientOrderId = request.clientOrderId ?? `gv_${orderId}`;
+    const localOrderId = `order_${Date.now()}_${this.orderCounter}`;
+    const clientOrderId = request.clientOrderId ?? `gv_${localOrderId}`;
 
     const order: BrokerOrder = {
-      orderId,
+      orderId: localOrderId,
       clientOrderId,
       symbol: request.symbol,
       side: request.side,
@@ -178,8 +182,39 @@ export class BrokerBridge {
       metadata: request.metadata ?? {},
     };
 
-    this.orders.set(orderId, order);
+    this.orders.set(localOrderId, order);
     this.eventHandlers.onOrderUpdate?.(order);
+
+    // P0-5: route through Alpaca when keys are present; otherwise keep the
+    // legacy in-memory path so tests + demo mode still work.
+    if (hasValidTradingKey) {
+      try {
+        const remote = await alpacaPlaceOrder({
+          symbol: request.symbol,
+          qty: request.quantity,
+          side: request.side,
+          type: request.type === "trailing_stop" ? "stop" : request.type,
+          time_in_force: request.timeInForce,
+          limit_price: request.limitPrice,
+          stop_price: request.stopPrice,
+        });
+        this.orders.delete(localOrderId);
+        order.orderId = remote.id;
+        order.clientOrderId = remote.client_order_id ?? clientOrderId;
+        order.status = (remote.status as OrderStatus) ?? "new";
+        order.filledQty = Number(remote.filled_qty ?? 0) || 0;
+        order.avgFillPrice = Number(remote.filled_avg_price ?? 0) || 0;
+        order.submittedAt = remote.submitted_at ? new Date(remote.submitted_at) : order.submittedAt;
+        if (remote.filled_at) order.filledAt = new Date(remote.filled_at);
+        this.orders.set(order.orderId, order);
+        this.eventHandlers.onOrderUpdate?.(order);
+      } catch (err) {
+        order.status = "rejected";
+        this.eventHandlers.onOrderUpdate?.(order);
+        this.eventHandlers.onError?.(err instanceof Error ? err : new Error(String(err)));
+        throw err;
+      }
+    }
 
     return order;
   }

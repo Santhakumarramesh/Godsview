@@ -40,6 +40,7 @@ const Proof              = React.lazy(() => import("@/pages/proof"));
 const Checklist          = React.lazy(() => import("@/pages/checklist"));
 const OpsPage            = React.lazy(() => import("@/pages/ops"));
 const QuantLabPage       = React.lazy(() => import("@/pages/quant-lab"));
+const E2EPage            = React.lazy(() => import("@/pages/e2e"));
 const PortfolioPage      = React.lazy(() => import("@/pages/portfolio"));
 const ExecutionPage      = React.lazy(() => import("@/pages/execution"));
 const AuditPage          = React.lazy(() => import("@/pages/audit"));
@@ -206,6 +207,7 @@ function Router() {
         <RoutedPage path="/checklist"         component={Checklist}             scope="page:checklist" />
         <RoutedPage path="/ops"               component={OpsPage}               scope="page:ops" />
         <RoutedPage path="/quant-lab"         component={QuantLabPage}          scope="page:quant-lab" />
+        <RoutedPage path="/e2e"               component={E2EPage}               scope="page:e2e" />
         <RoutedPage path="/portfolio"         component={PortfolioPage}         scope="page:portfolio" />
         <RoutedPage path="/execution"         component={ExecutionPage}         scope="page:execution" />
         <RoutedPage path="/audit"             component={AuditPage}             scope="page:audit" />

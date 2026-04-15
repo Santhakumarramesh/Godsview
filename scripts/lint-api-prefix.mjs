@@ -12,7 +12,10 @@ import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(__filename), "..");
-const pagesDir = path.join(repoRoot, "godsview-dashboard", "src", "pages");
+// The real workspace dashboard package lives at artifacts/godsview-dashboard/
+// per pnpm-workspace.yaml (packages: artifacts/*). Scan that, not the legacy
+// top-level copy.
+const pagesDir = path.join(repoRoot, "artifacts", "godsview-dashboard", "src", "pages");
 
 // Static SPA assets that legitimately live outside /api.
 const ALLOW_LIST_PREFIXES = [

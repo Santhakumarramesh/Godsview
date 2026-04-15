@@ -20,9 +20,17 @@ function parsePositiveIntegerEnv(name: string, fallback: number): number {
   return parsed;
 }
 
-function parsePort(raw: string | undefined): number {
+// P0-1: safe defaults for clean-clone boot. Fail-fast reserved for production + live_enabled.
+const DEFAULT_PORT = 3000;
+const DEFAULT_DATA_DIR = "./.runtime";
+const DEFAULT_CORS_ORIGIN = "http://localhost:3000";
+
+function parsePort(raw: string | undefined, env: NodeEnv): number {
   if (!raw) {
-    throw new Error("PORT environment variable is required but was not provided.");
+    if (env === "production") {
+      throw new Error("PORT environment variable is required in production.");
+    }
+    return DEFAULT_PORT;
   }
   const parsed = Number.parseInt(raw, 10);
   if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 65535) {
@@ -31,11 +39,22 @@ function parsePort(raw: string | undefined): number {
   return parsed;
 }
 
-function parseCorsOrigins(raw: string | undefined): string[] {
-  return String(raw ?? "")
+function parseCorsOrigins(raw: string | undefined, env: NodeEnv): string[] {
+  const trimmed = String(raw ?? "").trim();
+  if (!trimmed) {
+    return env === "production" ? [] : [DEFAULT_CORS_ORIGIN];
+  }
+  return trimmed
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);
+}
+
+function ensureDataDir(): string {
+  const raw = String(process.env.GODSVIEW_DATA_DIR ?? "").trim();
+  if (raw) return raw;
+  process.env.GODSVIEW_DATA_DIR = DEFAULT_DATA_DIR;
+  return DEFAULT_DATA_DIR;
 }
 
 function parseBodyLimit(raw: string | undefined): string {
@@ -70,7 +89,8 @@ const nodeEnv = parseNodeEnv(process.env.NODE_ENV);
 const systemMode = resolveSystemMode(process.env.GODSVIEW_SYSTEM_MODE, {
   liveTradingEnabled: legacyLiveTradingEnabled,
 });
-const corsOrigins = parseCorsOrigins(process.env.CORS_ORIGIN);
+const dataDir = ensureDataDir();
+const corsOrigins = parseCorsOrigins(process.env.CORS_ORIGIN, nodeEnv);
 const operatorToken = requiredTrimmed("GODSVIEW_OPERATOR_TOKEN");
 const hasAlpacaKeys =
   requiredTrimmed("ALPACA_API_KEY").length > 0 && requiredTrimmed("ALPACA_SECRET_KEY").length > 0;
@@ -106,6 +126,7 @@ function validateRuntimeConfig(config: RuntimeConfig): void {
 export interface RuntimeConfig {
   nodeEnv: NodeEnv;
   port: number;
+  dataDir: string;
   corsOrigins: string[];
   systemMode: SystemMode;
   trustProxy: boolean | number;
@@ -124,7 +145,8 @@ export interface RuntimeConfig {
 
 const config: RuntimeConfig = {
   nodeEnv,
-  port: parsePort(process.env.PORT),
+  port: parsePort(process.env.PORT, nodeEnv),
+  dataDir,
   corsOrigins,
   systemMode,
   trustProxy: parseTrustProxy(process.env.GODSVIEW_TRUST_PROXY),
@@ -149,6 +171,7 @@ export function getRuntimeConfigForLog(): Record<string, string | number | boole
   return {
     nodeEnv: runtimeConfig.nodeEnv,
     port: runtimeConfig.port,
+    dataDir: runtimeConfig.dataDir,
     systemMode: runtimeConfig.systemMode,
     corsOriginCount: runtimeConfig.corsOrigins.length,
     trustProxy: runtimeConfig.trustProxy,

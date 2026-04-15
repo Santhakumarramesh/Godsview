@@ -145,17 +145,20 @@ export function useBacktest() {
 }
 
 // ─── Quant Lab Backtest Run & Quick ─────────────────────────────────────────
+// P1-12: migrated to unified /api/quant-lab route backed by Phase 103
+// QuantLabUnified. Legacy /api/backtest/{run,quick} paths still served by the
+// existing backtest router so external callers are unaffected.
 export function useBacktestRun() {
   return useMutation({
     mutationFn: (params: { lookback_days: number; initial_equity: number; mode?: string }) =>
-      apiFetch<any>("/backtest/run", { method: "POST", body: JSON.stringify(params) }),
+      apiFetch<any>("/quant-lab/backtest/run", { method: "POST", body: JSON.stringify(params) }),
   });
 }
 
 export function useBacktestQuick() {
   return useQuery({
     queryKey: ["backtest", "quick"],
-    queryFn: () => apiFetch<any>("/backtest/quick"),
+    queryFn: () => apiFetch<any>("/quant-lab/backtest/quick"),
     retry: false,
   });
 }

@@ -14,6 +14,10 @@ import { alpacaAccountStream, wireAccountStreamToReconciler } from "./lib/alpaca
 import { startPaperValidationLoop, stopPaperValidationLoop } from "./lib/paper_validation_loop";
 import { validateOrExit } from "./lib/ops/startup_validator";
 import { initGracefulShutdown } from "./lib/ops/graceful_shutdown";
+// P0-1 / P1-8: runtimeConfig port + 10s Phase 103 reconciliation cron.
+import { runtimeConfig } from "./lib/runtime_config";
+import { createReconciliationService } from "./lib/phase103/broker_reality/reconciliation_service";
+import { logAuditEvent } from "./lib/audit_logger";
 
 // ── Validate environment before anything else ───────────────────
 validateEnv();
@@ -21,19 +25,8 @@ validateEnv();
 // ── Phase 6: Production startup validation ───────────────────
 try { validateOrExit(); } catch (e: any) { logger.warn({ err: e.message }, "Startup validator unavailable (non-fatal)"); }
 
-const rawPort = process.env["PORT"];
-
-if (!rawPort) {
-  throw new Error(
-    "PORT environment variable is required but was not provided.",
-  );
-}
-
-const port = Number(rawPort);
-
-if (Number.isNaN(port) || port <= 0) {
-  throw new Error(`Invalid PORT value: "${rawPort}"`);
-}
+// P0-1: port now comes from runtimeConfig (default 3000 in non-production).
+const port = runtimeConfig.port;
 
 const server = app.listen(port, (err) => {
   if (err) {
@@ -103,6 +96,28 @@ const server = app.listen(port, (err) => {
   const systemMode = process.env.GODSVIEW_SYSTEM_MODE || "paper";
   startSession(systemMode).catch((err) => logger.error({ err }, "Failed to start trading session"));
 
+  // P1-9: register Phase 103 RecallStore as strategy-core RecallProvider.
+  import("./lib/phase103/recall_engine/strategy_core_adapter")
+    .then(({ registerRecallAdapter }) => {
+      registerRecallAdapter();
+      logger.info("strategy-core RecallProvider registered → Phase 103 RecallStore");
+    })
+    .catch((err) => logger.warn({ err }, "Failed to register RecallProvider"));
+
+  // P2-13: Polygon L2 → OrderFlowL2Engine. No-op without POLYGON_API_KEY.
+  import("./lib/phase103/orderflow_l2/polygon_adapter")
+    .then(async ({ startPolygonL2 }) => {
+      const handle = await startPolygonL2();
+      if (handle.isRunning()) {
+        logger.info(
+          { symbols: handle.subscribedSymbols() },
+          "Polygon L2 streamer started → OrderFlowL2Engine",
+        );
+        onShutdown(async () => handle.stop());
+      }
+    })
+    .catch((err) => logger.warn({ err }, "Polygon L2 start failed"));
+
   // Train ML model from accuracy_results data (non-blocking)
   trainModel().catch((err) => logger.error({ err }, "ML model training failed"));
 
@@ -124,6 +139,56 @@ const server = app.listen(port, (err) => {
     wireAccountStreamToReconciler();
     alpacaAccountStream.start();
     logger.info("Alpaca account stream started (real-time trade_updates)");
+
+    // P1-8: 10s Phase 103 ReconciliationService cron — pulls Alpaca positions
+    // + orders, feeds the reconciler, emits critical drifts to audit.
+    const phase103Reconciler = createReconciliationService(
+      { getAllOrders: () => [] } as any,
+      () => [],
+      () => 0,
+    );
+    const phase103Cron = setInterval(async () => {
+      try {
+        const { getPositions, getOrders } = await import("./lib/alpaca");
+        const [positions, orders] = await Promise.all([
+          getPositions().catch(() => [] as any[]),
+          getOrders("all", 100).catch(() => [] as any[]),
+        ]);
+        const snapshot = {
+          positions: (positions ?? []).map((p: any) => ({
+            symbol: p.symbol,
+            qty: Number(p.qty ?? 0) || 0,
+            avg_price: Number(p.avg_entry_price ?? 0) || 0,
+            realized_pnl: Number(p.realized_pl ?? 0) || 0,
+            unrealized_pnl: Number(p.unrealized_pl ?? 0) || 0,
+          })),
+          orders: (orders ?? []).map((o: any) => ({
+            client_order_id: o.client_order_id,
+            broker_order_id: o.id,
+            symbol: o.symbol,
+            qty: Number(o.qty ?? 0) || 0,
+            filled_qty: Number(o.filled_qty ?? 0) || 0,
+            avg_fill_price: Number(o.filled_avg_price ?? 0) || 0,
+            status: String(o.status ?? "unknown"),
+          })),
+          timestamp: Date.now(),
+        };
+        const report = phase103Reconciler.reconcile(snapshot as any);
+        if (report.critical_count > 0) {
+          await logAuditEvent({
+            event_type: "RECONCILIATION_DRIFT" as any,
+            severity: "critical",
+            actor: "phase103_reconciler",
+            payload: report as unknown as Record<string, unknown>,
+          }).catch(() => void 0);
+          logger.warn({ report }, "Phase 103 reconciliation: critical drifts detected");
+        }
+      } catch (err) {
+        logger.warn({ err }, "Phase 103 reconciliation tick failed");
+      }
+    }, 10_000);
+    onShutdown(async () => clearInterval(phase103Cron));
+    logger.info("Phase 103 reconciliation cron started (10s interval)");
   } else {
     logger.warn("Alpaca not configured — fill reconciler disabled");
   }
