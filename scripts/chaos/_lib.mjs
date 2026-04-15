@@ -11,7 +11,7 @@
 const ENV_BASE = String(process.env.GODSVIEW_BASE ?? "").trim();
 const PORT = process.env.PORT ?? "3000";
 const HOST = process.env.HOST ?? "127.0.0.1";
-const BASE = ENV_BASE || `http://${HOST}:${PORT}`;
+export const BASE = ENV_BASE || `http://${HOST}:${PORT}`;
 
 export async function gget(path) {
   const res = await fetch(`${BASE}${path}`);

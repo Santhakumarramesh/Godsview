@@ -12,7 +12,7 @@
  *   7. GET /api/mesh/services              → expect old count restored
  */
 
-import { gget, gpost, record, waitForServer } from "./_lib.mjs";
+import { gget, gpost, record, waitForServer, BASE } from "./_lib.mjs";
 
 const obs = {};
 let passed = true;
@@ -53,8 +53,9 @@ if (id) {
   obs.draining = ours?.status;
   if (ours?.status !== "draining") passed = false;
 
-  // Manual fetch with DELETE since _lib doesn't have it
-  const delRes = await fetch(`http://${process.env.HOST ?? "127.0.0.1"}:${process.env.PORT ?? "5001"}/api/mesh/services/${id}`, { method: "DELETE" });
+  // Phase 113: use the shared BASE so this DELETE respects GODSVIEW_BASE
+  // like every other chaos drill, instead of hardcoding :5001.
+  const delRes = await fetch(`${BASE}/api/mesh/services/${id}`, { method: "DELETE" });
   obs.deregisterStatus = delRes.status;
 
   const final = await gget("/api/mesh/services");
