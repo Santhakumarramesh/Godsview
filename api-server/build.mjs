@@ -29,7 +29,8 @@ async function buildAll() {
     // - use path traversal to read files (e.g. @google-cloud/secret-manager loads sibling .proto files)
     external: [
       "*.node",
-      "@electric-sql/pglite",
+      // P0-2: @electric-sql/pglite is now a real runtime dependency (api-server/package.json),
+      // not externalized. esbuild will bundle the JS shim and resolve native bits via require().
       "sharp",
       "better-sqlite3",
       "sqlite3",
@@ -47,7 +48,6 @@ async function buildAll() {
       "dtrace-provider",
       "isolated-vm",
       "lightningcss",
-      "@electric-sql/pglite",
       "pg-native",
       "oracledb",
       "mongodb-client-encryption",
