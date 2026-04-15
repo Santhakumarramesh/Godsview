@@ -73,6 +73,21 @@ const server = app.listen(port, (err) => {
     })
     .catch((err) => logger.warn({ err }, "Failed to register RecallProvider"));
 
+  // P2-13: start Polygon L2 → OrderFlowL2Engine streamer. No-op when
+  // POLYGON_API_KEY is absent.
+  import("./lib/phase103/orderflow_l2/polygon_adapter")
+    .then(async ({ startPolygonL2 }) => {
+      const handle = await startPolygonL2();
+      if (handle.isRunning()) {
+        logger.info(
+          { symbols: handle.subscribedSymbols() },
+          "Polygon L2 streamer started → OrderFlowL2Engine",
+        );
+        onShutdown(async () => handle.stop());
+      }
+    })
+    .catch((err) => logger.warn({ err }, "Polygon L2 start failed"));
+
   // Train ML model from accuracy_results data (non-blocking)
   trainModel().catch((err) => logger.error({ err }, "ML model training failed"));
 

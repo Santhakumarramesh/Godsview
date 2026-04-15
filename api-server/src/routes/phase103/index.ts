@@ -107,6 +107,62 @@ router.get("/agents/recent", (req: Request, res: Response) => {
   res.json(getAgentBus().recent(limit));
 });
 
+// P2-14: SSE stream of agent events, powering pages/e2e.tsx.
+router.get("/agents/stream", (req: Request, res: Response) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders?.();
+
+  const bus = getAgentBus();
+  // Initial backfill so the UI isn't empty on first paint.
+  try {
+    const recent = bus.recent(Number(req.query.limit ?? 50));
+    for (const evt of recent) {
+      res.write(`event: agent\ndata: ${JSON.stringify(evt)}\n\n`);
+    }
+  } catch {
+    /* non-fatal */
+  }
+
+  const onEvt = (evt: unknown) => {
+    res.write(`event: agent\ndata: ${JSON.stringify(evt)}\n\n`);
+  };
+  const anyBus = bus as any;
+  if (typeof anyBus.onAny === "function") {
+    anyBus.onAny(onEvt);
+  } else if (typeof anyBus.on === "function") {
+    for (const ev of [
+      "signal.emitted",
+      "validation.approved",
+      "validation.rejected",
+      "risk.decided",
+      "governance.allowed",
+      "governance.vetoed",
+      "execution.requested",
+      "execution.fill",
+      "execution.failed",
+      "learning.recorded",
+    ]) {
+      anyBus.on(ev, onEvt);
+    }
+  }
+
+  const heartbeat = setInterval(() => {
+    res.write(`: heartbeat ${Date.now()}\n\n`);
+  }, 15_000);
+
+  req.on("close", () => {
+    clearInterval(heartbeat);
+    try {
+      if (typeof anyBus.offAny === "function") anyBus.offAny(onEvt);
+    } catch {
+      /* ignore */
+    }
+  });
+});
+
 // ── Quant lab unified ──────────────────────────────────────────
 router.post("/lab/strategy", (req: Request, res: Response) => {
   res.json(getQuantLab().registerStrategy(req.body));
