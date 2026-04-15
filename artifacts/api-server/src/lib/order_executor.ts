@@ -368,18 +368,17 @@ export async function executeOrder(req: ExecutionRequest): Promise<ExecutionResu
     decision_id: decisionId,
     symbol: req.symbol,
     side: req.side,
+    // SignalContribution shape: { source: string; weight: number; confidence: number; notes? }
     contributions: [
-      // edge_score is an unbounded score; clamp to [0,1] so FusionExplain's
-      // confidence-weighted average stays in-range.
       {
-        name: "edge_score",
+        source: "edge_score",
         weight: 0.4,
         confidence: Math.max(0, Math.min(1, Number(req.decision.meta?.edge_score ?? 0))),
       },
-      // kelly_pct is a formatted string ("15.23%") on this codebase; strip
-      // trailing "%", then convert percent to fraction [0,1].
       {
-        name: "kelly",
+        // kelly_pct is a formatted string ("15.23%") on this codebase; strip
+        // the trailing "%" and convert percent to fraction [0,1].
+        source: "kelly",
         weight: 0.3,
         confidence: Math.max(
           0,
@@ -389,9 +388,8 @@ export async function executeOrder(req: ExecutionRequest): Promise<ExecutionResu
           ),
         ),
       },
-      // win_probability is already a fraction in [0,1].
       {
-        name: "win_probability",
+        source: "win_probability",
         weight: 0.3,
         confidence: Math.max(0, Math.min(1, Number(req.decision.meta?.win_probability ?? 0))),
       },
