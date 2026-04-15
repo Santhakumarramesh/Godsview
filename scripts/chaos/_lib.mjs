@@ -3,9 +3,15 @@
  * Pure Node fetch — no third-party deps.
  */
 
-const PORT = process.env.PORT ?? "5001";
+// Phase 113: chaos drills resolve their target base URL in this priority:
+//   1. GODSVIEW_BASE  — full URL, matches scripts/soak/run-48h.sh and the
+//                       runtime_config CORS default
+//   2. PORT + HOST    — legacy override (used by older drill harnesses)
+//   3. http://127.0.0.1:3000 — matches the default `pnpm start` port
+const ENV_BASE = String(process.env.GODSVIEW_BASE ?? "").trim();
+const PORT = process.env.PORT ?? "3000";
 const HOST = process.env.HOST ?? "127.0.0.1";
-const BASE = `http://${HOST}:${PORT}`;
+const BASE = ENV_BASE || `http://${HOST}:${PORT}`;
 
 export async function gget(path) {
   const res = await fetch(`${BASE}${path}`);

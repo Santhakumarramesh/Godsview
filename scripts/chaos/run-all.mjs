@@ -2,7 +2,15 @@
 /**
  * Run every chaos drill in sequence. Exits non-zero if any failed.
  *
- * Usage:  PORT=5001 node scripts/chaos/run-all.mjs
+ * Target base URL resolution (in priority order):
+ *   1. GODSVIEW_BASE  — full URL (matches scripts/soak/run-48h.sh)
+ *   2. PORT + HOST    — legacy port override
+ *   3. http://127.0.0.1:3000 — default `pnpm start` port
+ *
+ * Usage:
+ *   node scripts/chaos/run-all.mjs                              # default :3000
+ *   GODSVIEW_BASE=http://localhost:3000 node scripts/chaos/run-all.mjs
+ *   PORT=5001 HOST=127.0.0.1 node scripts/chaos/run-all.mjs     # legacy
  */
 
 import { spawn } from "node:child_process";

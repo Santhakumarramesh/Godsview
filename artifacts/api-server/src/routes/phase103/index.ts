@@ -270,4 +270,27 @@ router.get("/health", (_req: Request, res: Response) => {
   });
 });
 
+// Phase 113: bare `/api/phase103/` was falling through to the SPA catch-all
+// because no root handler existed. Return a small JSON index instead so
+// operators can `curl /api/phase103/` and confirm the router is mounted.
+router.get("/", (_req: Request, res: Response) => {
+  res.json({
+    phase: 103,
+    status: "ready",
+    endpoints: [
+      "/api/phase103/health",
+      "/api/phase103/broker/orders/:cid",
+      "/api/phase103/agents/recent",
+      "/api/phase103/agents/trace/:decision_id",
+      "/api/phase103/agents/stream",
+      "/api/phase103/lab/strategy",
+      "/api/phase103/lab/rank",
+      "/api/phase103/explain/recent",
+      "/api/phase103/explain/decision/:id",
+      "/api/phase103/orderflow/state/:symbol",
+      "/api/phase103/e2e/run",
+    ],
+  });
+});
+
 export default router;
