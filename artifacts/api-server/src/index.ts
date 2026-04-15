@@ -179,19 +179,23 @@ const server = app.listen(port, (err) => {
     const phase103Cron = setInterval(async () => {
       try {
         const { getPositions, getOrders } = await import("./lib/alpaca");
-        const [positions, orders] = await Promise.all([
-          getPositions().catch(() => [] as any[]),
+        // getPositions() returns Promise<unknown> on the artifacts build; widen
+        // to any[] so .map() typechecks, and normalise null → [].
+        const [rawPositions, rawOrders] = await Promise.all([
+          getPositions().catch(() => [] as unknown) as Promise<unknown>,
           getOrders("all", 100).catch(() => [] as any[]),
         ]);
+        const positions: any[] = Array.isArray(rawPositions) ? rawPositions : [];
+        const orders: any[] = Array.isArray(rawOrders) ? rawOrders : [];
         const snapshot = {
-          positions: (positions ?? []).map((p: any) => ({
+          positions: positions.map((p: any) => ({
             symbol: p.symbol,
             qty: Number(p.qty ?? 0) || 0,
             avg_price: Number(p.avg_entry_price ?? 0) || 0,
             realized_pnl: Number(p.realized_pl ?? 0) || 0,
             unrealized_pnl: Number(p.unrealized_pl ?? 0) || 0,
           })),
-          orders: (orders ?? []).map((o: any) => ({
+          orders: orders.map((o: any) => ({
             client_order_id: o.client_order_id,
             broker_order_id: o.id,
             symbol: o.symbol,

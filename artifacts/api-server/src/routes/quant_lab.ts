@@ -20,7 +20,7 @@ router.get("/strategies", (_req: Request, res: Response) => {
 router.get("/strategies/:id", (req: Request, res: Response) => {
   const strat = getQuantLab().getStrategy(String(req.params.id));
   if (!strat) return res.status(404).json({ error: "not_found" });
-  res.json(strat);
+  return res.json(strat);
 });
 
 router.post("/strategies", (req: Request, res: Response) => {

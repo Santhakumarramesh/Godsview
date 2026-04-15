@@ -13,6 +13,21 @@ import {
   ReconciliationService,
   type BrokerSnapshot,
 } from "../../lib/phase103/broker_reality/index.js";
+
+// Express 5 types req.params / req.query values as string | string[] | undefined
+// (and similar unions). These helpers narrow to a single string/number so
+// Phase 103 calls typecheck cleanly.
+function qStr(v: unknown, fallback = ""): string {
+  if (Array.isArray(v)) return String(v[0] ?? fallback);
+  if (v === undefined || v === null) return fallback;
+  return String(v);
+}
+function qNum(v: unknown, fallback: number): number {
+  const s = qStr(v, "");
+  if (!s) return fallback;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : fallback;
+}
 import { getRecallStore } from "../../lib/phase103/recall_engine/index.js";
 import { getAgentBus } from "../../lib/phase103/agents/index.js";
 import { getQuantLab } from "../../lib/phase103/quant_lab_unified/index.js";
@@ -41,14 +56,14 @@ router.get("/broker/orders", (_req: Request, res: Response) => {
 });
 
 router.get("/broker/orders/:cid", (req: Request, res: Response) => {
-  const r = getOrderLifecycle().get(req.params.cid);
+  const r = getOrderLifecycle().get(qStr(req.params.cid));
   if (!r) return res.status(404).json({ error: "not_found" });
   return res.json(r);
 });
 
 router.post("/broker/orders/:cid/cancel", (req: Request, res: Response) => {
   const r = getOrderLifecycle().cancel(
-    req.params.cid,
+    qStr(req.params.cid),
     (req.body && (req.body as { reason?: string }).reason) || "user_cancel",
   );
   res.json(r);
@@ -99,11 +114,11 @@ router.get("/recall/size", (_req: Request, res: Response) => {
 
 // ── Agents ─────────────────────────────────────────────────────
 router.get("/agents/trace/:decision_id", (req: Request, res: Response) => {
-  res.json(getAgentBus().trace(req.params.decision_id));
+  res.json(getAgentBus().trace(qStr(req.params.decision_id)));
 });
 
 router.get("/agents/recent", (req: Request, res: Response) => {
-  const limit = Number(req.query.limit ?? 100);
+  const limit = qNum(req.query.limit, 100);
   res.json(getAgentBus().recent(limit));
 });
 
@@ -118,7 +133,7 @@ router.get("/agents/stream", (req: Request, res: Response) => {
   const bus = getAgentBus();
   // Initial backfill so the UI isn't empty on first paint.
   try {
-    const recent = bus.recent(Number(req.query.limit ?? 50));
+    const recent = bus.recent(qNum(req.query.limit, 50));
     for (const evt of recent) {
       res.write(`event: agent\ndata: ${JSON.stringify(evt)}\n\n`);
     }
@@ -180,7 +195,7 @@ router.get("/lab/rank", (_req: Request, res: Response) => {
   res.json(getQuantLab().rankStrategies());
 });
 router.post("/lab/promote/:strategy_id", (req: Request, res: Response) => {
-  res.json(getQuantLab().promote(req.params.strategy_id));
+  res.json(getQuantLab().promote(qStr(req.params.strategy_id)));
 });
 
 // ── Fusion + Explain ───────────────────────────────────────────
@@ -188,12 +203,12 @@ router.post("/explain/fuse", (req: Request, res: Response) => {
   res.json(getFusionExplain().fuse(req.body));
 });
 router.get("/explain/decision/:id", (req: Request, res: Response) => {
-  const r = getFusionExplain().get(req.params.id);
+  const r = getFusionExplain().get(qStr(req.params.id));
   if (!r) return res.status(404).json({ error: "not_found" });
   return res.json(r);
 });
 router.get("/explain/recent", (req: Request, res: Response) => {
-  res.json(getFusionExplain().list(Number(req.query.limit ?? 100)));
+  res.json(getFusionExplain().list(qNum(req.query.limit, 100)));
 });
 
 // ── Order flow L2 ──────────────────────────────────────────────
@@ -206,7 +221,7 @@ router.post("/orderflow/trade", (req: Request, res: Response) => {
   res.json({ ok: true });
 });
 router.get("/orderflow/state/:symbol", (req: Request, res: Response) => {
-  const s = getOrderFlowL2().computeState(req.params.symbol);
+  const s = getOrderFlowL2().computeState(qStr(req.params.symbol));
   if (!s) return res.status(404).json({ error: "no_book" });
   return res.json(s);
 });
