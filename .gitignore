@@ -101,3 +101,18 @@ artifacts/godsview-dashboard/dist/
 credentials.json
 *.pem
 *.key
+
+# ── Phase 115a: repo hygiene ──────────────────────────────────────────
+# macOS metadata
+.DS_Store
+# Claude session scratchpad
+.claude/
+# Temp files from crashed tools
+_tmp_*
+# Python venvs anywhere
+**/.venv/
+**/.venv_new/
+# One-off root-level live preview HTML (regenerated)
+/GODSVIEW_LIVE.html
+# pnpm store metadata (not inside node_modules)
+.pnpm-store/
