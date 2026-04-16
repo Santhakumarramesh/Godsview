@@ -29,8 +29,10 @@ class AlpacaStreamManager {
   private ws: WebSocket | null = null;
   private authenticated = false;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private wsRetryTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectDelay = 1000;
   private stopped = false;
+  private closedIntentionally = false; // prevent double reconnect from close + error
 
   // Listeners: "BTCUSD:5Min" → Set<listener>
   private listeners = new Map<string, Set<TickListener>>();
@@ -79,6 +81,8 @@ class AlpacaStreamManager {
   stop() {
     this.stopped = true;
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    if (this.wsRetryTimer) clearTimeout(this.wsRetryTimer);
+    this.closedIntentionally = true;
     this.ws?.close();
     this.ws = null;
     for (const t of this.pollTimers.values()) clearInterval(t);
@@ -145,6 +149,7 @@ class AlpacaStreamManager {
 
   private connect() {
     if (this.stopped) return;
+    this.closedIntentionally = false;
     console.log(`[stream] connecting to ${WS_URL}`);
     try {
       const ws = new WebSocket(WS_URL);
@@ -168,10 +173,14 @@ class AlpacaStreamManager {
 
       ws.on("error", (e) => {
         console.error("[stream] WS error:", e.message);
-        this.scheduleReconnect();
+        if (!this.closedIntentionally) this.scheduleReconnect();
       });
       ws.on("close", (code, reason) => {
         this.authenticated = false;
+        if (this.closedIntentionally) {
+          console.log(`[stream] WS closed code=${code} (intentional close, reconnect already scheduled)`);
+          return;
+        }
         console.log(`[stream] WS closed code=${code} reason=${reason?.toString()} — reconnecting`);
         this.scheduleReconnect();
       });
@@ -219,18 +228,37 @@ class AlpacaStreamManager {
       const errMsg = msg.msg as string;
       console.error(`[stream] Alpaca error code=${code} msg=${errMsg}`);
 
-      // 406 = connection limit exceeded — this is our second connection attempt from outside; ignore
+      // 406 = connection limit exceeded — old container still holds the WS slot.
+      // Close this WS and schedule a reconnect; the old container will shut down soon.
       if (code === 406) {
-        console.warn("[stream] connection limit error — this means a second WS connection was attempted. Ignoring.");
+        console.warn("[stream] connection limit error — closing WS and scheduling reconnect (old container will release slot)");
+        this.closedIntentionally = true;
+        this.ws?.close();
+        this.ws = null;
+        this.authenticated = false;
+        this.scheduleReconnect();
         return;
       }
 
-      // Auth failed — fall back to slower REST polling to avoid 429s
-      console.warn(`[stream] auth failed, falling back to REST polling at ${this.FALLBACK_POLL_MS}ms`);
+      // 404 = auth timeout — typically happens after a 406 delay.  Retriable.
+      if (code === 404) {
+        console.warn("[stream] auth timeout — closing WS and scheduling reconnect");
+        this.closedIntentionally = true;
+        this.ws?.close();
+        this.ws = null;
+        this.authenticated = false;
+        this.scheduleReconnect();
+        return;
+      }
+
+      // Other auth errors — fall back to REST polling but schedule periodic WS retry
+      console.warn(`[stream] auth failed (code=${code}), falling back to REST polling at ${this.FALLBACK_POLL_MS}ms`);
       this.pollingMode = true;
+      this.closedIntentionally = true;
       this.ws?.close();
       this.ws = null;
       this.startFallbackPolling();
+      this.scheduleWsRetry();
       return;
     }
 
@@ -363,6 +391,24 @@ class AlpacaStreamManager {
       this.connect();
     }, this.reconnectDelay);
     this.reconnectDelay = Math.min(this.reconnectDelay * 2, 30_000);
+  }
+
+  /** Periodically retry WS from polling mode (every 60s) */
+  private scheduleWsRetry() {
+    if (this.wsRetryTimer || this.stopped) return;
+    const WS_RETRY_MS = 60_000;
+    console.log(`[stream] will retry WS connection in ${WS_RETRY_MS / 1000}s`);
+    this.wsRetryTimer = setTimeout(() => {
+      this.wsRetryTimer = null;
+      if (this.stopped || !this.pollingMode) return;
+      console.log("[stream] attempting WS reconnect from polling mode");
+      this.pollingMode = false;
+      this.reconnectDelay = 1000;
+      // Stop fallback polling — will restart if WS fails again
+      for (const t of this.pollTimers.values()) clearInterval(t);
+      this.pollTimers.clear();
+      this.connect();
+    }, WS_RETRY_MS);
   }
 
   // ── Fallback: poll REST when WebSocket auth fails ────────────────────────
