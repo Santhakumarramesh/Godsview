@@ -1,5 +1,5 @@
 import { accuracyResultsTable, db, siDecisionsTable } from "@workspace/db";
-import { and, asc, desc, eq, gte, isNull, lte, or } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNull, lte, or, sql } from "drizzle-orm";
 import { logger } from "./logger";
 import { persistWrite, persistRead, persistAppend } from "./persistent_store";
 
@@ -597,8 +597,37 @@ export async function runPaperValidationCycle(options?: {
     const days = Math.max(7, Math.min(120, Math.round(parseNum(options?.days) || DEFAULT_DAYS)));
     const threshold = clamp01(parseNum(options?.threshold) || DEFAULT_THRESHOLD);
 
-    const reconciliation = await reconcilePendingOutcomes(days);
-    const samples = await fetchResolvedSamples(days);
+    // Reconciliation is non-fatal: if the DB query fails, we still
+    // compute metrics from whatever resolved samples we already have.
+    let reconciliation: Awaited<ReturnType<typeof reconcilePendingOutcomes>> = {
+      pending_before: 0,
+      matched: 0,
+      still_pending: 0,
+      scanned_accuracy_rows: 0,
+    };
+    try {
+      reconciliation = await reconcilePendingOutcomes(days);
+    } catch (reconErr) {
+      const errMsg = reconErr instanceof Error ? reconErr.message : String(reconErr);
+      const errStack = reconErr instanceof Error ? reconErr.stack : undefined;
+      const errCause = reconErr instanceof Error ? (reconErr as any).cause : undefined;
+      logger.warn(
+        { err: reconErr, message: errMsg, stack: errStack, cause: errCause },
+        "[paper-validation] reconciliation failed (non-fatal, continuing cycle)"
+      );
+      _lastError = `reconciliation: ${errMsg}`;
+    }
+
+    let samples: ValidationSample[] = [];
+    try {
+      samples = await fetchResolvedSamples(days);
+    } catch (fetchErr) {
+      logger.warn(
+        { err: fetchErr },
+        "[paper-validation] fetchResolvedSamples failed (non-fatal, using empty set)"
+      );
+      _lastError = `fetchSamples: ${fetchErr instanceof Error ? fetchErr.message : String(fetchErr)}`;
+    }
     const approvedSamples = samples.filter((sample) => sample.approved);
 
     const overall = computeMetrics(samples, threshold);
@@ -649,16 +678,24 @@ export async function runPaperValidationCycle(options?: {
 
     return report;
   } catch (err) {
-    _lastError = err instanceof Error ? err.message : String(err);
-    logger.error({ err }, "[paper-validation] cycle failed");
+    const errMsg = err instanceof Error ? err.message : String(err);
+    const errStack = err instanceof Error ? err.stack : undefined;
+    const errCause = err instanceof Error ? (err as any).cause : undefined;
+    _lastError = errMsg;
+    logger.error(
+      { err, message: errMsg, stack: errStack, cause: errCause },
+      "[paper-validation] cycle failed"
+    );
 
-    // Schedule retry on error
-    if (_retryScheduled) clearTimeout(_retryScheduled);
-    _retryScheduled = setTimeout(() => {
-      runPaperValidationCycle(options).catch((retryErr) => {
-        logger.error({ err: retryErr }, "[paper-validation] retry cycle failed");
-      });
-    }, RETRY_DELAY_MS);
+    // Only schedule ONE retry if not already pending
+    if (!_retryScheduled) {
+      _retryScheduled = setTimeout(() => {
+        _retryScheduled = null;
+        runPaperValidationCycle(options).catch((retryErr) => {
+          logger.warn({ err: retryErr }, "[paper-validation] retry also failed, will wait for next scheduled cycle");
+        });
+      }, RETRY_DELAY_MS);
+    }
 
     throw err;
   } finally {

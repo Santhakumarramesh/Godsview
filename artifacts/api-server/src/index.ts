@@ -37,8 +37,8 @@ const server = app.listen(port, (err) => {
 
   logger.info({ port }, "Server listening");
 
-  // Phase 6: Enhanced graceful shutdown with priority hooks
-  try { initGracefulShutdown(server); } catch (e: any) { logger.warn({ err: e.message }, "Enhanced graceful shutdown unavailable"); }
+  // Phase 6: Enhanced graceful shutdown is registered at module level (line ~292)
+  // via setupGracefulShutdown(server) — no need to double-register here.
 
   // Phase 95: Self-register the api-server's logical services into the
   // service mesh registry so /api/mesh/services reports something useful
@@ -76,7 +76,7 @@ const server = app.listen(port, (err) => {
   // Run preflight checks (non-blocking — logs results)
   runPreflight()
     .then((result) => {
-      if (!!result.passed) {
+      if (!result.passed) {
         logger.warn({ checks: result.checks.filter(c => !c.passed) }, "Preflight checks had failures");
       }
     })
