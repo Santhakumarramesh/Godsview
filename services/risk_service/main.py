@@ -253,8 +253,8 @@ async def portfolio_summary() -> dict[str, Any]:
                 entry_time=pos_data["entry_time"],
                 strategy=pos_data.get("strategy", "default"),
             ))
-        except Exception as e:
-            log.warning(f"error_converting_position {symbol}: {e}")
+        except Exception:
+            log.debug("error_converting_position", symbol=symbol, exc_info=True)
 
     # Run full analysis
     try:
@@ -318,7 +318,7 @@ async def portfolio_correlation() -> dict[str, Any]:
                 strategy=pos_data.get("strategy", "default"),
             ))
         except Exception:
-            pass
+            log.debug("error_converting_position_for_correlation", symbol=symbol, exc_info=True)
 
     if len(positions) < 2:
         return {"status": "insufficient_positions", "min_required": 2}
@@ -360,7 +360,7 @@ async def portfolio_sectors() -> dict[str, Any]:
             positions.append(pos)
             total_value += pos.value
         except Exception:
-            pass
+            log.debug("error_converting_position_for_sectors", symbol=symbol, exc_info=True)
 
     if total_value == 0:
         total_value = 10_000.0
@@ -398,7 +398,7 @@ async def portfolio_risk_metrics() -> dict[str, Any]:
                 strategy=pos_data.get("strategy", "default"),
             ))
         except Exception:
-            pass
+            log.debug("error_converting_position_for_risk_metrics", symbol=symbol, exc_info=True)
 
     try:
         metrics = _portfolio_engine._compute_risk_metrics(positions, _portfolio_price_history)
@@ -438,7 +438,7 @@ async def portfolio_allocation() -> dict[str, Any]:
             positions.append(pos)
             total_value += pos.value
         except Exception:
-            pass
+            log.debug("error_converting_position_for_allocation", symbol=symbol, exc_info=True)
 
     if total_value == 0:
         total_value = 10_000.0
@@ -511,7 +511,7 @@ async def rebalance_portfolio(req: RebalanceRequest) -> dict[str, Any]:
                 strategy=pos_data.get("strategy", "default"),
             ))
         except Exception:
-            pass
+            log.debug("error_converting_position_for_rebalance", symbol=symbol, exc_info=True)
 
     try:
         intel = _portfolio_engine.analyze_portfolio(

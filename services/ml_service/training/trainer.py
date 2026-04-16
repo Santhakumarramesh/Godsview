@@ -201,6 +201,7 @@ def train(
         fi_raw  = raw_xgb.feature_importances_
         importance = {feat_keys[i]: round(float(fi_raw[i]), 5) for i in range(len(feat_keys))}
     except Exception:
+        log.debug("failed_to_extract_feature_importance", exc_info=True)
         importance = {}
 
     # ── Save model ────────────────────────────────────────────────────────────
@@ -306,7 +307,7 @@ def _log_to_mlflow(
             try:
                 mlflow.log_artifact(model_path)
             except Exception:
-                pass
+                log.warning("failed_to_log_artifact_to_mlflow", exc_info=True)
             return run.info.run_id
     except ImportError:
         log.warning("mlflow_not_installed")

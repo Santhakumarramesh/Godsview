@@ -153,7 +153,7 @@ async def _scan_symbol(client: httpx.AsyncClient, symbol: str, timeframe: str) -
                 )
                 signals_found += 1
             except Exception:
-                pass
+                log.debug("failed_to_forward_signal_to_gateway", signal_id=sig.get("id"), exc_info=True)
 
     except Exception as exc:
         state.errors.append(f"scan {symbol}/{timeframe}: {exc}")
@@ -259,7 +259,7 @@ async def _position_monitor_loop() -> None:
                                         direction=direction,
                                     )
                         except Exception:
-                            pass
+                            log.debug("failed_to_fetch_current_price", symbol=symbol, exc_info=True)
         except Exception as exc:
             state.errors.append(f"position_monitor: {exc}")
 
