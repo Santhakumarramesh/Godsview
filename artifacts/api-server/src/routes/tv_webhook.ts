@@ -135,7 +135,11 @@ let stats: WebhookStats = {
 // ─── Authentication Middleware ──────────────────────────────────────────────
 
 function validateWebhookAuth(req: Request): boolean {
-  const secret = process.env.TV_WEBHOOK_SECRET || "default_secret";
+  const secret = process.env.TV_WEBHOOK_SECRET;
+  if (!secret || secret === "default_secret" || secret === "change-me") {
+    logger.warn("[tv_webhook] TV_WEBHOOK_SECRET not set or insecure — rejecting all webhook requests");
+    return false;
+  }
   const authHeader = req.headers.authorization || "";
   const bearerToken = authHeader.replace(/^Bearer\s+/i, "");
 

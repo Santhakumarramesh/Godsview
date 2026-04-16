@@ -55,7 +55,7 @@ services:
     environment:
       POSTGRES_DB: godsview
       POSTGRES_USER: godsview
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-godsview_secret}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     ports:
       - "${DB_EXTERNAL_PORT:-5432}:5432"
     volumes:
@@ -100,7 +100,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: "3001"
-      DATABASE_URL: postgresql://godsview:${POSTGRES_PASSWORD:-godsview_secret}@postgres:5432/godsview
+      DATABASE_URL: postgresql://godsview:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/godsview
       DB_POOL_MAX: "${DB_POOL_MAX:-10}"
       # Trading keys (inject via .env file)
       ALPACA_API_KEY: "${ALPACA_API_KEY:-}"
@@ -120,14 +120,14 @@ services:
       GODSVIEW_COOLDOWN_AFTER_LOSSES: "${GODSVIEW_COOLDOWN_AFTER_LOSSES:-3}"
       GODSVIEW_COOLDOWN_MINUTES: "${GODSVIEW_COOLDOWN_MINUTES:-30}"
       GODSVIEW_BLOCK_ON_DEGRADED_DATA: "${GODSVIEW_BLOCK_ON_DEGRADED_DATA:-true}"
-      GODSVIEW_OPERATOR_TOKEN: "${GODSVIEW_OPERATOR_TOKEN:-change-me}"
+      GODSVIEW_OPERATOR_TOKEN: "${GODSVIEW_OPERATOR_TOKEN:?Set GODSVIEW_OPERATOR_TOKEN in .env (min 16 chars)}"
       CORS_ORIGIN: "${CORS_ORIGIN:-http://localhost}"
       ECON_CALENDAR_URL: "${ECON_CALENDAR_URL:-https://nfs.faireconomy.media/ff_calendar_thisweek.json}"
       # Python v2 bridge (enabled by default)
       PY_GATEWAY_URL: "${PY_GATEWAY_URL:-http://py-gateway:8000}"
       PY_SERVICES_ENABLED: "${PY_SERVICES_ENABLED:-true}"
       # TradingView webhook secret
-      TV_WEBHOOK_SECRET: "${TV_WEBHOOK_SECRET:-change-me}"
+      TV_WEBHOOK_SECRET: "${TV_WEBHOOK_SECRET:?Set TV_WEBHOOK_SECRET in .env}"
       # Node API URL for Python services
       NODE_API_URL: "${NODE_API_URL:-http://api:3001}"
       # Order book configuration

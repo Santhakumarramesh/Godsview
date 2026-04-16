@@ -290,11 +290,20 @@ async def calibration_keys():
 # ── Data Truth / Latency Monitor ─────────────────────────────────────────────
 
 _data_source_status: dict[str, dict] = {}
+_MAX_DATA_SOURCES = 200  # Prevent unbounded memory growth
 
 
 @router.post("/data-truth/report")
 async def report_data_source(source: str, latency_ms: float, success: bool):
     """Report a data source fetch result for health tracking."""
+    # Input validation
+    if not source or len(source) > 128:
+        return {"status": "error", "detail": "source must be 1-128 chars"}
+    if not (-1.0 <= latency_ms <= 300_000):
+        return {"status": "error", "detail": "latency_ms must be 0-300000"}
+    # Prevent unbounded dict growth
+    if source not in _data_source_status and len(_data_source_status) >= _MAX_DATA_SOURCES:
+        return {"status": "error", "detail": f"max {_MAX_DATA_SOURCES} data sources tracked"}
     entry = _data_source_status.setdefault(source, {
         "total": 0, "errors": 0, "latency_sum": 0.0, "last_update": 0.0,
     })
