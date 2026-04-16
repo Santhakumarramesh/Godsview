@@ -14,6 +14,7 @@ import {
   PipelineState,
   PipelineStep,
 } from '../lib/decision_loop';
+import { logger } from "../lib/logger.js";
 
 // ============================================================================
 // TYPES
@@ -77,7 +78,7 @@ const errorHandler = (
   res: Response,
   next: NextFunction
 ) => {
-  console.error('Route error:', err);
+  logger.error({ err }, "[decision_loop] Route error");
   res.status(500).json({
     success: false,
     error: err.message || 'Internal server error',

@@ -10,6 +10,7 @@ import {
   type Fill,
   type ExecutionReport,
 } from "../lib/execution_validator.js";
+import { logger } from "../lib/logger.js";
 
 const router = Router();
 
@@ -141,7 +142,7 @@ router.post(
 
       res.json({ success: true, validation });
     } catch (error) {
-      console.error("Execution validation error:", error);
+      logger.error({ err: error }, "[execution_validation] Execution validation error");
       res.status(500).json({
         error: error instanceof Error ? error.message : "Unknown error",
       });
@@ -180,7 +181,7 @@ router.get(
 
       res.json({ success: true, distribution });
     } catch (error) {
-      console.error("Slippage computation error:", error);
+      logger.error({ err: error }, "[execution_validation] Slippage computation error");
       res.status(500).json({
         error: error instanceof Error ? error.message : "Unknown error",
       });
@@ -214,7 +215,7 @@ router.get(
 
       res.json({ success: true, comparison });
     } catch (error) {
-      console.error("Backtest vs live comparison error:", error);
+      logger.error({ err: error }, "[execution_validation] Backtest vs live comparison error");
       res.status(500).json({
         error: error instanceof Error ? error.message : "Unknown error",
       });
@@ -246,7 +247,7 @@ router.get(
         timestamp: new Date(),
       });
     } catch (error) {
-      console.error("Drift status error:", error);
+      logger.error({ err: error }, "[execution_validation] Drift status error");
       res.status(500).json({
         error: error instanceof Error ? error.message : "Unknown error",
       });
@@ -296,7 +297,7 @@ router.get(
 
       res.json({ success: true, events });
     } catch (error) {
-      console.error("Drift events error:", error);
+      logger.error({ err: error }, "[execution_validation] Drift events error");
       res.status(500).json({
         error: error instanceof Error ? error.message : "Unknown error",
       });
@@ -330,7 +331,7 @@ router.get(
 
       res.json({ success: true, report });
     } catch (error) {
-      console.error("Execution report error:", error);
+      logger.error({ err: error }, "[execution_validation] Execution report error");
       res.status(500).json({
         error: error instanceof Error ? error.message : "Unknown error",
       });
@@ -409,7 +410,7 @@ router.get(
         },
       });
     } catch (error) {
-      console.error("System health error:", error);
+      logger.error({ err: error }, "[execution_validation] System health error");
       res.status(500).json({
         error: error instanceof Error ? error.message : "Unknown error",
       });

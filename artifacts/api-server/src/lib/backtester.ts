@@ -18,6 +18,7 @@ import { processSuperSignal } from "./super_intelligence";
 import { computeFinalQuality } from "./strategy_engine";
 import { getBars, AlpacaBar } from "./alpaca";
 import pLimit from "p-limit";
+import { logger } from "./logger.js";
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -106,7 +107,7 @@ export function backtestHealthCheck(): BacktestHealthCheckResult {
  */
 export function enforceEquityCurveFloor(equity: number, startingEquity: number): number {
   if (equity < 0) {
-    console.warn(`Equity curve would have gone negative: ${equity}. Flooring at 0.`);
+    logger.warn({ equity }, "[backtest] Equity curve would have gone negative — flooring at 0");
     return 0;
   }
   return equity;
@@ -137,14 +138,14 @@ export function validateTradeSequenceIntegrity(trades: TradeResult[], expectedCh
   const computed = computeTradeChecksum(trades);
 
   if (expectedChecksum && computed !== expectedChecksum) {
-    console.warn(`Trade sequence checksum mismatch. Expected: ${expectedChecksum}, Got: ${computed}`);
+    logger.warn({ expected: expectedChecksum, got: computed }, "[backtest] Trade sequence checksum mismatch");
     return false;
   }
 
   // Additional validation: ensure trades are ordered by signal_id (monotonic)
   for (let i = 1; i < trades.length; i++) {
     if (trades[i].signal_id < trades[i - 1].signal_id) {
-      console.warn(`Trade sequence not monotonic. Trade ${i} (id=${trades[i].signal_id}) follows trade ${i - 1} (id=${trades[i - 1].signal_id})`);
+      logger.warn({ tradeIdx: i, signalId: trades[i].signal_id, prevSignalId: trades[i - 1].signal_id }, "[backtest] Trade sequence not monotonic");
       return false;
     }
   }
@@ -839,7 +840,7 @@ export async function startContinuousBacktest(): Promise<{ success: boolean; mes
   }
 
   _continuousBacktestRunning = true;
-  console.log("[backtest] Continuous backtesting started — will test every 5 minutes");
+  logger.info("[backtest] Continuous backtesting started — will test every 5 minutes");
 
   // Perform initial backtest immediately
   await runContinuousBacktestCycle();
@@ -849,7 +850,7 @@ export async function startContinuousBacktest(): Promise<{ success: boolean; mes
     try {
       await runContinuousBacktestCycle();
     } catch (err) {
-      console.error("[backtest] Continuous cycle error:", err);
+      logger.error({ err }, "[backtest] Continuous cycle error");
     }
   }, 5 * 60_000);
 
@@ -870,7 +871,7 @@ export function stopContinuousBacktest(): { success: boolean; message: string } 
   }
 
   _continuousBacktestRunning = false;
-  console.log("[backtest] Continuous backtesting stopped");
+  logger.info("[backtest] Continuous backtesting stopped");
   return { success: true, message: "Continuous backtesting deactivated" };
 }
 
@@ -879,7 +880,7 @@ export function stopContinuousBacktest(): { success: boolean; message: string } 
  */
 async function runContinuousBacktestCycle(): Promise<void> {
   try {
-    console.log("[backtest] [continuous] Starting backtest cycle...");
+    logger.info("[backtest] [continuous] Starting backtest cycle");
 
     const timeHorizons = [30, 60, 90, 180, 365];
     const results: BacktestResult[] = [];
@@ -887,7 +888,7 @@ async function runContinuousBacktestCycle(): Promise<void> {
     // Run backtest for each time horizon
     for (const days of timeHorizons) {
       try {
-        console.log(`[backtest] [continuous] Running ${days}-day backtest...`);
+        logger.info({ days }, "[backtest] [continuous] Running backtest");
         const result = await runBacktest({
           lookback_days: days,
           initial_equity: 10_000,
@@ -896,12 +897,12 @@ async function runContinuousBacktestCycle(): Promise<void> {
         });
         results.push(result);
       } catch (err) {
-        console.error(`[backtest] [continuous] ${days}-day backtest failed:`, err);
+        logger.error({ days, err }, "[backtest] [continuous] Backtest failed");
       }
     }
 
     if (results.length === 0) {
-      console.log("[backtest] [continuous] No valid results from cycle");
+      logger.info("[backtest] [continuous] No valid results from cycle");
       return;
     }
 
@@ -914,9 +915,9 @@ async function runContinuousBacktestCycle(): Promise<void> {
     // Update strategy leaderboard based on results
     updateStrategyLeaderboard(results);
 
-    console.log(`[backtest] [continuous] Cycle complete: ${results.length} time horizons tested`);
+    logger.info({ horizons: results.length }, "[backtest] [continuous] Cycle complete");
   } catch (err) {
-    console.error("[backtest] [continuous] Backtest cycle failed:", err);
+    logger.error({ err }, "[backtest] [continuous] Backtest cycle failed");
   }
 }
 
@@ -1018,9 +1019,9 @@ function updateStrategyLeaderboard(results: BacktestResult[]): void {
       _strategyLeaderboard.set(key, entry);
     }
 
-    console.log(`[backtest] Updated leaderboard: ${_strategyLeaderboard.size} strategies`);
+    logger.info({ strategies: _strategyLeaderboard.size }, "[backtest] Updated leaderboard");
   } catch (err) {
-    console.error("[backtest] [continuous] Strategy leaderboard update failed:", err);
+    logger.error({ err }, "[backtest] [continuous] Strategy leaderboard update failed");
   }
 }
 

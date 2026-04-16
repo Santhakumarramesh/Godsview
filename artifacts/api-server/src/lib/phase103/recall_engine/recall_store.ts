@@ -10,6 +10,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { embedFeatures, cosineSim, EMBED_DIM, SetupFeatures } from "./embedding.js";
+import { logger } from "../../logger.js";
 
 export type Outcome = "win" | "loss" | "scratch" | "missed";
 
@@ -64,8 +65,7 @@ export class RecallStore {
     } catch (err) {
       // First-run / missing file is fine; structural errors should not crash boot.
       if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-        // eslint-disable-next-line no-console
-        console.warn("[recall_store] load failed:", err);
+        logger.warn({ err }, "[recall_store] load failed");
       }
     }
   }

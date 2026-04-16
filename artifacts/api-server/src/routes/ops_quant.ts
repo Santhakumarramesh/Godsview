@@ -24,6 +24,7 @@ import {
   generateIncidentReport,
   formatIncidentReportAsText,
 } from '../lib/ops';
+import { logger } from "../lib/logger.js";
 
 const router = Router();
 
@@ -50,7 +51,7 @@ interface ApiError {
 // ============================================================================
 
 function errorHandler(err: unknown, req: Request, res: Response, next: NextFunction): void {
-  console.error('[ops_quant] Error:', err);
+  logger.error({ err }, "[ops_quant] Error");
 
   if (err instanceof Error) {
     res.status(500).json({

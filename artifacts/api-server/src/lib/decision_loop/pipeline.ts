@@ -8,6 +8,7 @@ const uuidv4 = () => randomUUID();
 import { AmbiguityResolver, ResolvedInterpretation } from './ambiguity_resolver';
 import { EarlyRejector, EarlyScreenResult } from './early_rejector';
 import { CausalReasoner, CausalAnalysis } from './causal_reasoner';
+import { logger } from "../logger.js";
 
 // ============================================================================
 // TYPES & INTERFACES
@@ -416,7 +417,7 @@ export class QuantDecisionPipeline {
     } catch (error: any) {
       this.state.status = 'failed';
       this.state.completed_at = Date.now();
-      console.error('Pipeline error:', error);
+      logger.error({ err: error }, "[pipeline] Pipeline error");
       throw error;
     }
   }
@@ -566,7 +567,7 @@ export class QuantDecisionPipeline {
     } catch (error: any) {
       this.state.status = 'failed';
       this.state.completed_at = Date.now();
-      console.error('Pipeline error:', error);
+      logger.error({ err: error }, "[pipeline] Pipeline error");
       throw error;
     }
   }

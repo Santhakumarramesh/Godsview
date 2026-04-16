@@ -14,6 +14,8 @@
  * event-driven architecture that can be observed, replayed, and logged.
  */
 
+import { logger } from "./logger.js";
+
 // ── Agent Identity ──────────────────────────────────────────────────────────
 
 /** Individual sub-agent IDs (engine-level) */
@@ -341,10 +343,10 @@ class BrainEventBus {
       this.eventLog = this.eventLog.slice(-this.maxLog);
     }
     this.listeners.get(event.type)?.forEach((fn) => {
-      try { fn(event); } catch (e) { console.error("[BrainEventBus] listener error:", e); }
+      try { fn(event); } catch (e) { logger.error({ err: e }, "[BrainEventBus] listener error"); }
     });
     this.listeners.get("*")?.forEach((fn) => {
-      try { fn(event); } catch (e) { console.error("[BrainEventBus] wildcard listener error:", e); }
+      try { fn(event); } catch (e) { logger.error({ err: e }, "[BrainEventBus] wildcard listener error"); }
     });
   }
 }
