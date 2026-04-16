@@ -1,7 +1,7 @@
 # ─────────────────────────────────────────────────────────────────
-# GodsView — Production Docker Compose Stack
+# GodsView — Production Docker Compose Stack (Full System Enabled)
 #
-# Services:
+# 14 Core Services:
 #   postgres       — PostgreSQL 16 with persistent volume
 #   redis          — Shared cache / message bus
 #   api            — GodsView API server (Express 5 + esbuild bundle)
@@ -17,15 +17,18 @@
 #   py-scheduler   — Task scheduling
 #   mlflow         — ML experiment tracking
 #
+# Monitoring Stack (Optional):
+#   prometheus     — Metrics collection
+#   grafana        — Visualization & dashboards
+#
 # Usage:
-#   docker compose up -d              # start all
-#   docker compose up -d api nginx    # Node.js only (no Python stack)
+#   docker compose up -d              # start full system (all 14 services)
+#   docker compose up -d api nginx    # Node.js only (without Python stack)
 #   docker compose logs -f api        # tail API logs
 #   docker compose down -v            # stop + remove volumes
 #
-# Profiles:
-#   default        — postgres + api + nginx (Node.js only)
-#   --profile v2   — adds all Python microservices + Redis + MLflow
+# By default: All services are always-on when using 'docker compose up'
+# The full Python v2 stack is enabled without requiring --profile flag
 # ─────────────────────────────────────────────────────────────────
 
 # ── Python service defaults (shared anchor) ──────────────────────
@@ -38,8 +41,6 @@ x-py-defaults: &py-defaults
   env_file:
     - .env
   restart: unless-stopped
-  profiles:
-    - v2
   logging:
     driver: "json-file"
     options:
@@ -72,8 +73,6 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    profiles:
-      - v2
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -81,6 +80,12 @@ services:
       retries: 5
     networks:
       - godsview-net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 64M
 
   # ── API Server (Node.js) ───────────────────────────────────────
   api:
@@ -118,11 +123,25 @@ services:
       GODSVIEW_OPERATOR_TOKEN: "${GODSVIEW_OPERATOR_TOKEN:-change-me}"
       CORS_ORIGIN: "${CORS_ORIGIN:-http://localhost}"
       ECON_CALENDAR_URL: "${ECON_CALENDAR_URL:-https://nfs.faireconomy.media/ff_calendar_thisweek.json}"
-      # Python v2 bridge (set to enable proxy to Python services)
+      # Python v2 bridge (enabled by default)
       PY_GATEWAY_URL: "${PY_GATEWAY_URL:-http://py-gateway:8000}"
-      PY_SERVICES_ENABLED: "${PY_SERVICES_ENABLED:-false}"
+      PY_SERVICES_ENABLED: "${PY_SERVICES_ENABLED:-true}"
+      # TradingView webhook secret
+      TV_WEBHOOK_SECRET: "${TV_WEBHOOK_SECRET:-change-me}"
+      # Node API URL for Python services
+      NODE_API_URL: "${NODE_API_URL:-http://api:3001}"
+      # Order book configuration
+      ORDERBOOK_ENABLED: "${ORDERBOOK_ENABLED:-true}"
+      POLYGON_API_KEY: "${POLYGON_API_KEY:-}"
+      # Storage paths for SQLite databases
+      GOVERNANCE_DB_PATH: "${GOVERNANCE_DB_PATH:-/app/data/governance.db}"
+      SCREENSHOT_DIR: "${SCREENSHOT_DIR:-/app/data/screenshots}"
+      EXPERIMENT_DB_PATH: "${EXPERIMENT_DB_PATH:-/app/data/experiments.db}"
+      PROMOTION_DB_PATH: "${PROMOTION_DB_PATH:-/app/data/promotions.db}"
     expose:
       - "3001"
+    volumes:
+      - api-data:/app/data
     networks:
       - godsview-net
     deploy:
@@ -156,13 +175,22 @@ services:
     expose:
       - "8000"
     depends_on:
-      - py-market-data
-      - py-feature
-      - py-backtest
-      - py-ml
-      - py-execution
-      - py-risk
-      - py-memory
+      redis:
+        condition: service_healthy
+      py-market-data:
+        condition: service_healthy
+      py-feature:
+        condition: service_healthy
+      py-backtest:
+        condition: service_healthy
+      py-ml:
+        condition: service_healthy
+      py-execution:
+        condition: service_healthy
+      py-risk:
+        condition: service_healthy
+      py-memory:
+        condition: service_healthy
     environment:
       API_GATEWAY_PORT: "8000"
       MARKET_DATA_URL: "http://py-market-data:8001"
@@ -172,11 +200,13 @@ services:
       EXECUTION_URL: "http://py-execution:8005"
       RISK_URL: "http://py-risk:8006"
       MEMORY_URL: "http://py-memory:8007"
+      REDIS_URL: "redis://redis:6379"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 15s
 
   py-market-data:
     <<: *py-defaults
@@ -317,8 +347,6 @@ services:
   # ── MLflow Tracking Server ─────────────────────────────────────
   mlflow:
     image: ghcr.io/mlflow/mlflow:v2.13.0
-    profiles:
-      - v2
     command: >
       mlflow server
       --host 0.0.0.0
@@ -332,14 +360,23 @@ services:
     restart: unless-stopped
     networks:
       - godsview-net
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 30s
       timeout: 10s
       retries: 5
+      start_period: 20s
 
 volumes:
   pgdata:
+    driver: local
+  api-data:
     driver: local
   py-market-data:
     driver: local

@@ -1,6 +1,57 @@
 // GodsView Smart Money Concepts Strategy v1.0
 // Detects order blocks, FVGs, and liquidity sweeps
 // Sends webhook alerts to GodsView MCP pipeline
+//
+// ─── WEBHOOK INTEGRATION ────────────────────────────────────────────────────
+//
+// This script sends JSON alert payloads to the GodsView webhook endpoint.
+//
+// SETUP:
+// 1. Copy the JSON message from the alertcondition() calls below
+// 2. In TradingView, go to Alerts > Create Alert
+// 3. Select this strategy as the condition
+// 4. Set Webhook URL to: https://your-godsview-domain.com/api/tv-webhook
+// 5. Add header: Authorization: Bearer {TV_WEBHOOK_SECRET}
+//    (Replace {TV_WEBHOOK_SECRET} with your actual secret from .env)
+//
+// WEBHOOK PAYLOAD FORMAT:
+// The alerts send JSON in this structure:
+// {
+//   "symbol": "AAPL",                    // Trading symbol from {{ticker}}
+//   "signal": "order_block_entry",       // Signal type: order_block_entry, sweep_reclaim, fvg_fill
+//   "timeframe": "5m",                   // Chart timeframe from {{interval}}
+//   "price": 150.25,                     // Current close price
+//   "timestamp": 1640000000000,          // Bar time in milliseconds
+//   "direction": "long",                 // Entry direction: long or short
+//   "stop_loss": 149.50,                 // Stop loss level
+//   "take_profit": 152.00,               // Take profit level
+//   "strategy_name": "GodsView SMC v1",  // Strategy identifier
+//   "passphrase": "your_secret_key"      // Verification passphrase
+// }
+//
+// RECEIVING IN GODSVIEW:
+// - POST /api/tv-webhook validates Bearer token (TV_WEBHOOK_SECRET)
+// - Extracts: symbol, signal type, timeframe, entry, stop, target, confidence
+// - Applies deduplication (60-second window by symbol+action+timeframe)
+// - Broadcasts to dashboard WebSocket
+// - Pushes to signal queue (/api/v2/signals)
+// - Stores in circular buffer (last 500 signals)
+//
+// TESTING:
+// curl -X POST https://your-domain.com/api/tv-webhook \
+//   -H "Authorization: Bearer YOUR_SECRET" \
+//   -H "Content-Type: application/json" \
+//   -d '{
+//     "symbol": "AAPL",
+//     "signal": "order_block_entry",
+//     "timeframe": "5m",
+//     "price": 150.25,
+//     "timestamp": 1640000000000,
+//     "direction": "long",
+//     "stop_loss": 149.50,
+//     "take_profit": 152.00,
+//     "strategy_name": "GodsView SMC v1"
+//   }'
 
 //@version=5
 strategy("GodsView SMC", overlay=true, default_qty_type=strategy.percent_of_equity, default_qty_value=5)

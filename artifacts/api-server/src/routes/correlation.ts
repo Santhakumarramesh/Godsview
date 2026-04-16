@@ -2,7 +2,7 @@
  * Phase 102 — Correlation & Portfolio Heat Map API
  *
  * Endpoints:
- *   GET  /matrix       — NxN strategy correlation matrix
+ *   GET  /matrix       — NxN strategy correlation matrix (now computed from real price data)
  *   GET  /dangers      — Dangerously correlated pairs
  *   GET  /heatmap      — Sector × timeframe portfolio heat map
  *   GET  /drawdown     — Live drawdown state + equity curve
@@ -11,28 +11,29 @@
  */
 
 import { Router, type Request, type Response } from "express";
+import { computeCorrelationMatrix, findDangerousCorrelations } from "../lib/providers/correlation_engine";
+import { logger } from "../lib/logger";
 
 const router = Router();
 
-// ── Mock Data ───────────────────────────────────────────────────────────────
+// ── Strategy symbols for correlation analysis ────────────────────────
 const strategies = ["Breakout_V3", "MeanRevert_V2", "Momentum_Alpha", "SMC_Sniper", "Divergence_Pro"];
+// Map strategies to representative market symbols for correlation
+const strategySymbols: Record<string, string> = {
+  "Breakout_V3": "QQQ",       // Tech-heavy momentum
+  "MeanRevert_V2": "SPY",     // Broad market mean reversion
+  "Momentum_Alpha": "NVDA",   // Growth momentum
+  "SMC_Sniper": "XLF",        // Financial/cyclical
+  "Divergence_Pro": "XLE",    // Energy sector
+};
 
-const correlationMatrix = [
+// Fallback static matrix
+const fallbackCorrelationMatrix = [
   [ 1.00,  0.12, 0.78, 0.34, -0.15],
   [ 0.12,  1.00, -0.08, 0.21,  0.65],
   [ 0.78, -0.08, 1.00, 0.42,  -0.22],
   [ 0.34,  0.21, 0.42, 1.00,  0.11],
   [-0.15,  0.65, -0.22, 0.11,  1.00],
-];
-
-const dangerousPairs = [
-  {
-    strategy_a: "Breakout_V3",
-    strategy_b: "Momentum_Alpha",
-    correlation: 0.78,
-    risk_level: "dangerous" as const,
-    recommendation: "Reduce combined allocation by 30% — both chase momentum breakouts in the same regime.",
-  },
 ];
 
 const sectors = ["Tech", "Energy", "Finance", "Healthcare", "Crypto"];
@@ -74,24 +75,72 @@ const currentEq = equityCurve[equityCurve.length - 1].equity;
 const currentDD = (hwm - currentEq) / hwm;
 
 // ── GET /matrix ─────────────────────────────────────────────────────────────
-router.get("/matrix", (_req: Request, res: Response) => {
-  res.json({
-    strategies,
-    matrix: correlationMatrix,
-    computed_at: new Date().toISOString(),
-    diversificationScore: 68,
-    trend: "stable",
-  });
+router.get("/matrix", async (_req: Request, res: Response) => {
+  try {
+    // Get symbols for each strategy
+    const symbols = strategies.map(s => strategySymbols[s] || "SPY");
+
+    // Compute correlation from real market data
+    const result = await computeCorrelationMatrix(symbols, "1d", 200, logger);
+
+    // Compute diversification score (inverse of average absolute correlation)
+    const correlations = [];
+    for (let i = 0; i < result.matrix.length; i++) {
+      for (let j = i + 1; j < result.matrix[i].length; j++) {
+        correlations.push(Math.abs(result.matrix[i][j]));
+      }
+    }
+    const avgCorr = correlations.length > 0
+      ? correlations.reduce((a, b) => a + b) / correlations.length
+      : 0;
+    const diversificationScore = Math.round((1 - avgCorr) * 100);
+
+    res.json({
+      strategies,
+      symbols: result.symbols,
+      matrix: result.matrix,
+      computed_at: result.computedAt,
+      diversificationScore,
+      trend: "based_on_real_data",
+      dataPoints: result.dataPoints,
+    });
+  } catch (err) {
+    logger.warn({ error: String(err) }, "Error computing correlation matrix, using fallback");
+    res.json({
+      strategies,
+      matrix: fallbackCorrelationMatrix,
+      computed_at: new Date().toISOString(),
+      diversificationScore: 68,
+      trend: "fallback",
+    });
+  }
 });
 
 // ── GET /dangers ────────────────────────────────────────────────────────────
-router.get("/dangers", (_req: Request, res: Response) => {
-  res.json({
-    pairs: dangerousPairs,
-    threshold: 0.7,
-    totalPairsChecked: (strategies.length * (strategies.length - 1)) / 2,
-    dangerousCount: dangerousPairs.length,
-  });
+router.get("/dangers", async (_req: Request, res: Response) => {
+  try {
+    const symbols = strategies.map(s => strategySymbols[s] || "SPY");
+    const threshold = Number(_req.query.threshold ?? 0.7);
+
+    const result = await computeCorrelationMatrix(symbols, "1d", 200, logger);
+    const pairs = findDangerousCorrelations(result.matrix, strategies, threshold);
+
+    res.json({
+      pairs,
+      threshold,
+      totalPairsChecked: (strategies.length * (strategies.length - 1)) / 2,
+      dangerousCount: pairs.length,
+      computedAt: result.computedAt,
+    });
+  } catch (err) {
+    logger.warn({ error: String(err) }, "Error finding dangerous correlations");
+    res.json({
+      pairs: [],
+      threshold: 0.7,
+      totalPairsChecked: (strategies.length * (strategies.length - 1)) / 2,
+      dangerousCount: 0,
+    });
+  }
 });
 
 // ── GET /heatmap ────────────────────────────────────────────────────────────

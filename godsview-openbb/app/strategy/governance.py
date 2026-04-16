@@ -3,9 +3,23 @@ from __future__ import annotations
 from typing import Any
 
 from app.config import settings
+from app.governance.engine import GovernanceEngine
+from app.governance.trust_tiers import TrustTierLevel
 
 
 def classify_strategy_state(metrics: dict[str, Any]) -> dict[str, Any]:
+    """Legacy classification function for backward compatibility.
+
+    This is superseded by the GovernanceEngine but kept for compatibility.
+    Classifies strategy state as DISABLED/WEAK/ACTIVE based on metrics.
+
+    Args:
+        metrics: Dict with 'closed_trades', 'profit_factor', 'max_drawdown_pct',
+                 'expectancy_r', 'win_rate'
+
+    Returns:
+        Dict with status, promotion_ready, reasons, metrics
+    """
     trades = int(metrics.get("closed_trades", metrics.get("trades", 0)) or 0)
     pf = float(metrics.get("profit_factor", 0.0))
     dd = float(metrics.get("max_drawdown_pct", 0.0))
@@ -51,4 +65,31 @@ def classify_strategy_state(metrics: dict[str, Any]) -> dict[str, Any]:
         "reasons": reasons,
         "metrics": metrics,
     }
+
+
+def promote_to_tier(
+    engine: GovernanceEngine,
+    promotion_min_profit_factor: float = 1.5,
+    promotion_min_win_rate: float = 0.4,
+) -> dict[str, Any]:
+    """Helper to promote engine tier when conditions are met.
+
+    Args:
+        engine: GovernanceEngine instance
+        promotion_min_profit_factor: Minimum profit factor
+        promotion_min_win_rate: Minimum win rate
+
+    Returns:
+        Promotion result dict
+    """
+    current_tier = engine.current_tier
+    # Promote one tier if conditions met
+    if current_tier.value < 4:  # Can't promote beyond TIER_4_AUTONOMOUS
+        new_tier = TrustTierLevel(current_tier.value + 1)
+        return engine.promote_or_demote_tier(
+            new_tier=new_tier,
+            reason="performance_promotion",
+            triggered_by="performance_monitor",
+        )
+    return {"changed": False, "reason": "already_at_max_tier"}
 

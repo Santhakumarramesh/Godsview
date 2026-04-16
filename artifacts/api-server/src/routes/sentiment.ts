@@ -12,11 +12,16 @@
  */
 
 import { Router, type Request, type Response } from "express";
+import { fetchAlpacaNews } from "../lib/providers/alpaca_news";
+import { logger } from "../lib/logger";
 
 const router = Router();
 
-// ── Mock Data ───────────────────────────────────────────────────────────────
+// ── Symbols to track sentiment ───────────────────────────────
 const symbols = ["AAPL", "NVDA", "TSLA", "MSFT", "META", "AMZN", "BTC-USD", "ETH-USD"];
+
+// Fallback sentiment biases when real data unavailable
+const biases: Record<string, number> = { AAPL: 0.45, NVDA: 0.72, TSLA: -0.35, MSFT: 0.38, META: 0.22, AMZN: 0.15, "BTC-USD": 0.55, "ETH-USD": 0.30 };
 
 function mockSentiment(sym: string, bias: number) {
   const composite = Math.max(-1, Math.min(1, bias + (Math.random() - 0.5) * 0.3));
@@ -119,25 +124,34 @@ router.get("/snapshot", (_req: Request, res: Response) => {
 });
 
 // ── GET /news ───────────────────────────────────────────────────────────────
-router.get("/news", (req: Request, res: Response) => {
-  let filtered = [...newsArticles];
-  const { sentiment, impact, symbol } = req.query;
+router.get("/news", async (req: Request, res: Response) => {
+  try {
+    const symbols_param = (req.query.symbols as string)?.split(",") ?? symbols;
+    const articles = await fetchAlpacaNews(symbols_param, 50, logger);
 
-  if (sentiment === "bullish") filtered = filtered.filter((a) => a.sentiment > 0.15);
-  else if (sentiment === "bearish") filtered = filtered.filter((a) => a.sentiment < -0.15);
+    let filtered = articles;
+    const { sentiment, impact, symbol } = req.query;
 
-  if (impact) filtered = filtered.filter((a) => a.impact === impact);
-  if (symbol) filtered = filtered.filter((a) => a.symbols.includes(String(symbol)));
+    if (sentiment === "bullish") filtered = filtered.filter((a) => a.sentiment > 0.15);
+    else if (sentiment === "bearish") filtered = filtered.filter((a) => a.sentiment < -0.15);
 
-  const bullish = filtered.filter((a) => a.sentiment > 0.15).length;
-  const bearish = filtered.filter((a) => a.sentiment < -0.15).length;
+    if (impact) filtered = filtered.filter((a) => a.impact === impact);
+    if (symbol) filtered = filtered.filter((a) => a.symbols.includes(String(symbol).toUpperCase()));
 
-  res.json({
-    articles: filtered,
-    totalArticles: filtered.length,
-    bySentiment: { bullish, bearish, neutral: filtered.length - bullish - bearish },
-    lastUpdated: new Date().toISOString(),
-  });
+    const bullish = filtered.filter((a) => a.sentiment > 0.15).length;
+    const bearish = filtered.filter((a) => a.sentiment < -0.15).length;
+
+    res.json({
+      articles: filtered,
+      totalArticles: filtered.length,
+      bySentiment: { bullish, bearish, neutral: filtered.length - bullish - bearish },
+      source: "alpaca_news",
+      lastUpdated: new Date().toISOString(),
+    });
+  } catch (err) {
+    logger.warn({ error: String(err) }, "Error fetching news sentiment");
+    res.status(500).json({ error: "Failed to fetch news sentiment" });
+  }
 });
 
 // ── GET /social ─────────────────────────────────────────────────────────────

@@ -1,390 +1,347 @@
 # GodsView — AI-Native Trading Operating System
 
-An intelligent trading operating system that manages the complete strategy lifecycle: from idea to validation to autonomous execution. Every trade passes through multiple intelligence layers and explicit safety gates before execution.
-
-GodsView is built for discretionary traders who want deterministic decision rules, full audit trails, and measurable edge proof before autonomous trading.
+An intelligent trading operating system that manages the complete strategy lifecycle: from idea to validation to autonomous execution. Built for traders who want deterministic decision rules, full audit trails, and measurable edge proof before autonomous trading.
 
 ## Key Capabilities
 
-**Strategy Lab: Prompt → Compile → Backtest → Promote**
-- Define strategies in natural language
-- Compile to deterministic execution rules
-- Run full backtest with equity curves
-- Validate edge before live trading
+- **Strategy Lab**: Define strategies in natural language, compile to execution rules, backtest against historical data, and validate edge before live trading
+- **Multi-Timeframe Intelligence**: SMC structural analysis, order flow (FVG/CVD), pattern detection (AB=CD, supply/demand), regime classification (trend/reversion/breakout/chop)
+- **Machine Learning**: L2-logistic regression on 18-dimensional feature set trained on 136k+ labeled trades, with drift detection and regime-adaptive position sizing
+- **Execution Safety**: 5-layer guard stack (kill switch, daily loss limit, exposure limit, session rules, circuit breaker) plus automatic drawdown protection
+- **Decision Replay**: Reconstruct any trade from raw market data → signal → execution → outcome with full audit trail and approval logs
+- **Real-Time Intelligence Monitor**: Live event stream of signals, fills, regime shifts, and degradation alerts with position tracking
+- **Paper Trading**: Full backtesting and walk-forward validation before autonomous approval
+- **Multi-Strategy Portfolio**: Unified portfolio intelligence with correlation analysis, rebalancing, and allocation optimization
+- **Adaptive Learning**: Continuous model retraining on new market regimes with automatic drift detection and performance monitoring
 
-**Multi-Timeframe Intelligence**
-- SMC Engine: Structural market analysis (support/resistance/order blocks)
-- Order Flow Analysis: FVG, CVD, cumulative volume delta
-- Pattern Detection: AB=CD, supply/demand, setup catalog (5 families)
-- Regime Classification: Trend day, mean reversion, breakout, chop, news-distorted
+## Architecture Overview
 
-**Super Intelligence: Ensemble ML + Regime-Adaptive Sizing**
-- L2-logistic regression on 18-dimensional feature set
-- Trained on 136k+ labeled win/loss records
-- Drift detection (stable/watch/drift status)
-- Kelly criterion position sizing with regime adjustment
+GodsView is built on a 16-system architecture:
 
-**Execution Safety: 5-Layer Guard Stack + Circuit Breaker**
-- Kill switch: Stop all execution immediately
-- Daily loss limit: Max drawdown per day
-- Exposure limit: Max concurrent open positions
-- Session rules: Market hours, news lockout
-- Circuit breaker: Automatic position close on max drawdown
+**Core Market Intelligence (4 systems)**
+- **SMC Engine**: Structural market analysis detecting support/resistance, order blocks, fair value gaps
+- **Order Flow Engine**: CVD calculation, FVG detection, volume delta analysis
+- **Regime Engine**: Market regime classification (trend day, mean reversion, breakout, chop, news-distorted)
+- **Macro Engine**: Macro bias, economic calendar integration, news sentiment
 
-**Live Intelligence Monitor**
-- Real-time event stream: signals, fills, regime shifts
-- Degradation alerts: Data quality, service health
-- Position tracking: Live P&L, duration, unrealized loss
+**Strategy & Intelligence (4 systems)**
+- **Strategy Engine**: Strategy parsing, lifecycle management (draft → parsed → backtested → stress tested → approved → autonomous)
+- **Super Intelligence**: Ensemble ML model with C4 scoring (Structure + OrderFlow + Context + Confirmation)
+- **Context Fusion**: Multi-timeframe signal fusion, confluence scoring, setup validation
+- **Adaptive Learning**: Model drift detection, continuous retraining, regime adaptation
 
-**TradingView Chart Overlay**
-- Render support/resistance levels from SMC
-- Visualize order blocks and fair value gaps
-- Pattern detection overlays
-- Real-time structure updates
+**Execution & Safety (4 systems)**
+- **Execution Engine**: Order placement, fill tracking, P&L monitoring with broker abstraction (Alpaca)
+- **Risk Engine**: VaR/CVaR calculation, portfolio risk, exposure limits, stress testing
+- **Circuit Breaker**: Automatic position closes on max drawdown, daily loss limits, kill switch
+- **Safety Supervisor**: 5-layer guard validation before execution
 
-**Walk-Forward Validation**
-- 3-month out-of-sample test window
-- Stress test across regime shifts
-- Shock scenario validation
-- Proof of edge before autonomous approval
+**Intelligence & Governance (4 systems)**
+- **Brain**: Real-time subsystem health monitoring, decision pipeline visualization
+- **Governance**: Strategy promotion gates, operator approval workflows, policy enforcement
+- **Portfolio Intelligence**: Multi-strategy allocation, correlation analysis, rebalancing
+- **Recall Engine**: LanceDB-backed vector store for strategy memory and retrieval
 
-**Side-by-Side Backtesting**
-- Historical backtest vs live execution comparison
-- Slippage tracking, fill quality analysis
-- Performance attribution by setup type
-- Win rate, profit factor, Sharpe ratio
+## System Components
 
-**Daily Review Journal**
-- HTML + Markdown reports generated automatically
-- Trade-by-trade analysis: entry reason, exit trigger, outcome
-- Setup performance breakdown
-- P&L attribution and risk metrics
+| Service | Language | Port | Purpose |
+|---------|----------|------|---------|
+| API Server | TypeScript/Node.js | 3001 | Express.js API gateway, dashboard backend, core intelligence |
+| Python Gateway | Python 3.10+ | 8000 | FastAPI gateway for Python v2 microservices |
+| Market Data Service | Python 3.10+ | 8001 | Alpaca WebSocket, OHLCV bar processing |
+| Feature Service | Python 3.10+ | 8002 | Feature engineering (candles, volatility, ATR) |
+| Backtest Service | Python 3.10+ | 8003 | Walk-forward backtesting, replay engine |
+| ML Service | Python 3.10+ | 8004 | Model training, prediction, drift detection |
+| Execution Service | Python 3.10+ | 8005 | Order execution, slippage tracking, fill analysis |
+| Risk Service | Python 3.10+ | 8006 | VaR/CVaR, stress testing, portfolio risk |
+| Memory Service | Python 3.10+ | 8007 | LanceDB vector store, strategy recall |
+| Scheduler | Python 3.10+ | 8008 | Automated scanning, model retraining, maintenance |
+| PostgreSQL | SQL | 5432 | Persistent data: orders, positions, trades, audit logs |
+| Redis | Cache | 6379 | Live signal stream, position cache, ML model state |
+| Nginx | HTTP | 80/443 | Reverse proxy, dashboard serving, rate limiting |
+| MLflow | Tracking | 5000 | ML experiment tracking (optional, profile v2) |
 
-**Decision Replay**
-- Trace any trade from raw market data → signal → execution → outcome
-- Reconstruct C4 scores (Structure + OrderFlow + Context + Confirmation)
-- View ML probability and regime at decision time
-- Audit trail: who approved, when, why
+## Getting Started
 
-## Architecture
+### Prerequisites
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  PRESENTATION LAYER                                             │
-│  Dashboard (React + TanStack Query)                             │
-├─────────────────────────────────────────────────────────────────┤
-│  API GATEWAY LAYER                                              │
-│  Express.js API Server (port 3000)                              │
-├─────────────────────────────────────────────────────────────────┤
-│  INTELLIGENCE LAYER                                             │
-│  ┌──────────────┬──────────────┬──────────────┬─────────────┐  │
-│  │ Strategy     │ Super        │ Context      │ Adaptive    │  │
-│  │ Engine       │ Intelligence │ Fusion       │ Learning    │  │
-│  └──────────────┴──────────────┴──────────────┴─────────────┘  │
-├─────────────────────────────────────────────────────────────────┤
-│  MARKET DATA LAYER                                              │
-│  ┌──────────────┬──────────────┬──────────────┬─────────────┐  │
-│  │ SMC Engine   │ Order Flow   │ Regime       │ Macro       │  │
-│  │              │ Engine       │ Engine       │ Engine      │  │
-│  └──────────────┴──────────────┴──────────────┴─────────────┘  │
-├─────────────────────────────────────────────────────────────────┤
-│  EXECUTION & SAFETY LAYER                                       │
-│  ┌──────────────┬──────────────┬──────────────┬─────────────┐  │
-│  │ Order        │ Position     │ Risk         │ Circuit     │  │
-│  │ Executor     │ Monitor      │ Engine       │ Breaker     │  │
-│  └──────────────┴──────────────┴──────────────┴─────────────┘  │
-├─────────────────────────────────────────────────────────────────┤
-│  PERSISTENCE LAYER                                              │
-│  PostgreSQL + File Store                                        │
-└─────────────────────────────────────────────────────────────────┘
-```
+- Node.js 18+ (API server)
+- Python 3.10+ (microservices)
+- Docker & Docker Compose (recommended)
+- PostgreSQL 16+ (or use Docker)
+- Redis 7+ (optional, for advanced features)
+- Alpaca API credentials (paper or live)
 
-See `docs/ARCHITECTURE.md` for detailed module map, API contract, and design rationale.
-
-## Strategy Lifecycle
-
-Every strategy must pass through explicit gates before autonomous execution:
-
-```
-draft → parsed → backtested → stress_tested → paper_approved
-  → live_assisted_approved → autonomous_approved → (retired)
-```
-
-Each transition requires:
-- **Parsed**: Syntax check, setup family validation
-- **Backtested**: Full historical backtest, equity curve generation
-- **Stress Tested**: Walk-forward validation, regime stress, shock scenarios
-- **Paper Approved**: Operator manual review of backtest report
-- **Live Assisted**: Min 20 paper trades, operator monitors fills vs backtest
-- **Autonomous**: Operator approves live P&L trajectory, edge validated
-- **Retired**: Model drift detected or operator retirement
-
-## Quick Start
-
-### Development
+### Quick Start (Docker Compose)
 
 ```bash
-# 1. Clone and install
+# 1. Clone repository
 git clone https://github.com/Santhakumarramesh/Godsview.git
 cd Godsview
+
+# 2. Configure environment
+cp .env.example .env
+# Edit .env with your Alpaca API keys and database settings
+
+# 3. Start Node.js stack (API + dashboard)
+docker compose up -d api postgres nginx
+
+# 4. Verify health
+curl http://localhost/api/healthz
+curl http://localhost/api/readyz
+
+# 5. Access dashboard
+# Open http://localhost in your browser
+```
+
+### Local Development
+
+```bash
+# 1. Install dependencies
 pnpm install
 
 # 2. Configure environment
 cp .env.example .env
-# Edit .env with your Alpaca API keys and database URL
+# ALPACA_API_KEY=your_paper_key
+# ALPACA_SECRET_KEY=your_paper_secret
+# DATABASE_URL=postgresql://user:pass@localhost:5432/godsview
 
-# 3. Run development
+# 3. Run development servers
 pnpm dev
+
 # Dashboard: http://localhost:5173
-# API: http://localhost:3000/api
+# API: http://localhost:3001/api
 ```
 
-### Production (Docker)
+### Adding Python Services (Advanced)
 
 ```bash
-# 1. Configure environment
-cp .env.example .env
-# Edit .env with your credentials
+# Start with Python v2 microservices
+docker compose --profile v2 up -d
 
-# 2. Start services
-docker compose up -d
-
-# 3. Verify health
-curl http://localhost:3000/api/healthz
-curl http://localhost:3000/api/readyz
-
-# 4. Access dashboard
-# http://localhost:3000
+# Or run individually during development
+cd services
+pip install -r requirements.txt
+./services/start.sh gateway  # or: market-data, feature, backtest, ml, execution, risk, memory, scheduler
 ```
 
-### Paper Trading (Recommended First)
+## Environment Variables
 
-GodsView defaults to Alpaca paper trading mode. To enable:
-
-```bash
-# In .env
-ALPACA_API_KEY=your_paper_key
-ALPACA_API_SECRET=your_paper_secret
-ALPACA_PAPER=true  # Default
-LIVE_TRADING_ENABLED=false
+**Required for any deployment:**
+```
+ALPACA_API_KEY             Paper or live API key
+ALPACA_SECRET_KEY          API secret
+ALPACA_BASE_URL            https://paper-api.alpaca.markets (default)
+DATABASE_URL               postgresql://user:pass@host:5432/godsview
 ```
 
-Paper trading allows you to validate strategies without financial risk.
-
-### Live Trading (After Validation)
-
-Only after passing walk-forward validation and operator approval:
-
-```bash
-# 1. Get live credentials from Alpaca
-# 2. Update .env
-ALPACA_API_KEY=your_live_key
-ALPACA_API_SECRET=your_live_secret
-ALPACA_PAPER=false
-LIVE_TRADING_ENABLED=true
-
-# 3. Operator token validation required at startup
-# System will prompt for GODSVIEW_OPERATOR_TOKEN
+**Safety controls (defaults are conservative):**
+```
+GODSVIEW_ENABLE_LIVE_TRADING=false    Explicitly enable live trading
+GODSVIEW_SYSTEM_MODE=paper            paper or live
+GODSVIEW_KILL_SWITCH=false            Emergency halt toggle
+GODSVIEW_MAX_DAILY_LOSS_USD=250       Max daily loss in USD
+GODSVIEW_MAX_OPEN_EXPOSURE_PCT=0.6    Max concurrent exposure
+GODSVIEW_MAX_TRADES_PER_SESSION=10    Max trades per session
+GODSVIEW_OPERATOR_TOKEN=change-me     Required for live trading
 ```
 
-**Warning**: Live trading is irreversible. Ensure strategies have been validated through the full lifecycle.
+**Optional integrations:**
+```
+ANTHROPIC_API_KEY          For Claude reasoning layer
+CLAUDE_VETO_MODEL=claude-sonnet-4-5-20241022  Veto model override
+PY_SERVICES_ENABLED=false  Enable Python v2 microservices
+PY_GATEWAY_URL             http://py-gateway:8000
+REDIS_URL                  redis://localhost:6379
+ECON_CALENDAR_URL          Economic calendar feed
+```
 
-## API Endpoints (Key)
+See `.env.example` for the complete list.
+
+## API Reference (Key Endpoints)
+
+### Market Intelligence
+- `GET /api/market/smc/{symbol}` — SMC structural levels
+- `GET /api/market/orderflow/{symbol}` — Order flow scores
+- `GET /api/market/regime` — Current market regime
+- `GET /api/macro` — Macro bias and economic data
+- `GET /api/signals` — Live signal stream
 
 ### Strategy Management
-- `GET /api/market/strict-setup` — List all strategy templates
-- `POST /api/alpaca/analyze` — Parse and analyze strategy prompt
-- `POST /api/alpaca/backtest` — Run backtest on strategy
+- `GET /api/strict-setup` — Strategy templates
+- `POST /api/alpaca/analyze` — Parse strategy prompt
+- `POST /api/alpaca/backtest` — Run backtest
 - `GET /api/market/strict-setup/promotion-check` — Check promotion readiness
 - `POST /api/market/strict-setup/promote` — Promote to next lifecycle stage
 
-### Real-Time Intelligence
-- `GET /api/signals` — Live signal feed
-- `GET /api/market/regime` — Current market regime
-- `GET /api/market/smc/{symbol}` — SMC structural analysis
-- `GET /api/market/orderflow/{symbol}` — Order flow scores
-
-### Execution
+### Execution & Monitoring
 - `POST /api/alpaca/orders` — Place order (validates 5-layer guards)
 - `GET /api/alpaca/orders` — Order history
 - `GET /api/execution/pnl` — Real-time P&L
+- `POST /api/system/risk/kill-switch` — Emergency kill switch
 
-### Safety Control
-- `POST /api/system/risk/kill-switch` — Activate emergency kill switch
+### Intelligence & Analysis
+- `GET /api/brain` — Subsystem health and state
+- `GET /api/super-intelligence` — ML scores and regime adaptation
+- `GET /api/portfolio` — Portfolio view and allocation
+- `GET /api/performance/analytics` — Win rate, profit factor, Sharpe
+- `GET /api/journal/daily-review` — Daily HTML report
+
+### System & Operations
 - `GET /api/system/manifest` — Engine inventory and versions
 - `GET /api/system/diagnostics` — Full system diagnostics
-
-### Analytics & Review
-- `GET /api/performance/analytics` — Win rate, profit factor, Sharpe
-- `GET /api/performance/by-setup` — Performance by strategy type
-- `GET /api/journal/daily-review` — Daily HTML report
 - `GET /api/system/audit` — Audit trail summary
-- `GET /api/system/audit/replay` — Replay decision by ID
-
-### Assisted Live Trading (Phase 21)
-- `POST /api/assisted-live/sessions` — Create supervised live session
-- `POST /api/assisted-live/queue` — Submit order for approval
-- `POST /api/assisted-live/approve/:id` — Approve pending order
-- `POST /api/assisted-live/reject/:id` — Reject pending order
-- `POST /api/assisted-live/flatten/:id` — Emergency flatten session
-- `GET /api/assisted-live/incidents` — List safety incidents
-
-### Autonomous Trading (Phase 22)
-- `POST /api/autonomy/candidates` — Register autonomous candidate
-- `POST /api/autonomy/candidates/:id/activate` — Activate candidate
-- `POST /api/autonomy/revoke/:id` — Revoke autonomy
-- `GET /api/autonomy/status` — Global autonomy status
-- `GET /api/autonomy/budget` — Budget allocation
-
-### Portfolio Intelligence (Phase 23)
-- `GET /api/portfolio-intelligence/summary` — Full portfolio view
-- `GET /api/portfolio-intelligence/exposure` — Exposure snapshot
-- `GET /api/portfolio-intelligence/correlations` — Correlation matrix
-- `POST /api/portfolio-intelligence/rebalance` — Trigger rebalance
-
-### Enterprise Admin (Phase 24)
-- `GET /api/admin/users` — User management
-- `GET /api/admin/audit` — Audit trail
-- `GET /api/admin/incidents/open` — Open incidents
-- `GET /api/admin/slos/summary` — SLO compliance
-
-### God Brain (Phase 25)
-- `GET /api/god-brain/status` — Unified brain health
-- `GET /api/god-brain/terminal` — Quanta Terminal data
-- `POST /api/god-brain/decisions` — Create decision packet
-- `GET /api/god-brain/packets` — Query decision packets
-
-### Terminal (Phase 26)
-- `GET /api/terminal/layout` — Terminal layout config
-- `GET /api/terminal/commands` — Command palette
-- `GET /api/terminal/watchlist` — Watchlist
-- `GET /api/terminal/mcp/status` — MCP bridge status
-
-See `docs/ARCHITECTURE.md` for complete API reference.
+- `GET /api/system/audit/replay/:id` — Replay decision by ID
+- `GET /api/healthz` — Liveness probe
+- `GET /api/readyz` — Readiness probe
 
 ## Dashboard Pages
 
-| Page | Route | Purpose |
-|------|-------|---------|
-| Mission Control | `/` | Real-time P&L, win rate, engine health, live chart |
-| Brain | `/brain` | Intelligence state visualization, entity tracking |
-| God Brain | `/god-brain` | Unified operator control surface |
-| Quanta Terminal | `/quanta-terminal` | Bloomberg-style multi-panel operator terminal |
-| Assisted Live | `/assisted-live` | Supervised live trading with approval queue |
-| Autonomous Candidates | `/autonomous-candidates` | Autonomous strategy management |
-| Portfolio Intelligence | `/portfolio-intelligence` | Multi-strategy portfolio view |
-| Enterprise Admin | `/enterprise-admin` | RBAC, incidents, SLOs, audit |
-| Live Intelligence | `/alpaca` | Real-time Alpaca analysis with chart overlays |
-| Strategy Lab | `/lab` | Prompt-to-backtest strategy creation |
-| Setup Matrix | `/setup-explorer` | Strategy performance matrix by type/regime |
-| Signal Feed | `/signals` | Real-time signals with quality scores |
-| Trade Journal | `/trades` | Execution log with entry/exit analysis |
-| Risk Control | `/risk` | Kill switch, guards, drawdown tracking |
-| Analytics | `/performance` | Equity curves, win rates, by-setup breakdown |
-| System Core | `/system` | Diagnostics, audit trail, engine health |
+The system includes 70+ dashboard pages across these domains:
+
+**Core Trading**: Dashboard, Trades, Signals, Performance, Execution
+**Intelligence**: Brain, Super Intelligence, Institutional Intelligence, Regime Intelligence
+**Risk & Safety**: Risk Control, Advanced Risk, Circuit Breaker, Capital Gating
+**Data & Signals**: Market Structure, Microstructure, Economic Calendar, MCP Signals
+**Operations**: System, Audit Trail, Production Watchdog, Ops Security
+**Analytics**: Performance Analytics, Trade Journal, Side-by-Side Backtest, Reports
 
 ## Monitoring & Observability
 
 ### Health Checks
 ```bash
 # Liveness (service running)
-curl http://localhost:3000/api/healthz
+curl http://localhost:3001/api/healthz
 
 # Readiness (ready to serve traffic)
-curl http://localhost:3000/api/readyz
+curl http://localhost:3001/api/readyz
 
-# System manifest (engine versions + capability inventory)
-curl http://localhost:3000/api/system/manifest
+# Full manifest with subsystems
+curl http://localhost:3001/api/system/manifest
 ```
 
 ### Key Metrics
-- `signal_detection_rate` — Signals per minute
-- `execution_rate` — Orders placed per minute
-- `guard_rejection_rate` — Trades rejected by safety guards
-- `ml_approval_rate` — ML model approval percentage
-- `circuit_breaker_trips` — Automatic position closes
-- `model_drift_status` — stable / watch / drift
+- Signal detection rate (signals/min)
+- Execution rate (orders/min)
+- Guard rejection rate (% rejected)
+- ML approval rate (% approved)
+- Circuit breaker trips (emergency closes)
+- Model drift status (stable/watch/drift)
 
-### Logs & Audit Trail
-- All decisions logged with full context (timestamp, symbol, regime, C4 score, ML probability, order ID, fill)
-- Immutable event log in PostgreSQL
-- Full replay capability for any trade
+### Prometheus Integration (Optional)
+```yaml
+# prometheus.yml
+scrape_configs:
+  - job_name: godsview
+    static_configs:
+      - targets: ['localhost:3001']  # Node.js API
+      - targets: ['localhost:8000']  # Python Gateway
+      - targets: ['localhost:8001']  # Market Data
+      # ... additional Python services
+```
+
+## Strategy Lifecycle
+
+Every strategy passes through explicit gates:
+
+```
+draft → parsed → backtested → stress_tested → paper_approved 
+  → live_assisted_approved → autonomous_approved → retired
+```
+
+Each transition requires:
+- **Parsed**: Syntax validation, setup family confirmation
+- **Backtested**: Historical backtest with equity curve and metrics
+- **Stress Tested**: Walk-forward validation, regime stress, shock scenarios
+- **Paper Approved**: Operator manual review of backtest report
+- **Live Assisted**: Min 20 paper trades, operator monitors fills vs backtest
+- **Autonomous**: Operator approves live P&L, edge validated
+- **Retired**: Model drift detected or operator retirement
+
+## Testing
+
+```bash
+# Full test suite (Node.js)
+pnpm test
+
+# Watch mode
+pnpm test:watch
+
+# Python tests
+cd services && python -m pytest tests/ -q
+
+# With coverage
+python -m pytest services/tests/ --cov=services --cov-report=html
+
+# Pre-release verification
+pnpm verify:release
+
+# Market deployment profiles
+pnpm verify:market:paper
+pnpm verify:market:live
+pnpm verify:market:live:strict
+```
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | React 18 + TypeScript |
-| API Server | Express.js + TypeScript |
-| Database | PostgreSQL |
-| Cache | Redis |
+| Frontend | React 19 + Vite 7 + TailwindCSS + TanStack Query |
+| API Server | Express 5 + TypeScript + Vitest |
+| Database | PostgreSQL 16 + Drizzle ORM |
+| Cache | Redis 7 (signal stream, model state) |
 | Market Data | Alpaca API + WebSocket |
 | Charting | TradingView Lightweight Charts |
-| ML | L2-Logistic Regression |
-| Monitoring | Prometheus + Grafana |
-| Logging | Winston + Structured JSON |
-| Testing | Vitest + Jest |
-
-## Environment Variables
-
-See `.env.example` for complete list.
-
-### Required for Paper Trading
-```
-ALPACA_API_KEY=your_paper_key
-ALPACA_API_SECRET=your_paper_secret
-ALPACA_PAPER=true
-DATABASE_URL=postgresql://...
-```
-
-### Optional
-```
-ANTHROPIC_API_KEY=your_claude_key  # For LLM reasoning layer
-QUALITY_THRESHOLD=0.75             # Min composite quality for execution
-```
+| ML | L2-Logistic Regression, LanceDB vector store |
+| Python Services | FastAPI + Pydantic v2 |
+| Monitoring | Prometheus + Grafana + Structured logging |
+| Testing | Vitest + Jest + pytest + k6 load tests |
+| Container | Docker + Docker Compose + GHCR |
 
 ## Production Deployment
 
-See `PRODUCTION.md` for detailed deployment guide:
-- Docker Compose setup
-- Kubernetes deployment
-- CI/CD pipeline (GitHub Actions)
+See `PRODUCTION.md` for detailed production deployment guide:
+- Docker Compose setup for all services
+- Kubernetes deployment configuration
+- CI/CD pipeline (GitHub Actions, 7 jobs)
 - Prometheus + Grafana monitoring
-- Database backup strategy
+- Database backup and disaster recovery
+- Security hardening and compliance
 
 ## Troubleshooting
 
 **Dashboard not connecting to API**
 ```bash
-# Check API server is running
-curl http://localhost:3000/api/healthz
-
-# Check CORS headers
-curl -i http://localhost:3000/api/signals
+curl http://localhost:3001/api/healthz
+# Should return 200 OK with health status
 ```
 
 **Backtest failing**
-- Ensure Alpaca credentials are correct
-- Check that market data is available for requested symbol/date range
-- Verify PostgreSQL is accessible
+- Verify Alpaca credentials are correct
+- Check market data availability for requested symbols/dates
+- Ensure PostgreSQL is accessible
 
 **Strategy won't promote**
-- Check backtest results meet minimum threshold (Sharpe > 1.0, win rate > 50%)
-- Verify stress test passed (walk-forward validation)
+- Backtest must meet minimum thresholds (Sharpe > 1.0, win rate > 50%)
+- Stress test must pass (walk-forward validation)
 - Operator must manually approve in dashboard
 
 **Orders not executing**
-- Verify market is open (9:30-16:00 EST)
-- Check kill switch is not active (`/api/system/risk`)
-- Verify daily loss limit not exceeded
-- Ensure max position exposure not exceeded
+- Check market hours (9:30-16:00 EST)
+- Verify kill switch is not active
+- Check daily loss limit not exceeded
+- Verify max position exposure not exceeded
+
+## Documentation
+
+- **Architecture**: `ARCHITECTURE.md` — Detailed system design, data flow, component reference
+- **Production Guide**: `PRODUCTION.md` — Deployment, operations, monitoring, scaling
+- **Governance**: `GOVERNANCE_ARCHITECTURE.md` — Trust tiers, approval workflows, policy engine
 
 ## Support
 
-- Documentation: `docs/` directory
-- Architecture: `docs/ARCHITECTURE.md`
-- Production Runbook: `docs/OPERATOR_RUNBOOK.md`
 - Issues: GitHub Issues
+- Documentation: `/docs` directory
 - Email: support@godsview.dev
 
 ## License

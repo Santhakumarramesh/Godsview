@@ -73,7 +73,10 @@ class Settings(BaseSettings):
         default="godsview-signals", alias="MLFLOW_EXPERIMENT"
     )
 
-    # ── LanceDB ────────────────────────────────────────────────────────────────
+    # ── Data Storage ───────────────────────────────────────────────────────────
+    data_dir: str = Field(
+        default="./data", alias="DATA_DIR"
+    )
     lancedb_uri: str = Field(
         default="./data/lancedb", alias="LANCEDB_URI"
     )

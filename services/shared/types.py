@@ -183,6 +183,13 @@ class BacktestMetrics(BaseModel):
     recovery_factor: float = 0.0
     total_bars:      int   = 0
     signal_rate:     float = 0.0
+    # MAE / MFE metrics
+    avg_mae:         float = 0.0  # Average maximum adverse excursion
+    max_mae:         float = 0.0  # Maximum adverse excursion across all trades
+    avg_mfe:         float = 0.0  # Average maximum favorable excursion
+    max_mfe:         float = 0.0  # Maximum favorable excursion across all trades
+    avg_efficiency:  float = 0.0  # Average MFE/MAE ratio (upside vs downside)
+    avg_exit_efficiency: float = 0.0  # Average actual profit / MFE (profit capture rate)
 
 
 class BacktestResult(BaseModel):

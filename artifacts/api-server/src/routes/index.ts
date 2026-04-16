@@ -73,11 +73,15 @@ import certificationRouter from "./certification";
 import deploymentTruthRouter from "./deployment_truth";
 import dataTruthRouter from "./data_truth";
 import executionValidationRouter from "./execution_validation";
+import tvWebhookRouter from "./tv_webhook";
+import tvSyncRouter from "./tv_sync";
+import operatorRouter from "./operator";
 
 const router: IRouter = Router();
 
 router.use(governanceRouter);
 router.use(healthRouter);
+router.use("/api/operator", operatorRouter);
 router.use(signalsRouter);
 router.use(tradesRouter);
 router.use(performanceRouter);
@@ -314,6 +318,20 @@ tvAliasRouter.post("/", (req, res, next) => {
   return (tradingviewMcpRouter as unknown as (req: unknown, res: unknown, next: unknown) => void)(req, res, next);
 });
 router.use("/tv-webhook", tvAliasRouter);
+
+// ── Real TradingView Webhook Integration (Phase 104+) ─────────────────────
+// POST /api/tv-webhook — receive TradingView Pine script alerts with deduplication
+// GET  /api/tv-webhook/history — get recent signals
+// GET  /api/tv-webhook/stats — webhook statistics
+router.use(tvWebhookRouter);
+
+// ── TradingView Bidirectional Sync (Phase 104+) ─────────────────────────────
+// GET  /api/tv-sync/:symbol/annotations — Chrome extension polls for annotations
+// POST /api/tv-sync/:symbol/annotations/ack — confirm annotation delivery
+// POST /api/tv-sync/:symbol/annotations/signal — push signal annotation
+// POST /api/tv-sync/:symbol/annotations/structures — push structure markings
+// GET  /api/tv-sync/stats — annotation statistics
+router.use(tvSyncRouter);
 
 // ── Phase 103: Market-Ready Completion Suite (ported into artifacts/) ─
 import phase103Router from "./phase103/index";

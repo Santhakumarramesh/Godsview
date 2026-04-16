@@ -2,8 +2,11 @@
  * News Monitor Feed — Phase 140
  * Real-time news aggregation with sentiment scoring, source attribution,
  * market impact classification, and SSE streaming.
+ * Now integrated with Alpaca News API for real data instead of templates.
  */
 import { Router, type Request, type Response } from "express";
+import { fetchAlpacaNews } from "../lib/providers/alpaca_news";
+import { logger } from "../lib/logger";
 
 const r = Router();
 
@@ -83,44 +86,103 @@ function generateNewsFeed(): NewsItem[] {
 }
 
 /* ── REST endpoint ────────────────────────────────────── */
-r.get("/news/monitor", (_req: Request, res: Response) => {
-  const feed = generateNewsFeed();
-  const symbol = _req.query.symbol as string | undefined;
-  const category = _req.query.category as string | undefined;
-  const impact = _req.query.impact as string | undefined;
-  let filtered = feed;
-  if (symbol) filtered = filtered.filter((n) => n.symbols.includes(symbol.toUpperCase()));
-  if (category) filtered = filtered.filter((n) => n.category === category);
-  if (impact) filtered = filtered.filter((n) => n.impact === impact);
-  res.json({
-    articles: filtered,
-    total: filtered.length,
-    aggregateSentiment: +(filtered.reduce((s, n) => s + n.sentiment, 0) / filtered.length).toFixed(3),
-    sources: SOURCES.map((s) => s.name),
-    timestamp: new Date().toISOString(),
-  });
+r.get("/news/monitor", async (_req: Request, res: Response) => {
+  try {
+    const symbol = _req.query.symbol as string | undefined;
+    const category = _req.query.category as string | undefined;
+    const impact = _req.query.impact as string | undefined;
+    const limit = Number(_req.query.limit ?? 50);
+
+    // Fetch real news from Alpaca
+    const symbols = symbol ? [symbol.toUpperCase()] : undefined;
+    const articles = await fetchAlpacaNews(symbols, limit, logger);
+
+    let filtered = articles;
+    if (category) filtered = filtered.filter((n) => n.category === category);
+    if (impact) filtered = filtered.filter((n) => n.impact === impact);
+
+    const aggregateSentiment = filtered.length > 0
+      ? +(filtered.reduce((s, n) => s + n.sentiment, 0) / filtered.length).toFixed(3)
+      : 0;
+
+    res.json({
+      articles: filtered,
+      total: filtered.length,
+      aggregateSentiment,
+      sources: SOURCES.map((s) => s.name),
+      dataSource: "alpaca_news_api",
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    logger.warn({ error: String(err) }, "Error fetching news monitor feed, using fallback");
+    // Fallback to template-based news
+    const feed = generateNewsFeed();
+    const symbol = _req.query.symbol as string | undefined;
+    const category = _req.query.category as string | undefined;
+    const impact = _req.query.impact as string | undefined;
+    let filtered = feed;
+    if (symbol) filtered = filtered.filter((n) => n.symbols.includes(symbol.toUpperCase()));
+    if (category) filtered = filtered.filter((n) => n.category === category);
+    if (impact) filtered = filtered.filter((n) => n.impact === impact);
+    res.json({
+      articles: filtered,
+      total: filtered.length,
+      aggregateSentiment: +(filtered.reduce((s, n) => s + n.sentiment, 0) / filtered.length).toFixed(3),
+      sources: SOURCES.map((s) => s.name),
+      dataSource: "fallback_templates",
+      timestamp: new Date().toISOString(),
+    });
+  }
 });
 
 /* ── Sentiment summary ────────────────────────────────── */
-r.get("/news/sentiment", (_req: Request, res: Response) => {
-  const feed = generateNewsFeed();
-  const byCategory: Record<string, { count: number; avgSentiment: number }> = {};
-  feed.forEach((n) => {
-    if (!byCategory[n.category]) byCategory[n.category] = { count: 0, avgSentiment: 0 };
-    byCategory[n.category].count++;
-    byCategory[n.category].avgSentiment += n.sentiment;
-  });
-  Object.values(byCategory).forEach((v) => { v.avgSentiment = +(v.avgSentiment / v.count).toFixed(3); });
-  const bullish = feed.filter((n) => n.sentiment > 0.2).length;
-  const bearish = feed.filter((n) => n.sentiment < -0.2).length;
-  const neutral = feed.length - bullish - bearish;
-  res.json({
-    overall: +(feed.reduce((s, n) => s + n.sentiment, 0) / feed.length).toFixed(3),
-    bullish, bearish, neutral,
-    byCategory,
-    topMover: feed.reduce((a, b) => Math.abs(a.sentiment) > Math.abs(b.sentiment) ? a : b).title,
-    timestamp: new Date().toISOString(),
-  });
+r.get("/news/sentiment", async (_req: Request, res: Response) => {
+  try {
+    const articles = await fetchAlpacaNews(undefined, 100, logger);
+    const byCategory: Record<string, { count: number; avgSentiment: number }> = {};
+    articles.forEach((n) => {
+      if (!byCategory[n.category]) byCategory[n.category] = { count: 0, avgSentiment: 0 };
+      byCategory[n.category].count++;
+      byCategory[n.category].avgSentiment += n.sentiment;
+    });
+    Object.values(byCategory).forEach((v) => { v.avgSentiment = +(v.avgSentiment / v.count).toFixed(3); });
+    const bullish = articles.filter((n) => n.sentiment > 0.2).length;
+    const bearish = articles.filter((n) => n.sentiment < -0.2).length;
+    const neutral = articles.length - bullish - bearish;
+    const topMover = articles.length > 0
+      ? articles.reduce((a, b) => Math.abs(a.sentiment) > Math.abs(b.sentiment) ? a : b).title
+      : "N/A";
+
+    res.json({
+      overall: articles.length > 0 ? +(articles.reduce((s, n) => s + n.sentiment, 0) / articles.length).toFixed(3) : 0,
+      bullish, bearish, neutral,
+      byCategory,
+      topMover,
+      dataSource: "alpaca_news_api",
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    logger.warn({ error: String(err) }, "Error fetching sentiment summary, using fallback");
+    const feed = generateNewsFeed();
+    const byCategory: Record<string, { count: number; avgSentiment: number }> = {};
+    feed.forEach((n) => {
+      if (!byCategory[n.category]) byCategory[n.category] = { count: 0, avgSentiment: 0 };
+      byCategory[n.category].count++;
+      byCategory[n.category].avgSentiment += n.sentiment;
+    });
+    Object.values(byCategory).forEach((v) => { v.avgSentiment = +(v.avgSentiment / v.count).toFixed(3); });
+    const bullish = feed.filter((n) => n.sentiment > 0.2).length;
+    const bearish = feed.filter((n) => n.sentiment < -0.2).length;
+    const neutral = feed.length - bullish - bearish;
+    res.json({
+      overall: +(feed.reduce((s, n) => s + n.sentiment, 0) / feed.length).toFixed(3),
+      bullish, bearish, neutral,
+      byCategory,
+      topMover: feed.reduce((a, b) => Math.abs(a.sentiment) > Math.abs(b.sentiment) ? a : b).title,
+      dataSource: "fallback_templates",
+      timestamp: new Date().toISOString(),
+    });
+  }
 });
 
 /* ── SSE streaming endpoint ───────────────────────────── */

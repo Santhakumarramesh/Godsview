@@ -3,14 +3,102 @@ GodsView v2 — Backtest metrics computation.
 
 All metrics follow industry-standard definitions:
   Win Rate, Profit Factor, Sharpe Ratio, Sortino Ratio,
-  Calmar Ratio, Max Drawdown, Expectancy, Recovery Factor.
+  Calmar Ratio, Max Drawdown, Expectancy, Recovery Factor,
+  MAE (Maximum Adverse Excursion), MFE (Maximum Favorable Excursion).
 """
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from typing import Sequence
 
-from services.shared.types import BacktestMetrics, Trade, TradeOutcome
+from services.shared.types import BacktestMetrics, Trade, TradeOutcome, Bar
+
+
+@dataclass
+class TradeExcursion:
+    """Track MAE/MFE for a single trade."""
+    trade_id: str
+    entry_price: float
+    direction: str  # LONG or SHORT
+    mae: float = 0.0  # Maximum adverse excursion (worst unrealised loss)
+    mfe: float = 0.0  # Maximum favorable excursion (best unrealised profit)
+
+
+def compute_mae_mfe(
+    trades: Sequence[Trade],
+    bars: Sequence[Bar],
+) -> dict[str, dict]:
+    """
+    Compute MAE/MFE for each closed trade.
+
+    Args:
+        trades: List of closed trades
+        bars: Full list of bars (to reconstruct price history)
+
+    Returns:
+        Dict mapping trade_id to {mae, mfe, efficiency, exit_efficiency, mae_pct, mfe_pct}
+    """
+    excursions = {}
+
+    # Build bar map for fast lookup
+    bar_map = {}
+    for bar in bars:
+        bar_map[bar.timestamp] = bar
+
+    for trade in trades:
+        if not trade.entry_time or not trade.exit_time:
+            continue
+
+        entry_idx = None
+        exit_idx = None
+        for i, bar in enumerate(bars):
+            if bar.timestamp == trade.entry_time:
+                entry_idx = i
+            if bar.timestamp == trade.exit_time:
+                exit_idx = i
+
+        if entry_idx is None or exit_idx is None:
+            continue
+
+        mae = 0.0
+        mfe = 0.0
+
+        # Scan bars from entry to exit
+        for i in range(entry_idx, exit_idx + 1):
+            bar = bars[i]
+
+            if trade.direction.value == "LONG":
+                # Adverse = low below entry, Favorable = high above entry
+                adverse = max(0, trade.entry_price - bar.low)
+                favorable = max(0, bar.high - trade.entry_price)
+            else:  # SHORT
+                # Adverse = high above entry, Favorable = low below entry
+                adverse = max(0, bar.high - trade.entry_price)
+                favorable = max(0, trade.entry_price - bar.low)
+
+            mae = max(mae, adverse)
+            mfe = max(mfe, favorable)
+
+        # Efficiency metrics
+        efficiency = (mfe / mae) if mae > 0 else 0.0  # MFE/MAE ratio
+        actual_profit = trade.pnl / trade.size if trade.size > 0 else 0.0
+        exit_efficiency = (actual_profit / mfe) if mfe > 0 else 0.0  # Profit captured
+
+        # Percentage excursions
+        mae_pct = (mae / trade.entry_price) if trade.entry_price > 0 else 0.0
+        mfe_pct = (mfe / trade.entry_price) if trade.entry_price > 0 else 0.0
+
+        excursions[trade.id] = {
+            "mae": round(mae, 6),
+            "mfe": round(mfe, 6),
+            "mae_pct": round(mae_pct, 6),
+            "mfe_pct": round(mfe_pct, 6),
+            "efficiency": round(efficiency, 4),  # MFE/MAE
+            "exit_efficiency": round(exit_efficiency, 4),  # Actual / MFE
+        }
+
+    return excursions
 
 
 def compute_metrics(
@@ -18,10 +106,18 @@ def compute_metrics(
     equity_curve: list[dict],
     initial_equity: float,
     bars_per_year:  float = 252.0,
+    bars: Sequence[Bar] | None = None,
 ) -> BacktestMetrics:
     """
     Compute comprehensive backtest metrics from a list of closed trades
     and the equity curve.
+
+    Args:
+        trades: List of closed trades
+        equity_curve: Equity curve points
+        initial_equity: Starting capital
+        bars_per_year: Bars per annum (for annualization)
+        bars: Full bar list (for MAE/MFE computation)
     """
     if not trades:
         return BacktestMetrics()
@@ -74,27 +170,52 @@ def compute_metrics(
     total_bars  = equity_curve[-1].get("total_bars", 0) if equity_curve else 0
     signal_rate = n / total_bars if total_bars else 0.0
 
-    return BacktestMetrics(
-        total_trades=n,
-        winning_trades=n_win,
-        losing_trades=n_los,
-        win_rate=round(win_rate, 4),
-        profit_factor=round(profit_factor, 3),
-        total_pnl=round(total_pnl, 2),
-        total_pnl_pct=round(total_pnl_pct, 4),
-        max_drawdown=round(max_dd, 2),
-        max_drawdown_pct=round(max_dd_pct, 4),
-        sharpe_ratio=round(sharpe, 3),
-        sortino_ratio=round(sortino, 3),
-        calmar_ratio=round(calmar, 3),
-        avg_rr=round(avg_rr, 2),
-        avg_win_pct=round(avg_win_pct, 4),
-        avg_loss_pct=round(avg_loss_pct, 4),
-        expectancy=round(expectancy, 4),
-        recovery_factor=round(recovery, 2),
-        total_bars=total_bars,
-        signal_rate=round(signal_rate, 4),
-    )
+    # ── MAE / MFE ────────────────────────────────────────────────────────────
+    mae_dict = {}
+    if bars:
+        mae_dict = compute_mae_mfe(closed, bars)
+
+    maes = [v["mae"] for v in mae_dict.values()] if mae_dict else []
+    mfes = [v["mfe"] for v in mae_dict.values()] if mae_dict else []
+    efficiencies = [v["efficiency"] for v in mae_dict.values()] if mae_dict else []
+    exit_effs = [v["exit_efficiency"] for v in mae_dict.values()] if mae_dict else []
+
+    avg_mae = sum(maes) / len(maes) if maes else 0.0
+    max_mae = max(maes) if maes else 0.0
+    avg_mfe = sum(mfes) / len(mfes) if mfes else 0.0
+    max_mfe = max(mfes) if mfes else 0.0
+    avg_efficiency = sum(efficiencies) / len(efficiencies) if efficiencies else 0.0
+    avg_exit_eff = sum(exit_effs) / len(exit_effs) if exit_effs else 0.0
+
+    metrics_dict = {
+        "total_trades": n,
+        "winning_trades": n_win,
+        "losing_trades": n_los,
+        "win_rate": round(win_rate, 4),
+        "profit_factor": round(profit_factor, 3),
+        "total_pnl": round(total_pnl, 2),
+        "total_pnl_pct": round(total_pnl_pct, 4),
+        "max_drawdown": round(max_dd, 2),
+        "max_drawdown_pct": round(max_dd_pct, 4),
+        "sharpe_ratio": round(sharpe, 3),
+        "sortino_ratio": round(sortino, 3),
+        "calmar_ratio": round(calmar, 3),
+        "avg_rr": round(avg_rr, 2),
+        "avg_win_pct": round(avg_win_pct, 4),
+        "avg_loss_pct": round(avg_loss_pct, 4),
+        "expectancy": round(expectancy, 4),
+        "recovery_factor": round(recovery, 2),
+        "total_bars": total_bars,
+        "signal_rate": round(signal_rate, 4),
+        "avg_mae": round(avg_mae, 6),
+        "max_mae": round(max_mae, 6),
+        "avg_mfe": round(avg_mfe, 6),
+        "max_mfe": round(max_mfe, 6),
+        "avg_efficiency": round(avg_efficiency, 4),
+        "avg_exit_efficiency": round(avg_exit_eff, 4),
+    }
+
+    return BacktestMetrics(**metrics_dict)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

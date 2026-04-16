@@ -1,0 +1,341 @@
+{
+  "dashboard": {
+    "title": "GodsView Operator Status",
+    "uid": "godsview-operator",
+    "tags": ["godsview", "operator", "system", "health"],
+    "timezone": "browser",
+    "refresh": "5s",
+    "time": { "from": "now-6h", "to": "now" },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Overall System Health",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+        "targets": [
+          { "expr": "godsview_system_health", "legendFormat": "System Health" }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "steps": [
+                { "value": null, "color": "red" },
+                { "value": 1, "color": "yellow" },
+                { "value": 2, "color": "green" }
+              ]
+            },
+            "mappings": [
+              { "type": "value", "options": { "1": { "text": "CRITICAL", "color": "red" } } },
+              { "type": "value", "options": { "2": { "text": "DEGRADED", "color": "yellow" } } },
+              { "type": "value", "options": { "3": { "text": "HEALTHY", "color": "green" } } }
+            ]
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "API Server Uptime",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+        "targets": [
+          { "expr": "godsview_uptime_seconds", "legendFormat": "Uptime" }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "thresholds": {
+              "steps": [
+                { "value": null, "color": "green" },
+                { "value": 0, "color": "red" }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "Active HTTP Requests",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+        "targets": [
+          { "expr": "godsview_http_requests_in_flight", "legendFormat": "In-flight" }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "thresholds": {
+              "steps": [
+                { "value": null, "color": "green" },
+                { "value": 100, "color": "yellow" },
+                { "value": 500, "color": "red" }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Database Status",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+        "targets": [
+          { "expr": "godsview_service_health{service='database'}", "legendFormat": "DB Health" }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" } } },
+              { "type": "value", "options": { "1": { "text": "UP", "color": "green" } } }
+            ]
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "Services Health Status",
+        "type": "table",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+        "targets": [
+          { "expr": "godsview_service_health", "format": "table", "instant": true }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": { "displayMode": "color-background" },
+            "mappings": [
+              { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" } } },
+              { "type": "value", "options": { "1": { "text": "UP", "color": "green" } } }
+            ]
+          }
+        }
+      },
+      {
+        "id": 6,
+        "title": "Broker Connection Status",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 6, "x": 12, "y": 4 },
+        "targets": [
+          { "expr": "godsview_service_health{service='broker'}", "legendFormat": "Broker" }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              { "type": "value", "options": { "0": { "text": "DISCONNECTED", "color": "red" } } },
+              { "type": "value", "options": { "1": { "text": "CONNECTED", "color": "green" } } }
+            ]
+          }
+        }
+      },
+      {
+        "id": 7,
+        "title": "HTTP Request Rate",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+        "targets": [
+          { "expr": "rate(godsview_http_requests_total[1m])", "legendFormat": "{{method}} {{path}} {{status}}" }
+        ],
+        "fieldConfig": { "defaults": { "unit": "ops" } }
+      },
+      {
+        "id": 8,
+        "title": "HTTP Latency (P95)",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+        "targets": [
+          { "expr": "histogram_quantile(0.95, rate(godsview_http_request_duration_seconds_bucket[5m]))", "legendFormat": "P95 Latency" }
+        ],
+        "fieldConfig": { "defaults": { "unit": "s" } }
+      },
+      {
+        "id": 9,
+        "title": "Active Positions",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 6, "x": 12, "y": 12 },
+        "targets": [
+          { "expr": "godsview_active_positions", "legendFormat": "Positions" }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "thresholds": {
+              "steps": [
+                { "value": null, "color": "green" },
+                { "value": 10, "color": "yellow" },
+                { "value": 20, "color": "red" }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 10,
+        "title": "Daily P&L",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 6, "x": 18, "y": 12 },
+        "targets": [
+          { "expr": "godsview_daily_pnl_usd", "legendFormat": "P&L" }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyUSD",
+            "thresholds": {
+              "steps": [
+                { "value": null, "color": "red" },
+                { "value": 0, "color": "yellow" },
+                { "value": 100, "color": "green" }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 11,
+        "title": "Brain Cycle Count",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 6, "x": 0, "y": 16 },
+        "targets": [
+          { "expr": "godsview_brain_cycle_count", "legendFormat": "Cycles" }
+        ],
+        "fieldConfig": { "defaults": { "unit": "short" } }
+      },
+      {
+        "id": 12,
+        "title": "Brain Cycle Duration (P95)",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 6, "x": 6, "y": 16 },
+        "targets": [
+          { "expr": "histogram_quantile(0.95, rate(godsview_brain_cycle_duration_seconds_bucket[5m]))", "legendFormat": "Duration" }
+        ],
+        "fieldConfig": { "defaults": { "unit": "s" } }
+      },
+      {
+        "id": 13,
+        "title": "Service Latency (P95)",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+        "targets": [
+          { "expr": "histogram_quantile(0.95, rate(godsview_service_latency_ms_bucket[5m]))", "legendFormat": "{{service}}" }
+        ],
+        "fieldConfig": { "defaults": { "unit": "ms" } }
+      },
+      {
+        "id": 14,
+        "title": "Data Source Freshness",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+        "targets": [
+          { "expr": "godsview_data_source_freshness_seconds", "legendFormat": "{{source}}" }
+        ],
+        "fieldConfig": { "defaults": { "unit": "s" } }
+      },
+      {
+        "id": 15,
+        "title": "Orderbook Latency (P95)",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 6, "x": 12, "y": 24 },
+        "targets": [
+          { "expr": "histogram_quantile(0.95, rate(godsview_orderbook_latency_ms_bucket[5m]))", "legendFormat": "Latency" }
+        ],
+        "fieldConfig": { "defaults": { "unit": "ms" } }
+      },
+      {
+        "id": 16,
+        "title": "Confidence Score Distribution",
+        "type": "histogram",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 28 },
+        "targets": [
+          { "expr": "godsview_confidence_score_bucket", "legendFormat": "{{le}}" }
+        ]
+      },
+      {
+        "id": 17,
+        "title": "Trades By Outcome",
+        "type": "piechart",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 28 },
+        "targets": [
+          { "expr": "godsview_trades_total", "legendFormat": "{{outcome}}" }
+        ]
+      },
+      {
+        "id": 18,
+        "title": "Portfolio Heat",
+        "type": "gauge",
+        "gridPos": { "h": 4, "w": 6, "x": 0, "y": 36 },
+        "targets": [
+          { "expr": "godsview_portfolio_heat", "legendFormat": "Heat" }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "steps": [
+                { "value": null, "color": "green" },
+                { "value": 50, "color": "yellow" },
+                { "value": 80, "color": "red" }
+              ]
+            },
+            "unit": "percent"
+          }
+        }
+      },
+      {
+        "id": 19,
+        "title": "Trust Tier",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 6, "x": 6, "y": 36 },
+        "targets": [
+          { "expr": "godsview_trust_tier", "legendFormat": "Tier" }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              { "type": "value", "options": { "1": { "text": "TIER_1_MANUAL" } } },
+              { "type": "value", "options": { "2": { "text": "TIER_2_SEMI_AUTO" } } },
+              { "type": "value", "options": { "3": { "text": "TIER_3_ASSISTED" } } },
+              { "type": "value", "options": { "4": { "text": "TIER_4_SEMI_AUTONOMOUS" } } },
+              { "type": "value", "options": { "5": { "text": "TIER_5_FULLY_AUTONOMOUS" } } }
+            ]
+          }
+        }
+      },
+      {
+        "id": 20,
+        "title": "Model Accuracy",
+        "type": "gauge",
+        "gridPos": { "h": 4, "w": 6, "x": 12, "y": 36 },
+        "targets": [
+          { "expr": "godsview_champion_accuracy", "legendFormat": "Accuracy" }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "min": 0,
+            "max": 1,
+            "thresholds": {
+              "steps": [
+                { "value": null, "color": "red" },
+                { "value": 0.5, "color": "yellow" },
+                { "value": 0.7, "color": "green" }
+              ]
+            },
+            "unit": "percentunit"
+          }
+        }
+      },
+      {
+        "id": 21,
+        "title": "Active SSE Clients",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 6, "x": 18, "y": 36 },
+        "targets": [
+          { "expr": "godsview_active_sse_clients", "legendFormat": "Clients" }
+        ],
+        "fieldConfig": { "defaults": { "unit": "short" } }
+      }
+    ],
+    "schemaVersion": 38,
+    "style": "dark",
+    "templating": { "list": [] },
+    "version": 1
+  },
+  "overwrite": true
+}

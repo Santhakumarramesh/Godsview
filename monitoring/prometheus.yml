@@ -1,4 +1,5 @@
 # GodsView Prometheus Configuration
+# Monitors Node.js API server + Python microservices
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
@@ -7,20 +8,116 @@ rule_files:
   - "prometheus-alerts.yml"
 
 scrape_configs:
+  # ── Node.js API Server (Docker & Local) ──────────────────────────────────
   - job_name: "godsview-api"
     metrics_path: "/metrics"
     scrape_interval: 10s
     static_configs:
-      - targets: ["api:3000"]
+      - targets: ["api:3001"]
         labels:
           environment: "production"
           service: "godsview-api"
+          component: "api-server"
 
   - job_name: "godsview-api-local"
     metrics_path: "/metrics"
     scrape_interval: 10s
     static_configs:
-      - targets: ["localhost:3000"]
+      - targets: ["localhost:3001"]
         labels:
           environment: "development"
           service: "godsview-api"
+          component: "api-server"
+
+  # ── Python v2 Microservices ────────────────────────────────────────────────
+  # These scrape targets will auto-fail gracefully if services are not running
+
+  - job_name: "py-gateway"
+    metrics_path: "/metrics"
+    scrape_interval: 15s
+    static_configs:
+      - targets: ["py-gateway:8000"]
+        labels:
+          environment: "production"
+          service: "py-gateway"
+          component: "api-gateway"
+
+  - job_name: "py-market-data"
+    metrics_path: "/metrics"
+    scrape_interval: 15s
+    static_configs:
+      - targets: ["py-market-data:8001"]
+        labels:
+          environment: "production"
+          service: "py-market-data"
+          component: "market-data"
+
+  - job_name: "py-feature"
+    metrics_path: "/metrics"
+    scrape_interval: 15s
+    static_configs:
+      - targets: ["py-feature:8002"]
+        labels:
+          environment: "production"
+          service: "py-feature"
+          component: "feature-service"
+
+  - job_name: "py-backtest"
+    metrics_path: "/metrics"
+    scrape_interval: 30s
+    static_configs:
+      - targets: ["py-backtest:8003"]
+        labels:
+          environment: "production"
+          service: "py-backtest"
+          component: "backtest"
+
+  - job_name: "py-ml"
+    metrics_path: "/metrics"
+    scrape_interval: 30s
+    static_configs:
+      - targets: ["py-ml:8004"]
+        labels:
+          environment: "production"
+          service: "py-ml"
+          component: "ml-service"
+
+  - job_name: "py-execution"
+    metrics_path: "/metrics"
+    scrape_interval: 15s
+    static_configs:
+      - targets: ["py-execution:8005"]
+        labels:
+          environment: "production"
+          service: "py-execution"
+          component: "execution"
+
+  - job_name: "py-risk"
+    metrics_path: "/metrics"
+    scrape_interval: 15s
+    static_configs:
+      - targets: ["py-risk:8006"]
+        labels:
+          environment: "production"
+          service: "py-risk"
+          component: "risk"
+
+  - job_name: "py-memory"
+    metrics_path: "/metrics"
+    scrape_interval: 15s
+    static_configs:
+      - targets: ["py-memory:8007"]
+        labels:
+          environment: "production"
+          service: "py-memory"
+          component: "memory"
+
+  - job_name: "py-scheduler"
+    metrics_path: "/metrics"
+    scrape_interval: 30s
+    static_configs:
+      - targets: ["py-scheduler:8008"]
+        labels:
+          environment: "production"
+          service: "py-scheduler"
+          component: "scheduler"

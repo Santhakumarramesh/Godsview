@@ -98,11 +98,17 @@ COPY --from=build /app/lib/api-zod/src ./lib/api-zod/src
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 
+# Create data directories for SQLite databases and artifacts
+RUN mkdir -p /app/data/{governance,screenshots,experiments,promotions} && \
+    chown -R godsview:godsview /app
+
 # Switch to non-root user
 USER godsview
 
 ENV NODE_ENV=production
 ENV PORT=3001
+ENV PY_SERVICES_ENABLED=true
+ENV GODSVIEW_SYSTEM_MODE=paper
 
 EXPOSE 3001
 
