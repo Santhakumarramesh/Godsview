@@ -65,6 +65,11 @@ function signRequest(
   const amzDate = now.toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
 
   const payloadHash = sha256Hex(body);
+
+  // Include x-amz-* headers BEFORE signing (they must be part of the signature)
+  headers["x-amz-date"] = amzDate;
+  headers["x-amz-content-sha256"] = payloadHash;
+
   const signedHeaders = Object.keys(headers).sort().join(";");
   const canonicalHeaders = Object.keys(headers)
     .sort()
@@ -82,7 +87,8 @@ function signRequest(
 
   const credentialScope = `${dateStamp}/${config.region}/s3/aws4_request`;
   const stringToSign = [
-    "AWS4-HMAC-SHA256",    amzDate,
+    "AWS4-HMAC-SHA256",
+    amzDate,
     credentialScope,
     sha256Hex(canonicalRequest),
   ].join("\n");
@@ -92,8 +98,6 @@ function signRequest(
 
   return {
     ...headers,
-    "x-amz-date": amzDate,
-    "x-amz-content-sha256": payloadHash,
     Authorization: `AWS4-HMAC-SHA256 Credential=${config.accessKeyId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`,
   };
 }
@@ -130,7 +134,6 @@ export async function s3Put(key: string, data: string | object, contentType = "a
   const headers: Record<string, string> = {
     host,
     "content-type": contentType,
-    "content-length": String(Buffer.byteLength(body)),
   };
 
   const signed = signRequest("PUT", path, headers, body, config);

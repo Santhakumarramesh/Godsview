@@ -279,7 +279,8 @@ export async function fetchFredMacroSnapshot(): Promise<FredMacroSnapshot> {
   sources.gdp = gdpResult.source;
   if (gdp_growth !== null) successCount++;
 
-  // Claims  const initial_claims = latest(claimsResult);
+  // Claims
+  const initial_claims = latest(claimsResult);
   sources.claims = claimsResult.source;
   if (initial_claims !== null) successCount++;
 
