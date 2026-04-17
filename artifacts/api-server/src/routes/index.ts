@@ -73,15 +73,13 @@ import certificationRouter from "./certification";
 import deploymentTruthRouter from "./deployment_truth";
 import dataTruthRouter from "./data_truth";
 import executionValidationRouter from "./execution_validation";
-import tvWebhookRouter from "./tv_webhook";
-import tvSyncRouter from "./tv_sync";
-import operatorRouter from "./operator";
+import certificationRunRouter from "./certification_run";
+import opsV2Router from "./ops_v2";
 
 const router: IRouter = Router();
 
 router.use(governanceRouter);
 router.use(healthRouter);
-router.use("/api/operator", operatorRouter);
 router.use(signalsRouter);
 router.use(tradesRouter);
 router.use(performanceRouter);
@@ -151,194 +149,20 @@ router.use("/api/ml-ops", mlOperationsRouter);
 router.use("/api/production-health", productionHealthRouter);
 router.use("/api/certification", certificationRouter);
 
-deploymentTruthRouter(router);
+router.use("/api/deployment", deploymentTruthRouter);
 router.use("/api/data-truth", dataTruthRouter);
 router.use("/api/execution-validation", executionValidationRouter);
+router.use("/api/certification-run", certificationRunRouter); // Phase 20 — One strategy certification run
+router.use("/api/ops/v2", opsV2Router); // Operator brief, kill switch, exposure, drift, startup
 
 // Python v2 microservices proxy — shadow routes at /v2/*
 router.use(pythonV2Router);
 
-// ── Phase 150+: Production Hardening export default router; Observability ────────────────────────
-import opsV2Router from "./ops_v2";
-router.use("/api/ops/v2", opsV2Router);              // Operator brief, kill switch, exposure, drift, startup
+// ── Phase 129: Finnhub Alt-Data + S3 Cloud Storage ───────────────────────
+import finnhubAltRouter from "./finnhub_alt";
+router.use("/api/finnhub", finnhubAltRouter);
 
-// ── Phase 57-60: Multi-Tenant, Marketplace, Chaos, Launch Readiness ───────
-import multiTenantRouter from "./multi_tenant";
-import strategyMarketplaceRouter from "./strategy_marketplace";
-import chaosEngineeringRouter from "./chaos_engineering";
-import launchReadinessRouter from "./launch_readiness";
-router.use(multiTenantRouter);
-router.use(strategyMarketplaceRouter);
-router.use(chaosEngineeringRouter);
-router.use(launchReadinessRouter);
-
-// ── Phase 61: SLO Monitoring + Dashboards ─────────────────────────────────
-import sloMonitoringRouter from "./slo_monitoring";
-router.use(sloMonitoringRouter);
-
-// ── Phase 62: Audit Trail + Compliance ────────────────────────────────────
-import auditTrailRouter from "./audit_trail";
-router.use(auditTrailRouter);
-
-// ── Phase 63: Feature Flags + Progressive Rollout ─────────────────────────
-import featureFlagsRouter from "./feature_flags";
-router.use(featureFlagsRouter);
-
-// ── Phase 64: Data Lineage + Quality ──────────────────────────────────────
-import dataLineageRouter from "./data_lineage";
-router.use(dataLineageRouter);
-
-// ── Phase 65: Capacity Planning + Auto-Scaling ────────────────────────────
-import capacityPlanningRouter from "./capacity_planning";
-router.use(capacityPlanningRouter);
-
-// ── Phase 66: Disaster Recovery ───────────────────────────────────────────
-import disasterRecoveryRouter from "./disaster_recovery";
-router.use(disasterRecoveryRouter);
-
-// ── Phase 67: Cost Observability ──────────────────────────────────────────
-import costObservabilityRouter from "./cost_observability";
-router.use(costObservabilityRouter);
-
-// ── Phase 68: Incident Management ─────────────────────────────────────────
-import incidentManagementRouter from "./incident_management";
-router.use(incidentManagementRouter);
-
-// ── Phase 69: Release Management ──────────────────────────────────────────
-import releaseManagementRouter from "./release_management";
-router.use(releaseManagementRouter);
-
-// ── Phase 70: Developer Platform ──────────────────────────────────────────
-import developerPlatformRouter from "./developer_platform";
-router.use(developerPlatformRouter);
-
-// ── Phase 71: Notifications & Communication Hub ───────────────────────────
-import notificationsRouter from "./notifications";
-router.use(notificationsRouter);
-
-// ── Phase 72: Privacy & PII Protection ────────────────────────────────────
-import privacyProtectionRouter from "./privacy_protection";
-router.use(privacyProtectionRouter);
-
-// ── Phase 73: Advanced Risk Analytics ─────────────────────────────────────
-import riskAnalyticsRouter from "./risk_analytics";
-router.use(riskAnalyticsRouter);
-
-// ── Phase 74: ML Model Lifecycle ──────────────────────────────────────────
-import mlLifecycleRouter from "./ml_lifecycle";
-router.use(mlLifecycleRouter);
-
-// ── Phase 75: Workflow Engine ─────────────────────────────────────────────
-import workflowEngineRouter from "./workflow_engine";
-router.use(workflowEngineRouter);
-
-// ── Phase 76: Service Mesh ────────────────────────────────────────────────
-import serviceMeshRouter from "./service_mesh";
-router.use(serviceMeshRouter);
-
-// ── Phase 77: Event Sourcing + Time Travel ────────────────────────────────
-import eventSourcingRouter from "./event_sourcing";
-router.use(eventSourcingRouter);
-
-// ── Phase 78: Search + Indexing ───────────────────────────────────────────
-import searchRouter from "./search";
-router.use(searchRouter);
-
-// ── Phase 79: Real-Time Pub/Sub Bus ───────────────────────────────────────
-import pubsubRouter from "./pubsub";
-router.use(pubsubRouter);
-
-// ── Phase 80: Job Scheduler + Background Tasks ────────────────────────────
-import jobSchedulerRouter from "./job_scheduler";
-router.use(jobSchedulerRouter);
-
-// ── Phase 81: Cache Layer ─────────────────────────────────────────────────
-import cacheLayerRouter from "./cache_layer";
-router.use(cacheLayerRouter);
-
-// ── Phase 82: Knowledge Base + Embeddings ─────────────────────────────────
-import knowledgeBaseRouter from "./knowledge_base";
-router.use(knowledgeBaseRouter);
-
-// ── Phase 83: Strategy Bandit + Significance Testing ──────────────────────
-import strategyBanditRouter from "./strategy_bandit";
-router.use(strategyBanditRouter);
-
-// ── Phase 84: Reporting Engine ────────────────────────────────────────────
-import reportingRouter from "./reporting";
-router.use(reportingRouter);
-
-// ── Phase 85: Anomaly Detection ───────────────────────────────────────────
-import anomalyDetectionRouter from "./anomaly_detection";
-router.use(anomalyDetectionRouter);
-
-// ── Phase 86: Portfolio Optimizer ─────────────────────────────────────────
-import portfolioOptimizerRouter from "./portfolio_optimizer";
-router.use(portfolioOptimizerRouter);
-
-// ── Phase 87: Tax Lot Tracking + Wash Sale ────────────────────────────────
-import taxTrackingRouter from "./tax_tracking";
-router.use(taxTrackingRouter);
-
-// ── Phase 88: Order Book L2 + Imbalance + Spread ──────────────────────────
-import orderbookL2Router from "./orderbook_l2";
-router.use(orderbookL2Router);
-
-// ── Phase 89: News + Sentiment ────────────────────────────────────────────
-import newsSentimentRouter from "./news_sentiment";
-router.use(newsSentimentRouter);
-
-// ── Phase 90: Self-Heal Diagnostics + Recommender ─────────────────────────
-import selfHealRouter from "./self_heal";
-router.use(selfHealRouter);
-
-// ── Phase 97: Unified risk-breakers summary at /api/risk/breakers ──
-import riskBreakersSummaryRouter from "./risk_breakers_summary";
-router.use(riskBreakersSummaryRouter);
-
-// ── Phase 99: MCP backtest router — previously defined but not mounted ──
-//   POST /api/mcp-backtest/run  → full backtest with synthetic bars
-//   GET  /api/mcp-backtest/compare/:runId
-//   GET  /api/mcp-backtest/signal-log/:runId
-//   GET  /api/mcp-backtest/history
-import mcpBacktestRouter from "./mcp_backtest";
-router.use(mcpBacktestRouter);
-
-// ── Phase 92: TradingView MCP webhook (/tradingview/webhook, aliased as /tv-webhook) ──
-import tradingviewMcpRouter from "./tradingview_mcp";
-router.use("/tradingview", tradingviewMcpRouter);
-// Alias routers so external tools (Chrome extension, TradingView alerts) can POST
-// to /api/tv-webhook directly. We mount the same router at /tv-webhook so
-// POST /api/tv-webhook/webhook works, and also register a root-path alias.
-import { Router as ExpressRouter } from "express";
-const tvAliasRouter = ExpressRouter();
-tvAliasRouter.post("/", (req, res, next) => {
-  // Re-route root POST to the /webhook handler inside tradingviewMcpRouter
-  req.url = "/webhook";
-  return (tradingviewMcpRouter as unknown as (req: unknown, res: unknown, next: unknown) => void)(req, res, next);
-});
-router.use("/tv-webhook", tvAliasRouter);
-
-// ── Real TradingView Webhook Integration (Phase 104+) ─────────────────────
-// POST /api/tv-webhook — receive TradingView Pine script alerts with deduplication
-// GET  /api/tv-webhook/history — get recent signals
-// GET  /api/tv-webhook/stats — webhook statistics
-router.use(tvWebhookRouter);
-
-// ── TradingView Bidirectional Sync (Phase 104+) ─────────────────────────────
-// GET  /api/tv-sync/:symbol/annotations — Chrome extension polls for annotations
-// POST /api/tv-sync/:symbol/annotations/ack — confirm annotation delivery
-// POST /api/tv-sync/:symbol/annotations/signal — push signal annotation
-// POST /api/tv-sync/:symbol/annotations/structures — push structure markings
-// GET  /api/tv-sync/stats — annotation statistics
-router.use(tvSyncRouter);
-
-// ── Phase 103: Market-Ready Completion Suite (ported into artifacts/) ─
-import phase103Router from "./phase103/index";
-router.use("/api/phase103", phase103Router);                   // broker reality, recall, agents, quant lab, fusion+explain, L2 flow, E2E, gates
-
-// ── P1-12: Unified Quant Lab route backed by Phase 103 QuantLabUnified ─
-import quantLabRouter from "./quant_lab";
-router.use("/api/quant-lab", quantLabRouter);
+import s3StorageRouter from "./s3_storage";
+router.use("/api/storage", s3StorageRouter);
 
 export default router;
