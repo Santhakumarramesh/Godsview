@@ -340,7 +340,8 @@ class BrainEventBus {
   private emit(event: BrainEvent): void {
     this.eventLog.push(event);
     if (this.eventLog.length > this.maxLog) {
-      this.eventLog = this.eventLog.slice(-this.maxLog);
+      // In-place mutation to avoid creating a new array (memory-friendly)
+      this.eventLog.splice(0, this.eventLog.length - this.maxLog);
     }
     this.listeners.get(event.type)?.forEach((fn) => {
       try { fn(event); } catch (e) { logger.error({ err: e }, "[BrainEventBus] listener error"); }

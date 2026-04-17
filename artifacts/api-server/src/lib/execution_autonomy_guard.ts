@@ -118,6 +118,7 @@ let _lastHaltReason: string | null = null;
 const _recentEvents: ExecutionAutonomyGuardEvent[] = [];
 const _blockTimes: number[] = [];
 const _warnTimes: number[] = [];
+const MAX_BLOCK_WARN_ENTRIES = 1000;
 
 let _lastEvaluation: ExecutionAutonomyGuardSnapshot["last_evaluation"] = {
   at: null,
@@ -333,10 +334,12 @@ function applyDecisionTelemetry(
   if (action === "BLOCK") {
     _consecutiveBlocks += 1;
     _blockTimes.push(nowMs);
+    if (_blockTimes.length > MAX_BLOCK_WARN_ENTRIES) _blockTimes.splice(0, _blockTimes.length - MAX_BLOCK_WARN_ENTRIES);
   } else {
     _consecutiveBlocks = 0;
     if (action === "WARN") {
       _warnTimes.push(nowMs);
+      if (_warnTimes.length > MAX_BLOCK_WARN_ENTRIES) _warnTimes.splice(0, _warnTimes.length - MAX_BLOCK_WARN_ENTRIES);
     }
   }
 

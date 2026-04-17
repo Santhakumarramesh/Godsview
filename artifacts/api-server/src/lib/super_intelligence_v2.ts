@@ -294,7 +294,8 @@ class SuperIntelligenceEngine {
     const state = this.getState(outcome.symbol);
     state.outcomes.push(outcome);
     if (state.outcomes.length > this.MAX_OUTCOMES) {
-      state.outcomes = state.outcomes.slice(-this.MAX_OUTCOMES);
+      // In-place splice to avoid creating a new array (memory-friendly)
+      state.outcomes.splice(0, state.outcomes.length - this.MAX_OUTCOMES);
     }
 
     // Update accuracy

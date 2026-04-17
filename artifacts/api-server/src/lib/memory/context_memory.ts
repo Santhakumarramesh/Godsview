@@ -109,6 +109,11 @@ export interface TemporalPattern {
 }
 
 class ContextMemory {
+  private static readonly MAX_CONTEXT_KEYS = 200;
+  private static readonly MAX_HISTORY_PER_KEY = 100;
+  private static readonly MAX_TRANSITIONS = 2000;
+  private static readonly MAX_TEMPORAL_PATTERNS = 500;
+
   private contextHistories: Map<string, { context: MarketContext; outcomes: ContextOutcome[] }[]> = new Map();
   private transitions: RegimeTransition[] = [];
   private temporalPatterns: TemporalPattern[] = [];
@@ -123,10 +128,17 @@ class ContextMemory {
       this.contextHistories.set(contextKey, []);
     }
 
-    this.contextHistories.get(contextKey)!.push({
-      context,
-      outcomes,
-    });
+    const arr = this.contextHistories.get(contextKey)!;
+    arr.push({ context, outcomes });
+    // Evict oldest entries per key
+    if (arr.length > ContextMemory.MAX_HISTORY_PER_KEY) {
+      arr.splice(0, arr.length - ContextMemory.MAX_HISTORY_PER_KEY);
+    }
+    // Evict oldest keys if too many
+    if (this.contextHistories.size > ContextMemory.MAX_CONTEXT_KEYS) {
+      const firstKey = this.contextHistories.keys().next().value;
+      if (firstKey !== undefined) this.contextHistories.delete(firstKey);
+    }
 
     // Extract temporal patterns if applicable
     this.updateTemporalPatterns(context, outcomes);
@@ -206,6 +218,9 @@ class ContextMemory {
       timestamp: Date.now(),
       impact,
     });
+    if (this.transitions.length > ContextMemory.MAX_TRANSITIONS) {
+      this.transitions.splice(0, this.transitions.length - ContextMemory.MAX_TRANSITIONS);
+    }
 
     logger.info(
       {
@@ -410,6 +425,9 @@ class ContextMemory {
           avgReturn,
           sampleSize: outcomes.length,
         });
+        if (this.temporalPatterns.length > ContextMemory.MAX_TEMPORAL_PATTERNS) {
+          this.temporalPatterns.splice(0, this.temporalPatterns.length - ContextMemory.MAX_TEMPORAL_PATTERNS);
+        }
       }
     }
   }
