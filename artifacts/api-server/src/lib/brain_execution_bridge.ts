@@ -355,7 +355,7 @@ class BrainExecutionBridge {
             confirmation_score: String(signal.confirmationScore),
             svg_chart: signal.chartSvg,
             annotation_count: 0,
-          }).catch(() => {});
+          }).catch((e) => logger.debug({ err: e }, "[ExecutionBridge] snapshot audit failed"));
         }
 
         // Emit brain event

@@ -274,7 +274,7 @@ export async function runBrainCycleForSymbol(input: LayerInput): Promise<BrainDe
 
   // ── Phase 10C: Auto-route STRONG signals to execution bridge ─────────────
   if (action === "STRONG_LONG" || action === "STRONG_SHORT") {
-    _autoEvaluateSignal(decision, l2Result.output, l5Result.output, input).catch(() => {});
+    _autoEvaluateSignal(decision, l2Result.output, l5Result.output, input).catch((e) => logger.warn({ err: e }, "[Brain] auto-evaluate signal failed"));
   }
 
   return decision;

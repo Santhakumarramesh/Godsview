@@ -217,7 +217,7 @@ class BrainDailyCircuitBreaker {
         autonomousBrain.setMode("PAUSED");
         logger.warn("[CircuitBreaker] Brain auto-paused due to circuit trip");
       }
-    }).catch(() => {});
+    }).catch((e) => logger.warn({ err: e }, "[CircuitBreaker] trip alert failed"));
   }
 
   private _scheduleMidnightReset(): void {

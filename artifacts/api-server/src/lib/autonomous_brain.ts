@@ -221,7 +221,7 @@ class AutonomousBrain {
 
       // Warm-load performance engine for all symbols
       for (const sym of symbols) {
-        brainPerformance.warmLoad(sym).catch(() => {});
+        brainPerformance.warmLoad(sym).catch((e) => logger.debug({ err: e, symbol: sym }, "[Brain] warmLoad failed"));
       }
 
       logger.info("[AutonomousBrain] All Phase 8 subsystems booted");
@@ -298,11 +298,11 @@ class AutonomousBrain {
       brainWatchdog.stop?.();
       brainStreamBridge.stop?.();
       brainPnLTracker.stop?.();
-    }).catch(() => {});
+    }).catch((e) => logger.warn({ err: e }, "[Brain] subsystem stop failed"));
 
     brainAlerts.custom("BRAIN_STOPPED", "warning", "Autonomous Brain Stopped",
       `Brain stopped after ${this.state.cycleCount} cycles, ${this.state.totalJobsCompleted} jobs`
-    ).catch(() => {});
+    ).catch((e) => logger.debug({ err: e }, "[Brain] stop alert failed"));
 
     logger.info(`[AutonomousBrain] Stopped. Cycles: ${this.state.cycleCount}, Jobs: ${this.state.totalJobsCompleted}`);
   }
@@ -366,15 +366,15 @@ class AutonomousBrain {
 
       // If tier changed → fire alerts
       if (result.newTier === "SUSPENDED") {
-        brainAlerts.strategySuspended(symbol, strategy ?? "smc_ob_fvg").catch(() => {});
+        brainAlerts.strategySuspended(symbol, strategy ?? "smc_ob_fvg").catch((e) => logger.debug({ err: e }, "[Brain] strategySuspended alert failed"));
       } else if (result.newTier === "ELITE") {
-        brainAlerts.newEliteStrategy(symbol, strategy ?? "smc_ob_fvg").catch(() => {});
+        brainAlerts.newEliteStrategy(symbol, strategy ?? "smc_ob_fvg").catch((e) => logger.debug({ err: e }, "[Brain] newElite alert failed"));
       } else if (result.newTier === "DEGRADING") {
         brainAlerts.custom(
           "STRATEGY_SUSPENDED", "warning",
           `Strategy Degrading — ${symbol}`,
           `${strategy} on ${symbol} degraded to ${result.newTier} after ${result.changes.length} param changes`
-        ).catch(() => {});
+        ).catch((e) => logger.debug({ err: e }, "[Brain] strategy degraded alert failed"));
       }
 
       if (result.newTier === "DEGRADING" || result.newTier === "SUSPENDED") {
@@ -413,7 +413,7 @@ class AutonomousBrain {
 
         // Phase 9: detect SI drift (accuracy < 50% or brier > 0.30)
         if (r.accuracy < 0.50 || r.brier > 0.30) {
-          brainAlerts.siDrift(symbol, r.accuracy, r.brier).catch(() => {});
+          brainAlerts.siDrift(symbol, r.accuracy, r.brier).catch((e) => logger.debug({ err: e }, "[Brain] siDrift alert failed"));
         }
 
         // Alert on retrain completion
@@ -421,7 +421,7 @@ class AutonomousBrain {
           "RETRAIN_COMPLETE", "info",
           `SI Retrained — ${symbol}`,
           `v${r.version} | Accuracy: ${(r.accuracy * 100).toFixed(1)}% | Brier: ${r.brier.toFixed(3)}`
-        ).catch(() => {});
+        ).catch((e) => logger.debug({ err: e }, "[Brain] retrain alert failed"));
 
         return { symbol, version: r.version, accuracy: r.accuracy, brier: r.brier };
       } else {
@@ -532,8 +532,8 @@ class AutonomousBrain {
       logger.info("[AutonomousBrain] Entering DEFENSIVE mode after 5 consecutive losses");
 
       // Phase 9: fire alert for consecutive losses + defensive mode
-      brainAlerts.consecutiveLosses(symbol, this.state.consecutiveLosses).catch(() => {});
-      brainAlerts.defensiveMode(this.state.consecutiveLosses).catch(() => {});
+      brainAlerts.consecutiveLosses(symbol, this.state.consecutiveLosses).catch((e) => logger.debug({ err: e }, "[Brain] loss alert failed"));
+      brainAlerts.defensiveMode(this.state.consecutiveLosses).catch((e) => logger.debug({ err: e }, "[Brain] defensive alert failed"));
 
       brainEventBus.agentReport({
         agentId: "brain",

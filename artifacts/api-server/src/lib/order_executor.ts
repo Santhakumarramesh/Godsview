@@ -406,7 +406,7 @@ export async function executeOrder(req: ExecutionRequest): Promise<ExecutionResu
       setup_type: req.setup_type,
       actor: "order_executor",
       payload: explain as unknown as Record<string, unknown>,
-    }).catch(() => void 0);
+    }).catch((e) => logger.debug({ err: e }, "[OrderExecutor] audit event failed"));
     logger.info({ ...logCtx, decisionId, outcome: explain.outcome }, "FusionExplain recorded");
     if (explain.outcome === "vetoed" || explain.outcome === "rejected") {
       return {

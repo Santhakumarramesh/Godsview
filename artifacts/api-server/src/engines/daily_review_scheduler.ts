@@ -18,6 +18,7 @@ import {
   saveDailyReview,
   type DailyReview,
 } from "./daily_review_engine.js";
+import { logger } from "../lib/logger.js";
 
 /**
  * Scheduler run history entry
@@ -43,7 +44,7 @@ export function startDailyReviewScheduler(intervalMs: number = 3600_000): void {
   schedulerInterval = setInterval(() => {
     const today = new Date().toISOString().slice(0, 10);
     if (today !== lastRunDate) {
-      runDailyReviews(today).catch(() => {});
+      runDailyReviews(today).catch((e) => logger.warn({ err: e }, "[DailyReview] scheduled run failed"));
     }
   }, intervalMs);
 }

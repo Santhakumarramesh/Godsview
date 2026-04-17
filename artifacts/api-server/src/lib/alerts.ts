@@ -119,7 +119,7 @@ export async function fireAlert(
 
   // Fire webhook (non-blocking)
   if (WEBHOOK_URL) {
-    sendWebhook(alert).catch(() => {});
+    sendWebhook(alert).catch((e) => logger.debug({ err: e }, "[Alerts] webhook delivery failed"));
   }
 }
 

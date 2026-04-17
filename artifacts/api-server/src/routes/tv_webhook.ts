@@ -13,6 +13,7 @@
 import { Router, type Request, type Response } from "express";
 import { randomUUID } from "node:crypto";
 import { createHash } from "node:crypto";
+import { brainEventBus } from "../lib/brain_event_bus.js";
 import { logger } from "../lib/logger";
 
 const router = Router();
@@ -191,22 +192,41 @@ function validateSignal(signal: InternalSignal): {
   return { valid: true };
 }
 
-// ─── Signal Broadcasting (TODO: integrate with WebSocket) ──────────────────
+// ─── Signal Broadcasting via BrainEventBus ──────────────────────────────────
 
 async function broadcastSignal(signal: InternalSignal): Promise<void> {
   try {
-    // Broadcast to connected WebSocket clients
-    // TODO: integrate with your WebSocket handler
+    // Broadcast to connected WebSocket clients via BrainEventBus brain:alert channel
+    brainEventBus.agentReport({
+      agentId: "production_gate",
+      symbol: signal.symbol,
+      status: "done",
+      confidence: signal.confidence ?? 0.5,
+      score: signal.confidence ?? 0.5,
+      verdict: `TV Signal: ${signal.action} ${signal.symbol} @ ${signal.entry_price}`,
+      data: {
+        source: "tradingview",
+        signal_id: signal.id,
+        action: signal.action,
+        timeframe: signal.timeframe,
+        entry_price: signal.entry_price,
+        stop_loss: signal.stop_loss,
+        take_profit: signal.take_profit,
+      },
+      flags: [],
+      timestamp: Date.now(),
+      latencyMs: 0,
+    });
     logger.info(
       { signal_id: signal.id, symbol: signal.symbol },
-      "Signal ready for broadcast",
+      "Signal broadcast via BrainEventBus",
     );
   } catch (err) {
     logger.error({ err }, "Failed to broadcast signal");
   }
 }
 
-// ─── Internal Signal Queue (TODO: integrate with Python brain) ────────────
+// ─── Internal Signal Queue (forwards to brain decision pipeline) ────────────
 
 async function pushToSignalQueue(signal: InternalSignal): Promise<void> {
   try {

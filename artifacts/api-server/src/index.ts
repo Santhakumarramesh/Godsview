@@ -212,7 +212,7 @@ const server = app.listen(port, (err) => {
             event_type: "reconciliation_drift",
             actor: "phase103_reconciler",
             payload: report as unknown as Record<string, unknown>,
-          }).catch(() => void 0);
+          }).catch((e) => logger.debug({ err: e }, "Audit event recording failed"));
           logger.warn({ report }, "Phase 103 reconciliation: critical drifts detected");
         }
       } catch (err) {

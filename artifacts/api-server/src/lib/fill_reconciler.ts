@@ -241,7 +241,7 @@ function broadcastFill(fill: ReconciledFill): void {
           timestamp: fill.timestamp,
         },
       });
-    }).catch(() => {});
+    }).catch((e) => logger.debug({ err: e }, "[FillReconciler] audit event failed"));
   } catch { /* ignore */ }
 }
 
