@@ -370,3 +370,26 @@ onShutdown(async () => {
   logger.info("Draining database connection pool...");
   await closePool();
 });
+
+// ── Phase 123: Memory watchdog — log heap usage every 5 min ────────────────
+const MEMORY_LOG_INTERVAL_MS = 5 * 60 * 1000;
+const MEMORY_WARN_THRESHOLD_MB = 400;
+const memoryWatchdog = setInterval(() => {
+  const mem = process.memoryUsage();
+  const heapMB = Math.round(mem.heapUsed / 1024 / 1024);
+  const rssMB = Math.round(mem.rss / 1024 / 1024);
+  const externalMB = Math.round(mem.external / 1024 / 1024);
+
+  if (heapMB > MEMORY_WARN_THRESHOLD_MB) {
+    logger.warn({ heapMB, rssMB, externalMB }, "Memory watchdog: heap usage elevated");
+    // Hint GC if available (--expose-gc flag)
+    if (typeof globalThis.gc === "function") {
+      globalThis.gc();
+      const after = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+      logger.info({ heapMB: after }, "Memory watchdog: GC invoked");
+    }
+  } else {
+    logger.debug({ heapMB, rssMB, externalMB }, "Memory watchdog: periodic check");
+  }
+}, MEMORY_LOG_INTERVAL_MS);
+onShutdown(async () => clearInterval(memoryWatchdog));

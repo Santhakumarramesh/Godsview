@@ -147,9 +147,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 640M
         reservations:
-          memory: 128M
+          memory: 192M
 
   # ── Nginx Reverse Proxy ────────────────────────────────────────
   nginx:

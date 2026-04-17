@@ -91,6 +91,19 @@ const errorHandler = (
 // ============================================================================
 
 const pipelineStates = new Map<string, PipelineState>();
+const MAX_PIPELINE_STATES = 500;
+
+/** Evict oldest entries when map exceeds capacity */
+function evictOldPipelineStates(): void {
+  if (pipelineStates.size <= MAX_PIPELINE_STATES) return;
+  // Map iteration order is insertion order — delete oldest first
+  const excess = pipelineStates.size - MAX_PIPELINE_STATES;
+  let i = 0;
+  for (const key of pipelineStates.keys()) {
+    if (i++ >= excess) break;
+    pipelineStates.delete(key);
+  }
+}
 
 // ============================================================================
 // ROUTER
@@ -126,6 +139,7 @@ router.post('/run', async (req: Request, res: Response, next: NextFunction) => {
     );
 
     pipelineStates.set(result.pipeline_state.pipeline_id, result.pipeline_state);
+    evictOldPipelineStates();
 
     return res.status(200).json({
       success: true,
@@ -192,6 +206,7 @@ router.post(
       );
 
       pipelineStates.set(result.pipeline_state.pipeline_id, result.pipeline_state);
+    evictOldPipelineStates();
 
       return res.status(200).json({
         success: true,
@@ -245,6 +260,7 @@ router.post('/resume', async (req: Request, res: Response, next: NextFunction) =
     );
 
     pipelineStates.set(result.pipeline_state.pipeline_id, result.pipeline_state);
+    evictOldPipelineStates();
 
     return res.status(200).json({
       success: true,

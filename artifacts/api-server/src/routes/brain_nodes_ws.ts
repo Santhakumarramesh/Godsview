@@ -67,6 +67,11 @@ async function checkServiceHealth(id: string, baseUrl?: string): Promise<{ statu
 
     const result = { status, latencyMs, errorRate };
     healthCheckCache.set(id, { ...result, timestamp: Date.now() });
+    // Prevent unbounded cache growth (should be bounded by subsystem count, but be safe)
+    if (healthCheckCache.size > 100) {
+      const oldest = [...healthCheckCache.entries()].sort((a, b) => a[1].timestamp - b[1].timestamp)[0];
+      if (oldest) healthCheckCache.delete(oldest[0]);
+    }
     return result;
   } catch (err) {
     return { status: "error", latencyMs: 0, errorRate: 100 };

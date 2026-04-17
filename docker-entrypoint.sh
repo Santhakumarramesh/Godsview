@@ -78,4 +78,4 @@ echo "[entrypoint] Data directories ready"
 echo "[entrypoint] Starting GodsView API server on port ${PORT:-3001}..."
 echo "[entrypoint] Python v2 services enabled: ${PY_SERVICES_ENABLED:-true}"
 echo "[entrypoint] System mode: ${GODSVIEW_SYSTEM_MODE:-paper}"
-exec node --enable-source-maps ./artifacts/api-server/dist/index.mjs
+exec node --enable-source-maps --max-old-space-size=450 --expose-gc ./artifacts/api-server/dist/index.mjs

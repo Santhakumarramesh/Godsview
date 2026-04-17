@@ -38,11 +38,18 @@ const startedAt = new Date().toISOString();
 /* ── Liveness: is the process running? ────────────────────────────── */
 const livenessHandler = (_req: import("express").Request, res: import("express").Response): void => {
   const data = HealthCheckResponse.parse({ status: "ok" });
+  const mem = process.memoryUsage();
   res.json({
     ...data,
     uptime: process.uptime(),
     startedAt,
-    memoryMB: Math.round(process.memoryUsage.rss() / 1024 / 1024),
+    memoryMB: Math.round(mem.rss / 1024 / 1024),
+    memory: {
+      rssMB: Math.round(mem.rss / 1024 / 1024),
+      heapUsedMB: Math.round(mem.heapUsed / 1024 / 1024),
+      heapTotalMB: Math.round(mem.heapTotal / 1024 / 1024),
+      externalMB: Math.round(mem.external / 1024 / 1024),
+    },
   });
 };
 router.get("/healthz", livenessHandler);
