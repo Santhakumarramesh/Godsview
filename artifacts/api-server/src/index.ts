@@ -272,6 +272,14 @@ const server = app.listen(port, (err) => {
           brainRulebook.start();
           logger.info({ symbols }, "Autonomous Brain auto-started");
         }
+
+        // Start the autonomy supervisor (monitors & auto-heals all brain services)
+        const { startAutonomySupervisor, shouldAutonomySupervisorAutoStart } = await import("./lib/autonomy_supervisor.js");
+        if (shouldAutonomySupervisorAutoStart()) {
+          startAutonomySupervisor({ runImmediate: true })
+            .then((r) => logger.info({ intervalMs: r.interval_ms }, "Autonomy supervisor auto-started"))
+            .catch((e) => logger.warn({ err: e }, "Autonomy supervisor auto-start failed"));
+        }
       } catch (err: any) {
         logger.warn({ err: err?.message }, "Brain auto-start failed — manual start required");
       }
