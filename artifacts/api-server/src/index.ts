@@ -281,22 +281,23 @@ const server = app.listen(port, (err) => {
     logger.info("Brain auto-start disabled (set BRAIN_AUTOSTART=true to enable)");
   }
 
-  // ── Autonomy Supervisor Auto-Start (independent of Alpaca keys) ───────────
-  // The supervisor monitors & auto-heals all brain services. It runs even
-  // without Alpaca keys so it can report service health and heal when keys appear.
-  if (process.env.BRAIN_AUTOSTART === "true") {
-    setTimeout(async () => {
-      try {
-        const { startAutonomySupervisor, shouldAutonomySupervisorAutoStart } = await import("./lib/autonomy_supervisor.js");
-        if (shouldAutonomySupervisorAutoStart()) {
-          const r = await startAutonomySupervisor({ runImmediate: true });
-          logger.info({ intervalMs: r.interval_ms }, "Autonomy supervisor auto-started");
-        }
-      } catch (e: any) {
-        logger.warn({ err: e?.message }, "Autonomy supervisor auto-start failed");
+  // ── Autonomy Supervisor Auto-Start (always-on monitoring) ──────────────────
+  // The supervisor monitors & auto-heals all brain services. It starts
+  // unconditionally — it's a watchdog that should always be active.
+  // Controlled by AUTONOMY_SUPERVISOR_AUTO_START env (defaults to true).
+  setTimeout(async () => {
+    try {
+      const { startAutonomySupervisor, shouldAutonomySupervisorAutoStart } = await import("./lib/autonomy_supervisor.js");
+      if (shouldAutonomySupervisorAutoStart()) {
+        const r = await startAutonomySupervisor({ runImmediate: true });
+        logger.info({ intervalMs: r.interval_ms }, "Autonomy supervisor auto-started");
+      } else {
+        logger.info("Autonomy supervisor auto-start disabled (AUTONOMY_SUPERVISOR_AUTO_START=false)");
       }
-    }, 10_000); // 10s delay — after brain attempt
-  }
+    } catch (e: any) {
+      logger.warn({ err: e?.message }, "Autonomy supervisor auto-start failed");
+    }
+  }, 10_000); // 10s delay — after brain attempt
 
   // Phase 15: paper validation loop (predicted vs realized in paper mode)
   if ((process.env.PAPER_VALIDATION_AUTO_START ?? "true") !== "false") {
