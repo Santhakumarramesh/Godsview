@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   pgTable,
   serial,
@@ -45,11 +46,10 @@ export const executionValidations = pgTable(
       table.strategyId,
       table.symbol
     ),
-    sideCheck: check("side_check", () =>
-      table.side.inList(["buy", "sell"])
-    ),
-    scoreCheck: check("score_check", () =>
-      table.fillQualityScore.gte(0).and(table.fillQualityScore.lte(1))
+    sideCheck: check("side_check", sql`${table.side} IN ('buy', 'sell')`),
+    scoreCheck: check(
+      "score_check",
+      sql`${table.fillQualityScore} >= 0 AND ${table.fillQualityScore} <= 1`
     ),
   })
 );
@@ -85,8 +85,9 @@ export const slippageDistributions = pgTable(
       table.strategyId,
       table.symbol
     ),
-    favorablePctCheck: check("favorable_pct_check", () =>
-      table.favorablePct.gte(0).and(table.favorablePct.lte(100))
+    favorablePctCheck: check(
+      "favorable_pct_check",
+      sql`${table.favorablePct} >= 0 AND ${table.favorablePct} <= 100`
     ),
   })
 );
@@ -122,16 +123,13 @@ export const executionDriftEvents = pgTable(
       table.strategyId,
       table.detectedAt
     ),
-    driftTypeCheck: check("drift_type_check", () =>
-      table.driftType.inList([
-        "slippage_spike",
-        "latency_spike",
-        "fill_rate_drop",
-        "venue_degradation",
-      ])
+    driftTypeCheck: check(
+      "drift_type_check",
+      sql`${table.driftType} IN ('slippage_spike', 'latency_spike', 'fill_rate_drop', 'venue_degradation')`
     ),
-    severityCheck: check("severity_check", () =>
-      table.severity.inList(["info", "warning", "critical"])
+    severityCheck: check(
+      "severity_check",
+      sql`${table.severity} IN ('info', 'warning', 'critical')`
     ),
   })
 );
