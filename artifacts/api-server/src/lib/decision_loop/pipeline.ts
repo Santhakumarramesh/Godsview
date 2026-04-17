@@ -57,7 +57,7 @@ export interface StrategyParameter {
 
 export interface StepResult<T = any> {
   status: 'success' | 'warning' | 'failure' | 'skipped';
-  data: T;
+  data: T | null;
   duration_ms: number;
   confidence: number;
   warnings: string[];
@@ -695,7 +695,7 @@ export class QuantDecisionPipeline {
     } catch (error: any) {
       const stepResult: StepResult<ParseResult> = {
         status: 'failure',
-        data: null as any,
+        data: null,
         duration_ms: Date.now() - start,
         confidence: 0,
         warnings: [],
@@ -732,7 +732,7 @@ export class QuantDecisionPipeline {
     } catch (error: any) {
       const stepResult: StepResult<EarlyScreenResult> = {
         status: 'failure',
-        data: null as any,
+        data: null,
         duration_ms: Date.now() - start,
         confidence: 0,
         warnings: [],
@@ -788,7 +788,7 @@ export class QuantDecisionPipeline {
     } catch (error: any) {
       const stepResult: StepResult<CritiqueResult> = {
         status: 'failure',
-        data: null as any,
+        data: null,
         duration_ms: Date.now() - start,
         confidence: 0,
         warnings: [],
@@ -844,7 +844,7 @@ export class QuantDecisionPipeline {
     } catch (error: any) {
       const stepResult: StepResult<VariantResult> = {
         status: 'failure',
-        data: null as any,
+        data: null,
         duration_ms: Date.now() - start,
         confidence: 0,
         warnings: [],
@@ -890,7 +890,7 @@ export class QuantDecisionPipeline {
     } catch (error: any) {
       const stepResult: StepResult<BacktestResult[]> = {
         status: 'failure',
-        data: null as any,
+        data: null,
         duration_ms: Date.now() - start,
         confidence: 0,
         warnings: [],
@@ -953,7 +953,7 @@ export class QuantDecisionPipeline {
     } catch (error: any) {
       const stepResult: StepResult<PostBacktestAnalysis[]> = {
         status: 'failure',
-        data: null as any,
+        data: null,
         duration_ms: Date.now() - start,
         confidence: 0,
         warnings: [],
@@ -1003,7 +1003,7 @@ export class QuantDecisionPipeline {
     } catch (error: any) {
       const stepResult: StepResult<RankingResult> = {
         status: 'failure',
-        data: null as any,
+        data: null,
         duration_ms: Date.now() - start,
         confidence: 0,
         warnings: [],
@@ -1058,7 +1058,7 @@ export class QuantDecisionPipeline {
     } catch (error: any) {
       const stepResult: StepResult<ImprovementSuggestion[]> = {
         status: 'failure',
-        data: null as any,
+        data: null,
         duration_ms: Date.now() - start,
         confidence: 0,
         warnings: [],
@@ -1107,7 +1107,7 @@ export class QuantDecisionPipeline {
     } catch (error: any) {
       const stepResult: StepResult<ExplainResult> = {
         status: 'failure',
-        data: null as any,
+        data: null,
         duration_ms: Date.now() - start,
         confidence: 0,
         warnings: [],
@@ -1170,7 +1170,7 @@ export class QuantDecisionPipeline {
     } catch (error: any) {
       const stepResult: StepResult<GovernanceResult> = {
         status: 'failure',
-        data: null as any,
+        data: null,
         duration_ms: Date.now() - start,
         confidence: 0,
         warnings: [],
@@ -1308,18 +1308,18 @@ export class QuantDecisionPipeline {
         top_variant: { name: '', description: '', rules: { entry: [], exit: [] }, parameters: [] },
       },
       all_results: {
-        memory_consult: (this.state.steps.MEMORY_CONSULT as any) || null,
-        parse_and_resolve: (this.state.steps.PARSE_AND_RESOLVE as any) || null,
-        early_screen: (this.state.steps.EARLY_SCREEN as any) || null,
-        critique: (this.state.steps.CRITIQUE as any) || null,
-        variant_generation: (this.state.steps.VARIANT_GENERATION as any) || null,
-        backtest: (this.state.steps.BACKTEST as any) || null,
-        post_backtest: (this.state.steps.POST_BACKTEST_ANALYSIS as any) || null,
-        ranking: (this.state.steps.RANKING as any) || null,
-        improvement: (this.state.steps.IMPROVEMENT as any) || null,
-        explain: (this.state.steps.EXPLAIN as any) || null,
-        governance: (this.state.steps.GOVERNANCE_GATE as any) || null,
-        memory_learn: (this.state.steps.MEMORY_LEARN as any) || null,
+        memory_consult: this.state.steps.MEMORY_CONSULT ?? null,
+        parse_and_resolve: this.state.steps.PARSE_AND_RESOLVE ?? null,
+        early_screen: this.state.steps.EARLY_SCREEN ?? null,
+        critique: this.state.steps.CRITIQUE ?? null,
+        variant_generation: this.state.steps.VARIANT_GENERATION ?? null,
+        backtest: this.state.steps.BACKTEST ?? null,
+        post_backtest: this.state.steps.POST_BACKTEST_ANALYSIS ?? null,
+        ranking: this.state.steps.RANKING ?? null,
+        improvement: this.state.steps.IMPROVEMENT ?? null,
+        explain: this.state.steps.EXPLAIN ?? null,
+        governance: this.state.steps.GOVERNANCE_GATE ?? null,
+        memory_learn: this.state.steps.MEMORY_LEARN ?? null,
       },
     };
   }
