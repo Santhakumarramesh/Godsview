@@ -3,6 +3,7 @@
  * Zero external dependencies.
  */
 import type { Request, Response, NextFunction } from "express";
+import { createHash, timingSafeEqual as cryptoTimingSafeEqual } from "node:crypto";
 import { logger } from "../lib/logger";
 
 /* ── Security Headers ─────────────────────────────────────────────── */
@@ -83,14 +84,17 @@ export function apiKeyAuth(req: Request, res: Response, next: NextFunction): voi
   next();
 }
 
-/** Constant-time string comparison */
+/**
+ * Length-safe constant-time string comparison.
+ *
+ * SHA-256 both sides so the compared buffers are always 32 bytes, then use
+ * Node's native timingSafeEqual. This avoids the classic timing side-channel
+ * where an early `a.length !== b.length` branch leaks the expected key length.
+ */
 function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let result = 0;
-  for (let i = 0; i < a.length; i++) {
-    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return result === 0;
+  const bufA = createHash("sha256").update(a, "utf8").digest();
+  const bufB = createHash("sha256").update(b, "utf8").digest();
+  return cryptoTimingSafeEqual(bufA, bufB);
 }
 
 /* ── Request Size Limiter ─────────────────────────────────────────── */

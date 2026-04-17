@@ -617,15 +617,17 @@ describe("GET /api/execution/autonomy-guard", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("POST /api/execution/autonomy-guard/reset", () => {
-  it("resets autonomy guard without operator token", async () => {
+  it("rejects reset without operator token", async () => {
     const { status } = await post("/api/execution/autonomy-guard/reset", {});
-    expect(status).toBe(200);
+    // Middleware rejects with 401 (missing) — this mirrors all other *-guard/reset routes
+    expect(status).toBe(401);
   });
 
-  it("resets autonomy guard with explicit reason payload", async () => {
+  it("resets autonomy guard with explicit reason payload when operator token present", async () => {
     const { status, data } = await post(
       "/api/execution/autonomy-guard/reset",
       { reason: "test_reset" },
+      opHeaders,
     );
     expect(status).toBe(200);
     const d = data as Record<string, unknown>;

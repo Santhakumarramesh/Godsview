@@ -1,4 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
+import { createHash, timingSafeEqual as cryptoTimingSafeEqual } from "node:crypto";
 import { claudeVeto, isClaudeAvailable, type ClaudeVetoResult, type SetupContext } from "../lib/claude";
 import { getBars, getBarsHistorical, getLatestBar, getLatestTrade, getAccount, getPositions, hasValidTradingKey, isBrokerKey, placeOrder, getOrders, cancelOrder, cancelAllOrders, closePosition, getTypedPositions, calcPositionSize, getTodayFills, computeRoundTrips, type AlpacaBar, type AlpacaTimeframe, type AlpacaPosition, type AlpacaFillActivity, type PlaceOrderRequest } from "../lib/alpaca";
 import { alpacaStream, type TickListener } from "../lib/alpaca_stream";
@@ -419,6 +420,18 @@ function getProvidedOperatorToken(req: Request): string | null {
   return null;
 }
 
+/**
+ * Constant-time token comparison that does not leak the expected token length.
+ *
+ * Hashes both inputs with SHA-256 so the comparison always runs on 32-byte
+ * buffers of equal length, then delegates to Node's native timingSafeEqual.
+ */
+function constantTimeTokenEqual(provided: string, expected: string): boolean {
+  const a = createHash("sha256").update(provided, "utf8").digest();
+  const b = createHash("sha256").update(expected, "utf8").digest();
+  return cryptoTimingSafeEqual(a, b);
+}
+
 function ensureTradingWriteAccess(req: Request, res: Response): boolean {
   if (isKillSwitchActive()) {
     void writeAuditEvent(req, {
@@ -469,7 +482,7 @@ function ensureTradingWriteAccess(req: Request, res: Response): boolean {
   }
 
   const provided = getProvidedOperatorToken(req);
-  if (!provided || provided !== OPERATOR_TOKEN) {
+  if (!provided || !constantTimeTokenEqual(provided, OPERATOR_TOKEN)) {
     void writeAuditEvent(req, {
       eventType: "ORDER_WRITE_BLOCKED",
       decisionState: "REJECTED",

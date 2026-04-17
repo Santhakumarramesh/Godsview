@@ -11,6 +11,7 @@
  */
 
 import type { RequestHandler } from "express";
+import { createHash, timingSafeEqual as cryptoTimingSafeEqual } from "node:crypto";
 import { logger } from "./logger";
 
 const OPERATOR_TOKEN = (process.env.GODSVIEW_OPERATOR_TOKEN ?? "").trim();
@@ -97,21 +98,27 @@ function extractToken(req: any): string | null {
     return req.body.operator_token.trim();
   }
 
-  // 4. Query param (for GET requests, less secure but useful for testing)
-  if (typeof req.query?.token === "string" && req.query.token.trim()) {
-    return req.query.token.trim();
-  }
+  // NOTE: Query-parameter tokens are intentionally NOT supported.
+  // They get written to ALB/CloudFront access logs, browser history,
+  // and upstream proxy logs, which leaks the operator secret.
+  // Use the Authorization: Bearer header or X-Operator-Token instead.
 
   return null;
 }
 
+/**
+ * Length-safe constant-time token comparison.
+ *
+ * We hash both sides with SHA-256 first so the compared buffers always have
+ * the same length (32 bytes). This eliminates the classic timing side-channel
+ * where an early `a.length !== b.length` return leaks the expected token
+ * length to an attacker. The hashes are then compared with Node's native
+ * crypto.timingSafeEqual which runs in constant time.
+ */
 function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let result = 0;
-  for (let i = 0; i < a.length; i++) {
-    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return result === 0;
+  const bufA = createHash("sha256").update(a, "utf8").digest();
+  const bufB = createHash("sha256").update(b, "utf8").digest();
+  return cryptoTimingSafeEqual(bufA, bufB);
 }
 
 export const authGuard = requireOperator;

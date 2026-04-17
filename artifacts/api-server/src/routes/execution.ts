@@ -839,7 +839,7 @@ executionRouter.post("/incident-guard/reset", requireOperator, (req: Request, re
 
 // ── POST /autonomy-guard/reset — Manual autonomy guard reset ────
 
-executionRouter.post("/autonomy-guard/reset", (req: Request, res: Response) => {
+executionRouter.post("/autonomy-guard/reset", requireOperator, (req: Request, res: Response) => {
   try {
     const clearKillSwitch =
       String(req.body?.clear_kill_switch ?? "")
