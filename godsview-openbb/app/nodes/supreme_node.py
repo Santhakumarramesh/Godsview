@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import asdict
+from typing import Optional
 
 from app.state.schemas import Regime, StockBrainState, SupremeBrainState
-from app.state.store import BrainStore
+from app.state.store import BrainStore, get_store
 
 
 def _derive_regime(stocks: list[StockBrainState]) -> Regime:
@@ -60,3 +61,17 @@ class SupremeNode:
             "cards": [asdict(card) for card in store.get_consciousness_board()],
         }
 
+
+# ─── Module-level helpers used by brain_loop.py ──────────────────────────────
+
+
+def update_supreme(store: Optional[BrainStore] = None) -> SupremeBrainState:
+    """Run a single SupremeNode pass and return the fresh supreme state."""
+    store = store or get_store()
+    return SupremeNode().run(store)
+
+
+def get_board_payload(store: Optional[BrainStore] = None) -> dict:
+    """Return the consciousness-board payload for dashboards/APIs."""
+    store = store or get_store()
+    return SupremeNode().board_payload(store)

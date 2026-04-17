@@ -67,3 +67,52 @@ class RiskNode(NodeBase):
         self.mark_live(brain)
         return brain
 
+
+# ─── Module-level helpers used by brain_loop.py ──────────────────────────────
+
+
+def quick_risk_check(
+    brain: StockBrainState,
+    supreme: Any | None = None,
+) -> bool:
+    """Cheap pre-screen: should we even bother running the full risk gate?"""
+    try:
+        direction = getattr(brain.decision, "direction", None)
+        state = getattr(brain.decision, "state", None)
+        if direction not in ("long", "short"):
+            return False
+        if state == BrainState.BLOCKED:
+            return False
+        last_price = float(getattr(brain.price, "last", 0.0) or 0.0)
+        if last_price <= 0:
+            return False
+        if supreme is not None and getattr(supreme, "system_health", "healthy") == "halted":
+            return False
+        return True
+    except Exception:
+        return False
+
+
+def evaluate_risk(
+    brain: StockBrainState,
+    supreme: Any | None = None,
+) -> RiskGate:
+    """Run the full RiskNode and return the computed RiskGate."""
+    node = RiskNode()
+    payload: dict[str, Any] = {
+        "data": {
+            "signal": {"close_price": getattr(brain.price, "last", 0.0)},
+            "market": {"last_price": getattr(brain.price, "last", 0.0)},
+        },
+        "blocked": False,
+    }
+    try:
+        # NodeBase.run mutates brain.risk_gate in place; we pass a transient
+        # store shim that only needs update_stock() available.
+        class _NoopStore:
+            def update_stock(self, *a: Any, **kw: Any) -> None:
+                return None
+        node.run(brain, payload, _NoopStore())  # type: ignore[arg-type]
+    except Exception:
+        pass
+    return brain.risk_gate

@@ -25,7 +25,8 @@ from datetime import datetime, timezone
 from .state.store import get_store
 from .state.schemas import Regime
 from .nodes.stock_node import update_stock_brain
-from .nodes.supreme_node import update_supremefrom .nodes.risk_node import evaluate_risk, quick_risk_check
+from .nodes.supreme_node import update_supreme
+from .nodes.risk_node import evaluate_risk, quick_risk_check
 from .nodes.execution_node import get_position_tracker
 from .nodes.evolution_node import run_evolution
 
@@ -78,7 +79,8 @@ def run_brain_cycle(symbols: list[str] = None):
     store = get_store()
     cycle_start = time.monotonic()
 
-    for symbol in symbols:        try:
+    for symbol in symbols:
+        try:
             # 1. Fetch market data
             bars = fetch_bars(symbol)
 
@@ -160,7 +162,8 @@ def _brain_loop_worker(symbols: list[str]):
                     store = get_store()
                     supreme = store.get_supreme()
                     run_evolution(supreme)
-                    last_evolution = time.monotonic()                except Exception as e:
+                    last_evolution = time.monotonic()
+                except Exception as e:
                     logger.error(f"Periodic evolution error: {e}")
 
         except Exception as e:

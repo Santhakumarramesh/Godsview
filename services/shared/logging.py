@@ -58,3 +58,8 @@ def get_logger(name: str) -> structlog.stdlib.BoundLogger:
 # Configure on import with a sensible default; services call
 # configure_structlog() with their own log level at startup.
 configure_structlog = _configure_structlog
+# Back-compat alias used by scheduler_service and other callers that import
+# configure_logging directly.
+configure_logging = _configure_structlog
+
+__all__ = ["get_logger", "configure_structlog", "configure_logging"]

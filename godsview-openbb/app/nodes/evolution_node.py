@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional
 
-from app.state.schemas import StockBrainState
-from app.state.store import BrainStore
+from app.state.schemas import StockBrainState, SupremeBrainState
+from app.state.store import BrainStore, get_store
 
 from .base_node import NodeBase
 
@@ -37,3 +37,29 @@ class EvolutionNode(NodeBase):
         self.mark_live(brain)
         return brain
 
+
+# ─── Module-level helper used by brain_loop.py ───────────────────────────────
+
+
+def run_evolution(
+    supreme: Optional[SupremeBrainState] = None,
+    store: Optional[BrainStore] = None,
+) -> SupremeBrainState:
+    """Apply evolutionary adjustments across all active stocks.
+
+    Wraps EvolutionNode so brain_loop can call it without iterating symbols
+    itself.
+    """
+    store = store or get_store()
+    node = EvolutionNode()
+    for symbol in store.list_symbols():
+        brain = store.get_stock(symbol)
+        if brain is None:
+            continue
+        try:
+            node.run(brain, {}, store)
+            store.update_stock(symbol, brain)
+        except Exception:
+            # Evolution is best-effort; never block the supreme loop.
+            continue
+    return supreme if supreme is not None else store.get_supreme()
