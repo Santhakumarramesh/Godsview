@@ -77,7 +77,6 @@ let _evaluatedStrategies: string[] = [];
 let _optimizedStrategies: string[] = [];
 let _lastCandidates: StrategyCandidate[] = [];
 const _recentActions: StrategyEvolutionAction[] = [];
-const MAX_RECENT_ACTIONS = 500;
 const _lastOptimizedAtMs = new Map<string, number>();
 const MAX_OPTIMIZED_TRACKING = 200;
 
