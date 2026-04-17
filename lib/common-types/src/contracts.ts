@@ -142,14 +142,14 @@ export type StructureState = z.infer<typeof StructureStateSchema>;
 
 // ── Regime State ─────────────────────────────────────────────────────────────
 
-export const ContractRegimeSchema = z.enum([
+export const RegimeSchema = z.enum([
   "trend_up", "trend_down", "range", "compression", "expansion", "chaotic",
 ]);
 
 export const RegimeStateSchema = z.object({
   symbol: z.string(),
   ts: z.string(),
-  regime: ContractRegimeSchema,
+  regime: RegimeSchema,
   trendStrength: z.number().min(0).max(1),
   volState: z.enum(["low", "medium", "high"]),
   confidence: z.number().min(0).max(1),

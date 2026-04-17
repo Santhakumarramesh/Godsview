@@ -120,9 +120,7 @@ export function initDeploymentTruthRoutes(
    * Environment variable completeness check (masks secrets)
    */
   router.get("/env-audit", (req: Request, res: Response): void => {
-    const envVars: Record<string, string> = Object.fromEntries(
-      Object.entries(process.env).filter(([, v]) => typeof v === "string"),
-    ) as Record<string, string>;
+    const envVars = process.env;
     const masked = maskSecrets(envVars);
 
     // Check which required env vars are present
@@ -279,13 +277,11 @@ export function initDeploymentTruthRoutes(
    * Mount router on the app
    */
   if ("use" in app) {
-    (app as express.Application).use("/api/deployment", router);
+    app.use("/api/deployment", router);
   }
 
   return router;
 }
-
-export default initDeploymentTruthRoutes;
 
 /**
  * Helper: Record startup event for current boot
@@ -301,3 +297,6 @@ export function recordStartupPhase(
     bootId: deploymentState.bootValidator.getBootId(),
   });
 }
+
+const deploymentTruthRouter = initDeploymentTruthRoutes(express.Router());
+export default deploymentTruthRouter;

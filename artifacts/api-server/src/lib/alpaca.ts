@@ -318,22 +318,7 @@ function normaliseBar(b: Record<string, unknown>): AlpacaBar {
 // ── Global bar cache to prevent Alpaca 429 rate limits ──────────────────────
 const _barCache: Map<string, { bars: AlpacaBar[]; ts: number }> = new Map();
 const BAR_CACHE_TTL = 8_000; // 8 seconds — fast enough for live trading, slow enough to avoid 429
-const BAR_CACHE_MAX_KEYS = 100;
 const _barInflight = new Map<string, Promise<AlpacaBar[]>>();
-
-// Periodic eviction of expired bar cache entries (prevents unbounded growth)
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, entry] of _barCache) {
-    if (now - entry.ts > BAR_CACHE_TTL * 10) _barCache.delete(key);
-  }
-  // Hard cap: evict oldest if still too large
-  if (_barCache.size > BAR_CACHE_MAX_KEYS) {
-    const sorted = [..._barCache.entries()].sort((a, b) => a[1].ts - b[1].ts);
-    const excess = _barCache.size - BAR_CACHE_MAX_KEYS;
-    for (let i = 0; i < excess; i++) _barCache.delete(sorted[i][0]);
-  }
-}, 30_000);
 
 function buildBarsCacheKey(
   symbol: string,

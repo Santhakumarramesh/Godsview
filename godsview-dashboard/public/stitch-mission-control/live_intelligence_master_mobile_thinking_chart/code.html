@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>OBSIDIAN ELITE - Live Intelligence</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              colors: {
+                "primary-dim": "#00ec3b",
+                "inverse-primary": "#006f16",
+                "outline-variant": "#484849",
+                "on-surface-variant": "#adaaab",
+                "tertiary-dim": "#e2241f",
+                "on-primary-fixed-variant": "#006513",
+                "on-tertiary-fixed": "#3a0001",
+                "surface-container-highest": "#262627",
+                "on-primary-container": "#005a10",
+                "tertiary-container": "#f9362c",
+                "on-primary-fixed": "#00440a",
+                "secondary-fixed": "#bed2ff",
+                "inverse-on-surface": "#565556",
+                "on-secondary": "#001f49",
+                "primary": "#9cff93",
+                "surface-container-low": "#131314",
+                "primary-fixed": "#00fc40",
+                "on-surface": "#ffffff",
+                "surface-dim": "#0e0e0f",
+                "error-container": "#b92902",
+                "surface": "#0e0e0f",
+                "on-secondary-fixed-variant": "#004ea5",
+                "surface-variant": "#262627",
+                "secondary-container": "#005bc0",
+                "surface-container-lowest": "#000000",
+                "error": "#ff7351",
+                "secondary": "#669dff",
+                "surface-container": "#1a191b",
+                "primary-fixed-dim": "#00ec3b",
+                "on-secondary-fixed": "#00326f",
+                "tertiary": "#ff7162",
+                "on-tertiary": "#4a0001",
+                "on-secondary-container": "#f7f7ff",
+                "on-error": "#450900",
+                "background": "#0e0e0f",
+                "surface-tint": "#9cff93",
+                "surface-container-high": "#201f21",
+                "on-tertiary-container": "#000000",
+                "inverse-surface": "#fcf8f9",
+                "error-dim": "#d53d18",
+                "secondary-fixed-dim": "#a8c4ff",
+                "primary-container": "#00fc40",
+                "on-background": "#ffffff",
+                "on-error-container": "#ffd2c8",
+                "outline": "#767576",
+                "tertiary-fixed": "#ff9385",
+                "surface-bright": "#2c2c2d",
+                "on-tertiary-fixed-variant": "#7a0004",
+                "secondary-dim": "#0070ea",
+                "tertiary-fixed-dim": "#ff7c6c",
+                "on-primary": "#006413"
+              },
+              fontFamily: {
+                "headline": ["Space Grotesk"],
+                "body": ["Inter"],
+                "label": ["Inter"]
+              },
+              borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+            },
+          },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .glass-panel {
+            background: rgba(44, 44, 45, 0.4);
+            backdrop-filter: blur(20px);
+        }
+        .chart-grid {
+            background-image: radial-gradient(circle, #484849 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+        .shimmer {
+            background: linear-gradient(90deg, transparent, rgba(156, 255, 147, 0.1), transparent);
+            background-size: 200% 100%;
+            animation: shimmer 2s infinite linear;
+        }
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface font-body overflow-x-hidden selection:bg-primary selection:text-on-primary">
+<!-- TopAppBar -->
+<header class="bg-[#0e0e0f]/80 backdrop-blur-xl fixed top-0 w-full z-50 border-b border-[#484849]/15 flex justify-between items-center px-6 h-16 w-full">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[#9cff93]">terminal</span>
+<h1 class="font-['Space_Grotesk'] uppercase tracking-widest text-sm text-[#9cff93] font-bold tracking-tighter text-xl">OBSIDIAN ELITE</h1>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex flex-col items-end">
+<span class="font-headline text-[10px] tracking-tighter text-primary">LATENCY: 4MS</span>
+<span class="font-headline text-[10px] tracking-tighter text-secondary">LIVE FEED</span>
+</div>
+<div class="w-8 h-8 rounded-full border border-outline-variant/30 flex items-center justify-center bg-surface-container overflow-hidden">
+<span class="material-symbols-outlined text-xs">person</span>
+</div>
+</div>
+</header>
+<main class="pt-16 pb-24 min-h-screen">
+<!-- Live Intelligence Chart Section (60% Vertical Priority) -->
+<section class="relative w-full h-[530px] bg-surface-container-lowest overflow-hidden chart-grid">
+<!-- Asset Header Overlay -->
+<div class="absolute top-4 left-6 z-10">
+<div class="flex items-baseline gap-2">
+<h2 class="font-headline text-3xl font-bold tracking-tighter text-on-surface">BTC / USDT</h2>
+<span class="font-headline text-lg text-primary">64,281.50</span>
+</div>
+<div class="flex gap-4 mt-1">
+<span class="text-[10px] font-headline text-on-surface-variant tracking-widest">1M TIMEFRAME</span>
+<span class="text-[10px] font-headline text-primary tracking-widest uppercase">Volatility: High</span>
+</div>
+</div>
+<!-- Candlestick Visualization (SVG Implementation) -->
+<div class="absolute inset-0 pt-20 pb-10 flex items-end px-4">
+<svg class="w-full h-full preserve-3d" viewbox="0 0 1000 400">
+<!-- Demand Zone -->
+<rect fill="rgba(156, 255, 147, 0.08)" height="60" width="400" x="600" y="280"></rect>
+<line opacity="0.4" stroke="#9cff93" stroke-dasharray="4" stroke-width="0.5" x1="600" x2="1000" y1="280" y2="280"></line>
+<!-- Supply Zone -->
+<rect fill="rgba(255, 113, 81, 0.08)" height="40" width="450" x="0" y="50"></rect>
+<!-- Simulated Candles -->
+<g class="candles opacity-80">
+<!-- Down candles -->
+<rect fill="#ff7162" height="60" width="8" x="100" y="120"></rect>
+<rect fill="#ff7162" height="40" width="8" x="120" y="170"></rect>
+<rect fill="#ff7162" height="30" width="8" x="140" y="200"></rect>
+<!-- Recovery -->
+<rect fill="#9cff93" height="15" width="8" x="160" y="190"></rect>
+<!-- Big Drop -->
+<rect fill="#ff7162" height="85" width="8" x="180" y="205"></rect>
+<rect fill="#ff7162" height="40" width="8" x="200" y="280"></rect>
+<!-- Consolidation at Demand -->
+<rect fill="#9cff93" height="10" width="8" x="220" y="310"></rect>
+<rect fill="#9cff93" height="15" width="8" x="240" y="305"></rect>
+<rect fill="#ff7162" height="5" width="8" x="260" y="315"></rect>
+<!-- Push Out -->
+<rect fill="#9cff93" height="30" width="8" x="280" y="290"></rect>
+</g>
+<!-- Trade Structure Layers -->
+<!-- Approved Trade: Long -->
+<g>
+<!-- Entry Line -->
+<line stroke="#9cff93" stroke-width="1.5" x1="280" x2="950" y1="290" y2="290"></line>
+<text fill="#9cff93" font-family="Space Grotesk" font-size="10" x="960" y="294">ENTRY @ 64,120</text>
+<!-- SL / TP Brackets -->
+<line stroke="#ff7162" stroke-dasharray="2" stroke-width="1" x1="900" x2="950" y1="340" y2="340"></line>
+<text fill="#ff7162" font-family="Space Grotesk" font-size="10" x="960" y="344">SL: 63,950</text>
+<line stroke="#9cff93" stroke-dasharray="2" stroke-width="1" x1="900" x2="950" y1="180" y2="180"></line>
+<text fill="#9cff93" font-family="Space Grotesk" font-size="10" x="960" y="184">TP: 65,200</text>
+</g>
+<!-- Intelligent Overlays -->
+<!-- Approved Marker -->
+<circle cx="280" cy="290" fill="#9cff93" r="4"></circle>
+<rect fill="#000" height="18" rx="2" stroke="#9cff93" stroke-width="1" width="60" x="295" y="275"></rect>
+<text fill="#9cff93" font-family="Space Grotesk" font-size="8" font-weight="bold" x="300" y="288">SR L 0.78</text>
+<!-- Veto Marker -->
+<circle cx="550" cy="120" fill="#ff7162" r="4"></circle>
+<rect fill="#000" height="18" rx="2" stroke="#ff7162" stroke-width="1" width="75" x="565" y="105"></rect>
+<text fill="#ff7162" font-family="Space Grotesk" font-size="8" font-weight="bold" x="570" y="118">AR S VETO</text>
+</svg>
+</div>
+<!-- Absolute HUD Elements -->
+<div class="absolute bottom-6 left-6 flex flex-col gap-2">
+<div class="flex items-center gap-2 px-3 py-1 bg-surface-container border border-outline-variant/20 rounded-lg">
+<span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+<span class="text-[10px] font-headline tracking-tighter text-on-surface">SYNTHESIS ENGINE ACTIVE</span>
+</div>
+</div>
+</section>
+<!-- Pipeline Engine -->
+<section class="px-6 -mt-6 relative z-20">
+<div class="bg-surface-container-high p-4 rounded-xl shadow-2xl border border-outline-variant/10">
+<div class="flex justify-between items-center mb-4">
+<h3 class="font-headline text-[10px] tracking-[0.2em] text-on-surface-variant uppercase">Logic Pipeline</h3>
+<div class="flex items-center gap-1">
+<span class="text-[10px] font-headline text-primary">SCANNING...</span>
+</div>
+</div>
+<div class="flex items-center justify-between gap-1 overflow-x-auto no-scrollbar">
+<!-- Pipeline Blocks -->
+<div class="flex flex-col items-center gap-2 group">
+<div class="w-12 h-14 bg-surface-container flex items-center justify-center rounded border border-primary/30 shadow-[0_0_8px_rgba(156,255,147,0.2)]">
+<span class="material-symbols-outlined text-primary text-xl" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<span class="text-[9px] font-headline text-on-surface-variant">SK</span>
+</div>
+<div class="h-px w-4 bg-outline-variant/30 mt-[-18px]"></div>
+<div class="flex flex-col items-center gap-2">
+<div class="w-12 h-14 bg-surface-container flex items-center justify-center rounded border border-primary/30 shadow-[0_0_8px_rgba(156,255,147,0.2)]">
+<span class="material-symbols-outlined text-primary text-xl" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<span class="text-[9px] font-headline text-on-surface-variant">SETUP</span>
+</div>
+<div class="h-px w-4 bg-outline-variant/30 mt-[-18px]"></div>
+<div class="flex flex-col items-center gap-2">
+<div class="w-12 h-14 bg-surface-container flex items-center justify-center rounded border border-primary/30 shadow-[0_0_8px_rgba(156,255,147,0.2)]">
+<span class="material-symbols-outlined text-primary text-xl" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<span class="text-[9px] font-headline text-on-surface-variant">OF</span>
+</div>
+<div class="h-px w-4 bg-outline-variant/30 mt-[-18px]"></div>
+<div class="flex flex-col items-center gap-2">
+<div class="w-12 h-14 bg-surface-container flex items-center justify-center rounded border border-primary/30 shadow-[0_0_8px_rgba(156,255,147,0.2)]">
+<span class="material-symbols-outlined text-primary text-xl" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<span class="text-[9px] font-headline text-on-surface-variant">ML</span>
+</div>
+<div class="h-px w-4 bg-outline-variant/30 mt-[-18px]"></div>
+<div class="flex flex-col items-center gap-2">
+<div class="w-12 h-14 bg-surface-container flex items-center justify-center rounded border border-tertiary/30">
+<span class="material-symbols-outlined text-tertiary text-xl">cancel</span>
+</div>
+<span class="text-[9px] font-headline text-tertiary">CLAUDE</span>
+</div>
+<div class="h-px w-4 bg-outline-variant/30 mt-[-18px]"></div>
+<div class="flex flex-col items-center gap-2">
+<div class="w-12 h-14 bg-surface-container-low flex items-center justify-center rounded border border-outline-variant/30 opacity-50">
+<span class="material-symbols-outlined text-outline text-xl">block</span>
+</div>
+<span class="text-[9px] font-headline text-on-surface-variant/50">RISK</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Synthesis & Decision -->
+<section class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+<!-- Reasoning Panel -->
+<div class="bg-surface-container p-5 rounded-xl border-l-2 border-secondary">
+<div class="flex items-center gap-2 mb-4">
+<span class="material-symbols-outlined text-secondary text-sm">psychology</span>
+<h3 class="font-headline text-xs font-semibold tracking-wider text-on-surface uppercase">Synthesis Engine</h3>
+</div>
+<div class="space-y-4">
+<div>
+<p class="text-[11px] text-on-surface-variant leading-relaxed">
+<span class="text-primary font-medium">CONFLUENCE:</span> Liquidity sweep into H1 Demand zone completed at 64,050. Orderflow shows aggressive absorption of sell-side pressure.
+                        </p>
+</div>
+<div class="p-3 bg-surface-container-lowest rounded border border-outline-variant/10">
+<p class="text-[11px] text-tertiary leading-relaxed italic">
+<span class="font-bold">CLAUDE VETO:</span> High macro volatility scheduled in 15m. Orderflow volume is thinning; potential for fake-out before actual expansion. Safety score insufficient.
+                        </p>
+</div>
+</div>
+</div>
+<!-- Decision Badge -->
+<div class="bg-surface-container p-5 rounded-xl flex flex-col items-center justify-center relative overflow-hidden">
+<!-- Background Ambient Glow -->
+<div class="absolute inset-0 bg-tertiary/5 shimmer"></div>
+<span class="text-[10px] font-headline tracking-[0.4em] text-on-surface-variant uppercase mb-2 z-10">Status</span>
+<div class="text-4xl font-headline font-black text-tertiary tracking-tighter mb-1 z-10">VETOED</div>
+<div class="flex items-baseline gap-1 z-10">
+<span class="text-[10px] font-headline text-on-surface-variant">CONFIDENCE:</span>
+<span class="text-lg font-headline font-bold text-on-surface">62%</span>
+</div>
+<button class="mt-4 w-full py-2.5 bg-surface-container-highest border border-outline-variant/30 rounded text-[11px] font-headline tracking-widest text-on-surface-variant hover:text-on-surface transition-colors z-10">
+                    OVERRIDE SYSTEM
+                </button>
+</div>
+</section>
+</main>
+<!-- Navigation Shell Logic - Active Navigation: Intelligence -->
+<nav class="bg-[#0e0e0f]/60 backdrop-blur-2xl fixed bottom-0 w-full z-50 pb-safe shadow-[0_-4px_20px_rgba(0,0,0,0.5)] flex justify-around items-center h-20 w-full px-4">
+<!-- Intelligence (Active) -->
+<a class="flex flex-col items-center justify-center text-[#9cff93] drop-shadow-[0_0_8px_rgba(156,255,147,0.4)]" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">insights</span>
+<span class="font-['Inter'] font-medium text-[10px] tracking-tight">Intelligence</span>
+</a>
+<!-- Execute -->
+<a class="flex flex-col items-center justify-center text-[#2c2c2d] hover:text-[#669dff] transition-colors" href="#">
+<span class="material-symbols-outlined">account_balance_wallet</span>
+<span class="font-['Inter'] font-medium text-[10px] tracking-tight">Execute</span>
+</a>
+<!-- Pipeline -->
+<a class="flex flex-col items-center justify-center text-[#2c2c2d] hover:text-[#669dff] transition-colors" href="#">
+<span class="material-symbols-outlined">account_tree</span>
+<span class="font-['Inter'] font-medium text-[10px] tracking-tight">Pipeline</span>
+</a>
+<!-- Archive -->
+<a class="flex flex-col items-center justify-center text-[#2c2c2d] hover:text-[#669dff] transition-colors" href="#">
+<span class="material-symbols-outlined">history</span>
+<span class="font-['Inter'] font-medium text-[10px] tracking-tight">Archive</span>
+</a>
+</nav>
+</body></html>

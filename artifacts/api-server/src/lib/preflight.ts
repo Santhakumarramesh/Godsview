@@ -109,10 +109,8 @@ export async function runPreflight(): Promise<PreflightResult> {
   }
 
   // 4. System mode validation
-  // Valid modes: demo, paper, live_disabled (safe default), live_enabled.
-  // live_disabled is an acceptable safe mode — live trading simply off.
   const mode = runtimeConfig.systemMode;
-  const modeOk = ["demo", "paper", "live_disabled", "live_enabled"].includes(mode);
+  const modeOk = ["demo", "paper", "live_enabled"].includes(mode);
   checks.push({
     name: "system_mode",
     passed: modeOk,

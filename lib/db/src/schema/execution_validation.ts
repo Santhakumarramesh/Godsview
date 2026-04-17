@@ -9,7 +9,6 @@ import {
   index,
   check,
 } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
 
 export const executionValidations = pgTable(
   "execution_validations",
@@ -34,20 +33,25 @@ export const executionValidations = pgTable(
     metadata: jsonb("metadata").default({}).notNull(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
-  (table) => [
-    index("idx_execution_validations_strategy_id").on(table.strategyId),
-    index("idx_execution_validations_symbol").on(table.symbol),
-    index("idx_execution_validations_validated_at").on(table.validatedAt),
-    index("idx_execution_validations_strategy_symbol").on(
+  (table) => ({
+    strategyIdIdx: index("idx_execution_validations_strategy_id").on(
+      table.strategyId
+    ),
+    symbolIdx: index("idx_execution_validations_symbol").on(table.symbol),
+    validatedAtIdx: index("idx_execution_validations_validated_at").on(
+      table.validatedAt
+    ),
+    strategySymbolIdx: index("idx_execution_validations_strategy_symbol").on(
       table.strategyId,
       table.symbol
     ),
-    check("side_check", sql`side IN ('buy', 'sell')`),
-    check(
-      "fill_quality_score_check",
-      sql`fill_quality_score >= 0 AND fill_quality_score <= 1`
+    sideCheck: check("side_check", () =>
+      table.side.inList(["buy", "sell"])
     ),
-  ]
+    scoreCheck: check("score_check", () =>
+      table.fillQualityScore.gte(0).and(table.fillQualityScore.lte(1))
+    ),
+  })
 );
 
 export const slippageDistributions = pgTable(
@@ -68,22 +72,23 @@ export const slippageDistributions = pgTable(
     computedAt: timestamp("computed_at").notNull().defaultNow(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
-  (table) => [
-    index("idx_slippage_distributions_strategy_id").on(table.strategyId),
-    index("idx_slippage_distributions_symbol").on(table.symbol),
-    index("idx_slippage_distributions_period").on(
+  (table) => ({
+    strategyIdIdx: index("idx_slippage_distributions_strategy_id").on(
+      table.strategyId
+    ),
+    symbolIdx: index("idx_slippage_distributions_symbol").on(table.symbol),
+    periodIdx: index("idx_slippage_distributions_period").on(
       table.periodStart,
       table.periodEnd
     ),
-    index("idx_slippage_distributions_strategy_symbol").on(
+    strategySymbolIdx: index("idx_slippage_distributions_strategy_symbol").on(
       table.strategyId,
       table.symbol
     ),
-    check(
-      "favorable_pct_check",
-      sql`favorable_pct >= 0 AND favorable_pct <= 100`
+    favorablePctCheck: check("favorable_pct_check", () =>
+      table.favorablePct.gte(0).and(table.favorablePct.lte(100))
     ),
-  ]
+  })
 );
 
 export const executionDriftEvents = pgTable(
@@ -100,24 +105,35 @@ export const executionDriftEvents = pgTable(
     detectedAt: timestamp("detected_at").notNull().defaultNow(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
-  (table) => [
-    index("idx_execution_drift_events_strategy_id").on(table.strategyId),
-    index("idx_execution_drift_events_drift_type").on(table.driftType),
-    index("idx_execution_drift_events_severity").on(table.severity),
-    index("idx_execution_drift_events_detected_at").on(table.detectedAt),
-    index("idx_execution_drift_events_strategy_detected").on(
+  (table) => ({
+    strategyIdIdx: index("idx_execution_drift_events_strategy_id").on(
+      table.strategyId
+    ),
+    driftTypeIdx: index("idx_execution_drift_events_drift_type").on(
+      table.driftType
+    ),
+    severityIdx: index("idx_execution_drift_events_severity").on(
+      table.severity
+    ),
+    detectedAtIdx: index("idx_execution_drift_events_detected_at").on(
+      table.detectedAt
+    ),
+    strategyDetectedIdx: index("idx_execution_drift_events_strategy_detected").on(
       table.strategyId,
       table.detectedAt
     ),
-    check(
-      "drift_type_check",
-      sql`drift_type IN ('slippage_spike', 'latency_spike', 'fill_rate_drop', 'venue_degradation')`
+    driftTypeCheck: check("drift_type_check", () =>
+      table.driftType.inList([
+        "slippage_spike",
+        "latency_spike",
+        "fill_rate_drop",
+        "venue_degradation",
+      ])
     ),
-    check(
-      "severity_check",
-      sql`severity IN ('info', 'warning', 'critical')`
+    severityCheck: check("severity_check", () =>
+      table.severity.inList(["info", "warning", "critical"])
     ),
-  ]
+  })
 );
 
 export type ExecutionValidation = typeof executionValidations.$inferSelect;

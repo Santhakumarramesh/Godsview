@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Risk Command Center v8</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-surface": "#e5e2e3",
+              "on-primary-container": "#002a51",
+              "error-container": "#93000a",
+              "surface-container-highest": "#353436",
+              "inverse-on-surface": "#313031",
+              "secondary-container": "#334d58",
+              "primary-container": "#4d93e5",
+              "surface": "#131314",
+              "surface-bright": "#3a393a",
+              "tertiary": "#61de8a",
+              "on-secondary": "#19343e",
+              "on-tertiary-container": "#003115",
+              "surface-container-high": "#2a2a2b",
+              "primary-fixed-dim": "#a4c9ff",
+              "on-tertiary-fixed": "#00210c",
+              "surface-dim": "#131314",
+              "surface-container-low": "#1c1b1c",
+              "on-surface-variant": "#c1c7d3",
+              "primary-fixed": "#d4e3ff",
+              "secondary-fixed": "#cbe7f5",
+              "on-tertiary": "#00391a",
+              "on-secondary-fixed-variant": "#304a55",
+              "on-error": "#690005",
+              "background": "#131314",
+              "surface-tint": "#a4c9ff",
+              "on-error-container": "#ffdad6",
+              "inverse-surface": "#e5e2e3",
+              "tertiary-fixed-dim": "#61de8a",
+              "on-secondary-container": "#a1bdca",
+              "tertiary-fixed": "#7efba4",
+              "outline-variant": "#414751",
+              "outline": "#8b919d",
+              "secondary": "#afcbd8",
+              "on-tertiary-fixed-variant": "#005228",
+              "surface-container-lowest": "#0e0e0f",
+              "error": "#ffb4ab",
+              "on-primary-fixed-variant": "#004883",
+              "on-secondary-fixed": "#021f29",
+              "surface-container": "#201f20",
+              "on-background": "#e5e2e3",
+              "inverse-primary": "#0060ac",
+              "secondary-fixed-dim": "#afcbd8",
+              "on-primary-fixed": "#001c39",
+              "surface-variant": "#353436",
+              "primary": "#a4c9ff",
+              "tertiary-container": "#18a659",
+              "on-primary": "#00315d",
+              "warning": "#FFB347",
+              "warning-container": "#4D3B18"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .tabular { font-feature-settings: "tnum" 1; }
+        .glass-panel {
+            background: rgba(28, 27, 28, 0.7);
+            backdrop-filter: blur(20px);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface font-body selection:bg-primary/30">
+<!-- Top Navigation Anchor -->
+<header class="bg-[#131314] text-[#A4C9FF] font-manrope tracking-[0.05em] uppercase font-bold text-sm docked full-width top-0 bg-[#1C1B1C] shadow-none border-none z-[100] sticky">
+<div class="flex justify-between items-center w-full px-6 py-4">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-[#A4C9FF]" data-icon="memory">memory</span>
+<span class="text-[#A4C9FF] font-manrope font-extrabold tracking-widest text-lg">NEURAL CORE STATUS</span>
+</div>
+<!-- Protocol Freeze: Central High-Stakes Action -->
+<button class="bg-gradient-to-r from-error to-error-container text-on-error font-headline font-extrabold px-8 py-2 rounded-sm flex items-center gap-3 hover:opacity-90 transition-all active:scale-95 shadow-[0_0_20px_rgba(255,180,171,0.2)]">
+<span class="material-symbols-outlined" data-icon="bolt" style="font-variation-settings: 'FILL' 1;">bolt</span>
+                PROTOCOL FREEZE
+            </button>
+<div class="hidden md:flex items-center gap-6">
+<div class="flex flex-col items-end">
+<span class="text-[10px] text-[#909093] leading-none">SYSTEM READINESS</span>
+<span class="text-[#61DE8A] font-bold tabular">0.8ms LATENCY</span>
+</div>
+<div class="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center border border-outline-variant/20">
+<span class="material-symbols-outlined text-[#A4C9FF]" data-icon="account_circle">account_circle</span>
+</div>
+</div>
+</div>
+</header>
+<main class="max-w-[1600px] mx-auto p-4 md:p-8 space-y-8 pb-32">
+<!-- Top Priority Row: System Readiness & Countdown -->
+<section class="grid grid-cols-1 md:grid-cols-12 gap-6">
+<div class="md:col-span-8 bg-surface-container-low rounded-sm p-6 flex flex-col md:flex-row justify-between items-center gap-8 border-l-2 border-warning shadow-lg">
+<div class="flex items-center gap-6">
+<div class="p-4 bg-warning-container/30 rounded-full border border-warning/20">
+<span class="material-symbols-outlined text-warning text-4xl" data-icon="lock_clock">lock_clock</span>
+</div>
+<div>
+<h2 class="font-headline text-warning font-bold text-xl uppercase tracking-wider">News Lockout Active</h2>
+<p class="text-on-surface-variant text-sm font-label">FOMC Statement Release - High Volatility Expected</p>
+</div>
+</div>
+<div class="text-center md:text-right">
+<div class="text-4xl md:text-6xl font-headline font-black tracking-tighter tabular text-warning">04:12:09</div>
+<div class="text-[10px] text-warning/60 uppercase font-bold tracking-widest mt-1">Countdown to Auto-Resume</div>
+</div>
+</div>
+<div class="md:col-span-4 bg-surface-container-high rounded-sm p-6 flex flex-col justify-center items-center border border-outline-variant/10">
+<div class="w-full flex justify-between items-center mb-4">
+<span class="font-headline font-bold text-xs tracking-widest text-[#909093]">CONNECTIVITY</span>
+<span class="flex items-center gap-1 text-[#61DE8A] text-[10px] font-bold">
+<span class="w-1.5 h-1.5 rounded-full bg-[#61DE8A]"></span> NOMINAL
+                    </span>
+</div>
+<div class="flex gap-2 w-full h-12 items-end">
+<div class="flex-1 bg-tertiary/20 h-4"></div>
+<div class="flex-1 bg-tertiary/40 h-6"></div>
+<div class="flex-1 bg-tertiary/20 h-5"></div>
+<div class="flex-1 bg-tertiary/60 h-8"></div>
+<div class="flex-1 bg-tertiary/30 h-4"></div>
+<div class="flex-1 bg-tertiary/80 h-10"></div>
+<div class="flex-1 bg-tertiary/40 h-7"></div>
+<div class="flex-1 bg-tertiary/90 h-12"></div>
+</div>
+<div class="w-full mt-2 text-[10px] font-label text-[#909093] flex justify-between">
+<span>-60s</span>
+<span>PACKET CONSENSUS: 99.99%</span>
+<span>LIVE</span>
+</div>
+</div>
+</section>
+<!-- Bento Grid Main Dashboard -->
+<section class="grid grid-cols-1 md:grid-cols-12 gap-6 auto-rows-fr">
+<!-- Daily Risk Status: Radial Section -->
+<div class="md:col-span-4 bg-surface-container-low rounded-sm p-8 flex flex-col justify-between border border-outline-variant/5">
+<h3 class="font-headline text-[#909093] font-bold text-xs uppercase tracking-[0.2em] mb-8">Daily Limits</h3>
+<div class="flex flex-col items-center gap-12">
+<div class="relative w-48 h-48 flex items-center justify-center">
+<svg class="w-full h-full -rotate-90">
+<circle class="text-surface-container-highest" cx="96" cy="96" fill="transparent" r="88" stroke="currentColor" stroke-width="8"></circle>
+<circle class="text-primary" cx="96" cy="96" fill="transparent" r="88" stroke="currentColor" stroke-dasharray="553" stroke-dashoffset="415" stroke-width="8"></circle>
+</svg>
+<div class="absolute inset-0 flex flex-col items-center justify-center">
+<span class="text-3xl font-headline font-black tabular">$12,402</span>
+<span class="text-[10px] text-[#909093] font-bold tracking-widest mt-1">24.8% USED</span>
+</div>
+</div>
+<div class="w-full space-y-6">
+<div class="flex flex-col gap-2">
+<div class="flex justify-between text-xs font-bold font-label">
+<span class="text-[#909093]">TRADE COUNT</span>
+<span class="text-on-surface">4 / 10</span>
+</div>
+<div class="h-1 bg-surface-container-highest w-full overflow-hidden">
+<div class="h-full bg-secondary w-[40%]"></div>
+</div>
+</div>
+<div class="flex flex-col gap-2">
+<div class="flex justify-between text-xs font-bold font-label">
+<span class="text-[#909093]">DRAWDOWN SOFT-CAP</span>
+<span class="text-on-surface">$5,200 LEFT</span>
+</div>
+<div class="h-1 bg-surface-container-highest w-full overflow-hidden">
+<div class="h-full bg-warning w-[85%]"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Net Exposure & Gating Matrix -->
+<div class="md:col-span-8 flex flex-col gap-6">
+<!-- Exposure Cards -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<div class="bg-surface-container-low p-6 border-l-4 border-primary/40">
+<div class="flex justify-between items-start mb-4">
+<div>
+<p class="text-[10px] font-bold text-[#909093] tracking-widest mb-1">DELTA EXPOSURE</p>
+<p class="text-3xl font-headline font-black tabular">+1,240.40</p>
+</div>
+<span class="material-symbols-outlined text-primary" data-icon="monitoring">monitoring</span>
+</div>
+<div class="h-10 w-full opacity-40">
+<svg class="w-full h-full" preserveaspectratio="none" viewbox="0 0 100 20">
+<path class="text-primary" d="M0 20 L10 15 L20 18 L30 10 L40 12 L50 5 L60 8 L70 2 L80 10 L90 5 L100 15" fill="none" stroke="currentColor" stroke-width="1.5"></path>
+</svg>
+</div>
+</div>
+<div class="bg-surface-container-low p-6 border-l-4 border-tertiary/40">
+<div class="flex justify-between items-start mb-4">
+<div>
+<p class="text-[10px] font-bold text-[#909093] tracking-widest mb-1">GAMMA PROFILE</p>
+<p class="text-3xl font-headline font-black tabular">-452.12</p>
+</div>
+<span class="material-symbols-outlined text-tertiary" data-icon="waves">waves</span>
+</div>
+<div class="h-10 w-full opacity-40">
+<svg class="w-full h-full" preserveaspectratio="none" viewbox="0 0 100 20">
+<path class="text-tertiary" d="M0 5 L10 8 L20 4 L30 15 L40 10 L50 18 L60 12 L70 15 L80 8 L90 12 L100 5" fill="none" stroke="currentColor" stroke-width="1.5"></path>
+</svg>
+</div>
+</div>
+</div>
+<!-- Regime Gating Matrix -->
+<div class="bg-surface-container-low flex-1 p-6">
+<h3 class="font-headline text-[#909093] font-bold text-xs uppercase tracking-[0.2em] mb-6">Asset Regime Gating Matrix</h3>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="text-[10px] font-bold text-[#909093] uppercase tracking-widest border-b border-outline-variant/10">
+<th class="pb-4 px-2">ASSET CLASS</th>
+<th class="pb-4 px-2">VOL REGIME</th>
+<th class="pb-4 px-2">STATE</th>
+<th class="pb-4 px-2">MAX POSITION</th>
+<th class="pb-4 px-2">THRESHOLD</th>
+</tr>
+</thead>
+<tbody class="text-sm font-label">
+<tr class="border-b border-outline-variant/5">
+<td class="py-4 px-2 font-bold">ES! (E-Mini S&amp;P 500)</td>
+<td class="py-4 px-2"><span class="bg-surface-container-high px-2 py-0.5 rounded text-[10px] text-tertiary font-bold">COMPRESSED</span></td>
+<td class="py-4 px-2">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+<span class="text-xs font-bold text-tertiary">ACTIVE</span>
+</div>
+</td>
+<td class="py-4 px-2 tabular">500 Contracts</td>
+<td class="py-4 px-2 tabular text-[#909093]">12.4 ATR</td>
+</tr>
+<tr class="border-b border-outline-variant/5">
+<td class="py-4 px-2 font-bold text-on-surface">NQ! (Nasdaq 100)</td>
+<td class="py-4 px-2"><span class="bg-surface-container-high px-2 py-0.5 rounded text-[10px] text-warning font-bold">EXPANDING</span></td>
+<td class="py-4 px-2">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-warning"></span>
+<span class="text-xs font-bold text-warning">SCALED</span>
+</div>
+</td>
+<td class="py-4 px-2 tabular">120 Contracts</td>
+<td class="py-4 px-2 tabular text-[#909093]">28.1 ATR</td>
+</tr>
+<tr>
+<td class="py-4 px-2 font-bold text-on-surface">RTY! (Russell 2000)</td>
+<td class="py-4 px-2"><span class="bg-surface-container-high px-2 py-0.5 rounded text-[10px] text-error font-bold">TURBULENT</span></td>
+<td class="py-4 px-2">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-error"></span>
+<span class="text-xs font-bold text-error">GATED</span>
+</div>
+</td>
+<td class="py-4 px-2 tabular">0 Contracts</td>
+<td class="py-4 px-2 tabular text-[#909093]">44.0 ATR</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</section>
+<!-- Signal Rejection & Suppression -->
+<section class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<div class="md:col-span-1 bg-surface-container-low p-6 flex flex-col justify-between">
+<div>
+<h3 class="font-headline text-[#909093] font-bold text-xs uppercase tracking-[0.2em] mb-6">Signal Suppressions</h3>
+<div class="space-y-6">
+<div class="flex justify-between items-end">
+<span class="text-sm font-bold">News Lockout</span>
+<span class="text-2xl font-black tabular">45%</span>
+</div>
+<div class="h-2 bg-surface-container-highest w-full">
+<div class="h-full bg-warning w-[45%]"></div>
+</div>
+<div class="flex justify-between items-end">
+<span class="text-sm font-bold">Regime Variance</span>
+<span class="text-2xl font-black tabular">33%</span>
+</div>
+<div class="h-2 bg-surface-container-highest w-full">
+<div class="h-full bg-error w-[33%]"></div>
+</div>
+<div class="flex justify-between items-end">
+<span class="text-sm font-bold">Spread Threshold</span>
+<span class="text-2xl font-black tabular">22%</span>
+</div>
+<div class="h-2 bg-surface-container-highest w-full">
+<div class="h-full bg-primary w-[22%]"></div>
+</div>
+</div>
+</div>
+<div class="mt-8 pt-6 border-t border-outline-variant/10">
+<p class="text-[10px] text-[#909093] font-bold uppercase tracking-widest">Total Trade Rejections (1H)</p>
+<p class="text-xl font-headline font-black text-on-surface tabular">1,402 Sigs</p>
+</div>
+</div>
+<!-- Detailed Analysis Panel -->
+<div class="md:col-span-2 bg-surface-container-low overflow-hidden relative group">
+<div class="absolute inset-0 z-0 opacity-20 pointer-events-none">
+<img class="w-full h-full object-cover grayscale" data-alt="high density data visualization dashboard with dark themes and glowing orange and blue geometric patterns" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCrda62XJMNBjlnPV-bzvSA0xIGqWsHeTLqdrAYApjpOD7DFQyLX8JKHi7ReTrOx7fALuqPtTvWtenAza5hZ85Z-NLW1UNL94gYAcla1i63aC8DAxgB5C9bBuWDqbW8ZmYSkHbjyom8LSVxuq3YkOimQBIP0OI2bzX862A8eBPb1ARpYr5GSDW-S7HCd0gPYZ610plhbQjZdX_XzkEuw1tIUvQe_Oidy5pMtnBlJuK2HM_FO7tj23o-Bqb5siqCKt4hxhUUtGaByRE"/>
+</div>
+<div class="relative z-10 p-8 flex flex-col h-full bg-gradient-to-t from-surface-container-low via-surface-container-low/90 to-transparent">
+<div class="flex justify-between items-start mb-12">
+<div>
+<h3 class="font-headline text-[#A4C9FF] font-bold text-xl mb-2">Supression Archetype Analysis</h3>
+<p class="text-on-surface-variant text-sm max-w-md">Multi-agent filters are currently prioritizing capital preservation due to high kurtosis in current price action.</p>
+</div>
+<button class="bg-surface-container-high p-3 rounded-sm border border-outline-variant/20 hover:bg-surface-container-highest transition-colors">
+<span class="material-symbols-outlined text-on-surface" data-icon="open_in_new">open_in_new</span>
+</button>
+</div>
+<div class="mt-auto grid grid-cols-2 md:grid-cols-4 gap-8">
+<div>
+<span class="block text-[10px] font-bold text-[#909093] tracking-widest mb-1 uppercase">Avg. Reject Size</span>
+<span class="text-xl font-headline font-black tabular">2.4m USD</span>
+</div>
+<div>
+<span class="block text-[10px] font-bold text-[#909093] tracking-widest mb-1 uppercase">Filter Latency</span>
+<span class="text-xl font-headline font-black tabular">0.02ms</span>
+</div>
+<div>
+<span class="block text-[10px] font-bold text-[#909093] tracking-widest mb-1 uppercase">Gating Impact</span>
+<span class="text-xl font-headline font-black tabular">-12.4% Vol</span>
+</div>
+<div>
+<span class="block text-[10px] font-bold text-[#909093] tracking-widest mb-1 uppercase">Node Consens</span>
+<span class="text-xl font-headline font-black tabular">9/9</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Bottom Navigation Shell -->
+<nav class="bg-[#1C1B1C] fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-6 pt-3 border-t border-[#414751]/15 shadow-[0px_-12px_32px_rgba(255,255,255,0.06)] md:hidden">
+<div class="flex flex-col items-center justify-center text-[#909093] px-3 py-1.5 hover:text-[#A4C9FF] transition-colors scale-95 duration-200 ease-out">
+<span class="material-symbols-outlined mb-1" data-icon="psychology">psychology</span>
+<span class="font-inter text-[10px] font-medium tracking-wider uppercase">Brain</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#909093] px-3 py-1.5 hover:text-[#A4C9FF] transition-colors scale-95 duration-200 ease-out">
+<span class="material-symbols-outlined mb-1" data-icon="dna">genetics</span>
+<span class="font-inter text-[10px] font-medium tracking-wider uppercase">DNA</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#909093] px-3 py-1.5 hover:text-[#A4C9FF] transition-colors scale-95 duration-200 ease-out">
+<span class="material-symbols-outlined mb-1" data-icon="query_stats">query_stats</span>
+<span class="font-inter text-[10px] font-medium tracking-wider uppercase">Reasoning</span>
+</div>
+<div class="flex flex-col items-center justify-center bg-gradient-to-br from-[#A4C9FF] to-[#4D93E2] text-[#131314] rounded-sm px-3 py-1.5 scale-95 duration-200 ease-out">
+<span class="material-symbols-outlined mb-1" data-icon="hub">hub</span>
+<span class="font-inter text-[10px] font-medium tracking-wider uppercase">Nodes</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#909093] px-3 py-1.5 hover:text-[#A4C9FF] transition-colors scale-95 duration-200 ease-out">
+<span class="material-symbols-outlined mb-1" data-icon="terminal">terminal</span>
+<span class="font-inter text-[10px] font-medium tracking-wider uppercase">Terminal</span>
+</div>
+</nav>
+</body></html>

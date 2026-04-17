@@ -14,11 +14,6 @@ import { alpacaAccountStream, wireAccountStreamToReconciler } from "./lib/alpaca
 import { startPaperValidationLoop, stopPaperValidationLoop } from "./lib/paper_validation_loop";
 import { validateOrExit } from "./lib/ops/startup_validator";
 import { initGracefulShutdown } from "./lib/ops/graceful_shutdown";
-// P0-1 / P1-8: runtimeConfig port + 10s Phase 103 reconciliation cron.
-import { runtimeConfig } from "./lib/runtime_config";
-import { createReconciliationService } from "./lib/phase103/broker_reality/reconciliation_service";
-import { getOrderLifecycle } from "./lib/phase103/broker_reality/order_lifecycle";
-import { logAuditEvent } from "./lib/audit_logger";
 
 // ── Validate environment before anything else ───────────────────
 validateEnv();
@@ -26,8 +21,19 @@ validateEnv();
 // ── Phase 6: Production startup validation ───────────────────
 try { validateOrExit(); } catch (e: any) { logger.warn({ err: e.message }, "Startup validator unavailable (non-fatal)"); }
 
-// P0-1: port now comes from runtimeConfig (default 3000 in non-production).
-const port = runtimeConfig.port;
+const rawPort = process.env["PORT"];
+
+if (!rawPort) {
+  throw new Error(
+    "PORT environment variable is required but was not provided.",
+  );
+}
+
+const port = Number(rawPort);
+
+if (Number.isNaN(port) || port <= 0) {
+  throw new Error(`Invalid PORT value: "${rawPort}"`);
+}
 
 const server = app.listen(port, (err) => {
   if (err) {
@@ -37,32 +43,8 @@ const server = app.listen(port, (err) => {
 
   logger.info({ port }, "Server listening");
 
-  // Phase 6: Enhanced graceful shutdown is registered at module level (line ~292)
-  // via setupGracefulShutdown(server) — no need to double-register here.
-
-  // Phase 95: Self-register the api-server's logical services into the
-  // service mesh registry so /api/mesh/services reports something useful
-  // out of the box. Each in-process subsystem becomes a registered instance
-  // tagged "in-process". External MCP servers can still register themselves
-  // via POST /api/mesh/services.
-  try {
-    const { serviceRegistry } = require("./lib/service_mesh");
-    const host = "127.0.0.1";
-    const baseUrl = `http://${host}:${port}`;
-    const subsystems = [
-      { serviceName: "api-server", tags: ["http", "primary"], version: "1.0.0" },
-      { serviceName: "tradingview-mcp-webhook", tags: ["webhook", "in-process"], version: "1.0.0" },
-      { serviceName: "engine-health", tags: ["health", "in-process"], version: "1.0.0" },
-      { serviceName: "self-heal", tags: ["diagnostics", "in-process"], version: "1.0.0" },
-      { serviceName: "service-mesh", tags: ["registry", "in-process"], version: "1.0.0" },
-    ];
-    for (const s of subsystems) {
-      serviceRegistry.register({ ...s, host, port });
-    }
-    logger.info({ count: subsystems.length, baseUrl }, "Service mesh seeded with in-process services");
-  } catch (e: any) {
-    logger.warn({ err: e.message }, "Service mesh seeding skipped (non-fatal)");
-  }
+  // Phase 6: Enhanced graceful shutdown with priority hooks
+  try { initGracefulShutdown(server); } catch (e: any) { logger.warn({ err: e.message }, "Enhanced graceful shutdown unavailable"); }
 
   // Phase 124: Attach WebSocket server for dual-transport real-time streaming
   try {
@@ -76,7 +58,7 @@ const server = app.listen(port, (err) => {
   // Run preflight checks (non-blocking — logs results)
   runPreflight()
     .then((result) => {
-      if (!result.passed) {
+      if (!!result.passed) {
         logger.warn({ checks: result.checks.filter(c => !c.passed) }, "Preflight checks had failures");
       }
     })
@@ -96,28 +78,6 @@ const server = app.listen(port, (err) => {
   // Start trading session
   const systemMode = process.env.GODSVIEW_SYSTEM_MODE || "paper";
   startSession(systemMode).catch((err) => logger.error({ err }, "Failed to start trading session"));
-
-  // P1-9: register Phase 103 RecallStore as strategy-core RecallProvider.
-  import("./lib/phase103/recall_engine/strategy_core_adapter")
-    .then(({ registerRecallAdapter }) => {
-      registerRecallAdapter();
-      logger.info("strategy-core RecallProvider registered → Phase 103 RecallStore");
-    })
-    .catch((err) => logger.warn({ err }, "Failed to register RecallProvider"));
-
-  // P2-13: Polygon L2 → OrderFlowL2Engine. No-op without POLYGON_API_KEY.
-  import("./lib/phase103/orderflow_l2/polygon_adapter")
-    .then(async ({ startPolygonL2 }) => {
-      const handle = await startPolygonL2();
-      if (handle.isRunning()) {
-        logger.info(
-          { symbols: handle.subscribedSymbols() },
-          "Polygon L2 streamer started → OrderFlowL2Engine",
-        );
-        onShutdown(async () => handle.stop());
-      }
-    })
-    .catch((err) => logger.warn({ err }, "Polygon L2 start failed"));
 
   // Train ML model from accuracy_results data (non-blocking)
   trainModel().catch((err) => logger.error({ err }, "ML model training failed"));
@@ -140,87 +100,6 @@ const server = app.listen(port, (err) => {
     wireAccountStreamToReconciler();
     alpacaAccountStream.start();
     logger.info("Alpaca account stream started (real-time trade_updates)");
-
-    // P1-8: 10s Phase 103 ReconciliationService cron — pulls Alpaca positions
-    // + orders, feeds the reconciler, emits critical drifts to audit.
-    // * lifecycle: shared OrderLifecycle singleton (submits routed through the
-    //   multi-agent pipeline land here).
-    // * internalPositions: brainPositions.getAll() normalised to InternalPosition
-    //   shape so drift is real-vs-tracked, not real-vs-empty.
-    // * expectedPnL: running unrealized R across brain-tracked positions (best
-    //   available proxy; ReconciliationService tolerates drift here).
-    const p103Lifecycle = getOrderLifecycle();
-    const phase103Reconciler = createReconciliationService(
-      p103Lifecycle,
-      () => {
-        try {
-          // Lazy require — brain_execution_bridge has side effects at module load.
-          const { brainPositions } = require("./lib/brain_execution_bridge.js");
-          return brainPositions.getAll().map((p: any) => ({
-            symbol: p.symbol,
-            qty: (p.direction === "short" ? -1 : 1) * Number(p.quantity ?? 0),
-            avg_price: Number(p.entryPrice ?? 0) || 0,
-          }));
-        } catch {
-          return [];
-        }
-      },
-      () => {
-        try {
-          const { brainPositions } = require("./lib/brain_execution_bridge.js");
-          return brainPositions
-            .getAll()
-            .reduce((s: number, p: any) => s + (Number(p.currentR ?? 0) || 0), 0);
-        } catch {
-          return 0;
-        }
-      },
-    );
-    const phase103Cron = setInterval(async () => {
-      try {
-        const { getPositions, getOrders } = await import("./lib/alpaca");
-        // getPositions() returns Promise<unknown> on the artifacts build; widen
-        // to any[] so .map() typechecks, and normalise null → [].
-        const [rawPositions, rawOrders] = await Promise.all([
-          getPositions().catch(() => [] as unknown) as Promise<unknown>,
-          getOrders("all", 100).catch(() => [] as any[]),
-        ]);
-        const positions: any[] = Array.isArray(rawPositions) ? rawPositions : [];
-        const orders: any[] = Array.isArray(rawOrders) ? rawOrders : [];
-        const snapshot = {
-          positions: positions.map((p: any) => ({
-            symbol: p.symbol,
-            qty: Number(p.qty ?? 0) || 0,
-            avg_price: Number(p.avg_entry_price ?? 0) || 0,
-            realized_pnl: Number(p.realized_pl ?? 0) || 0,
-            unrealized_pnl: Number(p.unrealized_pl ?? 0) || 0,
-          })),
-          orders: orders.map((o: any) => ({
-            client_order_id: o.client_order_id,
-            broker_order_id: o.id,
-            symbol: o.symbol,
-            qty: Number(o.qty ?? 0) || 0,
-            filled_qty: Number(o.filled_qty ?? 0) || 0,
-            avg_fill_price: Number(o.filled_avg_price ?? 0) || 0,
-            status: String(o.status ?? "unknown"),
-          })),
-          timestamp: Date.now(),
-        };
-        const report = phase103Reconciler.reconcile(snapshot as any);
-        if (report.critical_count > 0) {
-          await logAuditEvent({
-            event_type: "reconciliation_drift",
-            actor: "phase103_reconciler",
-            payload: report as unknown as Record<string, unknown>,
-          }).catch((e) => logger.debug({ err: e }, "Audit event recording failed"));
-          logger.warn({ report }, "Phase 103 reconciliation: critical drifts detected");
-        }
-      } catch (err) {
-        logger.warn({ err }, "Phase 103 reconciliation tick failed");
-      }
-    }, 10_000);
-    onShutdown(async () => clearInterval(phase103Cron));
-    logger.info("Phase 103 reconciliation cron started (10s interval)");
   } else {
     logger.warn("Alpaca not configured — fill reconciler disabled");
   }
@@ -272,7 +151,6 @@ const server = app.listen(port, (err) => {
           brainRulebook.start();
           logger.info({ symbols }, "Autonomous Brain auto-started");
         }
-
       } catch (err: any) {
         logger.warn({ err: err?.message }, "Brain auto-start failed — manual start required");
       }
@@ -280,24 +158,6 @@ const server = app.listen(port, (err) => {
   } else {
     logger.info("Brain auto-start disabled (set BRAIN_AUTOSTART=true to enable)");
   }
-
-  // ── Autonomy Supervisor Auto-Start (always-on monitoring) ──────────────────
-  // The supervisor monitors & auto-heals all brain services. It starts
-  // unconditionally — it's a watchdog that should always be active.
-  // Controlled by AUTONOMY_SUPERVISOR_AUTO_START env (defaults to true).
-  setTimeout(async () => {
-    try {
-      const { startAutonomySupervisor, shouldAutonomySupervisorAutoStart } = await import("./lib/autonomy_supervisor.js");
-      if (shouldAutonomySupervisorAutoStart()) {
-        const r = await startAutonomySupervisor({ runImmediate: true });
-        logger.info({ intervalMs: r.interval_ms }, "Autonomy supervisor auto-started");
-      } else {
-        logger.info("Autonomy supervisor auto-start disabled (AUTONOMY_SUPERVISOR_AUTO_START=false)");
-      }
-    } catch (e: any) {
-      logger.warn({ err: e?.message }, "Autonomy supervisor auto-start failed");
-    }
-  }, 10_000); // 10s delay — after brain attempt
 
   // Phase 15: paper validation loop (predicted vs realized in paper mode)
   if ((process.env.PAPER_VALIDATION_AUTO_START ?? "true") !== "false") {
@@ -389,26 +249,3 @@ onShutdown(async () => {
   logger.info("Draining database connection pool...");
   await closePool();
 });
-
-// ── Phase 123: Memory watchdog — log heap usage every 5 min ────────────────
-const MEMORY_LOG_INTERVAL_MS = 5 * 60 * 1000;
-const MEMORY_WARN_THRESHOLD_MB = 400;
-const memoryWatchdog = setInterval(() => {
-  const mem = process.memoryUsage();
-  const heapMB = Math.round(mem.heapUsed / 1024 / 1024);
-  const rssMB = Math.round(mem.rss / 1024 / 1024);
-  const externalMB = Math.round(mem.external / 1024 / 1024);
-
-  if (heapMB > MEMORY_WARN_THRESHOLD_MB) {
-    logger.warn({ heapMB, rssMB, externalMB }, "Memory watchdog: heap usage elevated");
-    // Hint GC if available (--expose-gc flag)
-    if (typeof globalThis.gc === "function") {
-      globalThis.gc();
-      const after = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
-      logger.info({ heapMB: after }, "Memory watchdog: GC invoked");
-    }
-  } else {
-    logger.debug({ heapMB, rssMB, externalMB }, "Memory watchdog: periodic check");
-  }
-}, MEMORY_LOG_INTERVAL_MS);
-onShutdown(async () => clearInterval(memoryWatchdog));

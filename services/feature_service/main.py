@@ -19,7 +19,6 @@ from services.shared.logging import configure_structlog, get_logger
 from services.shared.types import HealthResponse
 from services.feature_service.builder import build_features, build_feature_vector, FEATURE_NAMES
 from services.feature_service.signal_detector import detect_signal, batch_detect
-from services.feature_service.regime_service import router as regime_router
 
 log = get_logger(__name__)
 _STARTED_AT = 0.0
@@ -36,7 +35,6 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="GodsView v2 — Feature Service", version="2.0.0", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-app.include_router(regime_router)
 
 
 class SignalRequest(BaseModel):

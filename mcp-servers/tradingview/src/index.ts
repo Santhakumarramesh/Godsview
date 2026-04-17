@@ -105,58 +105,6 @@ const TOOLS: Tool[] = [
       required: ["symbol"],
     },
   },
-  {
-    name: "get_webhook_stats",
-    description: "Get TradingView webhook statistics (total received, deduplicated, errors, last signal time)",
-    inputSchema: { type: "object", properties: {} },
-  },
-  {
-    name: "get_webhook_history",
-    description: "Get recent signals received from TradingView webhooks",
-    inputSchema: {
-      type: "object",
-      properties: {
-        limit: { type: "number", description: "Number of signals to return (default 50, max 500)" },
-        symbol: { type: "string", description: "Filter by symbol (optional)" },
-      },
-    },
-  },
-  {
-    name: "get_annotations",
-    description: "Get pending chart annotations for a symbol (entry/exit lines, SL/TP, labels)",
-    inputSchema: {
-      type: "object",
-      properties: {
-        symbol: { type: "string", description: "Ticker symbol" },
-        timeframe: { type: "string", description: "Filter by timeframe (optional)" },
-      },
-      required: ["symbol"],
-    },
-  },
-  {
-    name: "push_annotation",
-    description: "Push a chart annotation to TradingView (entry/exit lines, structure markings, confidence labels)",
-    inputSchema: {
-      type: "object",
-      properties: {
-        symbol: { type: "string", description: "Ticker symbol" },
-        timeframe: { type: "string", description: "Chart timeframe" },
-        annotation_type: { type: "string", enum: ["signal", "structure"], description: "Type of annotation" },
-        entry_price: { type: "number", description: "Entry price (for signal type)" },
-        stop_loss: { type: "number", description: "Stop loss level (for signal type)" },
-        take_profit: { type: "number", description: "Take profit level (for signal type)" },
-        direction: { type: "string", enum: ["long", "short"], description: "Trade direction (for signal type)" },
-        confidence: { type: "number", description: "Confidence score 0-1 (for signal type)" },
-        structures: { type: "array", description: "Structure array [{type, price_high, price_low}] (for structure type)" },
-      },
-      required: ["symbol", "timeframe", "annotation_type"],
-    },
-  },
-  {
-    name: "get_annotation_stats",
-    description: "Get annotation statistics across all symbols",
-    inputSchema: { type: "object", properties: {} },
-  },
 ];
 
 /* ── API fetch helper ─────────────────────────────────── */
@@ -220,51 +168,6 @@ async function handleTool(name: string, args: Record<string, unknown>): Promise<
     }
     case "add_to_watchlist": {
       const data = await apiPost("/watchlist", { symbol: args.symbol });
-      return JSON.stringify(data, null, 2);
-    }
-    case "get_webhook_stats": {
-      const data = await apiGet("/tv-webhook/stats");
-      return JSON.stringify(data, null, 2);
-    }
-    case "get_webhook_history": {
-      const limit = args.limit ? `?limit=${args.limit}` : "";
-      const symbol = args.symbol ? `${limit ? "&" : "?"}symbol=${args.symbol}` : "";
-      const data = await apiGet(`/tv-webhook/history${limit}${symbol}`);
-      return JSON.stringify(data, null, 2);
-    }
-    case "get_annotations": {
-      const sym = args.symbol as string;
-      const tf = args.timeframe ? `?timeframe=${args.timeframe}` : "";
-      const data = await apiGet(`/tv-sync/${sym}/annotations${tf}`);
-      return JSON.stringify(data, null, 2);
-    }
-    case "push_annotation": {
-      const sym = args.symbol as string;
-      const type = args.annotation_type as string;
-      if (type === "signal") {
-        const body = {
-          timeframe: args.timeframe,
-          entry_price: args.entry_price,
-          stop_loss: args.stop_loss,
-          take_profit: args.take_profit,
-          direction: args.direction,
-          confidence: args.confidence,
-          setup_type: "mcp_annotation",
-        };
-        const data = await apiPost(`/tv-sync/${sym}/annotations/signal`, body);
-        return JSON.stringify(data, null, 2);
-      } else if (type === "structure") {
-        const body = {
-          timeframe: args.timeframe,
-          structures: args.structures,
-        };
-        const data = await apiPost(`/tv-sync/${sym}/annotations/structures`, body);
-        return JSON.stringify(data, null, 2);
-      }
-      throw new Error("Unknown annotation type");
-    }
-    case "get_annotation_stats": {
-      const data = await apiGet("/tv-sync/stats");
       return JSON.stringify(data, null, 2);
     }
     default:

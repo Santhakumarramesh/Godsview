@@ -78,7 +78,6 @@ let _optimizedStrategies: string[] = [];
 let _lastCandidates: StrategyCandidate[] = [];
 const _recentActions: StrategyEvolutionAction[] = [];
 const _lastOptimizedAtMs = new Map<string, number>();
-const MAX_OPTIMIZED_TRACKING = 200;
 
 function boolEnv(raw: string | undefined, fallback: boolean): boolean {
   if (raw === undefined) return fallback;
@@ -347,11 +346,6 @@ async function runCycleInternal(reason: string): Promise<void> {
       });
 
       _lastOptimizedAtMs.set(candidate.strategy_id, Date.now());
-      // Prevent unbounded map growth
-      if (_lastOptimizedAtMs.size > MAX_OPTIMIZED_TRACKING) {
-        const oldest = [..._lastOptimizedAtMs.entries()].sort((a, b) => a[1] - b[1])[0];
-        if (oldest) _lastOptimizedAtMs.delete(oldest[0]);
-      }
       _optimizedStrategies.push(candidate.strategy_id);
       optimizationsUsed += 1;
 

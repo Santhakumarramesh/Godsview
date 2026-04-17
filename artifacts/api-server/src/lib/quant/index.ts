@@ -73,8 +73,8 @@ export class QuantCore {
     }
 
     // Check 3: Some risk management required
-    const hasStopLoss = strategy.exitRules?.some((r: { type?: string }) => r.type === 'stop_loss');
-    const _hasProfitTarget = strategy.exitRules?.some((r: { type?: string }) => r.type === 'profit_target');
+    const hasStopLoss = strategy.exitRules?.some(r => r.type === 'stop_loss');
+    const hasProfitTarget = strategy.exitRules?.some(r => r.type === 'profit_target');
     const hasPositionSizing = strategy.positionSizingRules?.type && strategy.positionSizingRules.type !== 'fixed';
 
     if (!hasStopLoss) {
@@ -196,7 +196,7 @@ export class QuantCore {
       // Still do analysis but flag issues
       const postBacktest = backtestResults ? this.postBacktestAnalysis(strategy, backtestResults, marketData) : this.generateEmptyPostBacktest();
 
-      const recommendation = this.generateFinalRecommendation(strategy, preScreen, undefined, postBacktest);
+      const recommendation = this.generateFinalRecommendation(strategy, preScreen, null, postBacktest);
 
       return {
         preScreen,

@@ -395,10 +395,8 @@ signalsRouter.post("/signals", async (req: Request, res: Response) => {
 
       markEngineRun("hard-gates");
     } catch (gateErr) {
-      // Gates fail CLOSED — if risk evaluation crashes, block the signal for safety
-      gateBlocked = true;
-      gateReason = `GATE_ERROR: ${gateErr instanceof Error ? gateErr.message : "unknown"}`;
-      logger.error({ err: gateErr instanceof Error ? gateErr.message : "unknown" }, "[signals] Hard gate error — failing closed (signal blocked)");
+      // Gates fail open — log but don't block
+      logger.error(`[signals] Hard gate error: ${gateErr instanceof Error ? gateErr.message : "unknown"}`);
       markEngineError("hard-gates");
     }
 

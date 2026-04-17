@@ -2,7 +2,6 @@
  * Brain Nodes WebSocket & REST — Phase 142
  * Live subsystem status stream + REST snapshot for brain node visualization.
  * Aligned with brain-structure-v2 canonical naming.
- * Now uses actual service health checks instead of random status generation.
  */
 import { Router, type Request, type Response } from "express";
 
@@ -48,90 +47,52 @@ interface BrainNodeState {
   connections: string[]; // IDs of connected nodes
 }
 
-/* ── Health check service ────────────────────────────── */
-const healthCheckCache = new Map<string, { status: NodeStatus; latencyMs: number; errorRate: number; timestamp: number }>();
-
-async function checkServiceHealth(id: string, baseUrl?: string): Promise<{ status: NodeStatus; latencyMs: number; errorRate: number }> {
-  // Check cache first (max 30s TTL)
-  const cached = healthCheckCache.get(id);
-  if (cached && Date.now() - cached.timestamp < 30000) {
-    return { status: cached.status, latencyMs: cached.latencyMs, errorRate: cached.errorRate };
-  }
-
-  try {
-    // For now, assume all services are healthy (they would be pinged in production)
-    // In a real deployment, this would ping the actual service endpoints
-    const latencyMs = Math.floor(Math.random() * 30 + 5); // 5-35ms realistic latency
-    const status: NodeStatus = Math.random() > 0.98 ? "degraded" : "active"; // 2% chance of degradation
-    const errorRate = status === "active" ? +(Math.random() * 0.1).toFixed(2) : +(Math.random() * 1).toFixed(2);
-
-    const result = { status, latencyMs, errorRate };
-    healthCheckCache.set(id, { ...result, timestamp: Date.now() });
-    // Prevent unbounded cache growth (should be bounded by subsystem count, but be safe)
-    if (healthCheckCache.size > 100) {
-      const oldest = [...healthCheckCache.entries()].sort((a, b) => a[1].timestamp - b[1].timestamp)[0];
-      if (oldest) healthCheckCache.delete(oldest[0]);
-    }
-    return result;
-  } catch (err) {
-    return { status: "error", latencyMs: 0, errorRate: 100 };
-  }
-}
-
 /* ── Generate live state ──────────────────────────────── */
-async function generateNodeStates(): Promise<BrainNodeState[]> {
+function generateNodeStates(): BrainNodeState[] {
   const startTime = Date.now() - 3600_000 * (2 + Math.random() * 10);
-  const states: BrainNodeState[] = [];
-
-  for (const sub of BRAIN_SUBSYSTEMS) {
-    const health = await checkServiceHealth(sub.id);
-    states.push({
+  return BRAIN_SUBSYSTEMS.map((sub) => {
+    const r = Math.random();
+    const status: NodeStatus = r > 0.12 ? "active" : r > 0.05 ? "degraded" : r > 0.02 ? "idle" : "error";
+    return {
       ...sub,
-      status: health.status,
-      latencyMs: health.latencyMs,
+      status,
+      latencyMs: Math.floor(Math.random() * 80 + 2),
       throughputPerSec: Math.floor(Math.random() * 1200 + 10),
-      errorRate: health.errorRate,
+      errorRate: status === "error" ? +(Math.random() * 5).toFixed(2) : +(Math.random() * 0.3).toFixed(2),
       lastCycleAt: new Date().toISOString(),
       uptime: Math.floor((Date.now() - startTime) / 1000),
       connections: BRAIN_SUBSYSTEMS
         .filter((o) => o.id !== sub.id && Math.random() > 0.6)
         .slice(0, 3)
         .map((o) => o.id),
-    });
-  }
-
-  return states;
+    };
+  });
 }
 
 /* ── REST snapshot ────────────────────────────────────── */
-r.get("/brain/nodes", async (_req: Request, res: Response) => {
-  try {
-    const nodes = await generateNodeStates();
-    const active = nodes.filter((n) => n.status === "active").length;
-    const degraded = nodes.filter((n) => n.status === "degraded").length;
-    const errors = nodes.filter((n) => n.status === "error").length;
-    res.json({
-      nodes,
-      summary: {
-        total: nodes.length,
-        active, degraded, errors,
-        idle: nodes.length - active - degraded - errors,
-        avgLatencyMs: +(nodes.reduce((s, n) => s + n.latencyMs, 0) / nodes.length).toFixed(1),
-        totalThroughput: nodes.reduce((s, n) => s + n.throughputPerSec, 0),
-      },
-      hierarchy: {
-        core: nodes.filter((n) => n.category === "core").map((n) => n.id),
-        intelligence: nodes.filter((n) => n.category === "intelligence").map((n) => n.id),
-        execution: nodes.filter((n) => n.category === "execution").map((n) => n.id),
-        safety: nodes.filter((n) => n.category === "safety").map((n) => n.id),
-        analytics: nodes.filter((n) => n.category === "analytics").map((n) => n.id),
-      },
-      dataSource: "real_health_checks",
-      timestamp: new Date().toISOString(),
-    });
-  } catch (err) {
-    res.status(500).json({ error: "Failed to fetch brain node states" });
-  }
+r.get("/brain/nodes", (_req: Request, res: Response) => {
+  const nodes = generateNodeStates();
+  const active = nodes.filter((n) => n.status === "active").length;
+  const degraded = nodes.filter((n) => n.status === "degraded").length;
+  const errors = nodes.filter((n) => n.status === "error").length;
+  res.json({
+    nodes,
+    summary: {
+      total: nodes.length,
+      active, degraded, errors,
+      idle: nodes.length - active - degraded - errors,
+      avgLatencyMs: +(nodes.reduce((s, n) => s + n.latencyMs, 0) / nodes.length).toFixed(1),
+      totalThroughput: nodes.reduce((s, n) => s + n.throughputPerSec, 0),
+    },
+    hierarchy: {
+      core: nodes.filter((n) => n.category === "core").map((n) => n.id),
+      intelligence: nodes.filter((n) => n.category === "intelligence").map((n) => n.id),
+      execution: nodes.filter((n) => n.category === "execution").map((n) => n.id),
+      safety: nodes.filter((n) => n.category === "safety").map((n) => n.id),
+      analytics: nodes.filter((n) => n.category === "analytics").map((n) => n.id),
+    },
+    timestamp: new Date().toISOString(),
+  });
 });
 
 /* ── SSE stream for live brain node updates ───────────── */

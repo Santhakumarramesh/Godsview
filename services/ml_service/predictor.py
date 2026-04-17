@@ -80,7 +80,7 @@ def predict(signal: Signal, features: dict[str, float]) -> MLPrediction:
         fi = {feat_keys[i]: round(float(importances[i]) * features.get(feat_keys[i], 0.0), 5)
               for i in range(len(feat_keys))}
     except Exception:
-        log.debug("failed_to_compute_feature_importance", signal_id=signal.id, exc_info=True)
+        pass
 
     return MLPrediction(
         signal_id=signal.id,

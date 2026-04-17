@@ -2,15 +2,14 @@
 set -e
 
 # ─────────────────────────────────────────────────────────────────
-# GodsView — Production Entrypoint (Node.js API Server)
+# GodsView — Production Entrypoint
 # 1. Wait for PostgreSQL to accept connections
 # 2. Run database migrations (Drizzle)
-# 3. Ensure SQLite data directories exist
-# 4. Start the Node.js API server
+# 3. Start the API server
 # ─────────────────────────────────────────────────────────────────
 
 echo "╔══════════════════════════════════════════════╗"
-echo "║    GodsView API Server — Starting Production ║"
+echo "║        GodsView — Starting Production        ║"
 echo "╚══════════════════════════════════════════════╝"
 
 # ── Step 1: Wait for PostgreSQL ──────────────────────────────────
@@ -52,30 +51,6 @@ else
   echo "[entrypoint] No DATABASE_URL — using PGlite (in-process, dev mode)"
 fi
 
-# ── Step 3: Ensure SQLite data directories exist ──────────────────
-echo "[entrypoint] Setting up data directories for SQLite databases..."
-DATA_DIR="${GODSVIEW_DATA_DIR:-/app/data}"
-mkdir -p "$DATA_DIR" || true
-
-# Create governance directory for audit logs
-GOVERNANCE_DIR="$(dirname "${GOVERNANCE_DB_PATH:-$DATA_DIR/governance.db}")"
-mkdir -p "$GOVERNANCE_DIR" || true
-
-# Create screenshot directory
-mkdir -p "${SCREENSHOT_DIR:-$DATA_DIR/screenshots}" || true
-
-# Create experiment tracking directory
-EXPERIMENT_DIR="$(dirname "${EXPERIMENT_DB_PATH:-$DATA_DIR/experiments.db}")"
-mkdir -p "$EXPERIMENT_DIR" || true
-
-# Create promotion pipeline directory
-PROMOTION_DIR="$(dirname "${PROMOTION_DB_PATH:-$DATA_DIR/promotions.db}")"
-mkdir -p "$PROMOTION_DIR" || true
-
-echo "[entrypoint] Data directories ready"
-
-# ── Step 4: Start API server ─────────────────────────────────────
+# ── Step 3: Start API server ─────────────────────────────────────
 echo "[entrypoint] Starting GodsView API server on port ${PORT:-3001}..."
-echo "[entrypoint] Python v2 services enabled: ${PY_SERVICES_ENABLED:-true}"
-echo "[entrypoint] System mode: ${GODSVIEW_SYSTEM_MODE:-paper}"
-exec node --enable-source-maps --max-old-space-size=450 --expose-gc ./artifacts/api-server/dist/index.mjs
+exec node --enable-source-maps ./artifacts/api-server/dist/index.mjs

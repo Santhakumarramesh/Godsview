@@ -585,20 +585,17 @@ export class DeploySmokeTest {
     const name = path.split("/").pop() || path;
 
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
       const response = await fetch(`${this.baseUrl}${path}`, {
         method: "GET",
-        signal: controller.signal,
+        timeout: 10000,
       });
-      clearTimeout(timeoutId);
 
       const latency = performance.now() - startTime;
       const pass = response.ok || response.status === 200;
 
       let responseBody: Record<string, unknown> | undefined;
       try {
-        responseBody = (await response.json()) as Record<string, unknown>;
+        responseBody = await response.json();
       } catch {
         // Response was not JSON, which is OK
       }

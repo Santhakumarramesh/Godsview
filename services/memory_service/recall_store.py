@@ -101,7 +101,6 @@ class LanceRecallStore:
         query_vector: list[float],
         limit: int = 10,
         symbol: str | None = None,
-        prefer_wins: bool = True,
     ) -> list[dict[str, Any]]:
         if not self._ready or self._tbl is None:
             return []
@@ -109,22 +108,13 @@ class LanceRecallStore:
             q = self._tbl.search(
                 _pad_vector(query_vector, _EMB_DIM),
                 vector_column_name="vector",
-            ).limit(limit * 2)  # Fetch more to apply outcome weighting
+            ).limit(limit)
 
             if symbol:
                 q = q.where(f"symbol = '{symbol}'")
 
             results = await q.to_arrow()
-            pylist = results.to_pylist()
-
-            # Weight results by outcome if prefer_wins
-            if prefer_wins:
-                pylist.sort(key=lambda x: (
-                    1 if x.get("outcome") == "win" else (-1 if x.get("outcome") == "loss" else 0),
-                    x.get("_distance", 0) if "_distance" in x else 0,
-                ), reverse=True)
-
-            return pylist[:limit]
+            return results.to_pylist()
         except Exception as exc:
             log.error("recall_search_failed", err=str(exc))
             return []
@@ -153,52 +143,6 @@ class LanceRecallStore:
             return await self._tbl.count_rows()
         except Exception:
             return 0
-
-    async def get_setup_statistics(
-        self,
-        setup_type: str,
-        symbol: str | None = None,
-    ) -> dict[str, Any]:
-        """Get historical statistics for a specific setup type and current regime."""
-        if not self._ready or self._tbl is None:
-            return {}
-        try:
-            query = f"SELECT outcome, pnl_pct FROM recall WHERE setup_type = '{setup_type}'"
-            if symbol:
-                query += f" AND symbol = '{symbol}'"
-
-            results = await self._tbl.query().where(f"setup_type = '{setup_type}'")
-            if symbol:
-                results = results.where(f"symbol = '{symbol}'")
-
-            arrow_results = await results.limit(1000).to_arrow()
-            pylist = arrow_results.to_pylist()
-
-            wins = sum(1 for r in pylist if r.get("outcome") == "win")
-            losses = sum(1 for r in pylist if r.get("outcome") == "loss")
-            total = len(pylist)
-
-            avg_win_pnl = 0.0
-            avg_loss_pnl = 0.0
-            if wins > 0:
-                avg_win_pnl = sum(r["pnl_pct"] for r in pylist if r.get("outcome") == "win") / wins
-            if losses > 0:
-                avg_loss_pnl = sum(r["pnl_pct"] for r in pylist if r.get("outcome") == "loss") / losses
-
-            return {
-                "setup_type": setup_type,
-                "symbol": symbol or "all",
-                "total_trades": total,
-                "wins": wins,
-                "losses": losses,
-                "win_rate": round(wins / total, 3) if total > 0 else 0.0,
-                "avg_win_pnl_pct": round(avg_win_pnl, 2),
-                "avg_loss_pnl_pct": round(avg_loss_pnl, 2),
-                "avg_rr": round(avg_win_pnl / abs(avg_loss_pnl), 2) if avg_loss_pnl != 0 else 0.0,
-            }
-        except Exception as exc:
-            log.error("setup_statistics_failed", setup_type=setup_type, err=str(exc))
-            return {}
 
 
 # ── In-memory fallback ────────────────────────────────────────────────────────

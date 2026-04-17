@@ -1,6 +1,5 @@
 import { Router, Request, Response } from "express";
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Database = any;
+import Database from "better-sqlite3";
 import {
   ExecutionValidator,
   SlippageAnalyzer,
@@ -10,12 +9,11 @@ import {
   type Fill,
   type ExecutionReport,
 } from "../lib/execution_validator.js";
-import { logger } from "../lib/logger.js";
 
 const router = Router();
 
 // Injectable database instance (provided by app initialization)
-let db: Database;
+let db: Database.Database;
 let validator: ExecutionValidator;
 let analyzer: SlippageAnalyzer;
 let detector: ExecutionDriftDetector;
@@ -25,7 +23,7 @@ let feedbackLoop: ExecutionFeedbackLoop;
  * Initialize routes with database connection
  */
 export function initializeExecutionValidationRoutes(
-  database: Database
+  database: Database.Database
 ): Router {
   db = database;
   validator = new ExecutionValidator(db);
@@ -142,7 +140,7 @@ router.post(
 
       res.json({ success: true, validation });
     } catch (error) {
-      logger.error({ err: error }, "[execution_validation] Execution validation error");
+      console.error("Execution validation error:", error);
       res.status(500).json({
         error: error instanceof Error ? error.message : "Unknown error",
       });
@@ -181,7 +179,7 @@ router.get(
 
       res.json({ success: true, distribution });
     } catch (error) {
-      logger.error({ err: error }, "[execution_validation] Slippage computation error");
+      console.error("Slippage computation error:", error);
       res.status(500).json({
         error: error instanceof Error ? error.message : "Unknown error",
       });
@@ -215,7 +213,7 @@ router.get(
 
       res.json({ success: true, comparison });
     } catch (error) {
-      logger.error({ err: error }, "[execution_validation] Backtest vs live comparison error");
+      console.error("Backtest vs live comparison error:", error);
       res.status(500).json({
         error: error instanceof Error ? error.message : "Unknown error",
       });
@@ -247,7 +245,7 @@ router.get(
         timestamp: new Date(),
       });
     } catch (error) {
-      logger.error({ err: error }, "[execution_validation] Drift status error");
+      console.error("Drift status error:", error);
       res.status(500).json({
         error: error instanceof Error ? error.message : "Unknown error",
       });
@@ -297,7 +295,7 @@ router.get(
 
       res.json({ success: true, events });
     } catch (error) {
-      logger.error({ err: error }, "[execution_validation] Drift events error");
+      console.error("Drift events error:", error);
       res.status(500).json({
         error: error instanceof Error ? error.message : "Unknown error",
       });
@@ -331,7 +329,7 @@ router.get(
 
       res.json({ success: true, report });
     } catch (error) {
-      logger.error({ err: error }, "[execution_validation] Execution report error");
+      console.error("Execution report error:", error);
       res.status(500).json({
         error: error instanceof Error ? error.message : "Unknown error",
       });
@@ -410,7 +408,7 @@ router.get(
         },
       });
     } catch (error) {
-      logger.error({ err: error }, "[execution_validation] System health error");
+      console.error("System health error:", error);
       res.status(500).json({
         error: error instanceof Error ? error.message : "Unknown error",
       });

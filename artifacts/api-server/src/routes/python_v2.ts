@@ -30,10 +30,7 @@ const router = Router();
 
 const PY_GATEWAY_URL   = process.env.PYTHON_GATEWAY_URL   || "http://localhost:8000";
 const PY_SCHEDULER_URL = process.env.PYTHON_SCHEDULER_URL || "http://localhost:8008";
-const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY || (() => {
-  console.warn("[python_v2] INTERNAL_API_KEY not set — using random key (internal calls will fail if Python services expect a fixed key)");
-  return require("node:crypto").randomUUID();
-})();
+const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY     || "internal-dev-key";
 const PROXY_TIMEOUT_MS = parseInt(process.env.PROXY_TIMEOUT_MS || "10000", 10);
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

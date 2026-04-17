@@ -16,6 +16,7 @@
 
 import { logger } from "./logger";
 import { SETUP_TYPES, REGIMES } from "./super_intelligence";
+import { allowSyntheticFallback, logSyntheticUsage } from "./data_safety_guard";
 
 const DIRECTIONS = ["long", "short"] as const;
 const TIMEFRAMES = ["1m", "5m", "15m", "1h"] as const;
@@ -77,6 +78,12 @@ export async function seedAccuracyBootstrap(): Promise<{ seeded: number; skipped
   logSyntheticUsage("accuracy_seeder:bootstrap");
 
   try {
+    if (!allowSyntheticFallback("accuracy_seeder:bootstrap")) {
+      logger.info("Synthetic bootstrap skipped — live mode requires real training data");
+      return { seeded: 0, skipped: true };
+    }
+    logSyntheticUsage("accuracy_seeder:bootstrap");
+
     const { db, accuracyResultsTable } = await import("@workspace/db");
     const { count: drizzleCount } = await import("drizzle-orm");
 

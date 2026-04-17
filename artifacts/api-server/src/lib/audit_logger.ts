@@ -38,11 +38,7 @@ export type AuditEventType =
   | "execution_request_received"
   | "execution_idempotency"
   | "execution_gate_blocked"
-  | "execution_result"
-  // P1-10: fusion + explainability records persisted by order_executor.
-  | "fusion_explain"
-  // P1-8: Phase 103 reconciliation cron emits on critical drift.
-  | "reconciliation_drift";
+  | "execution_result";
 
 export type ExecutionLifecycleEventType =
   | "execution_request_received"

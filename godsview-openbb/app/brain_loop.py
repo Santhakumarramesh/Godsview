@@ -6,10 +6,9 @@ Periodically fetches market data and runs the full brain update pipeline:
 
   1. Fetch bars from Alpaca for all watched symbols
   2. Run stock_node.update_stock_brain() for each symbol
-  3. Detect market regime (multi-method ensemble)
-  4. Run supreme_node.update_supreme() to orchestrate
-  5. Check for exit signals on open positions
-  6. Optionally trigger evolution on schedule
+  3. Run supreme_node.update_supreme() to orchestrate
+  4. Check for exit signals on open positions
+  5. Optionally trigger evolution on schedule
 
 Can be started via:
   python -m app.brain_loop              (standalone)
@@ -26,14 +25,9 @@ from datetime import datetime, timezone
 from .state.store import get_store
 from .state.schemas import Regime
 from .nodes.stock_node import update_stock_brain
-from .nodes.supreme_node import update_supreme
-from .nodes.risk_node import evaluate_risk, quick_risk_check
+from .nodes.supreme_node import update_supremefrom .nodes.risk_node import evaluate_risk, quick_risk_check
 from .nodes.execution_node import get_position_tracker
 from .nodes.evolution_node import run_evolution
-
-# Regime detection imports
-from .analysis.regime_detector import detect_regime_from_bars, RegimeAnalysis
-from .analysis.regime_history import RegimeTracker
 
 logger = logging.getLogger("godsview.brain_loop")
 
@@ -43,9 +37,6 @@ DEFAULT_SYMBOLS = ["BTC/USD", "ETH/USD"]
 UPDATE_INTERVAL_S = 30       # Full brain cycle every 30s
 EVOLUTION_INTERVAL_S = 3600  # Evolution check every hour
 POSITION_CHECK_S = 5         # Check exits every 5s
-
-# Module-level regime tracker singleton
-_regime_tracker = RegimeTracker()
 
 
 # ─── Data Fetcher (Alpaca bars) ─────────────────────────────────────────────
@@ -77,59 +68,6 @@ def fetch_bars(symbol: str) -> dict:
         return {"bars_1m": [], "bars_5m": [], "bars_15m": [], "bars_1h": []}
 
 
-# ─── Regime Detection ──────────────────────────────────────────────────────
-
-def detect_and_track_regime(symbol: str, bars: dict) -> dict[str, RegimeAnalysis]:
-    """
-    Run regime detection across multiple timeframes and update the tracker.
-    Returns {timeframe: RegimeAnalysis} for each timeframe with data.
-    """
-    results: dict[str, RegimeAnalysis] = {}
-
-    tf_mapping = {
-        "1M": bars.get("bars_1m", []),
-        "5M": bars.get("bars_5m", []),
-        "15M": bars.get("bars_15m", []),
-        "1H": bars.get("bars_1h", []),
-    }
-
-    for tf_name, tf_bars in tf_mapping.items():
-        if not tf_bars or len(tf_bars) < 20:
-            continue
-
-        try:
-            # Get previous state for duration tracking
-            prev_regime, prev_bars = _regime_tracker.get_current(symbol, tf_name)
-
-            analysis = detect_regime_from_bars(
-                tf_bars,
-                prev_regime=prev_regime if prev_bars > 0 else None,
-                prev_regime_bars=prev_bars,
-            )
-
-            # Update tracker (will log transitions)
-            transition = _regime_tracker.update(symbol, tf_name, analysis)
-            results[tf_name] = analysis
-
-            if transition:
-                logger.info(
-                    "REGIME CHANGE: %s %s %s → %s (conf=%.2f)",
-                    symbol, tf_name,
-                    transition.from_regime.value,
-                    transition.to_regime.value,
-                    transition.confidence,
-                )
-        except Exception as e:
-            logger.error(f"Regime detection failed for {symbol} {tf_name}: {e}")
-
-    return results
-
-
-def get_regime_tracker() -> RegimeTracker:
-    """Expose the regime tracker for external use (e.g., API routes)."""
-    return _regime_tracker
-
-
 # ─── Main Brain Cycle ──────────────────────────────────────────────────────
 
 def run_brain_cycle(symbols: list[str] = None):
@@ -140,8 +78,7 @@ def run_brain_cycle(symbols: list[str] = None):
     store = get_store()
     cycle_start = time.monotonic()
 
-    for symbol in symbols:
-        try:
+    for symbol in symbols:        try:
             # 1. Fetch market data
             bars = fetch_bars(symbol)
 
@@ -149,10 +86,7 @@ def run_brain_cycle(symbols: list[str] = None):
                 logger.warning(f"No bars for {symbol}, skipping")
                 continue
 
-            # 2. Detect regime across timeframes
-            regime_results = detect_and_track_regime(symbol, bars)
-
-            # 3. Update stock brain
+            # 2. Update stock brain
             brain = update_stock_brain(
                 symbol=symbol,
                 bars_1m=bars["bars_1m"],
@@ -161,40 +95,21 @@ def run_brain_cycle(symbols: list[str] = None):
                 bars_1h=bars["bars_1h"],
             )
 
-            # 4. Inject regime data into brain state
-            if regime_results:
-                # Use 1H regime as primary, fall back to lower TFs
-                primary_tf = "1H" if "1H" in regime_results else next(iter(regime_results))
-                primary_analysis = regime_results[primary_tf]
-
-                if hasattr(brain, "regime"):
-                    brain.regime = primary_analysis.current_regime.value
-                if hasattr(brain, "regime_confidence"):
-                    brain.regime_confidence = primary_analysis.confidence
-
-                # Multi-TF confluence
-                confluence_score = _regime_tracker.get_confluence_score(symbol)
-                if hasattr(brain, "regime_confluence"):
-                    brain.regime_confluence = confluence_score
-
-            # 5. Quick risk check — can we even consider trading?
+            # 3. Quick risk check — can we even consider trading?
             supreme = store.get_supreme()
             if quick_risk_check(brain, supreme):
-                # 6. Full risk evaluation
+                # 4. Full risk evaluation
                 risk_gate = evaluate_risk(brain, supreme)
                 brain.risk_gate = risk_gate
                 store.update_stock(symbol, brain)
 
-            logger.debug(
-                f"Brain cycle: {symbol} "
-                f"attention={brain.attention_level.value} "
-                f"state={brain.decision.state.value} "
-                f"regime={regime_results.get('1H', regime_results.get(next(iter(regime_results), ''), None))}"
-            )
+            logger.debug(f"Brain cycle: {symbol} "
+                         f"attention={brain.attention_level.value} "
+                         f"state={brain.decision.state.value}")
         except Exception as e:
             logger.error(f"Brain cycle error for {symbol}: {e}", exc_info=True)
 
-    # 7. Supreme orchestration
+    # 5. Supreme orchestration
     try:
         update_supreme()
     except Exception as e:
@@ -214,13 +129,10 @@ def check_position_exits():
         if brain and brain.price.last > 0:
             exits = tracker.update_price(pos.symbol, brain.price.last)
             for exit_signal in exits:
-                logger.info(
-                    f"EXIT SIGNAL: {exit_signal['symbol']} {exit_signal['reason']} "
-                    f"R={exit_signal['r_multiple']:.2f}"
-                )
+                logger.info(f"EXIT SIGNAL: {exit_signal['symbol']} {exit_signal['reason']} "
+                            f"R={exit_signal['r_multiple']:.2f}")
                 # Close the position
                 tracker.close_position(exit_signal["position_id"], exit_signal["exit_price"])
-
 
 # ─── Background Loop ──────────────────────────────────────────────────────
 
@@ -248,8 +160,7 @@ def _brain_loop_worker(symbols: list[str]):
                     store = get_store()
                     supreme = store.get_supreme()
                     run_evolution(supreme)
-                    last_evolution = time.monotonic()
-                except Exception as e:
+                    last_evolution = time.monotonic()                except Exception as e:
                     logger.error(f"Periodic evolution error: {e}")
 
         except Exception as e:
@@ -277,7 +188,6 @@ def start_background_loop(symbols: list[str] = None):
         name="godsview-brain-loop",
     )
     _loop_thread.start()
-
 
 def stop_background_loop():
     """Stop the brain loop."""

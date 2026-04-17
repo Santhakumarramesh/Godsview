@@ -7,21 +7,28 @@
     "approved": false,
     "final_action": "skip",
     "reasons": [
-      "neutral_model_probability: 0.5796"
+      "neutral_model_probability: 0.5239"
     ]
   },
-  "generated_at": "2026-04-14T12:12:10.304043+00:00",
+  "generated_at": "2026-04-02T05:38:19.559810+00:00",
   "risk": null,
   "signal": {
     "action": "skip",
     "close_price": 112.81981558125712,
-    "confidence": 0.15913,
-    "generated_at": "2026-04-14T12:12:10.302982+00:00",
+    "confidence": 0.047778,
+    "generated_at": "2026-04-02T05:38:19.557594+00:00",
     "model_meta": {
-      "error": "model_file_missing",
-      "mode": "heuristic_fallback"
+      "accuracy": 0.6263736263736264,
+      "error": null,
+      "generated_at": "2026-04-02T05:35:59.550393+00:00",
+      "mode": "trained_model",
+      "roc_auc": 0.6235294117647058,
+      "symbol": "BTCUSD",
+      "test_rows": 91,
+      "timeframe": "1D",
+      "train_rows": 360
     },
-    "prob_up": 0.579565,
+    "prob_up": 0.523889,
     "symbol": "BTCUSD",
     "threshold_buy": 0.6,
     "threshold_sell": 0.4,

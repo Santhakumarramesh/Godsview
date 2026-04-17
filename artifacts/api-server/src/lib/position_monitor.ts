@@ -444,7 +444,7 @@ function logEvent(type: MonitorEvent["type"], symbol: string, detail: Record<str
           timestamp: new Date().toISOString(),
         },
       });
-    }).catch((e) => logger.debug({ err: e }, "[PositionMonitor] audit event failed"));
+    }).catch(() => {});
   } catch { /* ignore */ }
 }
 // ── Lifecycle ─────────────────────────────────────────

@@ -315,18 +315,15 @@ export class AutoImprover {
 
   private isDependencyMet(strategy: Strategy, dep: ImprovementType): boolean {
     // Check if strategy already implements this feature
-    const regimeFilters = (strategy as { regimeFilters?: unknown[] }).regimeFilters;
-    const hasRegimeFilter = Array.isArray(regimeFilters) && regimeFilters.length > 0;
+    const hasRegimeFilter = strategy.regimeFilters && strategy.regimeFilters.length > 0;
     const hasVolatilityScaling = strategy.positionSizingRules?.type === 'volatility_adjusted';
-    const hasTrailingStop = Boolean(
-      strategy.exitRules?.some((r: { type?: string }) => r.type === 'trailing_stop'),
-    );
+    const hasTrailingStop = strategy.exitRules?.some(r => r.type === 'trailing_stop');
 
     switch (dep) {
       case ImprovementType.ENTRY_REGIME_FILTER:
         return hasRegimeFilter;
       case ImprovementType.SIZING_VOLATILITY:
-        return Boolean(hasVolatilityScaling);
+        return hasVolatilityScaling;
       case ImprovementType.EXIT_TRAILING_STOP:
         return hasTrailingStop;
       default:

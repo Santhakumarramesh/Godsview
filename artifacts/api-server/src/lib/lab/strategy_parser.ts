@@ -1,9 +1,3 @@
-// @ts-nocheck
-// NOTE: This file was written against an older shape of the strategy_dsl
-// interfaces. The current FilterSpec/SizingSpec/MarketContextSpec/EntryCondition
-// shapes differ (e.g. FilterSpec is now a union of discriminated filters, not
-// a free-form `{ type, value }` record). Typechecking is disabled until this
-// parser is rewired to the new DSL.
 import {
   StrategyDSL,
   MarketContextSpec,

@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>OBSIDIAN ELITE | Live Signal Intelligence</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "tertiary": "#ff7162",
+                        "surface-dim": "#0e0e0f",
+                        "on-primary-container": "#005a10",
+                        "background": "#0e0e0f",
+                        "surface-container": "#1a191b",
+                        "surface-tint": "#9cff93",
+                        "surface": "#0e0e0f",
+                        "tertiary-container": "#f9362c",
+                        "inverse-on-surface": "#565556",
+                        "tertiary-fixed-dim": "#ff7c6c",
+                        "surface-bright": "#2c2c2d",
+                        "primary-dim": "#00ec3b",
+                        "surface-container-low": "#131314",
+                        "on-surface-variant": "#adaaab",
+                        "primary-fixed": "#00fc40",
+                        "on-secondary-fixed-variant": "#004ea5",
+                        "secondary-fixed-dim": "#a8c4ff",
+                        "secondary-container": "#005bc0",
+                        "tertiary-fixed": "#ff9385",
+                        "outline-variant": "#484849",
+                        "on-primary": "#006413",
+                        "secondary-fixed": "#bed2ff",
+                        "error-container": "#b92902",
+                        "on-tertiary": "#4a0001",
+                        "on-tertiary-fixed-variant": "#7a0004",
+                        "on-secondary-fixed": "#00326f",
+                        "secondary-dim": "#0070ea",
+                        "secondary": "#669dff",
+                        "on-primary-fixed-variant": "#006513",
+                        "inverse-primary": "#006f16",
+                        "on-tertiary-fixed": "#3a0001",
+                        "on-background": "#ffffff",
+                        "on-secondary-container": "#f7f7ff",
+                        "surface-container-highest": "#262627",
+                        "on-primary-fixed": "#00440a",
+                        "surface-variant": "#262627",
+                        "inverse-surface": "#fcf8f9",
+                        "outline": "#767576",
+                        "primary-container": "#00fc40",
+                        "tertiary-dim": "#e2241f",
+                        "primary-fixed-dim": "#00ec3b",
+                        "surface-container-high": "#201f21",
+                        "on-tertiary-container": "#000000",
+                        "primary": "#9cff93",
+                        "error-dim": "#d53d18",
+                        "surface-container-lowest": "#000000",
+                        "on-surface": "#ffffff",
+                        "on-error-container": "#ffd2c8",
+                        "on-error": "#450900",
+                        "error": "#ff7351",
+                        "on-secondary": "#001f49"
+                    },
+                    fontFamily: {
+                        "headline": ["Space Grotesk"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .chart-grid {
+            background-image: radial-gradient(circle, #484849 1px, transparent 1px);
+            background-size: 40px 40px;
+            background-position: center;
+            opacity: 0.1;
+        }
+        .glass-panel {
+            background: rgba(14, 14, 15, 0.6);
+            backdrop-filter: blur(20px);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface font-body overflow-x-hidden">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full bg-[#0e0e0f]/60 backdrop-blur-xl flex justify-between items-center px-6 h-16 z-50 border-b border-[#484849]/15">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[#9cff93]" data-icon="terminal">terminal</span>
+<h1 class="text-lg font-bold tracking-widest text-[#9cff93] font-['Space_Grotesk'] tracking-tighter">OBSIDIAN ELITE</h1>
+</div>
+<div class="hidden md:flex items-center space-x-8 font-['Space_Grotesk'] text-sm tracking-widest">
+<span class="text-[#9cff93] cursor-pointer">SIGNALS</span>
+<span class="text-gray-500 hover:text-[#9cff93] transition-colors cursor-pointer">TERMINAL</span>
+<span class="text-gray-500 hover:text-[#9cff93] transition-colors cursor-pointer">PIPELINE</span>
+<span class="text-gray-500 hover:text-[#9cff93] transition-colors cursor-pointer">ANALYTICS</span>
+</div>
+<div class="flex items-center gap-4">
+<span class="text-[#9cff93] text-[10px] font-mono tracking-widest bg-surface-container px-2 py-1 rounded">LATENCY: 4ms</span>
+</div>
+</header>
+<main class="pt-16 pb-24 min-h-screen">
+<!-- Main Panel: Interactive Chart Overlay Area -->
+<section class="relative w-full h-[442px] bg-surface overflow-hidden border-b border-outline-variant/15">
+<div class="absolute inset-0 chart-grid"></div>
+<!-- Asset Header -->
+<div class="absolute top-4 left-6 z-10 flex items-center gap-6">
+<div>
+<h2 class="font-headline text-2xl font-bold text-on-surface">BTC/USDT</h2>
+<p class="text-[10px] text-primary tracking-[0.3em] uppercase">Binance • Perpetual</p>
+</div>
+<div class="h-10 w-[1px] bg-outline-variant/30"></div>
+<div>
+<div class="text-xl font-headline font-medium text-primary">64,281.50</div>
+<div class="text-[10px] text-primary/60 font-mono">+2.41%</div>
+</div>
+</div>
+<!-- Visualization: Candles and Overlays (Conceptual HTML/CSS Drawing) -->
+<div class="relative w-full h-full flex items-center justify-center pointer-events-none">
+<div class="w-full h-full max-w-6xl mx-auto flex items-end gap-1 px-12 pb-20">
+<!-- Historical Candles -->
+<div class="flex-1 h-32 bg-tertiary-dim/20 w-3 rounded-t-sm relative">
+<div class="absolute -top-12 left-1/2 -translate-x-1/2 flex flex-col items-center">
+<div class="w-4 h-4 bg-tertiary border border-on-surface/20 rotate-45 flex items-center justify-center">
+<span class="material-symbols-outlined text-[10px] text-white -rotate-45" data-icon="warning">warning</span>
+</div>
+<div class="mt-2 bg-surface-container-highest px-2 py-0.5 rounded text-[8px] text-tertiary font-mono whitespace-nowrap">CT L RISK</div>
+</div>
+</div>
+<div class="flex-1 h-40 bg-secondary/20 w-3 rounded-t-sm"></div>
+<div class="flex-1 h-24 bg-tertiary-dim/20 w-3 rounded-t-sm"></div>
+<div class="flex-1 h-36 bg-secondary/20 w-3 rounded-t-sm relative">
+<!-- Claude Veto -->
+<div class="absolute -top-12 left-1/2 -translate-x-1/2 flex flex-col items-center">
+<div class="w-4 h-4 bg-[#b388ff] border border-on-surface/20 flex items-center justify-center">
+<span class="material-symbols-outlined text-[10px] text-white" data-icon="block">block</span>
+</div>
+<div class="mt-2 bg-surface-container-highest px-2 py-0.5 rounded text-[8px] text-[#b388ff] font-mono whitespace-nowrap">AR S VETO</div>
+</div>
+</div>
+<div class="flex-1 h-20 bg-secondary/20 w-3 rounded-t-sm"></div>
+<div class="flex-1 h-48 bg-secondary/20 w-3 rounded-t-sm"></div>
+<div class="flex-1 h-32 bg-secondary/20 w-3 rounded-t-sm"></div>
+<!-- Current Active Trade Candle -->
+<div class="flex-1 h-56 bg-primary/30 w-4 rounded-t-sm relative border-x border-primary/40">
+<div class="absolute -top-16 left-1/2 -translate-x-1/2 flex flex-col items-center">
+<div class="w-5 h-5 bg-primary border border-on-primary-container/20 rotate-45 shadow-[0_0_15px_rgba(156,255,147,0.4)] flex items-center justify-center">
+<span class="material-symbols-outlined text-[12px] text-on-primary-container -rotate-45" data-icon="diamond" style="font-variation-settings: 'FILL' 1;">diamond</span>
+</div>
+<div class="mt-2 bg-primary px-2 py-0.5 rounded text-[9px] text-on-primary-container font-bold font-mono whitespace-nowrap">SR L 0.77</div>
+</div>
+<!-- Price Brackets -->
+<div class="absolute left-full ml-4 top-0 w-48 h-full flex flex-col justify-between py-2 border-l border-primary/20">
+<div class="flex items-center gap-2">
+<div class="w-4 h-[1px] bg-primary"></div>
+<span class="text-[10px] text-primary font-mono">TP 66,100.00</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-8 h-[1px] bg-white"></div>
+<span class="text-[10px] text-white font-mono font-bold">ENTRY 64,281.50</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-4 h-[1px] bg-tertiary"></div>
+<span class="text-[10px] text-tertiary font-mono">SL 62,850.00</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- UI Overlay: Timeframe Selector -->
+<div class="absolute bottom-4 left-6 flex items-center gap-2 bg-surface-container/80 backdrop-blur-md p-1 rounded">
+<button class="px-3 py-1 text-[10px] font-mono text-gray-500 hover:text-white">5M</button>
+<button class="px-3 py-1 text-[10px] font-mono text-gray-500 hover:text-white">15M</button>
+<button class="px-3 py-1 text-[10px] font-mono bg-surface-container-high text-primary rounded-sm shadow-sm">1H</button>
+<button class="px-3 py-1 text-[10px] font-mono text-gray-500 hover:text-white">4H</button>
+<button class="px-3 py-1 text-[10px] font-mono text-gray-500 hover:text-white">1D</button>
+</div>
+</section>
+<!-- Lower Panels -->
+<div class="max-w-7xl mx-auto px-6 mt-8 space-y-8">
+<!-- Signature Pipeline Stepper -->
+<div class="bg-surface-container-low p-6 rounded-lg border border-outline-variant/10">
+<div class="flex items-center justify-between gap-4">
+<div class="flex flex-col items-center gap-3 flex-1 opacity-100">
+<div class="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary border border-primary/30">
+<span class="material-symbols-outlined text-sm" data-icon="check_circle">check_circle</span>
+</div>
+<span class="text-[10px] font-headline tracking-tighter text-on-surface uppercase font-medium">Setup Validated</span>
+</div>
+<div class="h-[1px] flex-1 bg-primary/30 mt-[-20px]"></div>
+<div class="flex flex-col items-center gap-3 flex-1">
+<div class="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary border border-primary/30 shadow-[0_0_10px_rgba(156,255,147,0.15)]">
+<span class="material-symbols-outlined text-sm" data-icon="dataset">dataset</span>
+</div>
+<span class="text-[10px] font-headline tracking-tighter text-on-surface uppercase font-medium">Order Flow Aggregated</span>
+</div>
+<div class="h-[1px] flex-1 bg-primary/30 mt-[-20px]"></div>
+<div class="flex flex-col items-center gap-3 flex-1">
+<div class="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary border border-primary/30">
+<span class="material-symbols-outlined text-sm" data-icon="psychology">psychology</span>
+</div>
+<span class="text-[10px] font-headline tracking-tighter text-on-surface uppercase font-medium">ML Engine Trained</span>
+</div>
+<div class="h-[1px] flex-1 bg-outline-variant/30 mt-[-20px]"></div>
+<div class="flex flex-col items-center gap-3 flex-1 animate-pulse">
+<div class="w-10 h-10 rounded-full bg-secondary/20 flex items-center justify-center text-secondary border border-secondary/30">
+<span class="material-symbols-outlined text-sm" data-icon="hub">hub</span>
+</div>
+<span class="text-[10px] font-headline tracking-tighter text-secondary uppercase font-medium">Claude Inferring...</span>
+</div>
+<div class="h-[1px] flex-1 bg-outline-variant/30 mt-[-20px]"></div>
+<div class="flex flex-col items-center gap-3 flex-1 opacity-40">
+<div class="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center text-gray-500 border border-outline-variant/30">
+<span class="material-symbols-outlined text-sm" data-icon="pending">pending</span>
+</div>
+<span class="text-[10px] font-headline tracking-tighter text-gray-500 uppercase font-medium">Risk Pending</span>
+</div>
+</div>
+</div>
+<!-- Data Grid -->
+<div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+<!-- AI Reasoning Synthesis -->
+<div class="md:col-span-8 bg-surface-container rounded-lg p-6 border border-outline-variant/10">
+<div class="flex items-center justify-between mb-6">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary" data-icon="neurology">neurology</span>
+<h3 class="font-headline font-bold text-lg tracking-tight">AI Reasoning Synthesis</h3>
+</div>
+<span class="text-[10px] font-mono text-gray-500 px-2 py-1 bg-surface-container-low rounded">MODEL: CLAUDE-3-OPUS</span>
+</div>
+<div class="space-y-6">
+<div class="flex gap-4">
+<div class="w-8 h-8 rounded bg-primary/10 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary text-sm" data-icon="waves">waves</span>
+</div>
+<div>
+<h4 class="text-xs font-bold text-on-surface uppercase tracking-widest mb-1">Liquidity Sweep</h4>
+<p class="text-sm text-on-surface-variant leading-relaxed">Aggressive rejection observed at 62.5k internal range low. Large buy-side absorption detected on heatmaps, suggesting a institutional floor established.</p>
+</div>
+</div>
+<div class="flex gap-4">
+<div class="w-8 h-8 rounded bg-primary/10 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary text-sm" data-icon="bar_chart_4_bars">bar_chart_4_bars</span>
+</div>
+<div>
+<h4 class="text-xs font-bold text-on-surface uppercase tracking-widest mb-1">Volume Divergence</h4>
+<p class="text-sm text-on-surface-variant leading-relaxed">Price making equal lows while OBV (On-Balance Volume) shows clear upward trajectory. Bullish divergence confirmed on 1H timeframe.</p>
+</div>
+</div>
+<div class="flex gap-4">
+<div class="w-8 h-8 rounded bg-primary/10 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary text-sm" data-icon="public">public</span>
+</div>
+<div>
+<h4 class="text-xs font-bold text-on-surface uppercase tracking-widest mb-1">Macro Overlay</h4>
+<p class="text-sm text-on-surface-variant leading-relaxed">Correlation with DXY weakness identified. Risk-on sentiment prevailing in pre-market equities session. High conviction on local trend reversal.</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Signal Parameters -->
+<div class="md:col-span-4 flex flex-col gap-6">
+<div class="bg-surface-container rounded-lg p-6 border border-outline-variant/10 flex-1">
+<div class="flex items-center gap-3 mb-6">
+<span class="material-symbols-outlined text-secondary" data-icon="tune">tune</span>
+<h3 class="font-headline font-bold text-lg tracking-tight">Signal Parameters</h3>
+</div>
+<div class="space-y-4">
+<div class="flex justify-between items-center py-2 border-b border-outline-variant/10">
+<span class="text-[10px] text-on-surface-variant uppercase font-mono tracking-wider">Entry Zone</span>
+<span class="text-sm font-bold font-mono">64,281.50</span>
+</div>
+<div class="flex justify-between items-center py-2 border-b border-outline-variant/10">
+<span class="text-[10px] text-on-surface-variant uppercase font-mono tracking-wider">Take Profit</span>
+<span class="text-sm font-bold text-primary font-mono">66,100.00</span>
+</div>
+<div class="flex justify-between items-center py-2 border-b border-outline-variant/10">
+<span class="text-[10px] text-on-surface-variant uppercase font-mono tracking-wider">Stop Loss</span>
+<span class="text-sm font-bold text-tertiary font-mono">62,850.00</span>
+</div>
+<div class="flex justify-between items-center py-2 border-b border-outline-variant/10">
+<span class="text-[10px] text-on-surface-variant uppercase font-mono tracking-wider">Leverage Advisor</span>
+<span class="text-sm font-bold text-secondary font-mono">10X ISOLATED</span>
+</div>
+<div class="flex justify-between items-center py-2">
+<span class="text-[10px] text-on-surface-variant uppercase font-mono tracking-wider">Risk/Reward</span>
+<span class="text-sm font-bold font-mono">1:2.4</span>
+</div>
+</div>
+</div>
+<!-- Primary Action -->
+<button class="w-full bg-primary hover:bg-primary-fixed transition-all active:scale-[0.98] py-5 rounded flex items-center justify-center gap-3 shadow-[0_0_20px_rgba(156,255,147,0.2)] group">
+<span class="material-symbols-outlined text-on-primary-container font-bold" data-icon="bolt" style="font-variation-settings: 'FILL' 1;">bolt</span>
+<span class="font-headline font-extrabold text-on-primary-container tracking-widest text-sm">INITIATE POSITION</span>
+</button>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center h-20 pb-safe px-4 bg-[#131314]/80 backdrop-blur-lg border-t border-[#484849]/15 shadow-[0_-4px_20px_rgba(156,255,147,0.05)]">
+<div class="flex flex-col items-center justify-center text-gray-500 py-1 px-3 hover:bg-[#201f21] active:scale-90 transition-transform cursor-pointer">
+<span class="material-symbols-outlined" data-icon="query_stats">query_stats</span>
+<span class="font-['Inter'] text-[10px] uppercase tracking-widest mt-1">Terminal</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#9cff93] bg-[#1a191b] rounded-md py-1 px-3 shadow-[0_0_10px_rgba(156,255,147,0.2)] active:scale-90 transition-transform cursor-pointer">
+<span class="material-symbols-outlined" data-icon="sensors" style="font-variation-settings: 'FILL' 1;">sensors</span>
+<span class="font-['Inter'] text-[10px] uppercase tracking-widest mt-1">Signals</span>
+</div>
+<div class="flex flex-col items-center justify-center text-gray-500 py-1 px-3 hover:bg-[#201f21] active:scale-90 transition-transform cursor-pointer">
+<span class="material-symbols-outlined" data-icon="account_tree">account_tree</span>
+<span class="font-['Inter'] text-[10px] uppercase tracking-widest mt-1">Pipeline</span>
+</div>
+<div class="flex flex-col items-center justify-center text-gray-500 py-1 px-3 hover:bg-[#201f21] active:scale-90 transition-transform cursor-pointer">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+<span class="font-['Inter'] text-[10px] uppercase tracking-widest mt-1">Analytics</span>
+</div>
+</nav>
+</body></html>

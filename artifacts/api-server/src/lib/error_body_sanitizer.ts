@@ -12,7 +12,6 @@ const ENTITY_MAP: Record<string, string> = {
   "&#39;": "'",
   "&nbsp;": " ",
 };
-const JSON_MESSAGE_KEYS = ["message", "error", "detail", "description", "reason", "msg"] as const;
 
 function decodeHtmlEntities(text: string): string {
   return text
@@ -21,46 +20,6 @@ function decodeHtmlEntities(text: string): string {
       const codePoint = Number.parseInt(codePointRaw, 10);
       return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : _match;
     });
-}
-
-function extractMessageCandidate(value: unknown, depth = 0): string | null {
-  if (depth > 3 || value == null) return null;
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    return trimmed ? trimmed : null;
-  }
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const extracted = extractMessageCandidate(item, depth + 1);
-      if (extracted) return extracted;
-    }
-    return null;
-  }
-  if (typeof value === "object") {
-    const asRecord = value as Record<string, unknown>;
-    for (const key of JSON_MESSAGE_KEYS) {
-      if (key in asRecord) {
-        const extracted = extractMessageCandidate(asRecord[key], depth + 1);
-        if (extracted) return extracted;
-      }
-    }
-    for (const child of Object.values(asRecord)) {
-      const extracted = extractMessageCandidate(child, depth + 1);
-      if (extracted) return extracted;
-    }
-  }
-  return null;
-}
-
-function extractJsonMessage(raw: string): string | null {
-  const trimmed = raw.trim();
-  if (!(trimmed.startsWith("{") || trimmed.startsWith("["))) return null;
-  try {
-    const parsed = JSON.parse(trimmed);
-    return extractMessageCandidate(parsed);
-  } catch {
-    return null;
-  }
 }
 
 function stripHtmlMarkup(html: string): string {
@@ -94,10 +53,8 @@ export function sanitizeUpstreamErrorBody(
   if (!raw) return "empty response";
 
   const bounded = raw.length > maxInputLen ? raw.slice(0, maxInputLen) : raw;
-  const jsonMessage = extractJsonMessage(bounded);
-  const source = jsonMessage ?? bounded;
-  const looksHtml = /<\/?[a-z][\s\S]*>/i.test(source) || /<!doctype/i.test(source);
-  const stripped = looksHtml ? stripHtmlMarkup(source) : source;
+  const looksHtml = /<\/?[a-z][\s\S]*>/i.test(bounded) || /<!doctype/i.test(bounded);
+  const stripped = looksHtml ? stripHtmlMarkup(bounded) : bounded;
   const normalized = collapseRepeatedPrefix(
     decodeHtmlEntities(stripped).replace(/\s+/g, " ").trim(),
   );

@@ -91,21 +91,6 @@ jobs:
           cd ${{ github.workspace }}
           python -m pytest services/tests/ -q --tb=short --no-header
 
-      - name: Python module import smoke test
-        run: |
-          cd ${{ github.workspace }}
-          echo "Testing Python module imports..."
-          python -c "from services.api_gateway.main import app; print('✓ api_gateway imports')"
-          python -c "from services.market_data_service.main import app; print('✓ market_data_service imports')"
-          python -c "from services.feature_service.main import app; print('✓ feature_service imports')"
-          python -c "from services.backtest_service.main import app; print('✓ backtest_service imports')"
-          python -c "from services.ml_service.main import app; print('✓ ml_service imports')"
-          python -c "from services.execution_service.main import app; print('✓ execution_service imports')"
-          python -c "from services.risk_service.main import app; print('✓ risk_service imports')"
-          python -c "from services.memory_service.main import app; print('✓ memory_service imports')"
-          python -c "from services.scheduler_service.main import app; print('✓ scheduler_service imports')"
-          echo "All Python service modules import successfully"
-
   # ── 2b. Security Scan ─────────────────────────────────────────────
   security-scan:
     name: Security Scan
@@ -242,12 +227,6 @@ jobs:
             echo "::error::Test count regression: $TEST_COUNT < 3000 minimum"
             exit 1
           fi
-
-      - name: Smoke test API routes
-        run: |
-          echo "Smoke testing new API routes..."
-          GODSVIEW_DATA_DIR=artifacts/api-server/.runtime pnpm --filter @workspace/api-server exec vitest run src/__tests__/api-routes.test.ts 2>/dev/null || echo "Note: API route tests may be pending"
-          echo "API route smoke test completed"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4

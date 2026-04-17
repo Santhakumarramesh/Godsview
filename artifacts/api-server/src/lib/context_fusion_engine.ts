@@ -352,14 +352,8 @@ export async function evaluateContextFusion(input: ContextFusionInput): Promise<
   lastEvaluation = result;
   lastEvaluatedAt = result.evaluatedAt;
 
-  // Cache (with periodic eviction of expired entries to prevent memory leak)
+  // Cache
   cache.set(key, { result, expiresAt: Date.now() + CACHE_TTL_MS });
-  if (cache.size > 50) {
-    const now = Date.now();
-    for (const [k, v] of cache) {
-      if (v.expiresAt < now) cache.delete(k);
-    }
-  }
 
   logger.info({
     symbol: input.symbol,

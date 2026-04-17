@@ -34,12 +34,6 @@ async function buildAll() {
     // - use path traversal to read files (e.g. @google-cloud/secret-manager loads sibling .proto files)
     external: [
       "*.node",
-      // Phase 112 — RESTORED: pglite MUST stay external. It's a real runtime
-      // dep (see package.json) AND has to be external because its core.ts
-      // uses path traversal to read sibling ./postgres.data at module init.
-      // esbuild cannot bundle that asset; removing from external surfaces
-      // as runtime ENOENT: no such file or directory, open
-      // "dist/postgres.data". Both facts are compatible — dep + external.
       "@electric-sql/pglite",
       "sharp",
       "better-sqlite3",
@@ -58,6 +52,7 @@ async function buildAll() {
       "dtrace-provider",
       "isolated-vm",
       "lightningcss",
+      "@electric-sql/pglite",
       "pg-native",
       "oracledb",
       "mongodb-client-encryption",

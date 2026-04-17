@@ -169,7 +169,6 @@ def run_backtest(bars: list[Bar], config: BacktestConfig) -> BacktestResult:
         equity_curve=broker.equity_curve,
         initial_equity=config.initial_equity,
         bars_per_year=_TF_BARS_PER_DAY.get(config.timeframe, 26) * 252,
-        bars=bars,
     )
 
     trades_data = [_trade_to_dict(t) for t in broker.closed_trades]

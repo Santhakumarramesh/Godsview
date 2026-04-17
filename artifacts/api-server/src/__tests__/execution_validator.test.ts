@@ -9,27 +9,7 @@ import {
   type Fill,
 } from "../lib/execution_validator.js";
 
-// better-sqlite3 is a native module; if the prebuilt binary for the current
-// Node ABI isn't on disk (common on a fresh clone until
-// `pnpm rebuild better-sqlite3` has run), skip this whole suite rather than
-// fail 18 tests for a tooling issue. The production code doesn't need this
-// test to run; it's only validating ExecutionValidator against in-memory
-// SQLite. Operator can restore by running:
-//    corepack pnpm rebuild better-sqlite3
-let sqliteAvailable = true;
-try {
-  const probe = new Database(":memory:");
-  probe.close();
-} catch {
-  sqliteAvailable = false;
-  // eslint-disable-next-line no-console
-  console.warn(
-    "[execution_validator.test] better-sqlite3 binding unavailable — skipping suite. Run `corepack pnpm rebuild better-sqlite3` to enable.",
-  );
-}
-const describeIfSqlite = sqliteAvailable ? describe : describe.skip;
-
-describeIfSqlite("Execution Validator", () => {
+describe("Execution Validator", () => {
   let db: Database.Database;
   let validator: ExecutionValidator;
   let analyzer: SlippageAnalyzer;

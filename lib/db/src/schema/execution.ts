@@ -1,111 +1,96 @@
-/**
- * Execution Truth Layer — persistent order, fill, metric, reconciliation schema.
- *
- * This is the ONLY orders/fills table in the workspace. It replaces the
- * earlier legacy orders.ts stub and is the source of truth for:
- *   - Order lifecycle (intent_created -> submitted -> filled/etc.)
- *   - Fill events with dedup by broker_fill_id
- *   - Post-execution metrics (slippage, latency, VWAP)
- *   - EOD / mid-session reconciliation events
- *
- * All tables use serial integer primary keys so execution_store.ts can
- * reference orders by numeric `id`. An `order_uuid` column gives an
- * idempotent external handle used by MCP/UI/broker bridge code.
- */
-
 import {
   pgTable,
   serial,
   text,
-  numeric,
   integer,
+  numeric,
   timestamp,
-  jsonb,
+  boolean,
   index,
-  uniqueIndex,
 } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
+import { createInsertSchema } from "drizzle-zod";
+import { z } from "zod/v4";
 
-// ── Orders ───────────────────────────────────────────────────────────────────
-
+/**
+ * Phase 12 — Execution truth persistence schema.
+ *
+ * Kept as a dedicated schema module because many API modules import these
+ * exact table/type names from `@workspace/db`.
+ */
 export const ordersTable = pgTable(
-  "orders_v2",
+  "orders",
   {
     id: serial("id").primaryKey(),
     order_uuid: text("order_uuid").notNull(),
     broker_order_id: text("broker_order_id"),
-    strategy_id: text("strategy_id").notNull(),
-    execution_mode: text("execution_mode").notNull().default("paper"),
+    signal_id: integer("signal_id"),
+    si_decision_id: integer("si_decision_id"),
+    strategy_id: text("strategy_id"),
     symbol: text("symbol").notNull(),
     side: text("side").notNull(),
-    order_type: text("order_type").notNull().default("market"),
-    quantity: numeric("quantity").notNull(),
-    limit_price: numeric("limit_price"),
-    stop_price: numeric("stop_price"),
-    expected_entry_price: numeric("expected_entry_price"),
+    direction: text("direction").notNull(),
+    order_type: text("order_type").notNull().default("limit"),
+    quantity: numeric("quantity", { precision: 12, scale: 4 }).notNull(),
+    limit_price: numeric("limit_price", { precision: 14, scale: 6 }),
+    stop_price: numeric("stop_price", { precision: 14, scale: 6 }),
+    target_price: numeric("target_price", { precision: 14, scale: 6 }),
+    expected_entry_price: numeric("expected_entry_price", { precision: 14, scale: 6 }),
     status: text("status").notNull().default("intent_created"),
-    rejection_reason: text("rejection_reason"),
-    filled_quantity: numeric("filled_quantity").notNull().default("0"),
-    avg_fill_price: numeric("avg_fill_price"),
-    total_commission: numeric("total_commission").notNull().default("0"),
-    regime: text("regime"),
-    setup_type: text("setup_type"),
-    signal_id: text("signal_id"),
-    metadata: jsonb("metadata").default({}).notNull(),
+    execution_mode: text("execution_mode").notNull().default("paper"),
+    idempotency_key: text("idempotency_key"),
+    intent_at: timestamp("intent_at", { withTimezone: true }).notNull().defaultNow(),
     submitted_at: timestamp("submitted_at", { withTimezone: true }),
     accepted_at: timestamp("accepted_at", { withTimezone: true }),
     first_fill_at: timestamp("first_fill_at", { withTimezone: true }),
     completed_at: timestamp("completed_at", { withTimezone: true }),
+    filled_quantity: numeric("filled_quantity", { precision: 12, scale: 4 }).default("0"),
+    avg_fill_price: numeric("avg_fill_price", { precision: 14, scale: 6 }),
+    total_commission: numeric("total_commission", { precision: 10, scale: 4 }).default("0"),
+    realized_pnl: numeric("realized_pnl", { precision: 14, scale: 4 }),
+    rejection_reason: text("rejection_reason"),
+    cancel_reason: text("cancel_reason"),
+    error_message: text("error_message"),
+    setup_type: text("setup_type"),
+    regime: text("regime"),
+    operator_notes: text("operator_notes"),
+    metadata_json: text("metadata_json"),
     created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    uniqueIndex("idx_orders_order_uuid").on(table.order_uuid),
-    index("idx_orders_broker_order_id").on(table.broker_order_id),
-    index("idx_orders_strategy_id").on(table.strategy_id),
-    index("idx_orders_symbol_created").on(table.symbol, table.created_at),
-    index("idx_orders_status").on(table.status),
-    index("idx_orders_completed_at").on(table.completed_at),
-  ]
+    index("idx_orders_symbol_status").on(table.symbol, table.status),
+    index("idx_orders_uuid").on(table.order_uuid),
+    index("idx_orders_broker_id").on(table.broker_order_id),
+    index("idx_orders_created").on(table.created_at),
+  ],
 );
-
-export type Order = typeof ordersTable.$inferSelect;
-export type NewOrder = typeof ordersTable.$inferInsert;
-export type InsertOrder = typeof ordersTable.$inferInsert;
-
-// ── Fills ────────────────────────────────────────────────────────────────────
 
 export const fillsTable = pgTable(
   "fills",
   {
     id: serial("id").primaryKey(),
-    order_id: integer("order_id").notNull(),
+    order_id: integer("order_id"),
     broker_fill_id: text("broker_fill_id").notNull(),
+    broker_order_id: text("broker_order_id"),
     symbol: text("symbol").notNull(),
     side: text("side").notNull(),
-    quantity: numeric("quantity").notNull(),
-    price: numeric("price").notNull(),
-    commission: numeric("commission").notNull().default("0"),
-    slippage_bps: numeric("slippage_bps"),
-    liquidity: text("liquidity"),
-    venue: text("venue"),
-    filled_at: timestamp("filled_at", { withTimezone: true }).notNull().defaultNow(),
-    metadata: jsonb("metadata").default({}).notNull(),
+    quantity: numeric("quantity", { precision: 12, scale: 4 }).notNull(),
+    price: numeric("price", { precision: 14, scale: 6 }).notNull(),
+    commission: numeric("commission", { precision: 10, scale: 4 }).default("0"),
+    expected_price: numeric("expected_price", { precision: 14, scale: 6 }),
+    slippage: numeric("slippage", { precision: 10, scale: 6 }),
+    slippage_bps: numeric("slippage_bps", { precision: 8, scale: 2 }),
+    matched_to_position: boolean("matched_to_position").notNull().default(false),
+    realized_pnl: numeric("realized_pnl", { precision: 14, scale: 4 }),
+    filled_at: timestamp("filled_at", { withTimezone: true }).notNull(),
     created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    uniqueIndex("idx_fills_broker_fill_id").on(table.broker_fill_id),
     index("idx_fills_order_id").on(table.order_id),
-    index("idx_fills_symbol_filled_at").on(table.symbol, table.filled_at),
-    index("idx_fills_filled_at").on(table.filled_at),
-  ]
+    index("idx_fills_broker_fill_id").on(table.broker_fill_id),
+    index("idx_fills_symbol_filled").on(table.symbol, table.filled_at),
+  ],
 );
-
-export type Fill = typeof fillsTable.$inferSelect;
-export type NewFill = typeof fillsTable.$inferInsert;
-export type InsertFill = typeof fillsTable.$inferInsert;
-
-// ── Execution Metrics ────────────────────────────────────────────────────────
 
 export const executionMetricsTable = pgTable(
   "execution_metrics",
@@ -113,55 +98,50 @@ export const executionMetricsTable = pgTable(
     id: serial("id").primaryKey(),
     order_id: integer("order_id").notNull(),
     symbol: text("symbol").notNull(),
-    strategy_id: text("strategy_id").notNull(),
-    execution_mode: text("execution_mode").notNull().default("paper"),
+    strategy_id: text("strategy_id"),
+    execution_mode: text("execution_mode"),
     total_fills: integer("total_fills").notNull().default(0),
-    avg_fill_price: numeric("avg_fill_price").notNull(),
-    expected_price: numeric("expected_price").notNull(),
-    realized_slippage_bps: numeric("realized_slippage_bps").notNull(),
+    fill_count: integer("fill_count").notNull().default(1),
+    avg_fill_price: numeric("avg_fill_price", { precision: 14, scale: 6 }),
+    expected_price: numeric("expected_price", { precision: 14, scale: 6 }),
+    realized_slippage_bps: numeric("realized_slippage_bps", { precision: 8, scale: 2 }),
     submit_to_first_fill_ms: integer("submit_to_first_fill_ms"),
     submit_to_complete_ms: integer("submit_to_complete_ms"),
+    total_commission: numeric("total_commission", { precision: 10, scale: 4 }).default("0"),
     regime: text("regime"),
     setup_type: text("setup_type"),
-    order_outcome: text("order_outcome").notNull(),
+    order_outcome: text("order_outcome"),
     created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    index("idx_exec_metrics_order_id").on(table.order_id),
-    index("idx_exec_metrics_symbol_created").on(table.symbol, table.created_at),
-    index("idx_exec_metrics_strategy_id").on(table.strategy_id),
-    index("idx_exec_metrics_regime").on(table.regime),
-  ]
+    index("idx_exec_metrics_order").on(table.order_id),
+    index("idx_exec_metrics_symbol").on(table.symbol, table.created_at),
+  ],
 );
 
+export const reconciliationEventsTable = pgTable("reconciliation_events", {
+  id: serial("id").primaryKey(),
+  event_type: text("event_type").notNull(),
+  status: text("status").notNull(),
+  local_position_count: integer("local_position_count"),
+  broker_position_count: integer("broker_position_count"),
+  orphaned_local_orders: integer("orphaned_local_orders").default(0),
+  unknown_broker_positions: integer("unknown_broker_positions").default(0),
+  quantity_mismatches: integer("quantity_mismatches").default(0),
+  details_json: text("details_json"),
+  created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const insertOrderSchema = createInsertSchema(ordersTable);
+export const insertFillSchema = createInsertSchema(fillsTable);
+export const insertExecutionMetricSchema = createInsertSchema(executionMetricsTable);
+export const insertReconciliationEventSchema = createInsertSchema(reconciliationEventsTable);
+
+export type Order = typeof ordersTable.$inferSelect;
+export type InsertOrder = z.infer<typeof insertOrderSchema>;
+export type Fill = typeof fillsTable.$inferSelect;
+export type InsertFill = z.infer<typeof insertFillSchema>;
 export type ExecutionMetric = typeof executionMetricsTable.$inferSelect;
-export type NewExecutionMetric = typeof executionMetricsTable.$inferInsert;
-export type InsertExecutionMetric = typeof executionMetricsTable.$inferInsert;
-
-// ── Reconciliation Events ────────────────────────────────────────────────────
-
-export const reconciliationEventsTable = pgTable(
-  "reconciliation_events",
-  {
-    id: serial("id").primaryKey(),
-    event_type: text("event_type").notNull(),
-    status: text("status").notNull(),
-    local_orders_checked: integer("local_orders_checked").notNull().default(0),
-    broker_positions_checked: integer("broker_positions_checked").notNull().default(0),
-    orphaned_local_orders: integer("orphaned_local_orders").notNull().default(0),
-    unknown_broker_positions: integer("unknown_broker_positions").notNull().default(0),
-    mismatched_orders: integer("mismatched_orders").notNull().default(0),
-    discrepancy_total_usd: numeric("discrepancy_total_usd").notNull().default("0"),
-    details: jsonb("details").default({}).notNull(),
-    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [
-    index("idx_reconciliation_created_at").on(table.created_at),
-    index("idx_reconciliation_event_type").on(table.event_type),
-    index("idx_reconciliation_status").on(table.status),
-  ]
-);
-
+export type InsertExecutionMetric = z.infer<typeof insertExecutionMetricSchema>;
 export type ReconciliationEvent = typeof reconciliationEventsTable.$inferSelect;
-export type NewReconciliationEvent = typeof reconciliationEventsTable.$inferInsert;
-export type InsertReconciliationEvent = typeof reconciliationEventsTable.$inferInsert;
+export type InsertReconciliationEvent = z.infer<typeof insertReconciliationEventSchema>;

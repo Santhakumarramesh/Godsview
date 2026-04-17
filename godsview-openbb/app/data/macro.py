@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-import logging
 from datetime import datetime, timezone
 from typing import Any
 
 import requests
 
 from app.config import settings
-
-logger = logging.getLogger(__name__)
 
 
 def get_macro_event_context(symbol: str) -> dict[str, Any]:
@@ -26,7 +23,7 @@ def get_macro_event_context(symbol: str) -> dict[str, Any]:
             if "high impact" in html:
                 high_impact_events.append({"source": "ftmo", "title": "High impact event detected"})
     except Exception:
-        logger.debug("failed_to_fetch_ftmo_calendar", exc_info=True)
+        pass
 
     # If many high-impact markers exist, activate blackout warning.
     if len(high_impact_events) >= 1:

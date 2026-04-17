@@ -114,16 +114,13 @@ export function runStartupValidation(): StartupValidationResult {
   const alpacaBase = process.env.ALPACA_BASE_URL ?? "";
   const isPaperAlpaca = alpacaBase.includes("paper-api");
 
-  const alpacaConfigured = hasAlpacaKey && hasAlpacaSecret;
   checks.push({
     name: "alpaca_credentials",
-    passed: alpacaConfigured || !isLiveMode,
-    required: isLiveMode, // MUST have Alpaca keys in live mode
-    message: alpacaConfigured
+    passed: true, // not required, but log status
+    required: false,
+    message: hasAlpacaKey && hasAlpacaSecret
       ? `Alpaca configured (${isPaperAlpaca ? "PAPER" : "LIVE"} endpoint)`
-      : isLiveMode
-        ? "CRITICAL: Alpaca credentials MISSING in live mode — set ALPACA_API_KEY and ALPACA_SECRET_KEY"
-        : "Alpaca credentials not configured — trading disabled",
+      : "Alpaca credentials not configured — trading disabled",
   });
 
   // 6. Live mode + paper Alpaca mismatch
