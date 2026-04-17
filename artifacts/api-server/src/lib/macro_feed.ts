@@ -285,7 +285,8 @@ export async function fetchLiveMacroSnapshot(
     sources["rateDiff"] = `funding proxy fallback (${funding.fundingRate.toFixed(5)})`;
   }
 
-  // Macro risk score: proxy from VIX + DXY combined stress  const vixStress = Math.max(0, (vix.vix - 20) / 60); // 0 at VIX=20, 1 at VIX=80
+  // Macro risk score: proxy from VIX + DXY combined stress
+  const vixStress = Math.max(0, (vix.vix - 20) / 60); // 0 at VIX=20, 1 at VIX=80
   const dxyStress = dxy.slope > 0 ? dxy.slope * 5 : 0;
   const macroRiskScore = Math.min(0.95, (vixStress * 0.7 + dxyStress * 0.3));
   sources["macroRiskScore"] = `VIX stress × 0.7 + DXY stress × 0.3`;
