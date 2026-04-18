@@ -143,6 +143,65 @@ const sloRouterStatusDefault = {
   },
 };
 
+// ── Proof Dashboard — shape matches proof.tsx `ProofDashboardData` ───────
+const proofDashboardDefault = {
+  summary: {
+    overall_win_rate: 0.68,
+    total_trades: 42,
+    profit_factor: 1.85,
+    sharpe_ratio: 1.42,
+    best_strategy: { name: "Breakout Reversion", win_rate: 0.73 },
+    worst_drawdown: -0.08,
+    equity_curve: [
+      { date: "2026-03-01", cumulative_pnl: 0 },
+      { date: "2026-03-15", cumulative_pnl: 1240 },
+      { date: "2026-04-01", cumulative_pnl: 2180 },
+    ],
+  },
+  trades: [],
+  strategy_comparison: {
+    strategies: [],
+    comparison_data: [],
+  },
+  market_readiness: {
+    status: "green",
+    regime: "trending-bull",
+    recommended_position_size: 0.75,
+  },
+};
+
+// ── System risk config — shape matches RiskConfig from lib/api.ts ────────
+const systemRiskDefault = {
+  kill_switch: false,
+  max_daily_loss: -250,
+  max_exposure_pct: 80,
+  max_concurrent_positions: 3,
+  max_trades_per_session: 8,
+  cooldown_minutes: 15,
+  degraded_data_block: false,
+  session_allowlist: ["NY Morning", "NY Afternoon"],
+  news_lockout: false,
+};
+
+const systemStatusDefault = {
+  status: "healthy",
+  mode: "paper",
+  uptime_seconds: 3600,
+  last_heartbeat: new Date().toISOString(),
+};
+
+const alpacaAccountDefault = {
+  account_number: "TEST-ACCOUNT",
+  status: "ACTIVE",
+  equity: 100_000,
+  buying_power: 50_000,
+  cash: 25_000,
+  portfolio_value: 100_000,
+  pattern_day_trader: false,
+  trading_blocked: false,
+  account_blocked: false,
+};
+
 // ── Handler registry ────────────────────────────────────────────────────
 export const handlers = [
   http.get("/api/alerts/summary", () => HttpResponse.json(alertSummaryDefault)),
@@ -163,6 +222,16 @@ export const handlers = [
 
   http.get("/api/slo/budgets", () => HttpResponse.json(sloBudgetsDefault)),
   http.get("/api/slo/router/status", () => HttpResponse.json(sloRouterStatusDefault)),
+
+  // Proof Dashboard — query string is part of the path; MSW matches on
+  // pathname only by default, so the same handler covers `?days=7`,
+  // `?days=30`, etc.
+  http.get("/api/proof/dashboard", () => HttpResponse.json(proofDashboardDefault)),
+
+  // System config + Alpaca shapes (consumed by settings.tsx and others).
+  http.get("/api/system/risk", () => HttpResponse.json(systemRiskDefault)),
+  http.get("/api/system/status", () => HttpResponse.json(systemStatusDefault)),
+  http.get("/api/alpaca/account", () => HttpResponse.json(alpacaAccountDefault)),
 
   http.get("/api/healthz", () => HttpResponse.json({ status: "ok" })),
   http.get("/api/readyz", () => HttpResponse.json({ status: "ok" })),

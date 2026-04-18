@@ -54,6 +54,15 @@ dashboard render tree stays healthy under the Phase 8 API shapes and
 the Phase 9 SSE push hook. Scaffolding is in `src/test/` — add one
 `__tests__/<page>.test.tsx` per page as coverage grows.
 
+Phase 12 wires the dashboard suite into `.github/workflows/ci.yml` so
+every PR runs the jsdom tests in the `typecheck-and-test` job and the
+`build` job enforces a regression floor (≥ 10 passing dashboard tests).
+Phase 12 also adds a `FakeWebSocket` shim to `src/test/setup.ts`, which
+unblocks smoke tests for any page that subscribes to a WebSocket feed.
+Current dashboard suite at `v1.5.0`: 13 tests across 6 files covering
+`not-found`, `alert-center`, `alerts`, `checklist`, `proof`, and
+`news-monitor`.
+
 ## 3. k6 performance baseline
 
 Run both k6 scripts against a locally-running api-server (paper mode):

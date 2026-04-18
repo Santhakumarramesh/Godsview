@@ -111,3 +111,47 @@ if (!globalThis.IntersectionObserver) {
 if (!window.scrollTo) {
   window.scrollTo = vi.fn() as unknown as typeof window.scrollTo;
 }
+
+// WebSocket is used by pages that subscribe to live price / news feeds
+// (e.g. news-monitor, watchlist). jsdom doesn't ship a WebSocket
+// implementation; we stub a minimal class that fires `onopen` in a
+// microtask and is otherwise silent. The shim matches the same interface
+// as FakeEventSource so pages that guard `new WebSocket()` with try/catch
+// keep working too.
+class FakeWebSocket {
+  static CONNECTING = 0;
+  static OPEN = 1;
+  static CLOSING = 2;
+  static CLOSED = 3;
+  readyState = FakeWebSocket.CONNECTING;
+  url: string;
+  protocol = "";
+  onopen: ((ev: Event) => void) | null = null;
+  onclose: ((ev: CloseEvent) => void) | null = null;
+  onerror: ((ev: Event) => void) | null = null;
+  onmessage: ((ev: MessageEvent) => void) | null = null;
+  private listeners = new Map<string, Set<(ev: Event) => void>>();
+  constructor(url: string, _protocols?: string | string[]) {
+    this.url = url;
+    queueMicrotask(() => {
+      this.readyState = FakeWebSocket.OPEN;
+      this.onopen?.(new Event("open"));
+    });
+  }
+  addEventListener(type: string, listener: (ev: Event) => void) {
+    if (!this.listeners.has(type)) this.listeners.set(type, new Set());
+    this.listeners.get(type)!.add(listener);
+  }
+  removeEventListener(type: string, listener: (ev: Event) => void) {
+    this.listeners.get(type)?.delete(listener);
+  }
+  send(_data: string) {
+    /* no-op */
+  }
+  close() {
+    this.readyState = FakeWebSocket.CLOSED;
+    this.onclose?.(new CloseEvent("close"));
+  }
+}
+// @ts-expect-error attach to jsdom window
+globalThis.WebSocket = FakeWebSocket;

@@ -50,11 +50,19 @@ jobs:
         # per-package typechecks above miss.
         run: pnpm run typecheck
 
-      - name: Run Unit Tests
+      - name: Run Unit Tests (api-server)
         run: pnpm --filter @workspace/api-server test
         env:
           PORT: "3000"
           GODSVIEW_SYSTEM_MODE: paper
+          NODE_ENV: test
+
+      # Dashboard smoke tests — added in Phase 11, hard-gated in CI as of
+      # Phase 12. The vitest suite runs under jsdom with MSW as the fetch
+      # boundary; see artifacts/godsview-dashboard/src/test/ for scaffold.
+      - name: Run Dashboard Smoke Tests
+        run: pnpm --filter @workspace/godsview-dashboard test
+        env:
           NODE_ENV: test
 
   # ── 2. Python v2 Microservices ────────────────────────────────────
@@ -230,12 +238,24 @@ jobs:
       - name: Build Dashboard
         run: pnpm --filter @workspace/godsview-dashboard build
 
-      - name: Verify test count (regression gate)
+      - name: Verify test count (regression gate — api-server)
         run: |
           TEST_COUNT=$(GODSVIEW_DATA_DIR=artifacts/api-server/.runtime pnpm --filter @workspace/api-server exec vitest run --reporter=json 2>/dev/null | grep -o '"numPassedTests":[0-9]*' | grep -o '[0-9]*' || echo "0")
           echo "Tests passed: $TEST_COUNT"
           if [ "$TEST_COUNT" -lt 3000 ]; then
             echo "::error::Test count regression: $TEST_COUNT < 3000 minimum"
+            exit 1
+          fi
+
+      - name: Verify test count (regression gate — dashboard)
+        # Phase 11 shipped 7 tests across 3 files; Phase 12 expanded to
+        # 13 tests across 6 files. Floor at 10 so we catch a regression
+        # but don't block legitimate test-suite refactors.
+        run: |
+          DASH_COUNT=$(pnpm --filter @workspace/godsview-dashboard exec vitest run --reporter=json 2>/dev/null | grep -o '"numPassedTests":[0-9]*' | grep -o '[0-9]*' | head -1 || echo "0")
+          echo "Dashboard tests passed: $DASH_COUNT"
+          if [ "$DASH_COUNT" -lt 10 ]; then
+            echo "::error::Dashboard test count regression: $DASH_COUNT < 10 minimum"
             exit 1
           fi
 
