@@ -496,12 +496,17 @@ const NotificationChannels = () => {
   });
 
   const rawChannels = Array.isArray(data) ? data : getMockChannels();
+  // Phase 11 hardening: the backend shape is known but historical mocks
+  // omit `messagesSent` / `failureRate`. Coerce once so the render tree
+  // never calls `.toFixed()` on `undefined`.
   const channels = rawChannels.map((c: any) => ({
     ...c,
+    messagesSent: typeof c.messagesSent === 'number' ? c.messagesSent : 0,
+    failureRate: typeof c.failureRate === 'number' ? c.failureRate : 0,
     lastSent:
       typeof c.lastSent === 'string' && c.lastSent.includes('T')
         ? toRelTime(c.lastSent)
-        : c.lastSent,
+        : c.lastSent ?? '—',
   }));
 
   const getChannelIcon = (type: string) => {

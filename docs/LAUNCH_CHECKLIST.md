@@ -40,12 +40,19 @@ open an issue against the phase whose module regressed.
 
 ```bash
 pnpm -r test                                  # all workspaces
-pnpm -F api-server test                       # api-server focus
+pnpm -F api-server test                       # api-server focus (3654 tests)
+pnpm -F @workspace/godsview-dashboard test    # dashboard smoke tests (Phase 11)
 ```
 
 Expected: all suites green. No `@ts-nocheck` headers remain on the
 Phase 5 governance scaffolds (`promotion_discipline.ts`,
 `trust_surface.ts`, `shadow_scorecard.ts`) — confirmed by Phase 7.
+
+Phase 11 adds jsdom/MSW-backed smoke tests under
+`artifacts/godsview-dashboard/src/pages/__tests__/`. They verify the
+dashboard render tree stays healthy under the Phase 8 API shapes and
+the Phase 9 SSE push hook. Scaffolding is in `src/test/` — add one
+`__tests__/<page>.test.tsx` per page as coverage grows.
 
 ## 3. k6 performance baseline
 
