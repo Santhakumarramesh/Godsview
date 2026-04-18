@@ -1,15 +1,3 @@
-// @ts-nocheck
-/**
- * DESIGN SCAFFOLD — not wired into the live runtime.
- * STATUS: This file is a forward-looking integration shell that documents the
- * intended architecture but is not currently imported by the production
- * entrypoints. Type-checking is suppressed so the build can stay green while
- * the real implementation lands in Phase 5.
- *
- * REMOVE the `// @ts-nocheck` directive once Phase 5 is implemented and the
- * file is actually mounted in `src/index.ts` / `src/routes/index.ts`.
- */
-
 /**
  * promotion_engine.ts — GodsView Strategy Promotion & Demotion Engine
  *
@@ -25,6 +13,28 @@
  */
 
 import { logger } from "../logger";
+
+// ── Severity helpers ───────────────────────────────────────────────────────
+// The demotion path escalates an in-flight severity level as more failure
+// signals are detected. We use a rank table rather than `Math.max` over strings
+// so the type stays in the union and TypeScript can exhaustively check
+// downstream consumers.
+
+type DemotionSeverity = "low" | "medium" | "high" | "critical";
+
+const SEVERITY_RANK: Record<DemotionSeverity, number> = {
+  low: 0,
+  medium: 1,
+  high: 2,
+  critical: 3,
+};
+
+function escalateSeverity(
+  current: DemotionSeverity,
+  candidate: DemotionSeverity,
+): DemotionSeverity {
+  return SEVERITY_RANK[candidate] > SEVERITY_RANK[current] ? candidate : current;
+}
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -496,11 +506,11 @@ export class PromotionEngine {
     }
     if ((metrics.sharpeRatio ?? 0) < 0.5) {
       signals.push(`Sharpe ratio ${metrics.sharpeRatio.toFixed(2)} degraded`);
-      severity = Math.max(severity as any, "medium");
+      severity = escalateSeverity(severity, "medium");
     }
     if ((metrics.maxDrawdown ?? 0) > 0.25) {
       signals.push(`Max drawdown ${(metrics.maxDrawdown * 100).toFixed(1)}% exceeded safety limit`);
-      severity = Math.max(severity as any, "high");
+      severity = escalateSeverity(severity, "high");
     }
     if ((metrics.daysUnderwater ?? 0) > 60) {
       signals.push(`${metrics.daysUnderwater} days underwater — recovery stalled`);

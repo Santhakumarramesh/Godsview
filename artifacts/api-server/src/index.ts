@@ -14,6 +14,8 @@ import { alpacaAccountStream, wireAccountStreamToReconciler } from "./lib/alpaca
 import { startPaperValidationLoop, stopPaperValidationLoop } from "./lib/paper_validation_loop";
 import { validateOrExit } from "./lib/ops/startup_validator";
 import { initGracefulShutdown } from "./lib/ops/graceful_shutdown";
+import { GovernanceScheduler } from "./lib/governance/governance_scheduler";
+import { CalibrationScheduler } from "./lib/eval/calibration_scheduler";
 
 // ── Validate environment before anything else ───────────────────
 validateEnv();
@@ -165,6 +167,30 @@ const server = app.listen(port, (err) => {
       .then((result) => logger.info({ intervalMs: result.interval_ms }, "Paper validation loop started"))
       .catch((err) => logger.error({ err }, "Paper validation loop failed to start"));
   }
+
+  // Phase 5: governance scheduler (auto promotion + demotion gate evaluator)
+  if ((process.env.GOVERNANCE_AUTOSTART ?? "true") !== "false") {
+    try {
+      GovernanceScheduler.getInstance().start();
+      logger.info("Governance scheduler started (auto promotion + demotion evaluator)");
+    } catch (err: any) {
+      logger.error({ err: err?.message }, "Governance scheduler failed to start");
+    }
+  } else {
+    logger.info("Governance scheduler disabled (GOVERNANCE_AUTOSTART=false)");
+  }
+
+  // Phase 5: calibration scheduler (hourly snapshot + drift detection cron)
+  if ((process.env.CALIBRATION_AUTOSTART ?? "true") !== "false") {
+    try {
+      CalibrationScheduler.getInstance().start();
+      logger.info("Calibration scheduler started (hourly snapshot + drift detection)");
+    } catch (err: any) {
+      logger.error({ err: err?.message }, "Calibration scheduler failed to start");
+    }
+  } else {
+    logger.info("Calibration scheduler disabled (CALIBRATION_AUTOSTART=false)");
+  }
 });
 
 // ── Graceful shutdown with connection draining ──────────────────
@@ -236,6 +262,26 @@ onShutdown(async () => {
 onShutdown(async () => {
   logger.info("Stopping paper validation loop...");
   stopPaperValidationLoop();
+});
+
+// Phase 5: stop governance scheduler
+onShutdown(async () => {
+  try {
+    logger.info("Stopping governance scheduler...");
+    GovernanceScheduler.getInstance().stop();
+  } catch (err: any) {
+    logger.warn({ err: err?.message }, "Governance scheduler stop failed");
+  }
+});
+
+// Phase 5: stop calibration scheduler
+onShutdown(async () => {
+  try {
+    logger.info("Stopping calibration scheduler...");
+    CalibrationScheduler.getInstance().stop();
+  } catch (err: any) {
+    logger.warn({ err: err?.message }, "Calibration scheduler stop failed");
+  }
 });
 
 // Register cleanup: end trading session
