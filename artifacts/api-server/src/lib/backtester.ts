@@ -406,8 +406,10 @@ export async function runBacktest(config: BacktestConfig): Promise<BacktestResul
   const { lookback_days, initial_equity, min_signals = 50 } = config;
 
   // Fetch historical signals from accuracy_results
-  const { db, accuracyResultsTable } = await import("@workspace/db");
-  const { and, or, eq, gte, isNotNull } = await import("drizzle-orm");
+  // IMPORTANT: pull operators from @workspace/db so we share a single
+  // drizzle-orm peer-resolution (pnpm hashes peers → multiple drizzle-orm
+  // copies → PgColumn incompatibility with SQLWrapper/AnyColumn).
+  const { db, accuracyResultsTable, and, or, eq, gte, isNotNull } = await import("@workspace/db");
 
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - lookback_days);
@@ -1341,8 +1343,8 @@ export async function runWalkForwardBacktest(config: WalkForwardConfig): Promise
     return cached.result;
   }
 
-  const { db, accuracyResultsTable } = await import("@workspace/db");
-  const { and, asc, eq, gte, or } = await import("drizzle-orm");
+  // Pull operators from @workspace/db to keep a single drizzle-orm peer copy.
+  const { db, accuracyResultsTable, and, asc, eq, gte, or } = await import("@workspace/db");
 
   const cutoff = new Date(Date.now() - normalized.lookback_days * DAY_MS);
   const conditions: any[] = [

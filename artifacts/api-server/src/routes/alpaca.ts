@@ -46,7 +46,7 @@ import {
   type DecisionState,
   type SystemMode,
 } from "@workspace/strategy-core";
-import { eq, desc, and, count, sql, inArray, gte } from "drizzle-orm";
+import { eq, desc, and, count, sql, inArray, gte } from "@workspace/db";
 
 const router: IRouter = Router();
 const LEGACY_LIVE_TRADING_ENABLED = String(process.env.GODSVIEW_ENABLE_LIVE_TRADING ?? "").toLowerCase() === "true";

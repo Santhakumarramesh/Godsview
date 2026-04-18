@@ -16,6 +16,7 @@
 import { Router, Request, Response } from "express";
 import { requireOperator } from "../lib/auth_guard";
 import { logger } from "../lib/logger";
+import { paramString, paramInt } from "../lib/utils/params";
 import {
   registerModelVersion,
   getChampion,
@@ -37,8 +38,9 @@ export const mlOperationsRouter = Router();
 
 mlOperationsRouter.get("/models/:name/champion", async (req: Request, res: Response) => {
   try {
-    const champion = await getChampion(req.params.name);
-    const shadow = await getShadow(req.params.name);
+    const name = paramString(req.params.name);
+    const champion = await getChampion(name);
+    const shadow = await getShadow(name);
     res.json({ champion, shadow });
   } catch (err) {
     logger.error({ err }, "Failed to get champion");
@@ -50,8 +52,9 @@ mlOperationsRouter.get("/models/:name/champion", async (req: Request, res: Respo
 
 mlOperationsRouter.get("/models/:name/history", async (req: Request, res: Response) => {
   try {
-    const limit = Math.min(Number(req.query.limit) || 20, 100);
-    const versions = await getModelVersionHistory(req.params.name, limit);
+    const name = paramString(req.params.name);
+    const limit = paramInt(req.query.limit, 20, 1, 100);
+    const versions = await getModelVersionHistory(name, limit);
     res.json({ versions, count: versions.length });
   } catch (err) {
     logger.error({ err }, "Failed to get model history");
@@ -63,6 +66,7 @@ mlOperationsRouter.get("/models/:name/history", async (req: Request, res: Respon
 
 mlOperationsRouter.post("/models/:name/register", async (req: Request, res: Response) => {
   try {
+    const name = paramString(req.params.name);
     const { metrics, training_rows, feature_count, feature_names, hyperparams, data_hash, artifact_path } = req.body ?? {};
 
     if (!metrics?.accuracy) {
@@ -70,7 +74,7 @@ mlOperationsRouter.post("/models/:name/register", async (req: Request, res: Resp
       return;
     }
 
-    const id = await registerModelVersion(req.params.name, metrics, {
+    const id = await registerModelVersion(name, metrics, {
       training_rows: Number(training_rows) || 0,
       feature_count: Number(feature_count) || 0,
       feature_names: feature_names ?? [],
@@ -80,7 +84,7 @@ mlOperationsRouter.post("/models/:name/register", async (req: Request, res: Resp
     });
 
     if (id) {
-      res.json({ version_id: id, model_name: req.params.name });
+      res.json({ version_id: id, model_name: name });
     } else {
       res.status(500).json({ error: "registration_failed" });
     }
@@ -94,7 +98,7 @@ mlOperationsRouter.post("/models/:name/register", async (req: Request, res: Resp
 
 mlOperationsRouter.post("/models/:versionId/shadow", requireOperator, async (req: Request, res: Response) => {
   try {
-    const versionId = Number(req.params.versionId);
+    const versionId = paramInt(req.params.versionId, 0);
     const success = await promoteToShadow(versionId);
     res.json({ promoted: success, to: "shadow" });
   } catch (err) {
@@ -107,7 +111,7 @@ mlOperationsRouter.post("/models/:versionId/shadow", requireOperator, async (req
 
 mlOperationsRouter.post("/models/:versionId/champion", requireOperator, async (req: Request, res: Response) => {
   try {
-    const versionId = Number(req.params.versionId);
+    const versionId = paramInt(req.params.versionId, 0);
     const { reason } = req.body ?? {};
     const success = await promoteToChampion(versionId, reason ?? "Manual promotion");
     res.json({ promoted: success, to: "champion" });
@@ -121,8 +125,9 @@ mlOperationsRouter.post("/models/:versionId/champion", requireOperator, async (r
 
 mlOperationsRouter.post("/models/:name/evaluate", async (req: Request, res: Response) => {
   try {
+    const name = paramString(req.params.name);
     const { evaluation_type } = req.body ?? {};
-    const verdict = await runEvaluation(req.params.name, evaluation_type ?? "periodic_review");
+    const verdict = await runEvaluation(name, evaluation_type ?? "periodic_review");
     if (!verdict) {
       res.json({ verdict: null, message: "No champion found or evaluation not possible" });
       return;

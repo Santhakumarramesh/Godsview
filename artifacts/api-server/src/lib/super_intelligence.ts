@@ -768,9 +768,9 @@ export async function trainEnsemble(): Promise<void> {
   try {
     console.log("[super] Training gradient-boosted ensemble...");
 
-    // Dynamic import to avoid circular deps
-    const { db, accuracyResultsTable } = await import("@workspace/db");
-    const { and, or, eq, isNotNull } = await import("drizzle-orm");
+    // Dynamic import to avoid circular deps. Pull operators from
+    // @workspace/db so all consumers share a single drizzle-orm peer copy.
+    const { db, accuracyResultsTable, and, or, eq, isNotNull } = await import("@workspace/db");
 
     const rows = await db
       .select({
@@ -1126,8 +1126,7 @@ export function stopAutonomousMode(): { success: boolean; message: string } {
 async function autonomousScan(): Promise<void> {
   try {
     console.log("[super] [autonomy] Starting scan cycle...");
-    const { db, accuracyResultsTable } = await import("@workspace/db");
-    const { and, gte, isNotNull } = await import("drizzle-orm");
+    const { db, accuracyResultsTable, and, gte, isNotNull } = await import("@workspace/db");
 
     // Fetch recent signals (last 24 hours) grouped by symbol/setup/regime
     const now = new Date();
@@ -1215,8 +1214,7 @@ async function autonomousScan(): Promise<void> {
  */
 async function updateStrategyRatings(signals: any[]): Promise<void> {
   try {
-    const { db, accuracyResultsTable } = await import("@workspace/db");
-    const { and, eq, isNotNull } = await import("drizzle-orm");
+    const { db, accuracyResultsTable, and, eq, isNotNull } = await import("@workspace/db");
 
     // Group by setup_type + regime combo
     const combos = new Map<string, typeof signals>();

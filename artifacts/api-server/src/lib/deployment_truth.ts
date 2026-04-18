@@ -585,17 +585,25 @@ export class DeploySmokeTest {
     const name = path.split("/").pop() || path;
 
     try {
-      const response = await fetch(`${this.baseUrl}${path}`, {
-        method: "GET",
-        timeout: 10000,
-      });
+      // Standard `fetch` (Node 20+) doesn't accept `timeout`; use AbortSignal.
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 10_000);
+      let response: Response;
+      try {
+        response = await fetch(`${this.baseUrl}${path}`, {
+          method: "GET",
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timer);
+      }
 
       const latency = performance.now() - startTime;
       const pass = response.ok || response.status === 200;
 
       let responseBody: Record<string, unknown> | undefined;
       try {
-        responseBody = await response.json();
+        responseBody = (await response.json()) as Record<string, unknown>;
       } catch {
         // Response was not JSON, which is OK
       }

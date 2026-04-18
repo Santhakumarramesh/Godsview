@@ -619,3 +619,45 @@ export async function closePool(): Promise<void> {
 
 export { db, pool };
 export * from "./schema";
+
+/**
+ * Re-export drizzle-orm query helpers so all consumers share a single
+ * drizzle-orm type instance. pnpm's peer-dependency hashing can otherwise
+ * resolve drizzle-orm to multiple distinct copies (one per peer tree),
+ * making `PgColumn<...>` from `@workspace/db` nominally incompatible with
+ * `SQLWrapper`/`AnyColumn` from a directly-imported `drizzle-orm`.
+ *
+ * Always import operators from `@workspace/db`, not `drizzle-orm`, in
+ * downstream packages.
+ */
+export {
+  and,
+  asc,
+  between,
+  count,
+  countDistinct,
+  desc,
+  eq,
+  exists,
+  gt,
+  gte,
+  ilike,
+  inArray,
+  isNotNull,
+  isNull,
+  like,
+  lt,
+  lte,
+  max,
+  min,
+  ne,
+  not,
+  notBetween,
+  notExists,
+  notIlike,
+  notInArray,
+  notLike,
+  or,
+  sql,
+  sum,
+} from "drizzle-orm";

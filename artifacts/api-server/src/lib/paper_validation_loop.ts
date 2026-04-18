@@ -1,5 +1,5 @@
 import { accuracyResultsTable, db, siDecisionsTable } from "@workspace/db";
-import { and, asc, desc, eq, gte, isNull, lte, or } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNull, lte, or } from "@workspace/db";
 import { logger } from "./logger";
 import { persistWrite, persistRead, persistAppend } from "./persistent_store";
 

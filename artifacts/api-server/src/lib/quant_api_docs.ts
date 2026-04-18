@@ -1,7 +1,67 @@
 // quant_api_docs.ts - Live API documentation generator for all subsystems
 // Generates OpenAPI 3.0 spec and structured endpoint documentation
+//
+// NOTE: We use lightweight, locally-defined OpenAPI shapes instead of pulling
+// in the `openapi3-ts` package. This keeps the API surface stable even if the
+// upstream types churn, and removes a third-party dependency from the server
+// runtime. The shapes below cover everything this generator emits.
 
-import { OpenAPIObject, PathItemObject, OperationObject, SchemaObject } from 'openapi3-ts';
+export interface SchemaObject {
+  type?: string;
+  format?: string;
+  description?: string;
+  properties?: Record<string, SchemaObject>;
+  items?: SchemaObject;
+  required?: string[];
+  enum?: unknown[];
+  oneOf?: SchemaObject[];
+  anyOf?: SchemaObject[];
+  allOf?: SchemaObject[];
+  $ref?: string;
+  example?: unknown;
+  default?: unknown;
+  nullable?: boolean;
+  additionalProperties?: boolean | SchemaObject;
+  [key: string]: unknown;
+}
+
+export interface OperationObject {
+  tags?: string[];
+  summary?: string;
+  description?: string;
+  operationId?: string;
+  parameters?: unknown[];
+  requestBody?: unknown;
+  responses?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface PathItemObject {
+  get?: OperationObject;
+  post?: OperationObject;
+  put?: OperationObject;
+  delete?: OperationObject;
+  patch?: OperationObject;
+  [key: string]: unknown;
+}
+
+export interface OpenAPIObject {
+  openapi: string;
+  info: {
+    title: string;
+    version: string;
+    description?: string;
+    [key: string]: unknown;
+  };
+  servers?: Array<{ url: string; description?: string }>;
+  paths: Record<string, PathItemObject>;
+  components?: {
+    schemas?: Record<string, SchemaObject>;
+    [key: string]: unknown;
+  };
+  tags?: Array<{ name: string; description?: string }>;
+  [key: string]: unknown;
+}
 
 // ============================================================================
 // Types and Interfaces
@@ -26,7 +86,8 @@ export interface RequestBodySchema {
   contentType: string;
   schema: SchemaObject;
   description: string;
-  required: boolean;
+  /** Defaults to `true` when omitted — most documented endpoints require a body. */
+  required?: boolean;
   examples?: Record<string, unknown>;
 }
 

@@ -24,7 +24,7 @@ import {
   ordersTable,
   executionMetricsTable,
 } from "@workspace/db";
-import { desc, eq, and, gte, lte, isNotNull, sql } from "drizzle-orm";
+import { desc, eq, and, gte, lte, isNotNull, sql } from "@workspace/db";
 
 // ── Types ──────────────────────────────────────────────────────
 
@@ -436,7 +436,7 @@ export async function computeLiveMetrics(
     }
 
     // Get execution metrics for these orders
-    const orderIds = orders.map(o => o.id);
+    const orderIds = orders.map((o: { id: number }) => o.id);
     const metrics = await db.select()
       .from(executionMetricsTable)
       .where(
@@ -454,13 +454,13 @@ export async function computeLiveMetrics(
       );
 
     // Compute aggregate metrics
-    const wins = orders.filter(o => {
+    const wins = orders.filter((o: { realized_pnl?: number | string | null }) => {
       const pnl = Number(o.realized_pnl ?? 0);
       return pnl > 0;
     }).length;
 
-    const pnls = orders.map(o => Number(o.realized_pnl ?? 0));
-    const totalPnl = pnls.reduce((s, v) => s + v, 0);
+    const pnls = orders.map((o: { realized_pnl?: number | string | null }) => Number(o.realized_pnl ?? 0));
+    const totalPnl = pnls.reduce((s: number, v: number) => s + v, 0);
     const avgPnl = pnls.length > 0 ? totalPnl / pnls.length : 0;
     const winRate = orders.length > 0 ? wins / orders.length : 0;
 
@@ -471,9 +471,9 @@ export async function computeLiveMetrics(
     const maxDD = computeMaxDrawdownPct(pnls);
 
     // Average slippage from fills
-    const slippageValues = fills.map(f => Number(f.slippage_bps ?? 0));
+    const slippageValues = fills.map((f: { slippage_bps?: number | string | null }) => Number(f.slippage_bps ?? 0));
     const avgSlippage = slippageValues.length > 0
-      ? slippageValues.reduce((s, v) => s + v, 0) / slippageValues.length
+      ? slippageValues.reduce((s: number, v: number) => s + v, 0) / slippageValues.length
       : 0;
 
     return {
@@ -527,8 +527,10 @@ export async function computeSlippageCalibration(
 
     if (fills.length < 5) return null;
 
-    const values = fills.map(f => Number(f.slippage_bps ?? 0)).sort((a, b) => a - b);
-    const avg = values.reduce((s, v) => s + v, 0) / values.length;
+    const values = fills
+      .map((f: { slippage_bps?: number | string | null }) => Number(f.slippage_bps ?? 0))
+      .sort((a: number, b: number) => a - b);
+    const avg = values.reduce((s: number, v: number) => s + v, 0) / values.length;
     const p50 = percentile(values, 0.50);
     const p95 = percentile(values, 0.95);
     const max = values[values.length - 1] ?? 0;

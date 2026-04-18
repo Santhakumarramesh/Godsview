@@ -11,7 +11,7 @@
  */
 
 import { db, accuracyResultsTable } from "@workspace/db";
-import { sql } from "drizzle-orm";
+import { sql } from "@workspace/db";
 import { logger } from "./logger";
 import { getHistoricalBars, type OHLCVBar, type DataTimeframe } from "./tiingo_client";
 

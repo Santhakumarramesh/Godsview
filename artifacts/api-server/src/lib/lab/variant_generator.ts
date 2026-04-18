@@ -129,11 +129,9 @@ export class VariantGenerator {
       JSON.stringify(strategy)
     ) as StrategyDSL;
 
-    if (newStrategy.entry.confirmationBars > 1) {
-      newStrategy.entry.confirmationBars = Math.max(
-        1,
-        newStrategy.entry.confirmationBars - 1
-      );
+    const currentBars = newStrategy.entry.confirmationBars ?? 1;
+    if (currentBars > 1) {
+      newStrategy.entry.confirmationBars = Math.max(1, currentBars - 1);
     }
 
     const modifications: string[] = [];

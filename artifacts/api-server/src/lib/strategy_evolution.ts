@@ -250,8 +250,8 @@ class StrategyRegistry {
           const merged: StrategyParams = {
             ...defaultParams,
             minConfirmationScore: Number(row.min_confirmation_score),
-            requireMTFAlignment: row.require_mtf_alignment,
-            requireBOS: row.require_bos,
+            requireMTFAlignment: row.require_mtf_alignment ?? defaultParams.requireMTFAlignment,
+            requireBOS: row.require_bos ?? defaultParams.requireBOS,
             minOBQuality: Number(row.min_ob_quality),
             stopATRMultiplier: Number(row.stop_atr_multiplier),
             takeProfitATRMultiplier: Number(row.take_profit_atr_multiplier),
@@ -260,7 +260,7 @@ class StrategyRegistry {
             blacklistedRegimes: row.blacklisted_regimes ? JSON.parse(row.blacklisted_regimes) : [],
             changelog: row.changelog ? JSON.parse(row.changelog) : [],
             tier: (row.tier as StrategyParams["tier"]) ?? "SEED",
-            version: row.version,
+            version: Number(row.version),
           };
           this.strategies.set(key, merged);
         }

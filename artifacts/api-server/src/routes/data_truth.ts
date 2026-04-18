@@ -1,11 +1,14 @@
-import { Router, Request, Response } from 'express';
+import { Router, type IRouter, Request, Response } from 'express';
 import { db } from '../db';
 import {
   dataQualityScores,
   dataFeedHealth,
   dataConsistencyChecks,
+  type DataFeedHealth,
+  type DataQualityScore,
+  type DataConsistencyCheck,
 } from '../schema/data_truth';
-import { desc, eq, and } from 'drizzle-orm';
+import { desc, eq, and } from "@workspace/db";
 import {
   DataQualityScorer,
   FeedHealthMonitor,
@@ -14,7 +17,7 @@ import {
   type Candle,
 } from '../lib/data_truth_engine';
 
-const router = Router();
+const router: IRouter = Router();
 
 // Shared instances (in production, these would be injected or managed globally)
 const qualityScorer = new DataQualityScorer();
@@ -22,35 +25,47 @@ const feedHealthMonitor = new FeedHealthMonitor();
 const crossSourceValidator = new CrossSourceValidator();
 
 /**
+ * Coerce a route param into a non-empty string. Express types this as
+ * `string | string[]` because middleware can swap in array params; for our
+ * single-value paths we always want the first scalar string.
+ */
+function paramString(value: unknown, fallback = ''): string {
+  if (Array.isArray(value)) return String(value[0] ?? fallback);
+  if (value === undefined || value === null) return fallback;
+  return String(value);
+}
+
+/**
  * GET /api/data-truth/quality/:symbol/:timeframe
  * Returns quality score for a specific symbol and timeframe
  */
 router.get('/quality/:symbol/:timeframe', async (req: Request, res: Response) => {
   try {
-    const { symbol, timeframe } = req.params;
+    const symbol = paramString(req.params.symbol).toUpperCase();
+    const timeframe = paramString(req.params.timeframe);
 
-    const latestScore = await db
+    const latestScore = (await db
       .select()
       .from(dataQualityScores)
       .where(
         and(
-          eq(dataQualityScores.symbol, symbol.toUpperCase()),
+          eq(dataQualityScores.symbol, symbol),
           eq(dataQualityScores.timeframe, timeframe)
         )
       )
       .orderBy(desc(dataQualityScores.scoredAt))
-      .limit(1);
+      .limit(1)) as DataQualityScore[];
 
     if (latestScore.length === 0) {
       return res.status(404).json({
         error: 'No quality score found',
-        symbol: symbol.toUpperCase(),
+        symbol,
         timeframe,
       });
     }
 
     const score = latestScore[0];
-    res.json({
+    return res.json({
       symbol: score.symbol,
       timeframe: score.timeframe,
       source: score.source,
@@ -65,7 +80,7 @@ router.get('/quality/:symbol/:timeframe', async (req: Request, res: Response) =>
       metadata: score.metadata,
     });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch quality score', details: String(error) });
+    return res.status(500).json({ error: 'Failed to fetch quality score', details: String(error) });
   }
 });
 
@@ -73,12 +88,12 @@ router.get('/quality/:symbol/:timeframe', async (req: Request, res: Response) =>
  * GET /api/data-truth/feeds
  * Returns health status for all data feeds
  */
-router.get('/feeds', async (req: Request, res: Response) => {
+router.get('/feeds', async (_req: Request, res: Response) => {
   try {
-    const allFeeds = await db
+    const allFeeds = (await db
       .select()
       .from(dataFeedHealth)
-      .orderBy(desc(dataFeedHealth.checkedAt));
+      .orderBy(desc(dataFeedHealth.checkedAt))) as DataFeedHealth[];
 
     const feeds = allFeeds.map((feed) => ({
       feedName: feed.feedName,
@@ -91,9 +106,9 @@ router.get('/feeds', async (req: Request, res: Response) => {
       details: feed.details,
     }));
 
-    res.json({ feeds, count: feeds.length });
+    return res.json({ feeds, count: feeds.length });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch feed health', details: String(error) });
+    return res.status(500).json({ error: 'Failed to fetch feed health', details: String(error) });
   }
 });
 
@@ -103,13 +118,13 @@ router.get('/feeds', async (req: Request, res: Response) => {
  */
 router.get('/feeds/:feedName', async (req: Request, res: Response) => {
   try {
-    const { feedName } = req.params;
+    const feedName = paramString(req.params.feedName);
 
-    const feed = await db
+    const feed = (await db
       .select()
       .from(dataFeedHealth)
       .where(eq(dataFeedHealth.feedName, feedName))
-      .limit(1);
+      .limit(1)) as DataFeedHealth[];
 
     if (feed.length === 0) {
       return res.status(404).json({
@@ -119,7 +134,7 @@ router.get('/feeds/:feedName', async (req: Request, res: Response) => {
     }
 
     const f = feed[0];
-    res.json({
+    return res.json({
       feedName: f.feedName,
       status: f.status,
       lastTickAt: f.lastTickAt,
@@ -130,7 +145,7 @@ router.get('/feeds/:feedName', async (req: Request, res: Response) => {
       details: f.details,
     });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch feed health', details: String(error) });
+    return res.status(500).json({ error: 'Failed to fetch feed health', details: String(error) });
   }
 });
 
@@ -140,19 +155,19 @@ router.get('/feeds/:feedName', async (req: Request, res: Response) => {
  */
 router.get('/consistency/:symbol', async (req: Request, res: Response) => {
   try {
-    const { symbol } = req.params;
+    const symbol = paramString(req.params.symbol).toUpperCase();
 
-    const checks = await db
+    const checks = (await db
       .select()
       .from(dataConsistencyChecks)
-      .where(eq(dataConsistencyChecks.symbol, symbol.toUpperCase()))
+      .where(eq(dataConsistencyChecks.symbol, symbol))
       .orderBy(desc(dataConsistencyChecks.checkedAt))
-      .limit(10);
+      .limit(10)) as DataConsistencyCheck[];
 
     if (checks.length === 0) {
       return res.status(404).json({
         error: 'No consistency checks found',
-        symbol: symbol.toUpperCase(),
+        symbol,
       });
     }
 
@@ -167,13 +182,13 @@ router.get('/consistency/:symbol', async (req: Request, res: Response) => {
       checkedAt: check.checkedAt,
     }));
 
-    res.json({
-      symbol: symbol.toUpperCase(),
+    return res.json({
+      symbol,
       checks: results,
       count: results.length,
     });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch consistency checks', details: String(error) });
+    return res.status(500).json({ error: 'Failed to fetch consistency checks', details: String(error) });
   }
 });
 
@@ -183,8 +198,9 @@ router.get('/consistency/:symbol', async (req: Request, res: Response) => {
  */
 router.get('/gate/:symbol/:timeframe', async (req: Request, res: Response) => {
   try {
-    const { symbol, timeframe } = req.params;
-    const mode = (req.query.mode as string) || 'live';
+    const symbol = paramString(req.params.symbol).toUpperCase();
+    const timeframe = paramString(req.params.timeframe);
+    const mode = paramString(req.query.mode, 'live');
 
     if (!['backtest', 'paper', 'live'].includes(mode)) {
       return res.status(400).json({
@@ -193,22 +209,22 @@ router.get('/gate/:symbol/:timeframe', async (req: Request, res: Response) => {
       });
     }
 
-    const latestScore = await db
+    const latestScore = (await db
       .select()
       .from(dataQualityScores)
       .where(
         and(
-          eq(dataQualityScores.symbol, symbol.toUpperCase()),
+          eq(dataQualityScores.symbol, symbol),
           eq(dataQualityScores.timeframe, timeframe)
         )
       )
       .orderBy(desc(dataQualityScores.scoredAt))
-      .limit(1);
+      .limit(1)) as DataQualityScore[];
 
     if (latestScore.length === 0) {
       return res.status(404).json({
         error: 'No quality score found',
-        symbol: symbol.toUpperCase(),
+        symbol,
         timeframe,
       });
     }
@@ -221,9 +237,9 @@ router.get('/gate/:symbol/:timeframe', async (req: Request, res: Response) => {
       mode as 'backtest' | 'paper' | 'live'
     );
 
-    res.json(verdict);
+    return res.json(verdict);
   } catch (error) {
-    res.status(500).json({ error: 'Failed to execute gate check', details: String(error) });
+    return res.status(500).json({ error: 'Failed to execute gate check', details: String(error) });
   }
 });
 
@@ -231,10 +247,10 @@ router.get('/gate/:symbol/:timeframe', async (req: Request, res: Response) => {
  * GET /api/data-truth/system
  * Returns overall system data truth status (aggregate)
  */
-router.get('/system', async (req: Request, res: Response) => {
+router.get('/system', async (_req: Request, res: Response) => {
   try {
     // Aggregate feed health
-    const allFeeds = await db.select().from(dataFeedHealth);
+    const allFeeds = (await db.select().from(dataFeedHealth)) as DataFeedHealth[];
 
     const healthyCount = allFeeds.filter((f) => f.status === 'healthy').length;
     const degradedCount = allFeeds.filter((f) => f.status === 'degraded').length;
@@ -243,20 +259,22 @@ router.get('/system', async (req: Request, res: Response) => {
 
     const avgLatency =
       allFeeds.length > 0
-        ? allFeeds.reduce((sum, f) => sum + f.avgLatencyMs, 0) / allFeeds.length
+        ? allFeeds.reduce((sum: number, f: DataFeedHealth) => sum + (f.avgLatencyMs ?? 0), 0) /
+          allFeeds.length
         : 0;
 
     const avgUptime =
       allFeeds.length > 0
-        ? allFeeds.reduce((sum, f) => sum + f.uptime24hPct, 0) / allFeeds.length
+        ? allFeeds.reduce((sum: number, f: DataFeedHealth) => sum + (f.uptime24hPct ?? 0), 0) /
+          allFeeds.length
         : 0;
 
     // Aggregate quality scores
-    const latestQualityScores = await db
+    const latestQualityScores = (await db
       .select()
       .from(dataQualityScores)
       .orderBy(desc(dataQualityScores.scoredAt))
-      .limit(50);
+      .limit(50)) as DataQualityScore[];
 
     const symbolQuality = new Map<string, number[]>();
     latestQualityScores.forEach((score) => {
@@ -268,7 +286,7 @@ router.get('/system', async (req: Request, res: Response) => {
 
     const avgQuality =
       latestQualityScores.length > 0
-        ? latestQualityScores.reduce((sum, s) => sum + s.qualityScore, 0) /
+        ? latestQualityScores.reduce((sum: number, s: DataQualityScore) => sum + s.qualityScore, 0) /
           latestQualityScores.length
         : 0;
 
@@ -281,7 +299,7 @@ router.get('/system', async (req: Request, res: Response) => {
       systemStatus = 'stale';
     }
 
-    res.json({
+    return res.json({
       status: systemStatus,
       timestamp: new Date(),
       feeds: {
@@ -301,7 +319,7 @@ router.get('/system', async (req: Request, res: Response) => {
       lastUpdate: allFeeds.length > 0 ? allFeeds[0].checkedAt : new Date(),
     });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to compute system status', details: String(error) });
+    return res.status(500).json({ error: 'Failed to compute system status', details: String(error) });
   }
 });
 

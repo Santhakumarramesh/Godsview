@@ -20,7 +20,7 @@ import {
   modelEvaluationsTable,
   retrainEventsTable,
 } from "@workspace/db";
-import { desc, eq, and, sql } from "drizzle-orm";
+import { desc, eq, and, sql } from "@workspace/db";
 
 // ── Types ──────────────────────────────────────────────────────
 

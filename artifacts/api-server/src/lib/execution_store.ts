@@ -20,7 +20,7 @@ import {
   executionMetricsTable,
   reconciliationEventsTable,
 } from "@workspace/db";
-import { eq, and, desc, sql, inArray } from "drizzle-orm";
+import { eq, and, desc, sql, inArray } from "@workspace/db";
 import type {
   Order,
   InsertOrder,
@@ -192,7 +192,7 @@ export async function getOpenOrders(symbol?: string): Promise<Order[]> {
 
     const rows = await query;
     if (symbol) {
-      return rows.filter(r => r.symbol === symbol);
+      return rows.filter((r: { symbol: string }) => r.symbol === symbol);
     }
     return rows;
   } catch (err) {

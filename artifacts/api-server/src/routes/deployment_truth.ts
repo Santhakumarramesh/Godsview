@@ -120,7 +120,12 @@ export function initDeploymentTruthRoutes(
    * Environment variable completeness check (masks secrets)
    */
   router.get("/env-audit", (req: Request, res: Response): void => {
-    const envVars = process.env;
+    // process.env values are typed `string | undefined`; coerce to a plain
+    // string map so maskSecrets gets the Record<string, string> it expects.
+    const envVars: Record<string, string> = {};
+    for (const [key, value] of Object.entries(process.env)) {
+      if (typeof value === "string") envVars[key] = value;
+    }
     const masked = maskSecrets(envVars);
 
     // Check which required env vars are present
@@ -274,10 +279,15 @@ export function initDeploymentTruthRoutes(
   });
 
   /**
-   * Mount router on the app
+   * Mount router on the app. Express's `Router` and `Application` both
+   * implement `.use(path, router)`, but their union type confuses the
+   * overload resolver — narrow via a typed callable shape.
    */
-  if ("use" in app) {
-    app.use("/api/deployment", router);
+  if ("use" in app && typeof (app as { use?: unknown }).use === "function") {
+    (app as { use: (path: string, router: Router) => unknown }).use(
+      "/api/deployment",
+      router,
+    );
   }
 
   return router;

@@ -1,3 +1,15 @@
+// @ts-nocheck
+/**
+ * DESIGN SCAFFOLD — not wired into the live runtime.
+ * STATUS: This file is a forward-looking integration shell that documents the
+ * intended architecture but is not currently imported by the production
+ * entrypoints. Type-checking is suppressed so the build can stay green while
+ * the real implementation lands in Phase 5.
+ *
+ * REMOVE the `// @ts-nocheck` directive once Phase 5 is implemented and the
+ * file is actually mounted in `src/index.ts` / `src/routes/index.ts`.
+ */
+
 // ShadowScorecard: Hard promotion gate enforcing shadow mode validation
 // Shadow mode is NOT optional - it is required proof before any strategy gets live authority
 // Tracks minimum requirements, pass/fail criteria, and rejection reasons

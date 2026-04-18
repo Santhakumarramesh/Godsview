@@ -18,7 +18,7 @@
 
 import { db } from "@workspace/db";
 import { siDecisionsTable } from "@workspace/db";
-import { desc, eq, and, gte, sql } from "drizzle-orm";
+import { desc, eq, and, gte, sql } from "@workspace/db";
 import { logger } from "./logger";
 
 export interface MarketDNA {

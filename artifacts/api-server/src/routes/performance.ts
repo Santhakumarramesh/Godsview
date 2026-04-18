@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, tradesTable } from "@workspace/db";
-import { eq, and, sql, gte } from "drizzle-orm";
+import { eq, and, sql, gte } from "@workspace/db";
 import { GetPerformanceQueryParams } from "@workspace/api-zod";
 import { getTodayFills, computeRoundTrips, getPortfolioHistory } from "../lib/alpaca.js";
 

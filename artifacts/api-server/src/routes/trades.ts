@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, tradesTable } from "@workspace/db";
-import { eq, desc, and, sql } from "drizzle-orm";
+import { eq, desc, and, sql } from "@workspace/db";
 import { CreateTradeBody, UpdateTradeBody, GetTradesQueryParams, UpdateTradeParams } from "@workspace/api-zod";
 
 const router: IRouter = Router();

@@ -11,6 +11,7 @@
 import { Router, Request, Response } from "express";
 import { requireOperator } from "../lib/auth_guard";
 import { logger } from "../lib/logger";
+import { paramString, paramInt } from "../lib/utils/params";
 import {
   initiateCertification,
   completeCertification,
@@ -28,7 +29,7 @@ export const certificationRouter = Router();
 
 certificationRouter.post("/:strategyId/initiate", async (req: Request, res: Response) => {
   try {
-    const { strategyId } = req.params;
+    const strategyId = paramString(req.params.strategyId);
     const { target_tier, current_tier } = req.body ?? {};
 
     if (!target_tier || !TIER_REQUIREMENTS[target_tier as TargetTier]) {
@@ -55,7 +56,7 @@ certificationRouter.post("/:strategyId/initiate", async (req: Request, res: Resp
 
 certificationRouter.post("/:strategyId/evaluate", async (req: Request, res: Response) => {
   try {
-    const { strategyId } = req.params;
+    const strategyId = paramString(req.params.strategyId);
     const {
       certification_id,
       target_tier,
@@ -116,8 +117,9 @@ certificationRouter.post("/:strategyId/evaluate", async (req: Request, res: Resp
 
 certificationRouter.get("/:strategyId/history", async (req: Request, res: Response) => {
   try {
-    const limit = Math.min(Number(req.query.limit) || 20, 100);
-    const history = await getCertificationHistory(req.params.strategyId, limit);
+    const strategyId = paramString(req.params.strategyId);
+    const limit = paramInt(req.query.limit, 20, 1, 100);
+    const history = await getCertificationHistory(strategyId, limit);
     res.json({ certifications: history, count: history.length });
   } catch (err) {
     logger.error({ err }, "Failed to get certification history");
@@ -129,7 +131,8 @@ certificationRouter.get("/:strategyId/history", async (req: Request, res: Respon
 
 certificationRouter.get("/:strategyId/active", async (req: Request, res: Response) => {
   try {
-    const cert = await getActiveCertification(req.params.strategyId);
+    const strategyId = paramString(req.params.strategyId);
+    const cert = await getActiveCertification(strategyId);
     res.json({ certification: cert });
   } catch (err) {
     logger.error({ err }, "Failed to get active certification");

@@ -205,11 +205,18 @@ export function generateHealthReport(): ProductionHealthReport {
     }
   }
 
-  // Overall status: worst of all subsystems
+  // Overall status: worst of all subsystems. Cast through `SubsystemStatus`
+  // so the control-flow narrowing doesn't drop "critical" from the union.
   let overallStatus: SubsystemStatus = "healthy";
   for (const sys of subsystems) {
-    if (sys.status === "critical") { overallStatus = "critical"; break; }
-    if (sys.status === "degraded" && overallStatus !== "critical") overallStatus = "degraded";
+    const sysStatus = sys.status as SubsystemStatus;
+    if (sysStatus === "critical") {
+      overallStatus = "critical";
+      break;
+    }
+    if (sysStatus === "degraded" && (overallStatus as SubsystemStatus) !== "critical") {
+      overallStatus = "degraded";
+    }
   }
 
   return {

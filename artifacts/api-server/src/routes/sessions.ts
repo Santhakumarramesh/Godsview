@@ -14,7 +14,7 @@
 
 import { Router, type IRouter } from "express";
 import { db, tradingSessionsTable, auditEventsTable, breakerEventsTable } from "@workspace/db";
-import { desc, eq, and, gte, sql } from "drizzle-orm";
+import { desc, eq, and, gte, sql } from "@workspace/db";
 import { logger } from "../lib/logger";
 import {
   startSession,

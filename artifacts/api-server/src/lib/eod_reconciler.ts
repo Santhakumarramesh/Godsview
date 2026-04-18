@@ -65,7 +65,7 @@ export async function runEodReconciliation(): Promise<ReconciliationResult> {
         avg_entry_price: Number(p.avg_entry_price) || 0,
       }));
 
-      const orders = await getOrders({ status: "open" });
+      const orders = await getOrders("open");
       for (const o of orders) {
         if (o.id) brokerOrderIds.add(o.id);
       }

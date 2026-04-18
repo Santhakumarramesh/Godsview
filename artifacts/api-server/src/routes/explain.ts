@@ -16,7 +16,7 @@
 import { Router, type IRouter } from "express";
 import { explainabilitySystem } from "../lib/explain/index.js";
 import { db, tradesTable, signalsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq } from "@workspace/db";
 import { logger } from "../lib/logger.js";
 
 const router: IRouter = Router();

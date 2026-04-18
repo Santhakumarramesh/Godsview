@@ -18,7 +18,7 @@
  */
 
 import { db, accuracyResultsTable } from "@workspace/db";
-import { sql, desc } from "drizzle-orm";
+import { sql, desc } from "@workspace/db";
 import { retrainModel, getModelStatus } from "./ml_model";
 import { logger } from "./logger";
 

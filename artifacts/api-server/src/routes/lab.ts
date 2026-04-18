@@ -1,26 +1,78 @@
 /**
  * Strategy Lab API Routes
  *
- * POST /api/lab/parse - parse natural language to StrategyDSL
- * POST /api/lab/critique - critique a strategy
- * POST /api/lab/variants - generate variants for a strategy
- * POST /api/lab/process - end-to-end pipeline
- * POST /api/lab/refine - refine strategy with feedback
- * POST /api/lab/compare - compare multiple strategies
+ * POST /api/lab/parse     - parse natural language → StrategyDSL
+ * POST /api/lab/critique  - critique a strategy
+ * POST /api/lab/variants  - generate + rank variants
+ * POST /api/lab/process   - end-to-end pipeline (parse → critique → variants)
+ * POST /api/lab/refine    - refine a strategy with natural-language feedback
+ * POST /api/lab/compare   - compare two strategies head-to-head
+ * POST /api/lab/validate  - schema validate a strategy
+ * GET  /api/lab/health    - health probe
+ *
+ * Response shapes wrap the underlying lab classes with stable, documented
+ * fields so the dashboard does not see the internal interface drift.
  */
 
-import { Router, Request, Response } from 'express';
+import { Router, type IRouter, Request, Response } from 'express';
 import { StrategyLab } from '../lib/lab/index';
-import { StrategyParser } from '../lib/lab/strategy_parser';
-import { StrategyCritique } from '../lib/lab/strategy_critique';
+import { NaturalLanguageStrategyParser } from '../lib/lab/strategy_parser';
+import { StrategyCritique, type CritiqueResult } from '../lib/lab/strategy_critique';
 import { VariantGenerator } from '../lib/lab/variant_generator';
 import { StrategyDSL, validateStrategyDSL } from '../lib/lab/strategy_dsl';
 
-const router = Router();
+const router: IRouter = Router();
 const lab = new StrategyLab();
-const parser = new StrategyParser();
+const parser = new NaturalLanguageStrategyParser();
 const critique = new StrategyCritique();
 const variants = new VariantGenerator();
+
+/**
+ * Compact summary that the dashboard renders. We derive it from the rich
+ * `CritiqueResult` shape so callers get a stable view even as internals evolve.
+ */
+function summarizeCritique(report: CritiqueResult) {
+  return {
+    score: report.overallScore,
+    grade: report.overallGrade,
+    verdict: gradeToVerdict(report.overallGrade),
+    recommendations: report.recommendations,
+    redFlags: report.redFlags,
+    strengths: report.strengths,
+  };
+}
+
+function gradeToVerdict(grade: CritiqueResult['overallGrade']): string {
+  switch (grade) {
+    case 'A':
+      return 'strong-edge';
+    case 'B':
+      return 'viable';
+    case 'C':
+      return 'marginal';
+    case 'D':
+      return 'weak';
+    case 'F':
+    default:
+      return 'unfit';
+  }
+}
+
+function nextStepsFromCritique(report: CritiqueResult): string[] {
+  const steps: string[] = [];
+  if (report.redFlags.length > 0) {
+    steps.push(`Address red flags: ${report.redFlags.slice(0, 3).join('; ')}`);
+  }
+  if (report.recommendations.length > 0) {
+    steps.push(...report.recommendations.slice(0, 3));
+  }
+  if (report.overallGrade === 'A' || report.overallGrade === 'B') {
+    steps.push('Promote to paper-trading replay for verification');
+  } else {
+    steps.push('Iterate on the weakest dimension before paper-trading');
+  }
+  return steps;
+}
 
 /**
  * POST /api/lab/parse
@@ -28,7 +80,7 @@ const variants = new VariantGenerator();
  */
 router.post('/parse', (req: Request, res: Response) => {
   try {
-    const { description } = req.body;
+    const { description } = req.body ?? {};
 
     if (!description || typeof description !== 'string') {
       return res.status(400).json({ error: 'Missing or invalid description field' });
@@ -38,15 +90,15 @@ router.post('/parse', (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Description too long (max 10000 chars)' });
     }
 
-    const result = parser.parse(description);
+    const strategy = parser.parse(description);
+    const validation = validateStrategyDSL(strategy);
 
     return res.json({
       success: true,
-      strategy: result.strategy,
-      confidence: result.confidence,
-      ambiguities: result.ambiguities,
-      suggestions: result.suggestions,
-      interpretations: result.interpretations,
+      strategy,
+      valid: validation.valid,
+      warnings: validation.warnings,
+      errors: validation.errors,
     });
   } catch (error) {
     return res.status(500).json({
@@ -61,13 +113,12 @@ router.post('/parse', (req: Request, res: Response) => {
  */
 router.post('/critique', (req: Request, res: Response) => {
   try {
-    const { strategy } = req.body;
+    const { strategy } = req.body ?? {};
 
     if (!strategy || typeof strategy !== 'object') {
       return res.status(400).json({ error: 'Missing or invalid strategy' });
     }
 
-    // Validate strategy structure
     const validation = validateStrategyDSL(strategy as StrategyDSL);
     if (!validation.valid) {
       return res.status(400).json({
@@ -76,11 +127,12 @@ router.post('/critique', (req: Request, res: Response) => {
       });
     }
 
-    const report = critique.critique(strategy as StrategyDSL);
+    const report = critique.fullCritique(strategy as StrategyDSL);
 
     return res.json({
       success: true,
       report,
+      summary: summarizeCritique(report),
     });
   } catch (error) {
     return res.status(500).json({
@@ -91,22 +143,22 @@ router.post('/critique', (req: Request, res: Response) => {
 
 /**
  * POST /api/lab/variants
- * Generate variants for a strategy
+ * Generate variants for a strategy and return them ranked by overall score
  */
 router.post('/variants', (req: Request, res: Response) => {
   try {
-    const { strategy, count = 5 } = req.body;
+    const { strategy, count = 5 } = req.body ?? {};
 
     if (!strategy || typeof strategy !== 'object') {
       return res.status(400).json({ error: 'Missing or invalid strategy' });
     }
 
-    if (count < 1 || count > 20) {
-      return res.status(400).json({ error: 'Count must be between 1 and 20' });
+    if (typeof count !== 'number' || count < 1 || count > 20) {
+      return res.status(400).json({ error: 'Count must be a number between 1 and 20' });
     }
 
-    const generated = variants.generateVariants(strategy as StrategyDSL, count);
-    const ranked = variants.rankVariants(generated);
+    const generated = variants.generateVariants(strategy as StrategyDSL).slice(0, count);
+    const ranked = lab.rankVariants(generated);
 
     return res.json({
       success: true,
@@ -122,11 +174,11 @@ router.post('/variants', (req: Request, res: Response) => {
 
 /**
  * POST /api/lab/process
- * End-to-end: parse → critique → variants → rank
+ * End-to-end pipeline: parse → critique → generate variants → rank
  */
-router.post('/process', async (req: Request, res: Response) => {
+router.post('/process', (req: Request, res: Response) => {
   try {
-    const { description } = req.body;
+    const { description } = req.body ?? {};
 
     if (!description || typeof description !== 'string') {
       return res.status(400).json({ error: 'Missing or invalid description field' });
@@ -136,24 +188,18 @@ router.post('/process', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Description too long (max 10000 chars)' });
     }
 
-    const result = await lab.processIdea(description);
+    const result = lab.processIdea(description);
+    const ranked = lab.rankVariants(result.variants);
 
     return res.json({
       success: true,
       strategy: result.strategy,
-      parseConfidence: result.parseResult.confidence,
-      critiqueSummary: {
-        score: result.critique.overallScore,
-        grade: result.critique.grade,
-        verdict: result.critique.verdict,
-        recommendation: result.critique.recommendation,
-        dealBreakers: result.critique.dealBreakers,
-        strengths: result.critique.strengths,
-        improvements: result.critique.improvements.slice(0, 3),
-      },
-      bestVariant: result.variants[0],
-      allVariants: result.variants,
-      nextSteps: result.nextSteps,
+      critique: result.critique,
+      critiqueSummary: summarizeCritique(result.critique),
+      bestVariant: ranked[0] ?? null,
+      allVariants: ranked,
+      nextSteps: nextStepsFromCritique(result.critique),
+      processingTimeMs: result.processingTime,
       timestamp: result.timestamp,
     });
   } catch (error) {
@@ -165,11 +211,11 @@ router.post('/process', async (req: Request, res: Response) => {
 
 /**
  * POST /api/lab/refine
- * Refine a strategy based on user feedback
+ * Refine a strategy based on natural-language feedback
  */
-router.post('/refine', async (req: Request, res: Response) => {
+router.post('/refine', (req: Request, res: Response) => {
   try {
-    const { strategy, feedback } = req.body;
+    const { strategy, feedback } = req.body ?? {};
 
     if (!strategy || typeof strategy !== 'object') {
       return res.status(400).json({ error: 'Missing or invalid strategy' });
@@ -183,20 +229,17 @@ router.post('/refine', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Feedback too long (max 1000 chars)' });
     }
 
-    const result = await lab.refineStrategy(strategy as StrategyDSL, feedback);
+    const result = lab.refineStrategy(strategy as StrategyDSL, feedback);
 
     return res.json({
       success: true,
-      refinedStrategy: result.strategy,
-      critiqueSummary: {
-        score: result.critique.overallScore,
-        grade: result.critique.grade,
-        verdict: result.critique.verdict,
-        recommendation: result.critique.recommendation,
-      },
-      improvements: result.critique.improvements.slice(0, 3),
-      bestVariant: result.variants[0],
-      nextSteps: result.nextSteps,      timestamp: result.timestamp,
+      originalStrategy: result.originalStrategy,
+      refinedStrategy: result.refinedStrategy,
+      changesSummary: result.changesSummary,
+      newCritique: result.newCritique,
+      critiqueSummary: summarizeCritique(result.newCritique),
+      nextSteps: nextStepsFromCritique(result.newCritique),
+      timestamp: result.timestamp,
     });
   } catch (error) {
     return res.status(500).json({
@@ -207,37 +250,26 @@ router.post('/refine', async (req: Request, res: Response) => {
 
 /**
  * POST /api/lab/compare
- * Compare multiple strategies
+ * Compare two strategies head-to-head
  */
-router.post('/compare', async (req: Request, res: Response) => {
+router.post('/compare', (req: Request, res: Response) => {
   try {
-    const { strategies } = req.body;
+    const { strategies } = req.body ?? {};
 
-    if (!Array.isArray(strategies) || strategies.length < 2) {
-      return res.status(400).json({ error: 'Need at least 2 strategies to compare' });
+    if (!Array.isArray(strategies) || strategies.length !== 2) {
+      return res.status(400).json({
+        error: 'Provide exactly 2 strategies in the `strategies` array',
+      });
     }
 
-    if (strategies.length > 10) {
-      return res.status(400).json({ error: 'Maximum 10 strategies to compare' });
-    }
-
-    const comparison = await lab.compareStrategies(strategies as StrategyDSL[]);
+    const [a, b] = strategies as [StrategyDSL, StrategyDSL];
+    const comparison = lab.compareStrategies(a, b);
 
     return res.json({
       success: true,
-      strategies: comparison.strategies.map(s => ({
-        id: s.id,
-        name: s.name,
-        complexity: s.complexity,
-      })),
-      comparisons: comparison.pairwiseComparisons.map(c => ({
-        strategyAName: c.strategyA.name,
-        strategyBName: c.strategyB.name,
-        similarities: c.similarities,
-        differences: c.differences,
-        recommendation: c.recommendation,
-      })),
-      bestCandidate: comparison.bestCandidate?.name,
+      strategyA: { name: a.name, critique: comparison.critiqueA },
+      strategyB: { name: b.name, critique: comparison.critiqueB },
+      differences: comparison.differences,
       recommendation: comparison.recommendation,
     });
   } catch (error) {
@@ -253,7 +285,7 @@ router.post('/compare', async (req: Request, res: Response) => {
  */
 router.post('/validate', (req: Request, res: Response) => {
   try {
-    const { strategy } = req.body;
+    const { strategy } = req.body ?? {};
 
     if (!strategy || typeof strategy !== 'object') {
       return res.status(400).json({ error: 'Missing or invalid strategy' });
@@ -278,7 +310,7 @@ router.post('/validate', (req: Request, res: Response) => {
  * GET /api/lab/health
  * Health check for lab service
  */
-router.get('/health', (req: Request, res: Response) => {
+router.get('/health', (_req: Request, res: Response) => {
   return res.json({
     status: 'healthy',
     service: 'Strategy Lab',
@@ -291,6 +323,7 @@ router.get('/health', (req: Request, res: Response) => {
       'compare strategies',
       'refine with feedback',
     ],
+    stats: lab.getLabStatus(),
   });
 });
 

@@ -6,7 +6,7 @@ import {
   db,
   siDecisionsTable,
 } from "@workspace/db";
-import { and, desc, eq, gte, inArray, or } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, or } from "@workspace/db";
 
 export type BrainNodeStatus = "READY" | "WATCH" | "BLOCKED" | "STALE" | "SCANNING";
 

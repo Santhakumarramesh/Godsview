@@ -9,7 +9,7 @@
 
 import { logger } from "./logger";
 import { db, tradingSessionsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq } from "@workspace/db";
 import { getBreakerSnapshot } from "./drawdown_breaker";
 import { isKillSwitchActive } from "./risk_engine";
 import crypto from "crypto";

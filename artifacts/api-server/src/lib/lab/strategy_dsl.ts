@@ -25,7 +25,20 @@ export interface StrategyDSL {
   entry: EntrySpec;
   exit: ExitSpec;
   sizing: SizingSpec;
-  filters: FilterSpec;
+  /**
+   * Per-trade filters applied at signal time.
+   * Discriminated union of named filter types (trend, volatility, volume,
+   * range, time, custom). Authors can keep this empty for "no extra
+   * filtering beyond the constraints object".
+   */
+  filters: FilterSpec[];
+  /**
+   * Cross-trade constraints (quality thresholds, correlation caps,
+   * cooldowns, blackout windows). Renamed from the old `filters` object.
+   * `filters` is kept for backward compat but is read at runtime from
+   * `constraints` when present.
+   */
+  constraints: ConstraintsSpec;
 
   // Meta information
   complexity: 'simple' | 'moderate' | 'complex' | 'advanced';
@@ -47,6 +60,8 @@ export interface MarketContextSpec {
   volatilityFilter: VolatilityFilter;
   trendFilter: TrendFilter;
   macroFilter?: MacroFilter;
+  /** Minimum number of historical bars required before strategy can trade. */
+  minDataPoints?: number;
 }
 export interface RegimeFilter {
   allowed: ('trending_up' | 'trending_down' | 'ranging' | 'volatile' | 'quiet')[];
@@ -85,9 +100,16 @@ export interface MacroFilter {
 
 export interface EntrySpec {
   type: 'limit' | 'market' | 'stop' | 'conditional';
-  conditions: EntryCondition[];
+  /**
+   * Either typed EntryCondition objects (preferred) or free-form strings
+   * (legacy / generated descriptions). Critique helpers may treat strings
+   * directly; downstream executors should branch on typeof === 'string'.
+   */
+  conditions: Array<EntryCondition | string>;
   confirmations: ConfirmationSpec[];
   minConfirmationsRequired: number;
+  /** Legacy alias for `minConfirmationsRequired` used by variant generator. */
+  confirmationBars?: number;
   entryZone?: {
     type: 'orderblock' | 'fvg' | 'support_resistance' | 'vwap' | 'ema' | 'custom';
     params: Record<string, any>;
@@ -117,6 +139,16 @@ export interface ExitSpec {
   trailingStop?: TrailingStopSpec;
   timeExit?: TimeExitSpec;
   invalidation?: InvalidationSpec;
+  /**
+   * Optional flat list of profit targets used by some critique / replay
+   * tooling. When present, runtime should prefer `takeProfit.targets`.
+   */
+  profitTargets?: Array<{ ratio: number; closePercent: number }>;
+  /**
+   * Free-form labels describing exit methods (e.g. "trailing", "time",
+   * "structure_break") for narrative / scoring purposes.
+   */
+  exitMethods?: string[];
 }
 
 export interface StopLossSpec {
@@ -154,15 +186,76 @@ export interface SizingSpec {
   maxPositionPercent: number;
   kellyFraction?: number;
   scalingRules?: { condition: string; adjustment: number }[];
+  /** Legacy: relative position-size multiplier (1.0 = base). */
+  baseSize?: number;
+  /** Legacy alias for `maxPositionPercent` (as a fraction of equity). */
+  maxSize?: number;
 }
 
-export interface FilterSpec {
+/**
+ * Cross-trade constraints applied at the portfolio / governor level.
+ * Renamed from the old `FilterSpec` object shape; kept as a separate
+ * interface to avoid colliding with the per-trade filter union below.
+ */
+export interface ConstraintsSpec {
   minQualityScore: number;
   minEdgeScore: number;
   maxCorrelation: number;
   maxOpenPositions: number;
   cooldownBars: number;
   blackoutPeriods: string[];
+}
+
+/**
+ * Per-trade filter. Discriminated union by `type`. Unknown types fall
+ * through to the `custom` branch so the type remains extensible without
+ * source churn when new filter families are added.
+ */
+export type FilterSpec =
+  | TrendFilterSpec
+  | VolatilityFilterSpec
+  | VolumeFilterSpec
+  | RangeFilterSpec
+  | TimeFilterSpec
+  | CustomFilterSpec;
+
+export interface TrendFilterSpec {
+  type: 'trend';
+  direction?: 'any' | 'up' | 'down';
+  strength?: 'weak' | 'moderate' | 'strong';
+  [k: string]: unknown;
+}
+
+export interface VolatilityFilterSpec {
+  type: 'volatility';
+  minAtr?: number;
+  maxAtr?: number;
+  [k: string]: unknown;
+}
+
+export interface VolumeFilterSpec {
+  type: 'volume';
+  minVolume?: number;
+  [k: string]: unknown;
+}
+
+export interface RangeFilterSpec {
+  type: 'range';
+  minRange?: number;
+  maxRange?: number;
+  [k: string]: unknown;
+}
+
+export interface TimeFilterSpec {
+  type: 'time';
+  allowedHours?: number[];
+  excludeWeekends?: boolean;
+  [k: string]: unknown;
+}
+
+export interface CustomFilterSpec {
+  type: string; // anything other than the known types falls here at runtime
+  [k: string]: unknown;
 }
 
 export interface Ambiguity {
@@ -233,7 +326,8 @@ export function createEmptyStrategy(name: string): StrategyDSL {
       maxPositionPercent: 5.0,
     },
 
-    filters: {
+    filters: [],
+    constraints: {
       minQualityScore: 0.6,
       minEdgeScore: 0.55,
       maxCorrelation: 0.7,
@@ -283,21 +377,29 @@ export function validateStrategyDSL(strategy: StrategyDSL): {
   if (strategy.exit.takeProfit.minRR < 1.0) {
     errors.push('Minimum RR must be >= 1.0');
   }
-  if (strategy.filters.minQualityScore < 0 || strategy.filters.minQualityScore > 1) {
+  if (
+    strategy.constraints.minQualityScore < 0 ||
+    strategy.constraints.minQualityScore > 1
+  ) {
     errors.push('minQualityScore must be between 0 and 1');
   }
   if (strategy.marketContext.regimeFilter.minStrength < 0 || strategy.marketContext.regimeFilter.minStrength > 1) {
     errors.push('Regime filter minStrength must be between 0 and 1');
   }
 
-  // Check if entry conditions have reasonable weights
-  const totalWeight = strategy.entry.conditions.reduce((sum, c) => sum + c.weight, 0);
+  // Check if entry conditions have reasonable weights. Conditions can be
+  // either typed EntryCondition objects (with .weight) or free-form strings;
+  // strings are treated as weight=0 / non-required for validator math.
+  const typedConditions = strategy.entry.conditions.filter(
+    (c): c is EntryCondition => typeof c !== 'string',
+  );
+  const totalWeight = typedConditions.reduce((sum, c) => sum + c.weight, 0);
   if (totalWeight === 0 && strategy.entry.conditions.length > 0) {
     warnings.push('Entry conditions have zero total weight');
   }
 
   // Confirm required conditions match minimum confirmations
-  const requiredCount = strategy.entry.conditions.filter(c => c.required).length;
+  const requiredCount = typedConditions.filter((c) => c.required).length;
   if (requiredCount > strategy.entry.minConfirmationsRequired) {
     errors.push(
       `${requiredCount} required conditions exceed minConfirmationsRequired (${strategy.entry.minConfirmationsRequired})`

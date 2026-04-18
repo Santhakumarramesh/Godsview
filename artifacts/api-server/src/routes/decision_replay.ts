@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { auditEventsTable, db, siDecisionsTable, signalsTable, tradesTable } from "@workspace/db";
-import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte, sql } from "@workspace/db";
 
 const router: IRouter = Router();
 

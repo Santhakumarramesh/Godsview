@@ -5,7 +5,7 @@ import {
   brainRelationsTable,
   db,
 } from "@workspace/db";
-import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, or, sql } from "@workspace/db";
 import { getConsciousnessSnapshot, getLatestBrainSnapshot, runBrainCycle } from "../lib/brain_bridge";
 
 const router: IRouter = Router();

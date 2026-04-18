@@ -14,6 +14,7 @@
 import { Router, Request, Response } from "express";
 import { requireOperator } from "../lib/auth_guard";
 import { logger } from "../lib/logger";
+import { paramString } from "../lib/utils/params";
 import {
   findOrderByUuid,
   getFillsForOrder,
@@ -27,7 +28,7 @@ import {
   getPersistentReconciliationSnapshot,
 } from "../lib/persistent_fill_reconciler";
 import { db, executionMetricsTable, reconciliationEventsTable } from "@workspace/db";
-import { desc, eq, sql } from "drizzle-orm";
+import { desc, eq, sql } from "@workspace/db";
 
 export const executionTruthRouter = Router();
 
@@ -57,7 +58,7 @@ executionTruthRouter.get("/orders", async (req: Request, res: Response) => {
 
 executionTruthRouter.get("/orders/:uuid", async (req: Request, res: Response) => {
   try {
-    const uuid = req.params.uuid ?? "";
+    const uuid = paramString(req.params.uuid);
     const order = await findOrderByUuid(uuid);
     if (!order) {
       res.status(404).json({ error: "not_found", message: `Order ${uuid} not found` });
@@ -73,7 +74,7 @@ executionTruthRouter.get("/orders/:uuid", async (req: Request, res: Response) =>
 
 executionTruthRouter.get("/orders/:uuid/fills", async (req: Request, res: Response) => {
   try {
-    const uuid = req.params.uuid ?? "";
+    const uuid = paramString(req.params.uuid);
     const order = await findOrderByUuid(uuid);
     if (!order) {
       res.status(404).json({ error: "not_found", message: `Order ${uuid} not found` });
