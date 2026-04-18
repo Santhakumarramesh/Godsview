@@ -221,7 +221,24 @@ LIVE_TRADING_ENABLED=true
 - `GET /api/system/audit` — Audit trail summary
 - `GET /api/system/audit/replay` — Replay decision by ID
 
-See `docs/ARCHITECTURE.md` for complete API reference.
+### Promotion & Calibration Schedulers (Phase 5)
+- `GET  /api/governance/scheduler/status` — Promotion cron run state + last run timestamp
+- `GET  /api/governance/scheduler/history` — Recent promotion-eligible / demotion events
+- `POST /api/governance/scheduler/trigger` — Operator-gated manual run
+- `GET  /api/calibration/scheduler/status` — Calibration cron run state
+- `GET  /api/calibration/scheduler/score` — Latest ensemble calibration snapshot
+- `POST /api/calibration/scheduler/trigger` — Operator-gated manual calibration
+
+### SLOs & Alert Routing (Phase 6)
+- `GET  /api/slo/definitions` — Codified SLO source of truth (6 SLOs across critical / high / normal tiers)
+- `GET  /api/slo/budgets` — Full snapshot incl. burn rate per SLO
+- `GET  /api/slo/burn-rate` — Currently alerting SLOs only
+- `GET  /api/slo/burn-rate/:id` — Burn-rate detail for a single SLO
+- `GET  /api/slo/router/status` — SSE alert router run state + forwarded-event counts
+- `POST /api/slo/reset` — Operator-gated buffer wipe (post-incident only)
+
+See `docs/ARCHITECTURE.md` for the complete API reference and `docs/SLOs.md`
+for the human-readable pair to `slo_definitions.ts`.
 
 ## Dashboard Pages
 
@@ -337,11 +354,43 @@ curl -i http://localhost:3000/api/signals
 - Verify daily loss limit not exceeded
 - Ensure max position exposure not exceeded
 
+## Production-Readiness Build Phases
+
+GodsView shipped to production over a seven-phase patch-based build. Each
+phase lives on its own `phase-N-*` branch with a `git format-patch`
+artifact under `phase-N/` so any operator can rebase the whole history
+from clean upstream.
+
+| Phase | Branch                          | Outcome |
+| ----- | ------------------------------- | ------- |
+| 1     | `phase-1-type-safety`           | Killed hidden TypeScript errors and failing tests; removed `continue-on-error` from CI. |
+| 2     | `phase-2-live-paths-no-mock`    | Removed mock data from live intelligence and execution paths. |
+| 3     | `phase-3-aws-cdk`               | AWS production deploy via CDK (TypeScript) with ECS / RDS / ALB / WAF. |
+| 4     | `phase-4-page-gaps`             | Closed dashboard page gaps (68/68) with hooks, RBAC, and route-level tests. |
+| 5     | `phase-5-promotion-cron`        | Auto-promotion pipeline (paper → assisted live → autonomous) and calibration cron. |
+| 6     | `phase-6-slo-alerts-k6`         | Codified SLOs, SSE alert router to the existing webhook, and k6 scheduler baseline. |
+| 7     | `phase-7-doc-truth-launch-v1`   | Documentation truth pass, launch checklist, and `v1.0.0` tag. |
+
+### Production gates
+
+| Gate                                                          | Status         |
+| ------------------------------------------------------------- | -------------- |
+| 1. TradingView MCP + webhook router                           | **shipped**    |
+| 2. Backtesting → paper → assisted live → auto-promotion       | **shipped**    |
+| 3. AWS production deploy                                      | **shipped**    |
+| 4. All 68 sidebar pages with RBAC                             | **shipped**    |
+| 5. SLOs + alert routing + k6 baseline                         | **shipped**    |
+
+All five gates ship in `v1.0.0`. See `docs/LAUNCH_CHECKLIST.md` for the
+end-to-end cut-over procedure.
+
 ## Support
 
 - Documentation: `docs/` directory
 - Architecture: `docs/ARCHITECTURE.md`
 - Production Runbook: `docs/OPERATOR_RUNBOOK.md`
+- Launch Checklist: `docs/LAUNCH_CHECKLIST.md`
+- SLOs: `docs/SLOs.md`
 - Issues: GitHub Issues
 - Email: support@godsview.dev
 

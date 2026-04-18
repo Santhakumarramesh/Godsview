@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * DESIGN SCAFFOLD — not wired into the live runtime.
  * STATUS: This file is a forward-looking integration shell that documents the
@@ -45,7 +44,7 @@ export interface ShadowCriterion {
   weight: number;
 }
 
-export interface ShadowScorecard {
+export interface ShadowScorecardReport {
   sessionId: string;
   strategyId: string;
   generatedAt: Date;
@@ -68,7 +67,7 @@ export interface PromotionDecision {
   timestamp: Date;
   decision: 'APPROVED_TO_ASSISTED' | 'REJECTED' | 'NEEDS_EXTENSION';
   confidence: number;
-  scorecardSummary: ShadowScorecard;
+  scorecardSummary: ShadowScorecardReport;
   evidencePacket: {
     minimumPeriodMet: boolean;
     minimumTradesMet: boolean;
@@ -88,7 +87,7 @@ export interface PromotionHistoryEntry {
   shadowSessionId: string;
   decision: 'APPROVED_TO_ASSISTED' | 'REJECTED' | 'EXTENDED';
   reasoning: string;
-  scorecard: ShadowScorecard;
+  scorecard: ShadowScorecardReport;
 }
 
 export interface VariantComparison {
@@ -250,7 +249,7 @@ export class ShadowScorecard {
   /**
    * Get detailed scorecard for shadow session
    */
-  public getScorecard(sessionId: string): ShadowScorecard {
+  public getScorecard(sessionId: string): ShadowScorecardReport {
     const session = this.shadowSessions.get(sessionId);
     if (!session) {
       throw new Error(`Shadow session not found: ${sessionId}`);
@@ -455,11 +454,15 @@ export class ShadowScorecard {
     }
 
     const avgPromotedSharpe =
-      promotedDecisions.reduce((sum, d) => sum + d.scorecard.criteria[2].actualValue, 0) /
-      promotedDecisions.length;
+      promotedDecisions.reduce(
+        (sum, d) => sum + Number(d.scorecard.criteria[2]?.actualValue ?? 0),
+        0,
+      ) / promotedDecisions.length;
     const avgRejectedSharpe =
-      rejectedDecisions.reduce((sum, d) => sum + d.scorecard.criteria[2].actualValue, 0) /
-      rejectedDecisions.length;
+      rejectedDecisions.reduce(
+        (sum, d) => sum + Number(d.scorecard.criteria[2]?.actualValue ?? 0),
+        0,
+      ) / rejectedDecisions.length;
 
     const edge = avgPromotedSharpe - avgRejectedSharpe;
     const effectiveness = edge > 0.3 ? 0.95 : edge > 0.1 ? 0.75 : 0.5;
@@ -531,11 +534,18 @@ export class ShadowScorecard {
   // ========== Private helpers ==========
 
   private recordPromotionApproval(decision: PromotionDecision): void {
+    // Map the wider PromotionDecision union (which includes 'NEEDS_EXTENSION')
+    // onto the narrower history-entry union ('EXTENDED'). Semantically the two
+    // states represent the same operator-facing outcome — the decision was not
+    // a final approve/reject and the shadow window is being extended.
+    const historyDecision: PromotionHistoryEntry['decision'] =
+      decision.decision === 'NEEDS_EXTENSION' ? 'EXTENDED' : decision.decision;
+
     const entry: PromotionHistoryEntry = {
       timestamp: decision.timestamp,
       strategyId: decision.strategyId,
       shadowSessionId: decision.shadowSessionId,
-      decision: decision.decision,
+      decision: historyDecision,
       reasoning: decision.scorecardSummary.reasoning,
       scorecard: decision.scorecardSummary,
     };
@@ -549,7 +559,7 @@ export class ShadowScorecard {
 
   private computePromotionConfidence(
     session: ShadowSession,
-    scorecard: ShadowScorecard
+    scorecard: ShadowScorecardReport
   ): number {
     let confidence = 0.5;
 

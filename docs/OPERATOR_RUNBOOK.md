@@ -864,6 +864,34 @@ curl http://localhost:3000/api/journal/daily-review/2026-04-05
 curl http://localhost:3000/api/system/manifest
 curl http://localhost:3000/api/system/diagnostics
 curl http://localhost:3000/api/degradation
+
+# Promotion & calibration schedulers (Phase 5)
+curl http://localhost:3000/api/governance/scheduler/status
+curl http://localhost:3000/api/governance/scheduler/history
+curl http://localhost:3000/api/calibration/scheduler/status
+curl http://localhost:3000/api/calibration/scheduler/score
+
+# SLOs & alert routing (Phase 6)
+curl http://localhost:3000/api/slo/definitions
+curl http://localhost:3000/api/slo/budgets
+curl http://localhost:3000/api/slo/burn-rate
+curl http://localhost:3000/api/slo/router/status
+```
+
+### Phase 5 / Phase 6 environment variables
+
+```
+# Scheduler cadence (defaults shown)
+PROMOTION_SCHEDULER_INTERVAL_MS=3600000
+CALIBRATION_SCHEDULER_INTERVAL_MS=1800000
+
+# Alert routing (Phase 6)
+SSE_ALERT_ROUTER_AUTOSTART=true       # set false to skip router at boot
+SLO_SCAN_INTERVAL_MS=60000            # burn-rate scan cadence
+SLO_OBSERVATION_MAX=5000              # ring buffer per SLO
+
+# Webhook already used by fireAlert() — re-used for SSE-routed events
+GODSVIEW_ALERT_WEBHOOK_URL=https://hooks.slack.com/services/...
 ```
 
 ### Operator Token

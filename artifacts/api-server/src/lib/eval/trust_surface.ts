@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * DESIGN SCAFFOLD — not wired into the live runtime.
  * STATUS: This file is a forward-looking integration shell that documents the
@@ -116,7 +115,7 @@ export interface DetailedBrief {
   risks: {
     topRisks: Array<{
       risk: string;
-      probability: string;
+      likelihood: string;
       impact: string;
       mitigation: string;
     }>;
@@ -716,7 +715,7 @@ export class TrustSurface {
   ): {
     topRisks: Array<{
       risk: string;
-      probability: string;
+      likelihood: string;
       impact: string;
       mitigation: string;
     }>;

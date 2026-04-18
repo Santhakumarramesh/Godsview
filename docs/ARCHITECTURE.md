@@ -355,6 +355,32 @@ MARKET DATA INPUT
 - `GET /api/journal/trades` — Trade journal with entry/exit analysis
 - `GET /api/analytics/drift` — ML model drift diagnostics
 
+### Promotion & Calibration Schedulers (Phase 5)
+
+- `GET  /api/governance/scheduler/status` — Promotion cron run state
+- `GET  /api/governance/scheduler/history` — Recent promotion-eligible / demotion events
+- `POST /api/governance/scheduler/trigger` — Operator-gated manual run
+- `GET  /api/calibration/scheduler/status` — Calibration cron run state
+- `GET  /api/calibration/scheduler/score` — Latest ensemble calibration snapshot
+- `POST /api/calibration/scheduler/trigger` — Operator-gated manual calibration
+
+### SLOs & Alert Routing (Phase 6)
+
+- `GET  /api/slo/definitions` — Codified SLO source of truth
+- `GET  /api/slo/budgets` — Snapshot incl. burn rate per SLO
+- `GET  /api/slo/burn-rate` — Currently alerting SLOs only
+- `GET  /api/slo/burn-rate/:id` — Burn-rate detail for a single SLO
+- `GET  /api/slo/router/status` — SSE alert router run state
+- `POST /api/slo/reset` — Operator-gated buffer wipe (post-incident only)
+
+The SSE alert router subscribes to the four Phase 5 SSE event types
+(`promotion_eligible`, `demotion_signal`, `calibration_snapshot`,
+`calibration_drift`) and forwards them through the existing
+`fireAlert()` pipeline so on-call gets paged via the configured
+`GODSVIEW_ALERT_WEBHOOK_URL`. A 60-second SLO scanner fires
+`production_gate_block_streak` for any SLO with burn ≥ its alert
+threshold. See `docs/SLOs.md` for the per-SLO breakdown.
+
 ## Security & Compliance
 
 ### Authentication
