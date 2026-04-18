@@ -4,10 +4,10 @@
  */
 
 export {
-  GoldenTestCase,
-  Difficulty,
-  Verdict,
-  EdgeMechanism,
+  type GoldenTestCase,
+  type Difficulty,
+  type Verdict,
+  type EdgeMechanism,
   GOLDEN_STRATEGIES,
   getGoldenStrategyById,
   getGoldenStrategiesByDifficulty,
@@ -17,25 +17,25 @@ export {
 
 export {
   DecisionLoopEvalHarness,
-  AmbiguityMetrics,
-  RejectionMetrics,
-  CritiqueMetrics,
-  VariantMetrics,
-  CausalMetrics,
-  ExplainMetrics,
-  RecommendationMetrics,
-  FullMetrics,
-  SingleTestResult,
-  EvalReport
+  type AmbiguityMetrics,
+  type RejectionMetrics,
+  type CritiqueMetrics,
+  type VariantMetrics,
+  type CausalMetrics,
+  type ExplainMetrics,
+  type RecommendationMetrics,
+  type FullMetrics,
+  type SingleTestResult,
+  type EvalReport
 } from './eval_harness';
 
 export {
   BaselineComparison,
-  BaselineType,
-  BaselineResult,
-  HeadToHeadComparison,
-  LeaderboardEntry,
-  ComparisonReport
+  type BaselineType,
+  type BaselineResult,
+  type HeadToHeadComparison,
+  type LeaderboardEntry,
+  type ComparisonReport
 } from './baseline_comparison';
 
 /**

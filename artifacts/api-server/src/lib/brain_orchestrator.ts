@@ -382,7 +382,7 @@ async function _autoEvaluateSignal(
     }
   } catch (err: any) {
     // Never throw — this is fire-and-forget
-    logger.warn("[BrainOrchestrator] Auto-signal evaluation error:", err?.message ?? err);
+    logger.warn({ err: err?.message ?? err }, "[BrainOrchestrator] Auto-signal evaluation error:");
   }
 }
 
@@ -559,13 +559,13 @@ export function startBrainScheduler(
               schedulerState.lastBacktestAt[sym] = Date.now();
             }
           } catch (btErr) {
-            logger.error(`[BrainScheduler] Backtest error for ${sym}:`, btErr);
+            logger.error({ err: btErr }, `[BrainScheduler] Backtest error for ${sym}:`);
           }
         }
       }
     } catch (err) {
       schedulerState.errors++;
-      logger.error(`[BrainScheduler] Cycle ${schedulerState.cycleCount} error:`, err);
+      logger.error({ err: err }, `[BrainScheduler] Cycle ${schedulerState.cycleCount} error:`);
     }
 
     // Schedule next tick — subtract elapsed time to maintain rhythm

@@ -13,9 +13,9 @@
 // ─── Normalized Schema Module ─────────────────────────────────────────────────
 export {
   DataSource,
-  NormalizedBar,
-  NormalizedQuote,
-  NormalizedTrade,
+  type NormalizedBar,
+  type NormalizedQuote,
+  type NormalizedTrade,
   DataSourceSchema,
   NormalizedBarSchema,
   NormalizedQuoteSchema,
@@ -33,11 +33,11 @@ export {
 
 // ─── Data Quality Module ───────────────────────────────────────────────────────
 export {
-  QualityIssueSeverity,
-  QualityIssue,
-  BarQualityAnalysis,
-  QualityReport,
-  QualityConfig,
+  type QualityIssueSeverity,
+  type QualityIssue,
+  type BarQualityAnalysis,
+  type QualityReport,
+  type QualityConfig,
   analyzeBarQuality,
   analyzeSeriesQuality,
   formatQualityReport,
@@ -47,10 +47,10 @@ export {
 
 // ─── Provider Failover Module ──────────────────────────────────────────────────
 export {
-  ProviderHealth,
-  FailoverDecision,
-  FailoverConfig,
-  FailoverStatus,
+  type ProviderHealth,
+  type FailoverDecision,
+  type FailoverConfig,
+  type FailoverStatus,
   recordSuccess,
   recordFailure,
   getProviderHealth,
@@ -70,9 +70,9 @@ export {
 
 // ─── Timestamp Synchronization Module ──────────────────────────────────────────
 export {
-  MarketSession,
-  SyncResult,
-  BatchSyncResult,
+  type MarketSession,
+  type SyncResult,
+  type BatchSyncResult,
   parseISOTimestamp,
   formatUTCISO,
   normalizeTimestamp,
@@ -91,11 +91,11 @@ export {
 
 // ─── Replay Storage Module ─────────────────────────────────────────────────────
 export {
-  OrderBookLevel,
-  OrderBookSnapshot,
-  StorageMetrics,
-  CompressionStats,
-  ReplayStorageConfig,
+  type OrderBookLevel,
+  type OrderBookSnapshot,
+  type StorageMetrics,
+  type CompressionStats,
+  type ReplayStorageConfig,
   storeBar,
   getBarsInRange,
   getLatestBar,
@@ -120,10 +120,10 @@ export {
 
 // ─── Cache Layer Module ────────────────────────────────────────────────────────
 export {
-  CacheMetrics,
-  CacheConfig,
-  EvictionPolicy,
-  CacheWarmerFn,
+  type CacheMetrics,
+  type CacheConfig,
+  type EvictionPolicy,
+  type CacheWarmerFn,
   get as cacheGet,
   set as cacheSet,
   has as cacheHas,
@@ -147,8 +147,8 @@ export {
 // ─── Data Normalizer Module (Phase 5) ──────────────────────────────────────
 export {
   DataNormalizer,
-  NormalizedOrderBook,
-  NormalizedTrade as DataNormalizerTrade,
+  type NormalizedOrderBook,
+  type NormalizedTrade as DataNormalizerTrade,
   DataIssueType,
   type IssuesSeverity,
   type DataIssue,
@@ -193,12 +193,12 @@ export {
 
 // ─── Existing Market Modules ──────────────────────────────────────────────────
 export {
-  PriceLevel,
-  OrderBookSnapshot as OrderBookSnapshotLegacy,
-  OrderBookUpdate,
-  LiquidityZone,
-  MicrostructureSnapshot,
-  OrderBookListener,
+  type PriceLevel,
+  type OrderBookSnapshot as OrderBookSnapshotLegacy,
+  type OrderBookUpdate,
+  type LiquidityZone,
+  type MicrostructureSnapshot,
+  type OrderBookListener,
 } from "./types";
 
 export { symbols, normalizeMarketSymbol, toAlpacaSlash } from "./symbols";

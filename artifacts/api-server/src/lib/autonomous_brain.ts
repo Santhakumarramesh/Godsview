@@ -225,7 +225,7 @@ class AutonomousBrain {
 
       logger.info("[AutonomousBrain] All Phase 8 subsystems booted");
     }).catch((err) => {
-      logger.warn("[AutonomousBrain] Subsystem auto-boot warning:", err?.message ?? err);
+      logger.warn({ err: err?.message ?? err }, "[AutonomousBrain] Subsystem auto-boot warning:");
     });
   }
 
@@ -242,7 +242,7 @@ class AutonomousBrain {
       try {
         await this._runAttentionBacktest();
       } catch (err) {
-        logger.error("[AutonomousBrain] Attention backtest tick error:", err);
+        logger.error({ err: err }, "[AutonomousBrain] Attention backtest tick error:");
       }
       if (this.state.running) {
         this._attentionBacktestTimer = setTimeout(tick, this.ATTENTION_BACKTEST_INTERVAL_MS);
@@ -615,7 +615,7 @@ class AutonomousBrain {
         await this._runScanTick();
       } catch (err) {
         this.state.errors++;
-        logger.error("[AutonomousBrain] Scan tick error:", err);
+        logger.error({ err: err }, "[AutonomousBrain] Scan tick error:");
       }
 
       if (this.state.running) {

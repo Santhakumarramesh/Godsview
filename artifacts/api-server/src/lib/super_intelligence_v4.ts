@@ -294,7 +294,7 @@ export class SuperIntelligenceV4 {
       // Store outcome for analysis
       await this.logOutcomeRecord(outcome);
     } catch (error) {
-      logger.error('Failed to record outcome:', error);
+      logger.error({ err: error }, 'Failed to record outcome:');
     }
   }
 
@@ -346,7 +346,7 @@ export class SuperIntelligenceV4 {
         regimeContext: await this.memory.getRegimeContext()
       };
     } catch (error) {
-      logger.error('Memory consultation failed:', error);
+      logger.error({ err: error }, 'Memory consultation failed:');
       return this.getDefaultMemoryContext();
     }
   }
@@ -378,7 +378,7 @@ export class SuperIntelligenceV4 {
         isStructural: edge.is_structural
       };
     } catch (error) {
-      logger.error('Causal edge scoring failed:', error);
+      logger.error({ err: error }, 'Causal edge scoring failed:');
       return this.getDefaultCausalEdge();
     }
   }
@@ -407,7 +407,7 @@ export class SuperIntelligenceV4 {
         conditions: this.autonomous.getConditionSummary(reasons)
       };
     } catch (error) {
-      logger.error('Self-refusal check failed:', error);
+      logger.error({ err: error }, 'Self-refusal check failed:');
       return this.getDefaultRefusalCheck();
     }
   }
@@ -435,7 +435,7 @@ export class SuperIntelligenceV4 {
         backTestVsLiveDeviation: metrics.backtest_vs_live_deviation
       };
     } catch (error) {
-      logger.error('Calibration adjustment failed:', error);
+      logger.error({ err: error }, 'Calibration adjustment failed:');
       return this.getDefaultCalibrationAdj(v3Pred);
     }
   }
@@ -459,7 +459,7 @@ export class SuperIntelligenceV4 {
         violations
       };
     } catch (error) {
-      logger.error('Authority check failed:', error);
+      logger.error({ err: error }, 'Authority check failed:');
       return this.getDefaultAuthorityCheck();
     }
   }

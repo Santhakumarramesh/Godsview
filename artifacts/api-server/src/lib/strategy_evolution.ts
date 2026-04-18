@@ -267,7 +267,7 @@ class StrategyRegistry {
       }
       logger.info(`[StrategyRegistry] Warm-loaded ${rows.length} strategy param sets from DB`);
     } catch (err) {
-      logger.warn("[StrategyRegistry] warmLoad failed — using in-memory defaults:", err);
+      logger.warn({ err: err }, "[StrategyRegistry] warmLoad failed — using in-memory defaults:");
     }
   }
 

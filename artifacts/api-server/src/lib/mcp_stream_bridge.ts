@@ -255,7 +255,7 @@ class MCPStreamBridge {
         this.stats.addEvent(event);
         publishEvent("signal", event);
       } catch (error) {
-        logger.error("MCPStreamBridge: Error publishing enriched event:", error);
+        logger.error({ err: error }, "MCPStreamBridge: Error publishing enriched event:");
       }
     });
 
@@ -278,7 +278,7 @@ class MCPStreamBridge {
         this.stats.addEvent(event);
         publishEvent("signal", event);
       } catch (error) {
-        logger.error("MCPStreamBridge: Error publishing scored event:", error);
+        logger.error({ err: error }, "MCPStreamBridge: Error publishing scored event:");
       }
     });
 
@@ -289,12 +289,12 @@ class MCPStreamBridge {
         const latencyMs = Date.now() - startMs;
         this.stats.recordEvent("mcp:decided", latencyMs);
       } catch (error) {
-        logger.error("MCPStreamBridge: Error publishing decided event:", error);
+        logger.error({ err: error }, "MCPStreamBridge: Error publishing decided event:");
       }
     });
 
     processor.on("error", (signalId: string, error: Error) => {
-      logger.error(`MCPStreamBridge: Processor error for signal ${signalId}:`, error);
+      logger.error({ err: error }, `MCPStreamBridge: Processor error for signal ${signalId}:`);
     });
 
     logger.info("MCPStreamBridge: Attached to MCPProcessor");
@@ -335,7 +335,7 @@ class MCPStreamBridge {
         this.stats.addEvent(event);
         publishEvent("signal", event);
       } catch (error) {
-        logger.error("MCPStreamBridge: Error publishing rejection event:", error);
+        logger.error({ err: error }, "MCPStreamBridge: Error publishing rejection event:");
       }
     });
 
@@ -366,7 +366,7 @@ class MCPStreamBridge {
       this.stats.addEvent(event);
       publishEvent("signal", event);
     } catch (error) {
-      logger.error("MCPStreamBridge: Error publishing decision:", error);
+      logger.error({ err: error }, "MCPStreamBridge: Error publishing decision:");
     }
   }
 
@@ -399,7 +399,7 @@ class MCPStreamBridge {
       this.stats.addEvent(event);
       publishEvent("signal", event);
     } catch (error) {
-      logger.error("MCPStreamBridge: Error publishing execution event:", error);
+      logger.error({ err: error }, "MCPStreamBridge: Error publishing execution event:");
     }
   }
 
@@ -433,7 +433,7 @@ class MCPStreamBridge {
       this.stats.addEvent(event);
       publishEvent("signal", event);
     } catch (error) {
-      logger.error("MCPStreamBridge: Error publishing learning event:", error);
+      logger.error({ err: error }, "MCPStreamBridge: Error publishing learning event:");
     }
   }
 
@@ -473,8 +473,8 @@ class MCPStreamBridge {
         publishEvent("signal", event);
       } catch (error) {
         logger.error(
-          "MCPStreamBridge: Error publishing status event:",
-          error
+          { err: error },
+          "MCPStreamBridge: Error publishing status event:"
         );
       }
     }, 5000);
