@@ -59,6 +59,29 @@ interface BrainGraphEvent {
   decision: { action: string; grade: string; score: number } | null;
 }
 
+/**
+ * Shape of events delivered via GET /api/alerts/stream.
+ *
+ * Covers every `fireAlert()` invocation AND every Phase 5 scheduler event
+ * that goes through `SignalStreamHub.publishAlert` — which is all of them.
+ * The backend always emits `type` + `severity` + `timestamp`, but `details`
+ * varies by AlertType so we keep it loose.
+ */
+export interface AlertStreamEvent {
+  /** Matches the backend `AlertType` union (kept as string to stay future-proof). */
+  type: string;
+  /** "fatal" | "critical" | "warning" | etc. — routing key on the receiving side. */
+  severity?: string;
+  /** Human-readable message. */
+  message?: string;
+  /** Per-type payload; see lib/alerts.ts. */
+  details?: Record<string, unknown>;
+  /** ISO-8601 emit time from the api-server. */
+  timestamp?: string;
+  /** Some Phase 5 events include extra fields; allow them through. */
+  [key: string]: unknown;
+}
+
 const MAX_EVENT_BUFFER = 100;
 const MAX_BACKOFF_DELAY = 30000; // 30 seconds
 
@@ -301,6 +324,31 @@ export function useBrainGraphStream(
   return useEventSource<BrainGraphEvent>({
     url: `${apiBase}/mcp/stream/brain-graph`,
     events: ["signal"],
+    enabled,
+  });
+}
+
+/**
+ * Specialized hook for the Alert Center live stream.
+ *
+ * Subscribes to `GET /api/alerts/stream` — the backend serves `event: alert`
+ * frames for every `fireAlert()` call AND every Phase 5 scheduler event
+ * (promotion eligibility, calibration freshness, governance transitions,
+ * ensemble drift, SLO burn-rate breaches, …) through the same pipeline.
+ *
+ * Pair with `useQueryClient().invalidateQueries(...)` at the call site to
+ * force immediate refetches on the Alert Center page's React Query caches
+ * (`activeAlerts`, `alertsSummary`, `alertAnomalies`). Polling should remain
+ * as a safety net but can be backed off dramatically once push is live.
+ */
+export function useAlertStream(
+  enabled: boolean = true
+): UseEventSourceReturn<AlertStreamEvent> {
+  const apiBase = import.meta.env.VITE_API_URL || "/api";
+
+  return useEventSource<AlertStreamEvent>({
+    url: `${apiBase}/alerts/stream`,
+    events: ["alert"],
     enabled,
   });
 }

@@ -381,6 +381,35 @@ The SSE alert router subscribes to the four Phase 5 SSE event types
 `production_gate_block_streak` for any SLO with burn ≥ its alert
 threshold. See `docs/SLOs.md` for the per-SLO breakdown.
 
+### Alert Center Live Push (Phase 9)
+
+The Alert Center dashboard page consumes the same alert stream over
+SSE for near-zero-lag UI updates:
+
+- Backend: `GET /api/alerts/stream` — `event: alert` frames served
+  by `SignalStreamHub.addClient(res, ["alert"])` with
+  `Last-Event-ID` replay. Every `fireAlert()` call and every Phase 5
+  scheduler event goes through `publishAlert` → this channel.
+- Frontend hook: `artifacts/godsview-dashboard/src/hooks/useEventSource.ts`
+  exports `useAlertStream(enabled)` — a specialized wrapper around
+  `useEventSource<AlertStreamEvent>` with auto-reconnect (exponential
+  backoff up to 30s, max 10 retries), `Last-Event-ID` replay, and a
+  100-event client buffer.
+- Page wiring: `alert-center.tsx` subscribes in the top-level page
+  component and, on every incoming event, calls
+  `queryClient.invalidateQueries({ queryKey: [...] })` for the six
+  Alert Center React Query caches (`activeAlerts`, `alertsSummary`,
+  `alertAnomalies`, `alertRules`, `alertChannels`,
+  `alertEscalation`). This forces immediate refetches against the
+  Phase 8 `/api/alerts/*` endpoints.
+- Safety net: the Active Alerts Feed retains a poll as a fallback for
+  the case where the SSE stream drops or the browser tab has been
+  backgrounded long enough to miss events. The interval is backed off
+  from 3s to 30s now that push is the primary freshness mechanism.
+- Connection status: a "Live / Connecting… / Offline / Reconnecting"
+  badge with event counter is rendered in the Alert Center header so
+  operators can tell at a glance whether the page is receiving push.
+
 ## Security & Compliance
 
 ### Authentication

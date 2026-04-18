@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useAlertStream, type SSEStatus } from '../hooks/useEventSource';
 
 const C = {
   bg: "#0e0e0f",
@@ -163,7 +164,11 @@ const AlertSummaryBanner = () => {
 const ActiveAlertsFeed = () => {
   const [filterPriority, setFilterPriority] = useState('All');
   const [filterCategory, setFilterCategory] = useState('All');
-  const [refreshInterval, setRefreshInterval] = useState(3000);
+  // Phase 9: SSE push (useAlertStream in the page wrapper) is the primary
+  // freshness mechanism. The 30s poll is a safety net for the case where
+  // the SSE connection is dropped between events or the browser tab has
+  // been backgrounded long enough to miss events.
+  const [refreshInterval, setRefreshInterval] = useState(30000);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['activeAlerts'],
@@ -783,8 +788,81 @@ const EscalationTimeline = () => {
   );
 };
 
+// ── Phase 9: Live SSE connection status badge ────────────────────────
+// Shown in the page header so operators can tell at a glance whether the
+// page is receiving push updates from the api-server or falling back to
+// the 30s polling safety net.
+const STATUS_COPY: Record<SSEStatus, { label: string; dot: string; text: string }> = {
+  connected:    { label: 'Live',         dot: C.green,    text: C.green    },
+  connecting:   { label: 'Connecting…',  dot: C.yellow,   text: C.yellow   },
+  disconnected: { label: 'Offline',      dot: C.textMuted, text: C.textDim },
+  error:        { label: 'Reconnecting', dot: C.red,      text: C.red     },
+};
+
+function LiveConnectionBadge({ status, eventCount }: { status: SSEStatus; eventCount: number }) {
+  const copy = STATUS_COPY[status];
+  return (
+    <div style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: '8px',
+      padding: '6px 12px',
+      background: C.card,
+      border: `1px solid ${C.border}`,
+      borderRadius: '999px',
+      fontSize: '12px',
+      fontWeight: 600,
+      color: copy.text,
+    }}>
+      <span style={{
+        width: '8px',
+        height: '8px',
+        borderRadius: '50%',
+        background: copy.dot,
+        boxShadow: status === 'connected' ? `0 0 6px ${C.green}` : 'none',
+        animation: status === 'connected' ? 'gvLivePulse 2s infinite' : 'none',
+      }} />
+      <span>{copy.label}</span>
+      <span style={{ color: C.textMuted, fontWeight: 500 }}>·</span>
+      <span style={{ color: C.textMuted, fontWeight: 500 }}>
+        {eventCount} event{eventCount === 1 ? '' : 's'}
+      </span>
+      <style>{`
+        @keyframes gvLivePulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.45; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 // Main Page Component
 export default function AlertCenterPage() {
+  // Phase 9: subscribe to the api-server's `/api/alerts/stream` SSE
+  // channel. Every `fireAlert()` on the backend AND every Phase 5
+  // scheduler event (promotion eligibility, calibration freshness,
+  // ensemble drift, SLO burn-rate breach, …) is published through
+  // `SignalStreamHub.publishAlert` → this hook's subscription.
+  //
+  // On each incoming event we invalidate the React Query caches that
+  // back the Alert Center widgets so they refetch immediately instead
+  // of waiting for the 30s safety-net poll. This gives the dashboard
+  // effectively zero-lag updates under normal conditions and a
+  // graceful degradation to 30s polling if the SSE channel drops.
+  const { status, eventCount } = useAlertStream(true);
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (eventCount === 0) return;
+    queryClient.invalidateQueries({ queryKey: ['activeAlerts'] });
+    queryClient.invalidateQueries({ queryKey: ['alertsSummary'] });
+    queryClient.invalidateQueries({ queryKey: ['alertAnomalies'] });
+    queryClient.invalidateQueries({ queryKey: ['alertRules'] });
+    queryClient.invalidateQueries({ queryKey: ['alertChannels'] });
+    queryClient.invalidateQueries({ queryKey: ['alertEscalation'] });
+  }, [eventCount, queryClient]);
+
   return (
     <div style={{
       background: C.bg,
@@ -792,6 +870,14 @@ export default function AlertCenterPage() {
       minHeight: '100vh',
       overflow: 'auto',
     }}>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'flex-end',
+        alignItems: 'center',
+        padding: '20px 20px 0 20px',
+      }}>
+        <LiveConnectionBadge status={status} eventCount={eventCount} />
+      </div>
       <AlertSummaryBanner />
       <ActiveAlertsFeed />
       <AlertRulesManager />
