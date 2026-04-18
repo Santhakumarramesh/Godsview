@@ -1,7 +1,9 @@
 """Tests for feature_service.indicators"""
+
 from __future__ import annotations
 
 import math
+
 import pytest
 
 from services.feature_service import indicators as ind
@@ -25,6 +27,7 @@ class TestSMA:
 
     def test_all_same_price(self):
         from services.tests.conftest import make_bar
+
         bars = [make_bar(close=100.0) for _ in range(20)]
         result = ind.sma(bars, 5)
         assert all(math.isnan(v) or abs(v - 100.0) < 1e-6 for v in result)
@@ -100,7 +103,7 @@ class TestMACD:
         bars = make_bars(100)
         macd_l, sig_l, hist_l = ind.macd(bars)
         assert len(macd_l) == len(bars)
-        assert len(sig_l)  == len(bars)
+        assert len(sig_l) == len(bars)
         assert len(hist_l) == len(bars)
 
     def test_histogram_equals_diff(self):
@@ -114,20 +117,20 @@ class TestMACD:
 class TestBollinger:
     def test_upper_gt_lower(self):
         bars = make_bars(50)
-        u, m, l = ind.bollinger(bars, 20)
+        upper, mid, lower = ind.bollinger(bars, 20)
         for i in range(19, len(bars)):
-            assert u[i] >= m[i] >= l[i]
+            assert upper[i] >= mid[i] >= lower[i]
 
     def test_price_mostly_inside(self):
         """~95% of closes should be inside the 2σ bands."""
         bars = make_bars(200)
-        u, m, l = ind.bollinger(bars, 20)
+        upper, _mid, lower = ind.bollinger(bars, 20)
         inside = 0
-        total  = 0
+        total = 0
         for i in range(19, len(bars)):
-            if not (math.isnan(u[i]) or math.isnan(l[i])):
+            if not (math.isnan(upper[i]) or math.isnan(lower[i])):
                 total += 1
-                if l[i] <= bars[i].close <= u[i]:
+                if lower[i] <= bars[i].close <= upper[i]:
                     inside += 1
         assert total > 0
         assert inside / total > 0.80

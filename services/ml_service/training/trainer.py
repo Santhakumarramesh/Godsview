@@ -14,6 +14,7 @@ Training pipeline:
   6. Log metrics + model to MLflow
   7. Return TrainingResult
 """
+
 from __future__ import annotations
 
 import json
@@ -25,9 +26,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from services.feature_service.builder import FEATURE_NAMES, build_features
 from services.shared.config import cfg
 from services.shared.logging import get_logger
-from services.feature_service.builder import build_features, FEATURE_NAMES
 
 log = get_logger(__name__)
 
@@ -37,30 +38,30 @@ _MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
 @dataclass
 class TrainingResult:
-    run_id:           str
-    model_id:         str
-    symbol:           str | None
-    timeframe:        str
-    train_rows:       int
-    test_rows:        int
-    train_accuracy:   float
-    test_accuracy:    float
-    roc_auc:          float
-    log_loss:         float
-    precision:        float
-    recall:           float
-    f1_score:         float
+    run_id: str
+    model_id: str
+    symbol: str | None
+    timeframe: str
+    train_rows: int
+    test_rows: int
+    train_accuracy: float
+    test_accuracy: float
+    roc_auc: float
+    log_loss: float
+    precision: float
+    recall: float
+    f1_score: float
     feature_importance: dict[str, float] = field(default_factory=dict)
-    model_path:       str = ""
-    mlflow_run_id:    str = ""
-    trained_at:       str = ""
-    meta:             dict[str, Any] = field(default_factory=dict)
+    model_path: str = ""
+    mlflow_run_id: str = ""
+    trained_at: str = ""
+    meta: dict[str, Any] = field(default_factory=dict)
 
 
 def label_bars(
     bars: list[Any],
     direction_long: bool,
-    stop_pct:   float,
+    stop_pct: float,
     target_pct: float,
     max_forward: int = 20,
 ) -> list[int]:
@@ -79,24 +80,24 @@ def label_bars(
             continue
 
         if direction_long:
-            stop   = entry * (1 - stop_pct)
+            stop = entry * (1 - stop_pct)
             target = entry * (1 + target_pct)
         else:
-            stop   = entry * (1 + stop_pct)
+            stop = entry * (1 + stop_pct)
             target = entry * (1 - target_pct)
 
-        label = -1   # unknown (reached max_forward without hitting)
+        label = -1  # unknown (reached max_forward without hitting)
         for j in range(i + 1, min(i + max_forward + 1, n)):
             b = bars[j]
             if direction_long:
                 if b.high >= target:
                     label = 1
                     break
-                if b.low  <= stop:
+                if b.low <= stop:
                     label = 0
                     break
             else:
-                if b.low  <= target:
+                if b.low <= target:
                     label = 1
                     break
                 if b.high >= stop:
@@ -126,13 +127,18 @@ def train(
 
     try:
         from sklearn.calibration import CalibratedClassifierCV  # type: ignore[import]
-        from sklearn.metrics import accuracy_score, roc_auc_score, log_loss, precision_recall_fscore_support  # type: ignore[import]
+        from sklearn.metrics import (  # type: ignore[import]
+            accuracy_score,
+            log_loss,
+            precision_recall_fscore_support,
+            roc_auc_score,
+        )
         from sklearn.model_selection import train_test_split  # type: ignore[import]
     except ImportError:
         log.error("sklearn_not_installed")
         return None
 
-    run_id  = str(uuid.uuid4())[:8]
+    run_id = str(uuid.uuid4())[:8]
     model_id = f"{symbol}_{timeframe}_{run_id}"
 
     # ── Build feature matrix ──────────────────────────────────────────────────
@@ -186,40 +192,48 @@ def train(
     calibrated.fit(X_train, y_train)
 
     # ── Evaluate ─────────────────────────────────────────────────────────────
-    y_pred  = calibrated.predict(X_test)
+    y_pred = calibrated.predict(X_test)
     y_proba = calibrated.predict_proba(X_test)[:, 1]
 
     train_acc = accuracy_score(y_train, calibrated.predict(X_train))
-    test_acc  = accuracy_score(y_test, y_pred)
-    roc_auc   = roc_auc_score(y_test, y_proba) if len(set(y_test)) > 1 else 0.5
-    ll        = log_loss(y_test, y_proba)
-    prec, rec, f1, _ = precision_recall_fscore_support(y_test, y_pred, average="binary", zero_division=0)
+    test_acc = accuracy_score(y_test, y_pred)
+    roc_auc = roc_auc_score(y_test, y_proba) if len(set(y_test)) > 1 else 0.5
+    ll = log_loss(y_test, y_proba)
+    prec, rec, f1, _ = precision_recall_fscore_support(
+        y_test, y_pred, average="binary", zero_division=0
+    )
 
     # ── Feature importance ────────────────────────────────────────────────────
     try:
         raw_xgb = calibrated.calibrated_classifiers_[0].estimator
-        fi_raw  = raw_xgb.feature_importances_
-        importance = {feat_keys[i]: round(float(fi_raw[i]), 5) for i in range(len(feat_keys))}
+        fi_raw = raw_xgb.feature_importances_
+        importance = {
+            feat_keys[i]: round(float(fi_raw[i]), 5) for i in range(len(feat_keys))
+        }
     except Exception:
         importance = {}
 
     # ── Save model ────────────────────────────────────────────────────────────
     import pickle
+
     model_path = _MODEL_DIR / f"{model_id}.pkl"
     with open(model_path, "wb") as f:
-        pickle.dump({
-            "model":       calibrated,
-            "feature_keys": feat_keys,
-            "symbol":      symbol,
-            "timeframe":   timeframe,
-            "trained_at":  datetime.now(timezone.utc).isoformat(),
-            "metrics": {
-                "test_accuracy": test_acc,
-                "roc_auc": roc_auc,
-                "train_rows": len(X_train),
-                "test_rows":  len(X_test),
+        pickle.dump(
+            {
+                "model": calibrated,
+                "feature_keys": feat_keys,
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "trained_at": datetime.now(timezone.utc).isoformat(),
+                "metrics": {
+                    "test_accuracy": test_acc,
+                    "roc_auc": roc_auc,
+                    "train_rows": len(X_train),
+                    "test_rows": len(X_test),
+                },
             },
-        }, f)
+            f,
+        )
 
     # ── MLflow tracking ───────────────────────────────────────────────────────
     mlflow_run_id = _log_to_mlflow(
@@ -228,21 +242,21 @@ def train(
         timeframe=timeframe,
         metrics={
             "train_accuracy": train_acc,
-            "test_accuracy":  test_acc,
-            "roc_auc":        roc_auc,
-            "log_loss":       ll,
-            "precision":      float(prec),
-            "recall":         float(rec),
-            "f1_score":       float(f1),
+            "test_accuracy": test_acc,
+            "roc_auc": roc_auc,
+            "log_loss": ll,
+            "precision": float(prec),
+            "recall": float(rec),
+            "f1_score": float(f1),
         },
         params={
             "n_estimators": 200,
-            "max_depth":    4,
+            "max_depth": 4,
             "learning_rate": 0.05,
-            "stop_pct":     stop_pct,
-            "target_pct":   target_pct,
-            "train_rows":   len(X_train),
-            "test_rows":    len(X_test),
+            "stop_pct": stop_pct,
+            "target_pct": target_pct,
+            "train_rows": len(X_train),
+            "test_rows": len(X_test),
         },
         model_path=str(model_path),
         importance=importance,
@@ -291,11 +305,12 @@ def _log_to_mlflow(
     """Log training run to MLflow; returns mlflow run_id or empty string."""
     try:
         import mlflow  # type: ignore[import]
+
         mlflow.set_tracking_uri(cfg.mlflow_tracking_uri)
         mlflow.set_experiment(cfg.mlflow_experiment)
 
         with mlflow.start_run(run_name=model_id) as run:
-            mlflow.log_param("symbol",    symbol)
+            mlflow.log_param("symbol", symbol)
             mlflow.log_param("timeframe", timeframe)
             for k, v in params.items():
                 mlflow.log_param(k, v)

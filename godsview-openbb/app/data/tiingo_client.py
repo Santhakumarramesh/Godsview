@@ -69,8 +69,15 @@ def get_tiingo_ohlcv(symbol: str, *, lookback: int | None = None) -> dict[str, A
         end_date = datetime.now(timezone.utc).date()
         start_date = end_date - timedelta(days=max(30, lookback * 2))
         url = f"https://api.tiingo.com/tiingo/daily/{ticker}/prices"
-        headers = {"Content-Type": "application/json", "Authorization": f"Token {settings.tiingo_api_key}"}
-        params = {"startDate": start_date.isoformat(), "endDate": end_date.isoformat(), "resampleFreq": "daily"}
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Token {settings.tiingo_api_key}",
+        }
+        params = {
+            "startDate": start_date.isoformat(),
+            "endDate": end_date.isoformat(),
+            "resampleFreq": "daily",
+        }
         resp = requests.get(url, headers=headers, params=params, timeout=10)
         if resp.status_code != 200:
             return {
@@ -94,4 +101,3 @@ def get_tiingo_ohlcv(symbol: str, *, lookback: int | None = None) -> dict[str, A
         }
 
     return cached(cache_key, ttl_seconds=60, loader=_load)
-

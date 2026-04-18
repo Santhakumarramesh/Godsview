@@ -20,8 +20,14 @@ def build_daily_report(symbol: str | None = None) -> dict[str, Any]:
             continue
         filtered.append(row)
 
-    taken = [r for r in filtered if str(r.get("status", "")).lower() in {"simulated", "submitted"}]
-    skipped = [r for r in filtered if str(r.get("status", "")).lower() in {"blocked", "error"}]
+    taken = [
+        r
+        for r in filtered
+        if str(r.get("status", "")).lower() in {"simulated", "submitted"}
+    ]
+    skipped = [
+        r for r in filtered if str(r.get("status", "")).lower() in {"blocked", "error"}
+    ]
 
     reason_counts: dict[str, int] = {}
     for row in filtered:
@@ -34,7 +40,9 @@ def build_daily_report(symbol: str | None = None) -> dict[str, Any]:
         "symbol": symbol.upper() if symbol else "ALL",
         "trades_taken": len(taken),
         "trades_skipped_or_blocked": len(skipped),
-        "top_reasons": sorted(reason_counts.items(), key=lambda item: item[1], reverse=True)[:10],
+        "top_reasons": sorted(
+            reason_counts.items(), key=lambda item: item[1], reverse=True
+        )[:10],
         "system_health": "GOOD" if len(skipped) <= len(taken) + 2 else "DEGRADED",
         "latest_strategy_control": latest_run.get("data", {}).get("strategy_control"),
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -47,8 +55,9 @@ def build_daily_report(symbol: str | None = None) -> dict[str, Any]:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Generate daily system report from journal/orchestrator artifacts.")
+    parser = argparse.ArgumentParser(
+        description="Generate daily system report from journal/orchestrator artifacts."
+    )
     parser.add_argument("--symbol", type=str, default=None)
     args = parser.parse_args()
     print(build_daily_report(args.symbol))
-

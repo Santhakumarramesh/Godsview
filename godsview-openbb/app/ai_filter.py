@@ -44,4 +44,3 @@ def ai_trade_filter(signal: dict[str, Any], context: dict[str, Any]) -> FilterDe
         final_action=action,
         reasons=[f"model_confidence_ok: {prob_up:.4f}"],
     )
-

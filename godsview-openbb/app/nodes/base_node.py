@@ -16,7 +16,9 @@ class NodeBase(ABC):
     name: str = "node"
 
     @abstractmethod
-    def run(self, brain: StockBrainState, payload: dict[str, Any], store: BrainStore) -> StockBrainState:
+    def run(
+        self, brain: StockBrainState, payload: dict[str, Any], store: BrainStore
+    ) -> StockBrainState:
         raise NotImplementedError
 
     def mark_live(self, brain: StockBrainState) -> None:
@@ -28,4 +30,3 @@ class NodeBase(ABC):
         brain.node_health = NodeHealth.DEGRADED
         brain.error = message
         brain.last_full_update = utc_now_iso()
-

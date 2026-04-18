@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Any
 
@@ -65,7 +65,11 @@ def _generate_trade_signal(history: pd.DataFrame) -> dict[str, Any] | None:
     else:
         # fallback using recent range
         recent = history.tail(20)
-        stop = float(recent["Low"].min()) if side == "long" else float(recent["High"].max())
+        stop = (
+            float(recent["Low"].min())
+            if side == "long"
+            else float(recent["High"].max())
+        )
 
     risk = abs(latest_close - stop)
     if risk <= 0:
@@ -146,7 +150,11 @@ def run_replay(
         exit_price, outcome = _resolve_trade(future, signal)
         entry = float(signal["entry"])
         side = str(signal["side"])
-        pnl_pct = (exit_price / entry - 1.0) * 100.0 if side == "long" else (entry / exit_price - 1.0) * 100.0
+        pnl_pct = (
+            (exit_price / entry - 1.0) * 100.0
+            if side == "long"
+            else (entry / exit_price - 1.0) * 100.0
+        )
         rr = float(signal["rr"])
 
         trade = ReplayTrade(
@@ -205,7 +213,11 @@ def run_replay(
     win_rate = len(wins) / len(trades) if trades else 0.0
     gross_win = sum(max(t.pnl_pct, 0) for t in trades)
     gross_loss = abs(sum(min(t.pnl_pct, 0) for t in trades))
-    profit_factor = (gross_win / gross_loss) if gross_loss > 0 else (999.0 if gross_win > 0 else 0.0)
+    profit_factor = (
+        (gross_win / gross_loss)
+        if gross_loss > 0
+        else (999.0 if gross_win > 0 else 0.0)
+    )
     expectancy = sum(t.pnl_pct for t in trades) / len(trades) if trades else 0.0
 
     summary = {
@@ -233,7 +245,9 @@ def run_replay(
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Replay engine with no-lookahead setup evaluation.")
+    parser = argparse.ArgumentParser(
+        description="Replay engine with no-lookahead setup evaluation."
+    )
     parser.add_argument("--symbol", type=str, default=settings.symbol)
     parser.add_argument("--timeframe", type=str, default=settings.timeframe)
     parser.add_argument("--warmup", type=int, default=90)
@@ -254,4 +268,3 @@ if __name__ == "__main__":
         screenshot_interval=args.screenshot_interval,
     )
     print(result)
-

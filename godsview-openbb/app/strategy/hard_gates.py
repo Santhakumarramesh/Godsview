@@ -72,7 +72,9 @@ def evaluate_hard_gates(
     volatility = _safe_float(market.get("volatility_100"), 0.0)
     volatility_pass = volatility <= 0.08
 
-    avg_hl_range = _safe_float(((bars["High"] - bars["Low"]) / bars["Close"]).tail(40).mean(), 0.0)
+    avg_hl_range = _safe_float(
+        ((bars["High"] - bars["Low"]) / bars["Close"]).tail(40).mean(), 0.0
+    )
     spread_quality_pass = avg_hl_range <= 0.04
 
     macro_blackout = bool(macro.get("blackout", False))
@@ -146,8 +148,9 @@ def evaluate_hard_gates(
         "pass_ratio": round(pass_ratio, 6),
         "liquidity_score": round(max(min(liquidity_ratio / 1.5, 1.0), 0.0), 6),
         "volatility_score": round(max(min((0.08 - volatility) / 0.08, 1.0), 0.0), 6),
-        "spread_quality_score": round(max(min((0.04 - avg_hl_range) / 0.04, 1.0), 0.0), 6),
+        "spread_quality_score": round(
+            max(min((0.04 - avg_hl_range) / 0.04, 1.0), 0.0), 6
+        ),
         "session_allowed": session_allowed,
         "news_blackout": macro_blackout,
     }
-

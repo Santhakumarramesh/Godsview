@@ -1,4 +1,5 @@
 """Tests for services.shared.types"""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -6,8 +7,16 @@ from datetime import datetime, timezone
 import pytest
 
 from services.shared.types import (
-    Bar, Signal, Trade, Direction, SignalType, TradeOutcome,
-    BacktestMetrics, BacktestResult, MLPrediction, RecallEntry,
+    BacktestMetrics,
+    BacktestResult,
+    Bar,
+    Direction,
+    MLPrediction,
+    RecallEntry,
+    Signal,
+    SignalType,
+    Trade,
+    TradeOutcome,
 )
 from services.tests.conftest import make_bar
 

@@ -30,4 +30,3 @@ def build_learning_summary(store: BrainMemoryStore, symbol: str) -> dict[str, An
         "win_rate": round(float(win_rate), 6),
         "by_setup": by_setup,
     }
-

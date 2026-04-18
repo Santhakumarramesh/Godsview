@@ -7,16 +7,21 @@ DB persistence is layered on top (write-behind).
 """
 
 from __future__ import annotations
+
+import json
 import threading
 import time
-import json
+from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Optional
-from dataclasses import asdict
 
 from .schemas import (
-    StockBrainState, SupremeBrainState, ConsciousnessCard,
-    NodeHealth, Attention, BrainState,
+    Attention,
+    BrainState,
+    ConsciousnessCard,
+    NodeHealth,
+    StockBrainState,
+    SupremeBrainState,
 )
 
 
@@ -49,7 +54,9 @@ class BrainStore:
 
     def update_supreme(self, supreme_or_none=None, **kwargs) -> SupremeBrainState:
         with self._rw_lock:
-            if supreme_or_none is not None and isinstance(supreme_or_none, SupremeBrainState):
+            if supreme_or_none is not None and isinstance(
+                supreme_or_none, SupremeBrainState
+            ):
                 supreme_or_none.last_update = datetime.now(timezone.utc).isoformat()
                 self._supreme = supreme_or_none
                 return self._supreme
@@ -78,7 +85,9 @@ class BrainStore:
                 self._stock_brains[symbol] = brain
             return self._stock_brains[symbol]
 
-    def update_stock(self, symbol: str, brain_or_none=None, **kwargs) -> Optional[StockBrainState]:
+    def update_stock(
+        self, symbol: str, brain_or_none=None, **kwargs
+    ) -> Optional[StockBrainState]:
         with self._rw_lock:
             if brain_or_none is not None and isinstance(brain_or_none, StockBrainState):
                 # Replace entire brain state
@@ -102,7 +111,8 @@ class BrainStore:
         """Return stocks sorted by attention score (descending)."""
         with self._rw_lock:
             active = [
-                b for b in self._stock_brains.values()
+                b
+                for b in self._stock_brains.values()
                 if b.attention_level != Attention.DORMANT
             ]
             active.sort(key=lambda b: b.attention_score, reverse=True)
@@ -124,24 +134,38 @@ class BrainStore:
                 reverse=True,
             ):
                 d = brain.decision
-                cards.append(ConsciousnessCard(
-                    symbol=brain.symbol,
-                    attention=brain.attention_level.value if isinstance(brain.attention_level, Attention) else str(brain.attention_level),
-                    bias=brain.structure.htf_bias.value if hasattr(brain.structure.htf_bias, 'value') else str(brain.structure.htf_bias),
-                    setup=d.setup_name or "—",
-                    memory_match_pct=round(brain.memory.cluster_similarity * 100, 1),
-                    readiness_pct=round(d.entry_quality * 100, 1),
-                    risk_state="Allowed" if brain.risk_gate.tradeable else ("Caution" if d.confidence > 0.5 else "Blocked"),
-                    brain_verdict=d.reasoning_summary or "No active analysis",
-                    c4_score=round(d.confidence * 100, 1),
-                    regime=brain.structure.sk_sequence_stage,
-                    node_health=brain.node_health.value if isinstance(brain.node_health, NodeHealth) else str(brain.node_health),
-                ))
+                cards.append(
+                    ConsciousnessCard(
+                        symbol=brain.symbol,
+                        attention=brain.attention_level.value
+                        if isinstance(brain.attention_level, Attention)
+                        else str(brain.attention_level),
+                        bias=brain.structure.htf_bias.value
+                        if hasattr(brain.structure.htf_bias, "value")
+                        else str(brain.structure.htf_bias),
+                        setup=d.setup_name or "—",
+                        memory_match_pct=round(
+                            brain.memory.cluster_similarity * 100, 1
+                        ),
+                        readiness_pct=round(d.entry_quality * 100, 1),
+                        risk_state="Allowed"
+                        if brain.risk_gate.tradeable
+                        else ("Caution" if d.confidence > 0.5 else "Blocked"),
+                        brain_verdict=d.reasoning_summary or "No active analysis",
+                        c4_score=round(d.confidence * 100, 1),
+                        regime=brain.structure.sk_sequence_stage,
+                        node_health=brain.node_health.value
+                        if isinstance(brain.node_health, NodeHealth)
+                        else str(brain.node_health),
+                    )
+                )
             return cards
 
     # ── Event Log ─────────────────────────────────────────────────────────
 
-    def log_event(self, topic: str, symbol: str = "", payload: dict | None = None) -> None:
+    def log_event(
+        self, topic: str, symbol: str = "", payload: dict | None = None
+    ) -> None:
         with self._rw_lock:
             event = {
                 "topic": topic,
@@ -151,7 +175,7 @@ class BrainStore:
             }
             self._event_log.append(event)
             if len(self._event_log) > self._max_events:
-                self._event_log = self._event_log[-self._max_events:]
+                self._event_log = self._event_log[-self._max_events :]
 
     def get_recent_events(self, limit: int = 50, topic: str = "") -> list[dict]:
         with self._rw_lock:
@@ -168,8 +192,7 @@ class BrainStore:
             return {
                 "supreme": asdict(self._supreme),
                 "stocks": {
-                    sym: asdict(brain)
-                    for sym, brain in self._stock_brains.items()
+                    sym: asdict(brain) for sym, brain in self._stock_brains.items()
                 },
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
@@ -184,8 +207,10 @@ class BrainStore:
 
 # ── Singleton accessor ────────────────────────────────────────────────────────
 
+
 def get_store() -> BrainStore:
     return BrainStore()
+
 
 # Alias for clearer semantics
 get_brain_store = get_store

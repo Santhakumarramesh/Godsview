@@ -14,7 +14,9 @@ class StockNode(NodeBase):
     def __init__(self, child_nodes: list[NodeBase]) -> None:
         self.child_nodes = child_nodes
 
-    def run(self, brain: StockBrainState, payload: dict[str, Any], store: BrainStore) -> StockBrainState:
+    def run(
+        self, brain: StockBrainState, payload: dict[str, Any], store: BrainStore
+    ) -> StockBrainState:
         for node in self.child_nodes:
             try:
                 brain = node.run(brain, payload, store)
@@ -53,26 +55,31 @@ def _build_default_pipeline() -> Optional[StockNode]:
     children: list[NodeBase] = []
     try:
         from .perception_node import PerceptionNode
+
         children.append(PerceptionNode())
     except Exception:
         pass
     try:
         from .structure_node import StructureNode
+
         children.append(StructureNode())
     except Exception:
         pass
     try:
         from .orderflow_node import OrderflowNode
+
         children.append(OrderflowNode())
     except Exception:
         pass
     try:
         from .reasoning_node import ReasoningNode
+
         children.append(ReasoningNode())
     except Exception:
         pass
     try:
         from .risk_node import RiskNode
+
         children.append(RiskNode())
     except Exception:
         pass

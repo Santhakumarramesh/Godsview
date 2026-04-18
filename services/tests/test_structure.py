@@ -1,17 +1,18 @@
 """Tests for feature_service.structure"""
+
 from __future__ import annotations
 
 import pytest
 
 from services.feature_service.structure import (
     StructureType,
-    find_swing_pivots,
+    compute_structure_score,
     find_bos_choch,
     find_fvgs,
     find_liquidity_sweeps,
-    compute_structure_score,
+    find_swing_pivots,
 )
-from services.tests.conftest import make_bars, make_bar
+from services.tests.conftest import make_bar, make_bars
 
 
 class TestSwingPivots:
@@ -57,15 +58,24 @@ class TestFVG:
         bars = make_bars(50)
         fvgs = find_fvgs(bars)
         for f in fvgs:
-            assert f.event_type in (StructureType.FVG_BULLISH, StructureType.FVG_BEARISH)
+            assert f.event_type in (
+                StructureType.FVG_BULLISH,
+                StructureType.FVG_BEARISH,
+            )
 
     def test_no_fvg_flat_market(self):
         """Perfectly flat bars should have no gaps."""
         from datetime import datetime, timedelta, timezone
+
         now = datetime.now(timezone.utc)
         bars = [
-            make_bar(close=100.0, open_=100.0, high=100.5, low=99.5,
-                     ts=now - timedelta(minutes=15 * i))
+            make_bar(
+                close=100.0,
+                open_=100.0,
+                high=100.5,
+                low=99.5,
+                ts=now - timedelta(minutes=15 * i),
+            )
             for i in range(20)
         ]
         fvgs = find_fvgs(bars)
@@ -102,9 +112,9 @@ class TestStructureScore:
 
     def test_trending_market_has_higher_score(self):
         uptrend = make_bars(120, trend=0.005)
-        flat    = make_bars(120, trend=0.0)
-        up_score   = compute_structure_score(uptrend, 100)
-        flat_score = compute_structure_score(flat,    100)
+        flat = make_bars(120, trend=0.0)
+        up_score = compute_structure_score(uptrend, 100)
+        flat_score = compute_structure_score(flat, 100)
         # Uptrend should generally produce non-trivial structure
         assert up_score >= 0.0
         assert flat_score >= 0.0

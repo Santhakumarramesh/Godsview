@@ -36,11 +36,19 @@ jobs:
         run: pnpm run typecheck:libs
 
       - name: TypeCheck API Server
-        continue-on-error: true
+        # Hard-gated as of phase-1c (was continue-on-error during phase-1a/1b).
         run: pnpm --filter @workspace/api-server typecheck
 
       - name: TypeCheck Dashboard
         run: pnpm --filter @workspace/godsview-dashboard typecheck
+
+      - name: TypeCheck Scripts
+        run: pnpm --filter @workspace/scripts typecheck
+
+      - name: TypeCheck Workspace (full project references)
+        # Belt-and-suspenders: catches any hidden cross-package drift that the
+        # per-package typechecks above miss.
+        run: pnpm run typecheck
 
       - name: Run Unit Tests
         run: pnpm --filter @workspace/api-server test
@@ -70,15 +78,18 @@ jobs:
           pip install ruff pytest pytest-asyncio
 
       - name: Ruff lint
-        run: ruff check services/ godsview-openbb/ --select=E,W,F,I --ignore=E501,F401 || true
+        # Hard-gated as of phase-1c (was `|| true`).
+        run: ruff check services/ godsview-openbb/ --select=E,W,F,I --ignore=E501,F401
 
       - name: Ruff format check
-        run: ruff format --check services/ godsview-openbb/ || true
+        # Hard-gated as of phase-1c (was `|| true`).
+        run: ruff format --check services/ godsview-openbb/
 
       - name: MyPy typecheck (shared contracts)
+        # Hard-gated as of phase-1c (was `|| true`).
         run: |
           pip install mypy pydantic
-          mypy godsview-openbb/app/shared_contracts.py --ignore-missing-imports --no-error-summary || true
+          mypy godsview-openbb/app/shared_contracts.py --ignore-missing-imports --no-error-summary
 
       - name: Run pytest (all 130+ tests)
         env:

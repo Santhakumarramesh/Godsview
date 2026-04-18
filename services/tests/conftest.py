@@ -1,6 +1,7 @@
 """
 GodsView v2 — pytest configuration and shared fixtures.
 """
+
 from __future__ import annotations
 
 import os
@@ -17,16 +18,18 @@ sys.path.insert(0, str(REPO_ROOT))
 # Set test env vars before any service config is loaded
 os.environ.setdefault("APP_ENV", "development")
 os.environ.setdefault("LOG_LEVEL", "WARNING")
-os.environ.setdefault("ALPACA_KEY_ID",     "test-key-id")
+os.environ.setdefault("ALPACA_KEY_ID", "test-key-id")
 os.environ.setdefault("ALPACA_SECRET_KEY", "test-secret")
-os.environ.setdefault("DATABASE_URL",      "sqlite+aiosqlite:///:memory:")
-os.environ.setdefault("LANCEDB_URI",       "/tmp/godsview_test_lancedb")
+os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+os.environ.setdefault("LANCEDB_URI", "/tmp/godsview_test_lancedb")
 os.environ.setdefault("MLFLOW_TRACKING_URI", "file:///tmp/godsview_test_mlruns")
 
 
 # ── Bar factory ───────────────────────────────────────────────────────────────
 
-from services.shared.types import Bar
+# Imports below the env-setup block are intentional: services.shared.types
+# resolves DATABASE_URL at import time, so we must populate os.environ first.
+from services.shared.types import Bar  # noqa: E402
 
 
 def make_bar(
@@ -67,28 +70,31 @@ def make_bars(
     """Generate a synthetic bar series with a mild uptrend and realistic noise."""
     import random
     from datetime import timedelta
+
     rng = random.Random(42)
     bars: list[Bar] = []
     price = base_price
     now = datetime.now(timezone.utc)
     for i in range(n):
         change = price * (trend + rng.gauss(0, 0.008))
-        open_  = price
-        close  = max(open_ + change, 0.01)
-        high   = max(open_, close) * (1 + abs(rng.gauss(0, 0.003)))
-        low    = min(open_, close) * (1 - abs(rng.gauss(0, 0.003)))
-        vol    = rng.uniform(50_000, 500_000)
-        ts     = now - timedelta(minutes=15 * (n - i))
-        bars.append(Bar(
-            symbol=symbol,
-            timestamp=ts,
-            open=round(open_, 4),
-            high=round(high, 4),
-            low=round(low, 4),
-            close=round(close, 4),
-            volume=round(vol, 0),
-            timeframe=timeframe,
-        ))
+        open_ = price
+        close = max(open_ + change, 0.01)
+        high = max(open_, close) * (1 + abs(rng.gauss(0, 0.003)))
+        low = min(open_, close) * (1 - abs(rng.gauss(0, 0.003)))
+        vol = rng.uniform(50_000, 500_000)
+        ts = now - timedelta(minutes=15 * (n - i))
+        bars.append(
+            Bar(
+                symbol=symbol,
+                timestamp=ts,
+                open=round(open_, 4),
+                high=round(high, 4),
+                low=round(low, 4),
+                close=round(close, 4),
+                volume=round(vol, 0),
+                timeframe=timeframe,
+            )
+        )
         price = close
     return bars
 

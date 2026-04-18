@@ -45,4 +45,3 @@ def detect_fvg(df: pd.DataFrame, max_gaps: int = 150) -> list[dict[str, Any]]:
             )
 
     return gaps[-max_gaps:]
-

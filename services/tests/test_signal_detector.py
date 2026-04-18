@@ -1,9 +1,10 @@
 """Tests for feature_service.signal_detector"""
+
 from __future__ import annotations
 
 import pytest
 
-from services.feature_service.signal_detector import detect_signal, batch_detect
+from services.feature_service.signal_detector import batch_detect, detect_signal
 from services.shared.types import Direction, SignalType
 from services.tests.conftest import make_bars
 

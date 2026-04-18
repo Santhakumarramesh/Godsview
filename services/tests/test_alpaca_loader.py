@@ -1,13 +1,14 @@
 """Tests for market_data_service.loaders.alpaca_loader"""
+
 from __future__ import annotations
 
 import pytest
 
 from services.market_data_service.loaders.alpaca_loader import (
+    _TF_MAP,
     _aggregate,
     _generate_synthetic,
     _parse_alpaca_bars,
-    _TF_MAP,
 )
 from services.shared.types import Bar
 from services.tests.conftest import make_bars
@@ -22,7 +23,7 @@ class TestAggregate:
     def test_aggregate_4_bars(self):
         bars = make_bars(12)
         result = _aggregate(bars, 4)
-        assert len(result) == 3   # 12 / 4 = 3
+        assert len(result) == 3  # 12 / 4 = 3
 
     def test_aggregate_high_is_max(self):
         bars = make_bars(4)
@@ -66,13 +67,13 @@ class TestGenerateSynthetic:
         bars = _generate_synthetic("BTCUSD", "1hour", 50)
         for b in bars:
             assert b.high >= max(b.open, b.close)
-            assert b.low  <= min(b.open, b.close)
+            assert b.low <= min(b.open, b.close)
             assert b.open > 0
             assert b.close > 0
 
     def test_btc_base_price(self):
         bars = _generate_synthetic("BTCUSD", "1day", 1)
-        assert bars[0].open > 10_000   # BTC should be above $10k
+        assert bars[0].open > 10_000  # BTC should be above $10k
 
     def test_volumes_positive(self):
         bars = _generate_synthetic("SPY", "15min", 20)
@@ -87,8 +88,8 @@ class TestTfMap:
             assert tf in _TF_MAP
 
     def test_aggregation_factors_correct(self):
-        assert _TF_MAP["30min"][1] == 2     # 30min = 2 × 15min
-        assert _TF_MAP["2hour"][1] == 2     # 2h = 2 × 1h
-        assert _TF_MAP["4hour"][1] == 4     # 4h = 4 × 1h
-        assert _TF_MAP["1min"][1]  == 1     # no aggregation
-        assert _TF_MAP["15min"][1] == 1     # no aggregation
+        assert _TF_MAP["30min"][1] == 2  # 30min = 2 × 15min
+        assert _TF_MAP["2hour"][1] == 2  # 2h = 2 × 1h
+        assert _TF_MAP["4hour"][1] == 4  # 4h = 4 × 1h
+        assert _TF_MAP["1min"][1] == 1  # no aggregation
+        assert _TF_MAP["15min"][1] == 1  # no aggregation

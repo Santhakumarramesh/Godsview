@@ -53,4 +53,3 @@ def apply_risk_checks(
         return RiskDecision(allowed=False, reason="invalid_position_size", qty=0)
 
     return RiskDecision(allowed=True, reason="ok", qty=qty)
-

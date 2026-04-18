@@ -15,6 +15,7 @@ Counters / histograms:
   godsview_ml_predictions_total{service, symbol, approved}
   godsview_errors_total{service, error_type}
 """
+
 from __future__ import annotations
 
 import time
@@ -30,30 +31,41 @@ from starlette.middleware.base import BaseHTTPMiddleware
 try:
     from prometheus_client import (
         CONTENT_TYPE_LATEST,
+        REGISTRY,
         Counter,
         Gauge,
         Histogram,
         generate_latest,
-        REGISTRY,
     )
+
     _PROMETHEUS_AVAILABLE = True
 except ImportError:
     _PROMETHEUS_AVAILABLE = False
 
     # Minimal stubs so the rest of the code never crashes
     class _Noop:
-        def labels(self, **_): return self
-        def inc(self, *_, **__): pass
-        def observe(self, *_, **__): pass
-        def set(self, *_, **__): pass
+        def labels(self, **_):
+            return self
 
-    Counter = Gauge = Histogram = lambda *a, **kw: _Noop()   # type: ignore
+        def inc(self, *_, **__):
+            pass
+
+        def observe(self, *_, **__):
+            pass
+
+        def set(self, *_, **__):
+            pass
+
+    Counter = Gauge = Histogram = lambda *a, **kw: _Noop()  # type: ignore
     CONTENT_TYPE_LATEST = "text/plain"
 
-    def generate_latest(*_): return b""  # type: ignore
-    class REGISTRY:   # type: ignore
+    def generate_latest(*_):
+        return b""  # type: ignore
+
+    class REGISTRY:  # type: ignore
         @staticmethod
-        def get_sample_value(*_): return None
+        def get_sample_value(*_):
+            return None
 
 
 # ---------------------------------------------------------------------------
@@ -127,6 +139,7 @@ def _ensure_metrics() -> None:
 # Public recording helpers
 # ---------------------------------------------------------------------------
 
+
 def record_request(service: str, method: str, path: str, status: int) -> None:
     _ensure_metrics()
     if "http_requests" in _counters:
@@ -139,8 +152,10 @@ def record_signal(service: str, symbol: str, timeframe: str, signal_type: str) -
     _ensure_metrics()
     if "signals" in _counters:
         _counters["signals"].labels(
-            service=service, symbol=symbol,
-            timeframe=timeframe, signal_type=signal_type,
+            service=service,
+            symbol=symbol,
+            timeframe=timeframe,
+            signal_type=signal_type,
         ).inc()
 
 
@@ -148,8 +163,10 @@ def record_trade(service: str, symbol: str, direction: str, outcome: str) -> Non
     _ensure_metrics()
     if "trades" in _counters:
         _counters["trades"].labels(
-            service=service, symbol=symbol,
-            direction=direction, outcome=outcome,
+            service=service,
+            symbol=symbol,
+            direction=direction,
+            outcome=outcome,
         ).inc()
 
 
@@ -157,7 +174,9 @@ def record_bars_fetched(service: str, symbol: str, timeframe: str, count: int) -
     _ensure_metrics()
     if "bars_fetched" in _counters:
         _counters["bars_fetched"].labels(
-            service=service, symbol=symbol, timeframe=timeframe,
+            service=service,
+            symbol=symbol,
+            timeframe=timeframe,
         ).inc(count)
 
 
@@ -165,7 +184,9 @@ def record_ml_prediction(service: str, symbol: str, approved: bool) -> None:
     _ensure_metrics()
     if "ml_predictions" in _counters:
         _counters["ml_predictions"].labels(
-            service=service, symbol=symbol, approved=str(approved).lower(),
+            service=service,
+            symbol=symbol,
+            approved=str(approved).lower(),
         ).inc()
 
 
@@ -179,7 +200,9 @@ def observe_duration(service: str, method: str, path: str, seconds: float) -> No
     _ensure_metrics()
     if "http_duration" in _histograms:
         _histograms["http_duration"].labels(
-            service=service, method=method, path=path,
+            service=service,
+            method=method,
+            path=path,
         ).observe(seconds)
 
 
@@ -189,7 +212,9 @@ def observe_backtest_duration(
     _ensure_metrics()
     if "backtest_duration" in _histograms:
         _histograms["backtest_duration"].labels(
-            service=service, symbol=symbol, timeframe=timeframe,
+            service=service,
+            symbol=symbol,
+            timeframe=timeframe,
         ).observe(seconds)
 
 
@@ -209,6 +234,7 @@ def set_equity(service: str, equity: float) -> None:
 # Prometheus scrape endpoint
 # ---------------------------------------------------------------------------
 
+
 async def metrics_endpoint(request: Request) -> Response:
     """GET /metrics — scraped by Prometheus."""
     _ensure_metrics()
@@ -221,6 +247,7 @@ async def metrics_endpoint(request: Request) -> Response:
 # ---------------------------------------------------------------------------
 # Middleware
 # ---------------------------------------------------------------------------
+
 
 class PrometheusMiddleware(BaseHTTPMiddleware):
     """Auto-records request count + latency for every endpoint."""
@@ -248,6 +275,7 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
 # ---------------------------------------------------------------------------
 # Setup helper
 # ---------------------------------------------------------------------------
+
 
 def setup_metrics(app: FastAPI, service_name: str) -> None:
     """

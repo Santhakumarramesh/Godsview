@@ -3,6 +3,7 @@ API Gateway — /api/market routes
 
 Thin proxy to the market data service.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -17,11 +18,11 @@ router = APIRouter()
 
 @router.get("/bars/{symbol}")
 async def get_bars(
-    symbol:    str,
+    symbol: str,
     timeframe: str = Query(default="15min"),
-    limit:     int = Query(default=200, ge=1, le=5000),
-    start:     str | None = Query(default=None),
-    end:       str | None = Query(default=None),
+    limit: int = Query(default=200, ge=1, le=5000),
+    start: str | None = Query(default=None),
+    end: str | None = Query(default=None),
 ) -> dict[str, Any]:
     params: dict[str, Any] = {"timeframe": timeframe, "limit": limit}
     if start:

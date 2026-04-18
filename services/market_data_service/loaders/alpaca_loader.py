@@ -7,6 +7,7 @@ Supports:
   • Asset listing
   • Timeframe aggregation (30Min, 2H, 4H not natively supported → aggregate)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -24,27 +25,27 @@ log = get_logger(__name__)
 # ── Timeframe mapping ─────────────────────────────────────────────────────────
 # Maps GodsView canonical TF → (Alpaca TF, aggregation_factor)
 _TF_MAP: dict[str, tuple[str, int]] = {
-    "1min":  ("1Min",  1),
-    "5min":  ("5Min",  1),
+    "1min": ("1Min", 1),
+    "5min": ("5Min", 1),
     "15min": ("15Min", 1),
-    "30min": ("15Min", 2),   # aggregate 2 × 15Min
+    "30min": ("15Min", 2),  # aggregate 2 × 15Min
     "1hour": ("1Hour", 1),
-    "2hour": ("1Hour", 2),   # aggregate 2 × 1Hour
-    "4hour": ("1Hour", 4),   # aggregate 4 × 1Hour
+    "2hour": ("1Hour", 2),  # aggregate 2 × 1Hour
+    "4hour": ("1Hour", 4),  # aggregate 4 × 1Hour
     "8hour": ("1Hour", 8),
     "12hour": ("1Hour", 12),
-    "1day":  ("1Day",  1),
+    "1day": ("1Day", 1),
 }
 
 _MAX_RETRIES = 3
-_RETRY_DELAY = 1.5   # seconds
+_RETRY_DELAY = 1.5  # seconds
 
 
 def _alpaca_headers() -> dict[str, str]:
     return {
-        "APCA-API-KEY-ID":     cfg.alpaca_key_id,
+        "APCA-API-KEY-ID": cfg.alpaca_key_id,
         "APCA-API-SECRET-KEY": cfg.alpaca_secret_key,
-        "Accept":              "application/json",
+        "Accept": "application/json",
     }
 
 
@@ -53,6 +54,7 @@ def _has_credentials() -> bool:
 
 
 # ── Bar aggregation ───────────────────────────────────────────────────────────
+
 
 def _aggregate(bars: list[Bar], n: int) -> list[Bar]:
     """Merge consecutive N bars into one OHLCV bar."""
@@ -66,7 +68,7 @@ def _aggregate(bars: list[Bar], n: int) -> list[Bar]:
             timestamp=chunk[0].timestamp,
             open=chunk[0].open,
             high=max(b.high for b in chunk),
-            low=min(b.low  for b in chunk),
+            low=min(b.low for b in chunk),
             close=chunk[-1].close,
             volume=sum(b.volume for b in chunk),
             timeframe=chunk[0].timeframe,
@@ -77,22 +79,25 @@ def _aggregate(bars: list[Bar], n: int) -> list[Bar]:
 
 # ── Alpaca REST helpers ───────────────────────────────────────────────────────
 
+
 def _parse_alpaca_bars(raw: list[dict[str, Any]], symbol: str, tf: str) -> list[Bar]:
     bars: list[Bar] = []
     for r in raw:
         try:
             ts_str: str = r.get("t") or r.get("T") or ""
-            bars.append(Bar(
-                symbol=symbol,
-                timestamp=datetime.fromisoformat(ts_str.replace("Z", "+00:00")),
-                open=float(r.get("o") or r.get("O", 0)),
-                high=float(r.get("h") or r.get("H", 0)),
-                low=float(r.get("l") or r.get("L", 0)),
-                close=float(r.get("c") or r.get("C", 0)),
-                volume=float(r.get("v") or r.get("V", 0)),
-                vwap=float(r["vw"]) if "vw" in r else None,
-                timeframe=tf,
-            ))
+            bars.append(
+                Bar(
+                    symbol=symbol,
+                    timestamp=datetime.fromisoformat(ts_str.replace("Z", "+00:00")),
+                    open=float(r.get("o") or r.get("O", 0)),
+                    high=float(r.get("h") or r.get("H", 0)),
+                    low=float(r.get("l") or r.get("L", 0)),
+                    close=float(r.get("c") or r.get("C", 0)),
+                    volume=float(r.get("v") or r.get("V", 0)),
+                    vwap=float(r["vw"]) if "vw" in r else None,
+                    timeframe=tf,
+                )
+            )
         except Exception as exc:
             log.warning("bar_parse_skip", err=str(exc), raw=r)
     return bars
@@ -109,11 +114,11 @@ async def _fetch_bars_page(
 ) -> tuple[list[dict[str, Any]], str | None]:
     params: dict[str, Any] = {
         "timeframe": alpaca_tf,
-        "start":     start,
-        "end":       end,
-        "limit":     min(limit, 10_000),
-        "feed":      "iex",
-        "sort":      "asc",
+        "start": start,
+        "end": end,
+        "limit": min(limit, 10_000),
+        "feed": "iex",
+        "sort": "asc",
     }
     if page_token:
         params["page_token"] = page_token
@@ -128,11 +133,11 @@ async def _fetch_bars_page(
 
 
 async def fetch_bars(
-    symbol:    str,
+    symbol: str,
     timeframe: str = "15min",
-    start:     datetime | None = None,
-    end:       datetime | None = None,
-    limit:     int = 500,
+    start: datetime | None = None,
+    end: datetime | None = None,
+    limit: int = 500,
 ) -> list[Bar]:
     """
     Fetch historical OHLCV bars from Alpaca with automatic aggregation.
@@ -146,7 +151,7 @@ async def fetch_bars(
     alpaca_tf, agg_factor = _TF_MAP.get(timeframe.lower(), ("15Min", 1))
 
     now = datetime.now(timezone.utc)
-    end_dt   = end   or now
+    end_dt = end or now
     start_dt = start or (now - timedelta(days=30))
 
     # Request more bars to account for aggregation shrinkage
@@ -164,8 +169,11 @@ async def fetch_bars(
             ) as client:
                 while len(raw_bars) < fetch_limit:
                     page, page_token = await _fetch_bars_page(
-                        client, symbol, alpaca_tf,
-                        start_dt.isoformat(), end_dt.isoformat(),
+                        client,
+                        symbol,
+                        alpaca_tf,
+                        start_dt.isoformat(),
+                        end_dt.isoformat(),
                         fetch_limit - len(raw_bars),
                         page_token,
                     )
@@ -214,11 +222,11 @@ async def fetch_latest_quote(symbol: str) -> dict[str, Any]:
             data = resp.json()
             q = data.get("quote", {})
             return {
-                "symbol":    symbol,
-                "ask":       float(q.get("ap", 0)),
-                "ask_size":  int(q.get("as", 0)),
-                "bid":       float(q.get("bp", 0)),
-                "bid_size":  int(q.get("bs", 0)),
+                "symbol": symbol,
+                "ask": float(q.get("ap", 0)),
+                "ask_size": int(q.get("as", 0)),
+                "bid": float(q.get("bp", 0)),
+                "bid_size": int(q.get("bs", 0)),
                 "timestamp": q.get("t", ""),
             }
     except Exception as exc:
@@ -252,13 +260,13 @@ async def list_assets(asset_class: str = "us_equity") -> list[dict[str, Any]]:
 
 _BASE_PRICES: dict[str, float] = {
     "BTCUSD": 65_000.0,
-    "ETHUSD":  3_200.0,
-    "SOLUSD":    150.0,
-    "EURUSD":      1.08,
-    "GBPUSD":      1.26,
+    "ETHUSD": 3_200.0,
+    "SOLUSD": 150.0,
+    "EURUSD": 1.08,
+    "GBPUSD": 1.26,
 }
 _DEFAULT_BASE = 175.0
-_VOLATILITY   = 0.008  # 0.8 % per bar
+_VOLATILITY = 0.008  # 0.8 % per bar
 
 
 def _generate_synthetic(symbol: str, timeframe: str, count: int) -> list[Bar]:
@@ -267,39 +275,49 @@ def _generate_synthetic(symbol: str, timeframe: str, count: int) -> list[Bar]:
     credentials are missing or the market is closed.
     """
     import random
+
     rng = random.Random(hash(symbol) % (2**32))
 
     price = _BASE_PRICES.get(symbol.upper(), _DEFAULT_BASE)
-    now   = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+    now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
 
     # Bar duration by timeframe
     _tf_minutes: dict[str, int] = {
-        "1min": 1, "5min": 5, "15min": 15, "30min": 30,
-        "1hour": 60, "2hour": 120, "4hour": 240,
-        "8hour": 480, "12hour": 720, "1day": 1440,
+        "1min": 1,
+        "5min": 5,
+        "15min": 15,
+        "30min": 30,
+        "1hour": 60,
+        "2hour": 120,
+        "4hour": 240,
+        "8hour": 480,
+        "12hour": 720,
+        "1day": 1440,
     }
     bar_minutes = _tf_minutes.get(timeframe.lower(), 15)
 
     bars: list[Bar] = []
     for i in range(count):
         ts = now - timedelta(minutes=bar_minutes * (count - i))
-        vol   = _VOLATILITY * (0.5 + rng.random())
+        vol = _VOLATILITY * (0.5 + rng.random())
         delta = price * vol * (rng.random() * 2 - 1)
         open_ = price
         close = max(price + delta, open_ * 0.5)
-        high  = max(open_, close) * (1 + rng.random() * vol * 0.5)
-        low   = min(open_, close) * (1 - rng.random() * vol * 0.5)
+        high = max(open_, close) * (1 + rng.random() * vol * 0.5)
+        low = min(open_, close) * (1 - rng.random() * vol * 0.5)
         volume = rng.uniform(50_000, 500_000)
         price = close
-        bars.append(Bar(
-            symbol=symbol,
-            timestamp=ts,
-            open=round(open_, 6),
-            high=round(high, 6),
-            low=round(low, 6),
-            close=round(close, 6),
-            volume=round(volume, 0),
-            timeframe=timeframe,
-        ))
+        bars.append(
+            Bar(
+                symbol=symbol,
+                timestamp=ts,
+                open=round(open_, 6),
+                high=round(high, 6),
+                low=round(low, 6),
+                close=round(close, 6),
+                volume=round(volume, 0),
+                timeframe=timeframe,
+            )
+        )
 
     return bars

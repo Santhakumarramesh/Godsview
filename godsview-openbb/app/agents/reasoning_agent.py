@@ -13,7 +13,8 @@ class ReasoningAgent(Agent):
             return state
 
         signal = state.data.get("signal")
-        market = state.data.get("market", {})
+        # market context is consumed by other agents; reasoning_agent only
+        # uses signal/mtf/sentiment/macro/scoring.
         mtf = state.data.get("mtf", {})
         sentiment = state.data.get("sentiment", {})
         macro = state.data.get("macro", {})
@@ -25,7 +26,9 @@ class ReasoningAgent(Agent):
             state.set_blocked("missing_signal")
             return state
 
-        memory_tail = state.brain.get_memories(state.symbol, memory_type="trade", limit=40)
+        memory_tail = state.brain.get_memories(
+            state.symbol, memory_type="trade", limit=40
+        )
         recent_losses = len([m for m in memory_tail if str(m.get("outcome")) == "loss"])
         recent_total = len(memory_tail)
         recent_loss_rate = (recent_losses / recent_total) if recent_total > 0 else 0.0
@@ -33,13 +36,19 @@ class ReasoningAgent(Agent):
         decision = compose_reasoning_decision(
             symbol=state.symbol,
             signal=signal,
-            setup_candidate=setup_candidate if isinstance(setup_candidate, dict) else None,
+            setup_candidate=setup_candidate
+            if isinstance(setup_candidate, dict)
+            else None,
             scoring=scoring if isinstance(scoring, dict) else None,
             sentiment=sentiment if isinstance(sentiment, dict) else None,
             macro=macro if isinstance(macro, dict) else None,
             memory_tail=memory_tail,
         )
-        confluence = float(mtf.get("summary", {}).get("confluence", 0.0)) if isinstance(mtf, dict) else 0.0
+        confluence = (
+            float(mtf.get("summary", {}).get("confluence", 0.0))
+            if isinstance(mtf, dict)
+            else 0.0
+        )
         if confluence < 0.45 and bool(decision.get("approved", False)):
             decision["approved"] = False
             decision["final_action"] = "skip"

@@ -43,7 +43,9 @@ def score_setup_pipeline(
     hard_gates = hard_gates or {}
     validation = validation or {}
 
-    structure_score = _safe_float(setup_candidate.get("structure", {}).get("structure_score"), 0.0)
+    structure_score = _safe_float(
+        setup_candidate.get("structure", {}).get("structure_score"), 0.0
+    )
     model_confidence = _safe_float(signal.get("confidence"), 0.0)
     rr = _safe_float(setup_candidate.get("rr"), 0.0)
     rr_score = _clip01(rr / 3.0)
@@ -67,7 +69,9 @@ def score_setup_pipeline(
     setup_pattern_quality = _clip01(setup_pattern_quality)
 
     strategy_score = _clip01(
-        0.45 * structure_score + 0.35 * setup_pattern_quality + 0.20 * ((model_confidence + rr_score) / 2.0)
+        0.45 * structure_score
+        + 0.35 * setup_pattern_quality
+        + 0.20 * ((model_confidence + rr_score) / 2.0)
     )
     regime_score = _clip01(_regime_fit_score(setup, regime))
 
@@ -82,14 +86,18 @@ def score_setup_pipeline(
         + 0.2 * gate_spread_quality_score
     )
 
-    final_score = _clip01(0.45 * strategy_score + 0.3 * regime_score + 0.25 * risk_score)
+    final_score = _clip01(
+        0.45 * strategy_score + 0.3 * regime_score + 0.25 * risk_score
+    )
     score_grade = "A" if final_score >= 0.75 else "B" if final_score >= 0.62 else "C"
 
     reasons: list[str] = []
     if not validation.get("valid", False):
         reasons.append(f"setup_validation_failed:{validation.get('reason', 'unknown')}")
     if not hard_gates.get("pass", False):
-        reasons.extend([f"gate_failed:{gate}" for gate in hard_gates.get("failed_reasons", [])])
+        reasons.extend(
+            [f"gate_failed:{gate}" for gate in hard_gates.get("failed_reasons", [])]
+        )
     if final_score < 0.55:
         reasons.append("final_score_below_threshold")
     if model_confidence < 0.2:
@@ -116,4 +124,3 @@ def score_setup_pipeline(
             "setup": setup,
         },
     }
-

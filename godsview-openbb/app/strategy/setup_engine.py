@@ -11,7 +11,9 @@ from app.analysis.structure import analyze_structure
 from app.analysis.sweep import detect_liquidity_sweep
 
 
-def generate_setup_candidate(df: pd.DataFrame, session: dict[str, Any] | None = None) -> dict[str, Any]:
+def generate_setup_candidate(
+    df: pd.DataFrame, session: dict[str, Any] | None = None
+) -> dict[str, Any]:
     if len(df) < 80:
         return {"valid": False, "reason": "insufficient_bars"}
 
@@ -58,7 +60,9 @@ def generate_setup_candidate(df: pd.DataFrame, session: dict[str, Any] | None = 
     block = None
     for item in reversed(blocks):
         side = item.get("side")
-        if (direction == "long" and side == "bullish") or (direction == "short" and side == "bearish"):
+        if (direction == "long" and side == "bullish") or (
+            direction == "short" and side == "bearish"
+        ):
             block = item
             break
 
@@ -66,12 +70,18 @@ def generate_setup_candidate(df: pd.DataFrame, session: dict[str, Any] | None = 
         stop = float(block["low"]) if direction == "long" else float(block["high"])
     else:
         recent = df.tail(25)
-        stop = float(recent["Low"].min()) if direction == "long" else float(recent["High"].max())
+        stop = (
+            float(recent["Low"].min())
+            if direction == "long"
+            else float(recent["High"].max())
+        )
 
     aligned_fvg = None
     for gap in reversed(fvgs):
         side = str(gap.get("side", ""))
-        if (direction == "long" and side == "bullish") or (direction == "short" and side == "bearish"):
+        if (direction == "long" and side == "bullish") or (
+            direction == "short" and side == "bearish"
+        ):
             aligned_fvg = gap
             break
 
@@ -79,7 +89,11 @@ def generate_setup_candidate(df: pd.DataFrame, session: dict[str, Any] | None = 
     if risk <= 0:
         return {"valid": False, "reason": "invalid_stop_distance"}
 
-    target = latest_close + (2.0 * risk) if direction == "long" else latest_close - (2.0 * risk)
+    target = (
+        latest_close + (2.0 * risk)
+        if direction == "long"
+        else latest_close - (2.0 * risk)
+    )
     return {
         "valid": True,
         "setup": setup,

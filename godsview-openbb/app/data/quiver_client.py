@@ -45,7 +45,10 @@ def get_quiver_snapshot(symbol: str) -> dict[str, Any]:
                 "generated_at": datetime.now(timezone.utc).isoformat(),
             }
 
-        headers = {"accept": "application/json", "Authorization": f"Bearer {settings.quiver_api_key}"}
+        headers = {
+            "accept": "application/json",
+            "Authorization": f"Bearer {settings.quiver_api_key}",
+        }
         # Quiver API routes can vary by account tier; these are best-effort endpoints.
         insider_url = f"https://api.quiverquant.com/beta/live/insiders/{ticker}"
         congress_url = f"https://api.quiverquant.com/beta/live/congresstrading/{ticker}"
@@ -77,12 +80,18 @@ def get_quiver_snapshot(symbol: str) -> dict[str, Any]:
 
         insider_bias = _parse_transaction_bias(insider_rows)
         congress_bias = _parse_transaction_bias(congress_rows)
-        smart_money_score = (insider_bias["bias_score"] * 0.55) + (congress_bias["bias_score"] * 0.45)
+        smart_money_score = (insider_bias["bias_score"] * 0.55) + (
+            congress_bias["bias_score"] * 0.45
+        )
         available = bool(insider_rows or congress_rows)
         return {
             "available": available,
             "source": "quiver",
-            "reason": "ok" if available else ",".join(errors) if errors else "empty_response",
+            "reason": "ok"
+            if available
+            else ",".join(errors)
+            if errors
+            else "empty_response",
             "symbol": ticker,
             "insider": insider_bias,
             "congress": congress_bias,
@@ -91,4 +100,3 @@ def get_quiver_snapshot(symbol: str) -> dict[str, Any]:
         }
 
     return cached(cache_key, ttl_seconds=180, loader=_load)
-

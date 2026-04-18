@@ -43,11 +43,25 @@ def plot_chart_with_overlays(
         stop = trade.get("stop")
         target = trade.get("target")
         if entry is not None:
-            ax.axhline(float(entry), linestyle="--", linewidth=1.0, color="#9467bd", label="Entry")
+            ax.axhline(
+                float(entry),
+                linestyle="--",
+                linewidth=1.0,
+                color="#9467bd",
+                label="Entry",
+            )
         if stop is not None:
-            ax.axhline(float(stop), linestyle=":", linewidth=1.0, color="#d62728", label="Stop")
+            ax.axhline(
+                float(stop), linestyle=":", linewidth=1.0, color="#d62728", label="Stop"
+            )
         if target is not None:
-            ax.axhline(float(target), linestyle=":", linewidth=1.0, color="#2ca02c", label="Target")
+            ax.axhline(
+                float(target),
+                linestyle=":",
+                linewidth=1.0,
+                color="#2ca02c",
+                label="Target",
+            )
 
     ax.set_title(title)
     ax.set_xlabel("Bars")
@@ -60,4 +74,3 @@ def plot_chart_with_overlays(
     fig.savefig(output_path, dpi=130)
     plt.close(fig)
     return output_path
-

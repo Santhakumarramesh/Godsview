@@ -101,4 +101,3 @@ def run_pipeline() -> dict[str, object]:
 
 if __name__ == "__main__":
     print(run_pipeline())
-

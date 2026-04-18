@@ -1,13 +1,15 @@
 """Tests for feature_service.builder"""
+
 from __future__ import annotations
 
 import math
+
 import pytest
 
 from services.feature_service.builder import (
-    build_features,
-    build_feature_vector,
     FEATURE_NAMES,
+    build_feature_vector,
+    build_features,
 )
 from services.tests.conftest import make_bars
 
@@ -19,7 +21,7 @@ class TestBuildFeatures:
         assert isinstance(result, list)
 
     def test_requires_min_lookback(self):
-        bars = make_bars(30)   # less than min_lookback=55
+        bars = make_bars(30)  # less than min_lookback=55
         result = build_features(bars)
         assert result == []
 
@@ -42,10 +44,18 @@ class TestBuildFeatures:
     def test_binary_features_in_range(self):
         """Binary (0/1) features must be exactly 0 or 1."""
         binary = [
-            "bullish_bar", "above_ema20", "above_ema50", "macd_positive",
-            "near_bb_upper", "near_bb_lower", "is_volume_spike",
-            "above_vwap", "absorption_bull", "rejection_bear",
-            "near_support", "near_resistance",
+            "bullish_bar",
+            "above_ema20",
+            "above_ema50",
+            "macd_positive",
+            "near_bb_upper",
+            "near_bb_lower",
+            "is_volume_spike",
+            "above_vwap",
+            "absorption_bull",
+            "rejection_bear",
+            "near_support",
+            "near_resistance",
         ]
         bars = make_bars(120)
         rows = build_features(bars)

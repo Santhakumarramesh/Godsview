@@ -51,4 +51,3 @@ def detect_liquidity_sweep(
         "close": post_close,
         "reason": "no_rejection_after_sweep",
     }
-

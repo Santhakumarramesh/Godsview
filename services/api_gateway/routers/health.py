@@ -4,6 +4,7 @@ API Gateway — /health routes
 GET /health          → gateway heartbeat
 GET /health/services → fan-out to all downstream services
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -22,12 +23,12 @@ log = get_logger(__name__)
 
 _DOWNSTREAM: dict[str, str] = {
     "market_data": cfg.market_data_url,
-    "feature":     cfg.feature_url,
-    "backtest":    cfg.backtest_url,
-    "ml":          cfg.ml_url,
-    "execution":   cfg.execution_url,
-    "risk":        cfg.risk_url,
-    "memory":      cfg.memory_url,
+    "feature": cfg.feature_url,
+    "backtest": cfg.backtest_url,
+    "ml": cfg.ml_url,
+    "execution": cfg.execution_url,
+    "risk": cfg.risk_url,
+    "memory": cfg.memory_url,
 }
 
 _STARTED_AT = time.time()
@@ -62,8 +63,10 @@ async def services_health() -> dict[str, Any]:
 
     statuses = [r["status"] for r in results]
     overall = (
-        "ok"        if all(s == "ok" for s in statuses)
-        else "degraded" if any(s == "ok" for s in statuses)
+        "ok"
+        if all(s == "ok" for s in statuses)
+        else "degraded"
+        if any(s == "ok" for s in statuses)
         else "critical"
     )
 

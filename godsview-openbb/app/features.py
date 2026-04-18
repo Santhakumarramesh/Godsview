@@ -52,4 +52,3 @@ def add_features(df: pd.DataFrame) -> pd.DataFrame:
 
     frame = frame.replace([np.inf, -np.inf], np.nan).dropna().copy()
     return frame
-

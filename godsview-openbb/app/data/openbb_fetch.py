@@ -10,4 +10,3 @@ def get_ohlcv(symbol: str, timeframe: str, lookback: int | None = None) -> pd.Da
     if lookback is None or lookback <= 0:
         return df
     return df.tail(lookback)
-

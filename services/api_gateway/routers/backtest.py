@@ -1,6 +1,7 @@
 """
 API Gateway — /api/backtest routes
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -15,12 +16,12 @@ router = APIRouter()
 
 
 class BacktestRequest(BaseModel):
-    symbol:         str
-    timeframe:      str   = "15min"
-    lookback_days:  int   = 30
+    symbol: str
+    timeframe: str = "15min"
+    lookback_days: int = 30
     initial_equity: float = 10_000.0
-    use_si_filter:  bool  = True
-    strategy:       str   = "sk_setup"
+    use_si_filter: bool = True
+    strategy: str = "sk_setup"
     commission_pct: float = 0.0005
 
 
@@ -34,8 +35,8 @@ async def run_backtest(req: BacktestRequest) -> dict[str, Any]:
 
 @router.get("/results")
 async def list_results(
-    symbol:    str | None = Query(default=None),
-    limit:     int = Query(default=20, ge=1, le=100),
+    symbol: str | None = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=100),
 ) -> dict[str, Any]:
     params: dict[str, Any] = {"limit": limit}
     if symbol:

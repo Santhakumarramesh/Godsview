@@ -4,15 +4,16 @@ GodsView v2 — SK Setup signal detector.
 Combines feature vectors + rule-based logic to detect high-probability
 entry candidates.  The output is a Signal object ready for ML scoring.
 """
+
 from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
 from typing import Sequence
 
-from services.shared.types import Bar, Direction, Signal, SignalType
 from services.feature_service import indicators as ind
-from services.feature_service.builder import build_feature_vector, FEATURE_NAMES
+from services.feature_service.builder import FEATURE_NAMES, build_feature_vector
+from services.shared.types import Bar, Direction, Signal, SignalType
 
 
 def detect_signal(bars: Sequence[Bar], timeframe: str = "15min") -> Signal | None:
@@ -30,23 +31,29 @@ def detect_signal(bars: Sequence[Bar], timeframe: str = "15min") -> Signal | Non
         return None
 
     # Pre-compute needed scalars
-    atr14  = ind.atr(bars, 14)
-    ema20  = ind.ema(bars, 20)
+    atr14 = ind.atr(bars, 14)
+    ema20 = ind.ema(bars, 20)
 
-    last     = bars[-1]
-    last_atr = atr14[-1] if atr14 and not (atr14[-1] != atr14[-1]) else (last.high - last.low)
-    last_ema = ema20[-1]  if ema20  and not (ema20[-1]  != ema20[-1])  else last.close
+    last = bars[-1]
+    last_atr = (
+        atr14[-1] if atr14 and not (atr14[-1] != atr14[-1]) else (last.high - last.low)
+    )
+    last_ema = ema20[-1] if ema20 and not (ema20[-1] != ema20[-1]) else last.close
 
     # ── Trend bias ────────────────────────────────────────────────────────────
     trend_bullish = last.close > last_ema
     trend_bearish = last.close < last_ema
 
     # ── Order flow ────────────────────────────────────────────────────────────
-    of_bullish = feat.get("absorption_bull", 0) > 0 and feat.get("lower_wick_ratio", 0) > 0.35
-    of_bearish = feat.get("rejection_bear",  0) > 0 and feat.get("upper_wick_ratio", 0) > 0.35
+    of_bullish = (
+        feat.get("absorption_bull", 0) > 0 and feat.get("lower_wick_ratio", 0) > 0.35
+    )
+    of_bearish = (
+        feat.get("rejection_bear", 0) > 0 and feat.get("upper_wick_ratio", 0) > 0.35
+    )
 
     # ── S/R proximity ─────────────────────────────────────────────────────────
-    near_support    = feat.get("near_support", 0) > 0
+    near_support = feat.get("near_support", 0) > 0
     near_resistance = feat.get("near_resistance", 0) > 0
 
     # ── Volume spike ──────────────────────────────────────────────────────────
@@ -57,45 +64,43 @@ def detect_signal(bars: Sequence[Bar], timeframe: str = "15min") -> Signal | Non
 
     # ── Long setup: absorption_reversal ──────────────────────────────────────
     long_signal = (
-        trend_bullish
-        and of_bullish
-        and near_support
-        and vol_spike
-        and struct_ok
+        trend_bullish and of_bullish and near_support and vol_spike and struct_ok
     )
 
     # ── Short setup: liquidity_sweep ─────────────────────────────────────────
     short_signal = (
-        trend_bearish
-        and of_bearish
-        and near_resistance
-        and vol_spike
-        and struct_ok
+        trend_bearish and of_bearish and near_resistance and vol_spike and struct_ok
     )
 
     if not (long_signal or short_signal):
         return None
 
-    direction   = Direction.LONG if long_signal else Direction.SHORT
-    signal_type = SignalType.ABSORPTION_REVERSAL if long_signal else SignalType.LIQUIDITY_SWEEP
+    direction = Direction.LONG if long_signal else Direction.SHORT
+    signal_type = (
+        SignalType.ABSORPTION_REVERSAL if long_signal else SignalType.LIQUIDITY_SWEEP
+    )
 
     # ── Entry / Stop / Target calculation ────────────────────────────────────
     if direction == Direction.LONG:
-        entry  = last.close
-        stop   = last.low  - last_atr * 0.5
-        target = entry + (entry - stop) * 2.0   # 2R minimum
+        entry = last.close
+        stop = last.low - last_atr * 0.5
+        target = entry + (entry - stop) * 2.0  # 2R minimum
     else:
-        entry  = last.close
-        stop   = last.high + last_atr * 0.5
+        entry = last.close
+        stop = last.high + last_atr * 0.5
         target = entry - (stop - entry) * 2.0
 
-    risk_reward = abs(target - entry) / abs(entry - stop) if abs(entry - stop) > 0 else 0.0
+    risk_reward = (
+        abs(target - entry) / abs(entry - stop) if abs(entry - stop) > 0 else 0.0
+    )
 
     # ── Confidence ───────────────────────────────────────────────────────────
     confidence_factors = [
         feat.get("structure_score", 0),
-        feat.get("volume_spike_ratio", 1.0) / 3.0,   # normalise to ~0-1
-        feat.get("absorption_bull", 0) if long_signal else feat.get("rejection_bear", 0),
+        feat.get("volume_spike_ratio", 1.0) / 3.0,  # normalise to ~0-1
+        feat.get("absorption_bull", 0)
+        if long_signal
+        else feat.get("rejection_bear", 0),
         min(risk_reward / 3.0, 1.0),
     ]
     confidence = sum(confidence_factors) / len(confidence_factors)
@@ -118,10 +123,12 @@ def detect_signal(bars: Sequence[Bar], timeframe: str = "15min") -> Signal | Non
         ema20=round(last_ema, 6),
         risk_reward=round(risk_reward, 2),
         meta={
-            "features": {k: round(v, 4) for k, v in feat.items() if not k.startswith("__")},
+            "features": {
+                k: round(v, 4) for k, v in feat.items() if not k.startswith("__")
+            },
             "trend_bullish": trend_bullish,
-            "of_bullish":    of_bullish,
-            "vol_spike":     vol_spike,
+            "of_bullish": of_bullish,
+            "vol_spike": vol_spike,
         },
     )
 

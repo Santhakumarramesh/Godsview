@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
 import numbers
+from datetime import datetime, timezone
 from typing import Any
 
 import pandas as pd
@@ -19,7 +19,6 @@ from app.learning.evaluator import evaluate_replay_metrics
 from app.learning.replay import run_replay
 from app.strategy.governance import classify_strategy_state
 from app.utils import write_json
-
 
 PIPELINE = [
     DataAgent(),
@@ -113,33 +112,55 @@ def run_orchestrator(
             "summary": {
                 "regime": state.data.get("market", {}).get("regime"),
                 "session": state.data.get("session", {}).get("session"),
-                "sentiment_score": state.data.get("sentiment", {}).get("sentiment_score"),
+                "sentiment_score": state.data.get("sentiment", {}).get(
+                    "sentiment_score"
+                ),
                 "macro_blackout": state.data.get("macro", {}).get("blackout"),
             },
         },
         "hard_gates": {
-            "status": "pass" if bool(state.data.get("hard_gates", {}).get("pass", False)) else "fail",
-            "failed_reasons": state.data.get("hard_gates", {}).get("failed_reasons", []),
+            "status": "pass"
+            if bool(state.data.get("hard_gates", {}).get("pass", False))
+            else "fail",
+            "failed_reasons": state.data.get("hard_gates", {}).get(
+                "failed_reasons", []
+            ),
         },
         "setup_engine": {
-            "status": "pass" if bool(state.data.get("signal", {}).get("setup_validation", {}).get("valid", False)) else "fail",
+            "status": "pass"
+            if bool(
+                state.data.get("signal", {})
+                .get("setup_validation", {})
+                .get("valid", False)
+            )
+            else "fail",
             "setup": state.data.get("signal", {}).get("setup"),
-            "validation_reason": state.data.get("signal", {}).get("setup_validation", {}).get("reason"),
+            "validation_reason": state.data.get("signal", {})
+            .get("setup_validation", {})
+            .get("reason"),
         },
         "scoring_engine": {
-            "status": "pass" if bool(state.data.get("scoring", {}).get("pass", False)) else "fail",
+            "status": "pass"
+            if bool(state.data.get("scoring", {}).get("pass", False))
+            else "fail",
             "final_score": state.data.get("scoring", {}).get("final_score"),
             "grade": state.data.get("scoring", {}).get("grade"),
             "reasons": state.data.get("scoring", {}).get("reasons", []),
         },
         "ai_reasoner": {
-            "status": "pass" if bool(state.data.get("reasoning", {}).get("approved", False)) else "fail",
+            "status": "pass"
+            if bool(state.data.get("reasoning", {}).get("approved", False))
+            else "fail",
             "action": state.data.get("reasoning", {}).get("final_action"),
             "reasons": state.data.get("reasoning", {}).get("reasons", []),
-            "challenge_points": state.data.get("reasoning", {}).get("challenge_points", []),
+            "challenge_points": state.data.get("reasoning", {}).get(
+                "challenge_points", []
+            ),
         },
         "risk_policy_engine": {
-            "status": "pass" if bool(state.data.get("risk", {}).get("allowed", False)) else "fail",
+            "status": "pass"
+            if bool(state.data.get("risk", {}).get("allowed", False))
+            else "fail",
             "reason": state.data.get("risk", {}).get("reason"),
             "qty": state.data.get("risk", {}).get("qty"),
         },
@@ -187,7 +208,12 @@ def run_orchestrator(
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Godsview multi-agent orchestrator")
-    parser.add_argument("--symbol", type=str, default=settings.symbol, help="Symbol to evaluate (e.g. AAPL, BTCUSD)")
+    parser.add_argument(
+        "--symbol",
+        type=str,
+        default=settings.symbol,
+        help="Symbol to evaluate (e.g. AAPL, BTCUSD)",
+    )
     parser.add_argument(
         "--live",
         action="store_true",
@@ -199,9 +225,22 @@ def _parse_args() -> argparse.Namespace:
         default=settings.dry_run,
         help="Force dry-run simulation mode.",
     )
-    parser.add_argument("--with-replay", action="store_true", help="Run replay learning pass after agent pipeline.")
-    parser.add_argument("--replay-timeframe", type=str, default=None, help="Optional replay timeframe override.")
-    parser.add_argument("--approve", action="store_true", help="Provide explicit human approval token for live execution.")
+    parser.add_argument(
+        "--with-replay",
+        action="store_true",
+        help="Run replay learning pass after agent pipeline.",
+    )
+    parser.add_argument(
+        "--replay-timeframe",
+        type=str,
+        default=None,
+        help="Optional replay timeframe override.",
+    )
+    parser.add_argument(
+        "--approve",
+        action="store_true",
+        help="Provide explicit human approval token for live execution.",
+    )
     return parser.parse_args()
 
 

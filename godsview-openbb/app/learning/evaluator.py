@@ -62,4 +62,3 @@ def evaluate_replay_metrics(report: dict[str, Any]) -> dict[str, Any]:
         "max_drawdown_pct": round(float(max_dd), 6),
         "total_pnl_pct": round(float(total_pnl), 6),
     }
-

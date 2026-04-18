@@ -24,7 +24,9 @@ def _normalize_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
         "volume": "Volume",
         "vwap": "VWAP",
     }
-    normalized = normalized.rename(columns={k: v for k, v in rename_map.items() if k in normalized.columns})
+    normalized = normalized.rename(
+        columns={k: v for k, v in rename_map.items() if k in normalized.columns}
+    )
 
     required = ["Open", "High", "Low", "Close", "Volume"]
     for col in required:
@@ -82,23 +84,35 @@ def _fetch_with_openbb(symbol: str, provider: str, interval: str) -> pd.DataFram
 
 def _fetch_with_alpaca(symbol: str, interval: str) -> pd.DataFrame:
     if not settings.has_alpaca_keys:
-        raise RuntimeError("Alpaca fallback unavailable: missing ALPACA_API_KEY/ALPACA_SECRET_KEY.")
+        raise RuntimeError(
+            "Alpaca fallback unavailable: missing ALPACA_API_KEY/ALPACA_SECRET_KEY."
+        )
 
     from alpaca.data import CryptoHistoricalDataClient, StockHistoricalDataClient
     from alpaca.data.requests import CryptoBarsRequest, StockBarsRequest
     from alpaca.data.timeframe import TimeFrame
 
-    timeframe = TimeFrame.Day if interval.upper() in {"1D", "D", "DAY"} else TimeFrame.Hour
+    timeframe = (
+        TimeFrame.Day if interval.upper() in {"1D", "D", "DAY"} else TimeFrame.Hour
+    )
     end_dt = datetime.now(timezone.utc)
     start_dt = end_dt - timedelta(days=max(30, settings.lookback * 2))
 
     if symbol.endswith("USD") and len(symbol) >= 6:
-        client = CryptoHistoricalDataClient(settings.alpaca_api_key, settings.alpaca_secret_key)
-        req = CryptoBarsRequest(symbol_or_symbols=[symbol], timeframe=timeframe, start=start_dt, end=end_dt)
+        client = CryptoHistoricalDataClient(
+            settings.alpaca_api_key, settings.alpaca_secret_key
+        )
+        req = CryptoBarsRequest(
+            symbol_or_symbols=[symbol], timeframe=timeframe, start=start_dt, end=end_dt
+        )
         bars = client.get_crypto_bars(req).df
     else:
-        client = StockHistoricalDataClient(settings.alpaca_api_key, settings.alpaca_secret_key)
-        req = StockBarsRequest(symbol_or_symbols=[symbol], timeframe=timeframe, start=start_dt, end=end_dt)
+        client = StockHistoricalDataClient(
+            settings.alpaca_api_key, settings.alpaca_secret_key
+        )
+        req = StockBarsRequest(
+            symbol_or_symbols=[symbol], timeframe=timeframe, start=start_dt, end=end_dt
+        )
         bars = client.get_stock_bars(req).df
 
     if bars.empty:
@@ -149,7 +163,9 @@ def _generate_synthetic_ohlcv(symbol: str, interval: str) -> pd.DataFrame:
     return _normalize_ohlcv(df)
 
 
-def fetch_price_history(symbol: str | None = None, interval: str | None = None) -> pd.DataFrame:
+def fetch_price_history(
+    symbol: str | None = None, interval: str | None = None
+) -> pd.DataFrame:
     final_symbol = (symbol or settings.symbol).upper()
     final_interval = (interval or settings.timeframe).upper()
 

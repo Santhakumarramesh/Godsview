@@ -1,12 +1,13 @@
 """Tests for backtest_service.metrics"""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
 
 import pytest
 
-from services.backtest_service.metrics import compute_metrics, _max_drawdown, _sharpe
-from services.shared.types import BacktestMetrics, Trade, TradeOutcome, Direction
+from services.backtest_service.metrics import _max_drawdown, _sharpe, compute_metrics
+from services.shared.types import BacktestMetrics, Direction, Trade, TradeOutcome
 
 
 def _make_trade(pnl: float, pnl_pct: float, outcome: TradeOutcome) -> Trade:
@@ -40,10 +41,14 @@ class TestComputeMetrics:
             _make_trade(100, 0.01, TradeOutcome.WIN),
             _make_trade(-50, -0.005, TradeOutcome.LOSS),
         ]
-        equity = [{"equity": 10000.0}, {"equity": 10100.0},
-                  {"equity": 10200.0}, {"equity": 10150.0}]
+        equity = [
+            {"equity": 10000.0},
+            {"equity": 10100.0},
+            {"equity": 10200.0},
+            {"equity": 10150.0},
+        ]
         m = compute_metrics(trades, equity, 10_000.0)
-        assert abs(m.win_rate - 2/3) < 0.01
+        assert abs(m.win_rate - 2 / 3) < 0.01
 
     def test_profit_factor(self):
         trades = [
@@ -58,7 +63,7 @@ class TestComputeMetrics:
         trades = [_make_trade(100, 0.01, TradeOutcome.WIN) for _ in range(5)]
         equity = [{"equity": 10000.0 + i * 100} for i in range(6)]
         m = compute_metrics(trades, equity, 10_000.0)
-        assert m.profit_factor > 10.0   # No losses → very high PF
+        assert m.profit_factor > 10.0  # No losses → very high PF
 
     def test_total_pnl(self):
         trades = [
@@ -84,8 +89,8 @@ class TestComputeMetrics:
         equity = [
             {"equity": 10000.0},
             {"equity": 10100.0},
-            {"equity":  9600.0},   # big drop
-            {"equity":  9800.0},
+            {"equity": 9600.0},  # big drop
+            {"equity": 9800.0},
         ]
         m = compute_metrics(trades, equity, 10_000.0)
         assert m.max_drawdown > 0
@@ -103,11 +108,11 @@ class TestMaxDrawdown:
         curve = [
             {"equity": 1000},
             {"equity": 1100},
-            {"equity": 900},   # 200 drawdown from peak
+            {"equity": 900},  # 200 drawdown from peak
         ]
         dd, pct = _max_drawdown(curve)
         assert abs(dd - 200.0) < 0.01
-        assert abs(pct - 200/1100) < 0.001
+        assert abs(pct - 200 / 1100) < 0.001
 
     def test_empty_curve(self):
         dd, pct = _max_drawdown([])
@@ -130,10 +135,11 @@ class TestSharpe:
         # All same returns → Sharpe is either 0 (std=0 guard) or very large
         # either way it must not be NaN or negative
         import math
+
         returns = [0.005] * 50
         s = _sharpe(returns, 252.0)
         assert not math.isnan(s)
-        assert s >= 0.0   # positive returns → non-negative Sharpe
+        assert s >= 0.0  # positive returns → non-negative Sharpe
 
     def test_empty(self):
         assert _sharpe([], 252.0) == 0.0

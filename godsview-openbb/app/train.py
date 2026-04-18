@@ -7,7 +7,7 @@ import joblib
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, classification_report, roc_auc_score
 
-from app.config import settings, ROOT_DIR
+from app.config import ROOT_DIR, settings
 from app.data_fetch import fetch_price_history
 from app.features import FEATURE_COLUMNS, add_features
 from app.utils import write_json
@@ -15,7 +15,9 @@ from app.utils import write_json
 
 def _build_model() -> RandomForestClassifier:
     if settings.model_type != "random_forest":
-        print(f"[warn] Unsupported MODEL_TYPE={settings.model_type}. Falling back to random_forest.")
+        print(
+            f"[warn] Unsupported MODEL_TYPE={settings.model_type}. Falling back to random_forest."
+        )
     return RandomForestClassifier(
         n_estimators=400,
         max_depth=7,
@@ -25,7 +27,9 @@ def _build_model() -> RandomForestClassifier:
     )
 
 
-def train_model(symbol: str | None = None, timeframe: str | None = None) -> dict[str, float | int | str]:
+def train_model(
+    symbol: str | None = None, timeframe: str | None = None
+) -> dict[str, float | int | str]:
     run_symbol = (symbol or settings.symbol).upper()
     run_timeframe = (timeframe or settings.timeframe).upper()
     df = fetch_price_history(run_symbol, run_timeframe)

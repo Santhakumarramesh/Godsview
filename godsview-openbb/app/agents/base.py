@@ -38,4 +38,3 @@ class Agent(ABC):
     @abstractmethod
     def run(self, state: AgentState) -> AgentState:
         raise NotImplementedError
-

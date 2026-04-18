@@ -8,13 +8,18 @@ Keeps state transitions predictable and testable.
 """
 
 from __future__ import annotations
+
 from datetime import datetime, timezone
 from typing import Optional
 
 from .schemas import (
-    StockBrainState, SupremeBrainState,
-    BrainState, NodeHealth, Attention,
-    Bias, Regime,
+    Attention,
+    Bias,
+    BrainState,
+    NodeHealth,
+    Regime,
+    StockBrainState,
+    SupremeBrainState,
 )
 
 
@@ -28,9 +33,12 @@ def reduce_price_update(brain: StockBrainState, payload: dict) -> StockBrainStat
     return brain
 
 
-def reduce_timeframe_opinion(brain: StockBrainState, tf: str, payload: dict) -> StockBrainState:
+def reduce_timeframe_opinion(
+    brain: StockBrainState, tf: str, payload: dict
+) -> StockBrainState:
     """Apply a timeframe opinion update."""
-    from .schemas import TimeframeOpinion, Timeframe
+    from .schemas import Timeframe, TimeframeOpinion
+
     opinion = TimeframeOpinion(
         timeframe=Timeframe(tf) if tf in [t.value for t in Timeframe] else Timeframe.M1,
         bias=Bias(payload.get("bias", "neutral")),
@@ -70,6 +78,7 @@ def reduce_orderflow_update(brain: StockBrainState, payload: dict) -> StockBrain
 def reduce_reasoning_verdict(brain: StockBrainState, payload: dict) -> StockBrainState:
     """Apply reasoning verdict."""
     from .schemas import ReasoningVerdict
+
     brain.last_reasoning = ReasoningVerdict(
         verdict=payload.get("verdict", "no_trade"),
         confidence=payload.get("confidence", 0),
@@ -87,6 +96,7 @@ def reduce_reasoning_verdict(brain: StockBrainState, payload: dict) -> StockBrai
 def reduce_risk_gate(brain: StockBrainState, payload: dict) -> StockBrainState:
     """Apply risk gate evaluation."""
     from .schemas import RiskGate
+
     brain.risk_gate = RiskGate(
         tradeable=payload.get("tradeable", False),
         reason=payload.get("reason", ""),
@@ -136,14 +146,19 @@ def reduce_health_check(brain: StockBrainState) -> StockBrainState:
 
 # ─── Supreme Reducers ──────────────────────────────────────────────────────
 
-def reduce_supreme_regime(supreme: SupremeBrainState, regime: str, confidence: float) -> SupremeBrainState:
+
+def reduce_supreme_regime(
+    supreme: SupremeBrainState, regime: str, confidence: float
+) -> SupremeBrainState:
     """Update supreme market regime."""
     supreme.market_regime = Regime(regime)
     supreme.market_regime_confidence = confidence
     return supreme
 
 
-def reduce_supreme_pnl(supreme: SupremeBrainState, daily_pnl: float, equity: float) -> SupremeBrainState:
+def reduce_supreme_pnl(
+    supreme: SupremeBrainState, daily_pnl: float, equity: float
+) -> SupremeBrainState:
     """Update supreme PnL state."""
     supreme.daily_pnl = daily_pnl
     supreme.total_equity = equity

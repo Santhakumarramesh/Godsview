@@ -6,13 +6,14 @@ the single source of truth for all inter-node data exchange.
 """
 
 from __future__ import annotations
+
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
 from typing import Optional
-from datetime import datetime
-
 
 # ─── Enums ────────────────────────────────────────────────────────────────────
+
 
 class MarketSession(str, Enum):
     PREMARKET = "premarket"
@@ -23,10 +24,12 @@ class MarketSession(str, Enum):
     AFTER_HOURS = "after_hours"
     CLOSED = "closed"
 
+
 class Bias(str, Enum):
     BULLISH = "bullish"
     BEARISH = "bearish"
     NEUTRAL = "neutral"
+
 
 class Regime(str, Enum):
     TRENDING_BULL = "trending_bull"
@@ -35,11 +38,13 @@ class Regime(str, Enum):
     VOLATILE = "volatile"
     CHOP = "chop"
 
+
 class NodeHealth(str, Enum):
     LIVE = "live"
     DEGRADED = "degraded"
     OFFLINE = "offline"
     INITIALIZING = "initializing"
+
 
 class BrainState(str, Enum):
     SCANNING = "scanning"
@@ -50,6 +55,7 @@ class BrainState(str, Enum):
     COOLDOWN = "cooldown"
     BLOCKED = "blocked"
 
+
 class Timeframe(str, Enum):
     TICK = "tick"
     M1 = "1m"
@@ -58,6 +64,7 @@ class Timeframe(str, Enum):
     H1 = "1h"
     H4 = "4h"
     D1 = "1d"
+
 
 class SetupFamily(str, Enum):
     SWEEP_RECLAIM = "sweep_reclaim"
@@ -68,6 +75,7 @@ class SetupFamily(str, Enum):
     LIQUIDITY_GRAB = "liquidity_grab"
     FVG_FILL = "fvg_fill"
     ORDER_BLOCK_RETEST = "order_block_retest"
+
 
 class Attention(str, Enum):
     CRITICAL = "CRITICAL"
@@ -80,22 +88,24 @@ class Attention(str, Enum):
 
 # ─── Timeframe Node Opinion ──────────────────────────────────────────────────
 
+
 @dataclass
 class TimeframeOpinion:
     timeframe: Timeframe
     bias: Bias = Bias.NEUTRAL
-    confidence: float = 0.0           # 0–1
+    confidence: float = 0.0  # 0–1
     regime: Regime = Regime.RANGING
     invalidation_level: float = 0.0
     strongest_setup: Optional[SetupFamily] = None
     key_level_above: float = 0.0
     key_level_below: float = 0.0
-    momentum: float = 0.0            # -1 to 1
-    structure_score: float = 0.0     # 0–1
+    momentum: float = 0.0  # -1 to 1
+    structure_score: float = 0.0  # 0–1
     updated_at: str = ""
 
 
 # ─── Price State ──────────────────────────────────────────────────────────────
+
 
 @dataclass
 class PriceState:
@@ -113,6 +123,7 @@ class PriceState:
 
 # ─── Tick State ───────────────────────────────────────────────────────────────
 
+
 @dataclass
 class TickState:
     tick_velocity: float = 0.0
@@ -120,16 +131,17 @@ class TickState:
     micro_reversal_score: float = 0.0
     burst_probability: float = 0.0
     tape_speed: float = 1.0
-    spread_state: str = "normal"     # "tight" | "normal" | "wide"
+    spread_state: str = "normal"  # "tight" | "normal" | "wide"
     last_update: str = ""
 
 
 # ─── Order Flow State ────────────────────────────────────────────────────────
 
+
 @dataclass
 class OrderFlowState:
-    delta_score: float = 0.0         # -1 to 1
-    cvd_trend: str = "flat"          # "up" | "down" | "flat"
+    delta_score: float = 0.0  # -1 to 1
+    cvd_trend: str = "flat"  # "up" | "down" | "flat"
     cvd_slope: float = 0.0
     absorption_score: float = 0.0
     imbalance_score: float = 0.0
@@ -141,10 +153,11 @@ class OrderFlowState:
 
 # ─── Order Block ──────────────────────────────────────────────────────────────
 
+
 @dataclass
 class OrderBlock:
     timeframe: Timeframe = Timeframe.M5
-    side: str = "demand"             # "demand" | "supply"
+    side: str = "demand"  # "demand" | "supply"
     low: float = 0.0
     high: float = 0.0
     strength: float = 0.0
@@ -153,15 +166,17 @@ class OrderBlock:
 
 # ─── FVG Zone ─────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class FVGZone:
-    side: str = "bullish"            # "bullish" | "bearish"
+    side: str = "bullish"  # "bullish" | "bearish"
     low: float = 0.0
     high: float = 0.0
     filled_pct: float = 0.0
 
 
 # ─── Structure State ─────────────────────────────────────────────────────────
+
 
 @dataclass
 class StructureState:
@@ -184,6 +199,7 @@ class StructureState:
 
 # ─── Liquidity State ─────────────────────────────────────────────────────────
 
+
 @dataclass
 class LiquidityState:
     equal_highs_nearby: bool = False
@@ -197,20 +213,22 @@ class LiquidityState:
 
 # ─── Event Context ────────────────────────────────────────────────────────────
 
+
 @dataclass
 class EventContext:
     earnings_near: bool = False
     earnings_days_away: Optional[int] = None
     news_heat: float = 0.0
-    macro_pressure: str = "neutral"   # "supportive" | "neutral" | "hostile"
-    sector_alignment: float = 0.0     # -1 to 1
-    vix_regime: str = "normal"        # "low" | "normal" | "elevated" | "extreme"
+    macro_pressure: str = "neutral"  # "supportive" | "neutral" | "hostile"
+    sector_alignment: float = 0.0  # -1 to 1
+    vix_regime: str = "normal"  # "low" | "normal" | "elevated" | "extreme"
     fed_proximity: bool = False
     market_session: MarketSession = MarketSession.CLOSED
     session_quality: float = 0.5
 
 
 # ─── Memory Cluster ──────────────────────────────────────────────────────────
+
 
 @dataclass
 class MemoryCluster:
@@ -228,6 +246,7 @@ class MemoryCluster:
 
 # ─── Symbol Personality ───────────────────────────────────────────────────────
 
+
 @dataclass
 class SymbolPersonality:
     trendiness: float = 0.5
@@ -241,15 +260,17 @@ class SymbolPersonality:
 
 # ─── Recent Outcome ──────────────────────────────────────────────────────────
 
+
 @dataclass
 class RecentOutcome:
     setup: SetupFamily = SetupFamily.SWEEP_RECLAIM
-    outcome: str = "loss"            # "win" | "loss" | "breakeven"
+    outcome: str = "loss"  # "win" | "loss" | "breakeven"
     r_multiple: float = 0.0
     timestamp: str = ""
 
 
 # ─── Memory State ─────────────────────────────────────────────────────────────
+
 
 @dataclass
 class MemoryState:
@@ -264,6 +285,7 @@ class MemoryState:
 
 
 # ─── Decision ─────────────────────────────────────────────────────────────────
+
 
 @dataclass
 class Decision:
@@ -286,9 +308,10 @@ class Decision:
 
 # ─── Reasoning Verdict (Claude Output) ────────────────────────────────────────
 
+
 @dataclass
 class ReasoningVerdict:
-    verdict: str = "no_trade"        # strong_long | watch_long | neutral | watch_short | strong_short | no_trade
+    verdict: str = "no_trade"  # strong_long | watch_long | neutral | watch_short | strong_short | no_trade
     confidence: float = 0.0
     reason: str = ""
     key_factors: list[str] = field(default_factory=list)
@@ -303,6 +326,7 @@ class ReasoningVerdict:
 
 
 # ─── Risk Gate ────────────────────────────────────────────────────────────────
+
 
 @dataclass
 class RiskGate:
@@ -319,6 +343,7 @@ class RiskGate:
 
 
 # ─── Evolution Metrics ────────────────────────────────────────────────────────
+
 
 @dataclass
 class EvolutionMetrics:
@@ -338,11 +363,12 @@ class EvolutionMetrics:
 
 # ─── Complete Stock Brain State ───────────────────────────────────────────────
 
+
 @dataclass
 class StockBrainState:
     symbol: str = ""
     display_name: str = ""
-    asset_class: str = "crypto"      # "crypto" | "equity" | "futures" | "forex"
+    asset_class: str = "crypto"  # "crypto" | "equity" | "futures" | "forex"
     market_status: str = "closed"
 
     # Attention
@@ -376,11 +402,12 @@ class StockBrainState:
 
 # ─── Supreme Brain State ─────────────────────────────────────────────────────
 
+
 @dataclass
 class SupremeBrainState:
     market_regime: Regime = Regime.RANGING
     market_regime_confidence: float = 0.0
-    risk_appetite: str = "normal"    # "aggressive" | "normal" | "defensive" | "risk_off"
+    risk_appetite: str = "normal"  # "aggressive" | "normal" | "defensive" | "risk_off"
     portfolio_heat_pct: float = 0.0
     total_equity: float = 0.0
     daily_pnl: float = 0.0
@@ -402,6 +429,7 @@ class SupremeBrainState:
 
 # ─── Consciousness Board ─────────────────────────────────────────────────────
 
+
 @dataclass
 class ConsciousnessCard:
     symbol: str = ""
@@ -418,6 +446,7 @@ class ConsciousnessCard:
 
 
 # ─── Adaptive Rules ──────────────────────────────────────────────────────────
+
 
 @dataclass
 class AdaptiveRule:

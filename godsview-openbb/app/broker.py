@@ -7,7 +7,9 @@ from app.config import settings
 
 def _get_trading_client():
     if not settings.has_alpaca_keys:
-        raise RuntimeError("Missing Alpaca credentials. Set ALPACA_API_KEY and ALPACA_SECRET_KEY.")
+        raise RuntimeError(
+            "Missing Alpaca credentials. Set ALPACA_API_KEY and ALPACA_SECRET_KEY."
+        )
 
     from alpaca.trading.client import TradingClient
 
@@ -40,4 +42,3 @@ def place_market_order(symbol: str, qty: int, side: str) -> Any:
         time_in_force=TimeInForce.DAY,
     )
     return client.submit_order(order_data=order)
-

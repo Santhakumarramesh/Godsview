@@ -44,4 +44,3 @@ def get_alpaca_execution_context() -> dict[str, Any]:
             }
 
     return cached("alpaca:execution_context", ttl_seconds=20, loader=_load)
-

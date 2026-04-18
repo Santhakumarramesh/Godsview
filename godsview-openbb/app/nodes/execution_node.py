@@ -14,7 +14,9 @@ from .base_node import NodeBase
 class ExecutionNode(NodeBase):
     name = "execution_node"
 
-    def run(self, brain: StockBrainState, payload: dict[str, Any], store: BrainStore) -> StockBrainState:
+    def run(
+        self, brain: StockBrainState, payload: dict[str, Any], store: BrainStore
+    ) -> StockBrainState:
         data = payload.get("data", payload)
         signal = data.get("signal", {}) if isinstance(data, dict) else {}
         action = str(signal.get("action", "skip"))
@@ -31,16 +33,25 @@ class ExecutionNode(NodeBase):
             stop_price = close_price * (1.0 + settings.default_stop_pct)
         rr = max(brain.risk_gate.reward_risk_ratio, settings.min_rr)
         risk_unit = abs(close_price - stop_price)
-        target = close_price + (risk_unit * rr) if action == "buy" else close_price - (risk_unit * rr)
+        target = (
+            close_price + (risk_unit * rr)
+            if action == "buy"
+            else close_price - (risk_unit * rr)
+        )
 
-        notional = min(brain.risk_gate.max_position_size_usd, 10_000.0 * settings.max_risk_per_trade * 10)
+        notional = min(
+            brain.risk_gate.max_position_size_usd,
+            10_000.0 * settings.max_risk_per_trade * 10,
+        )
         qty = 0.0 if close_price <= 0 else notional / close_price
 
         brain.decision.entry_price = close_price
         brain.decision.stop_loss = stop_price
         brain.decision.take_profit = target
         brain.decision.position_size = qty
-        brain.decision.state = BrainState.READY if settings.dry_run else BrainState.ENTRY_PENDING
+        brain.decision.state = (
+            BrainState.READY if settings.dry_run else BrainState.ENTRY_PENDING
+        )
         self.mark_live(brain)
         return brain
 
@@ -62,6 +73,7 @@ class OpenPosition:
 @dataclass
 class PositionTracker:
     """Minimal thread-safe tracker for open simulated positions."""
+
     open_positions: list[OpenPosition] = field(default_factory=list)
     _lock: Lock = field(default_factory=Lock)
 
@@ -69,7 +81,9 @@ class PositionTracker:
         with self._lock:
             self.open_positions.append(pos)
 
-    def close_position(self, position_id: str, exit_price: float) -> Optional[OpenPosition]:
+    def close_position(
+        self, position_id: str, exit_price: float
+    ) -> Optional[OpenPosition]:
         with self._lock:
             for i, p in enumerate(self.open_positions):
                 if p.position_id == position_id:
@@ -84,18 +98,26 @@ class PositionTracker:
                     continue
                 if p.direction == "long":
                     if last_price <= p.stop_loss or last_price >= p.take_profit:
-                        exits.append({
-                            "position_id": p.position_id,
-                            "exit_price": last_price,
-                            "reason": "stop" if last_price <= p.stop_loss else "target",
-                        })
+                        exits.append(
+                            {
+                                "position_id": p.position_id,
+                                "exit_price": last_price,
+                                "reason": "stop"
+                                if last_price <= p.stop_loss
+                                else "target",
+                            }
+                        )
                 else:
                     if last_price >= p.stop_loss or last_price <= p.take_profit:
-                        exits.append({
-                            "position_id": p.position_id,
-                            "exit_price": last_price,
-                            "reason": "stop" if last_price >= p.stop_loss else "target",
-                        })
+                        exits.append(
+                            {
+                                "position_id": p.position_id,
+                                "exit_price": last_price,
+                                "reason": "stop"
+                                if last_price >= p.stop_loss
+                                else "target",
+                            }
+                        )
         return exits
 
 

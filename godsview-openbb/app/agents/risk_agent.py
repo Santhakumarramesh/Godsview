@@ -21,7 +21,11 @@ class RiskAgent(Agent):
             return state
 
         if settings.godsview_kill_switch:
-            state.data["risk"] = {"allowed": False, "reason": "kill_switch_active", "qty": 0}
+            state.data["risk"] = {
+                "allowed": False,
+                "reason": "kill_switch_active",
+                "qty": 0,
+            }
             state.set_blocked("risk_blocked")
             return state
 
@@ -41,10 +45,14 @@ class RiskAgent(Agent):
             try:
                 account = get_account()
                 account_equity = float(getattr(account, "equity", 10_000.0))
-                day_pnl_pct = float(getattr(account, "equity", account_equity)) / max(
-                    float(getattr(account, "last_equity", account_equity)),
-                    1.0,
-                ) - 1.0
+                day_pnl_pct = (
+                    float(getattr(account, "equity", account_equity))
+                    / max(
+                        float(getattr(account, "last_equity", account_equity)),
+                        1.0,
+                    )
+                    - 1.0
+                )
             except Exception as err:  # noqa: BLE001
                 state.add_error(f"risk_agent_account_fetch_error: {err}")
 

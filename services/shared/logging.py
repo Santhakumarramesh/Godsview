@@ -6,6 +6,7 @@ Usage:
     log = get_logger(__name__)
     log.info("bar_fetched", symbol="AAPL", count=100)
 """
+
 from __future__ import annotations
 
 import logging

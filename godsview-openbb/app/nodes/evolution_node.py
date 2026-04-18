@@ -11,7 +11,9 @@ from .base_node import NodeBase
 class EvolutionNode(NodeBase):
     name = "evolution_node"
 
-    def run(self, brain: StockBrainState, payload: dict[str, Any], store: BrainStore) -> StockBrainState:
+    def run(
+        self, brain: StockBrainState, payload: dict[str, Any], store: BrainStore
+    ) -> StockBrainState:
         # Conservative confidence calibration based on memory sample quality.
         sample = max(0, brain.memory.similar_cases_count)
         win_rate = max(0.0, min(1.0, brain.memory.cluster_win_rate))

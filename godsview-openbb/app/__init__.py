@@ -1,2 +1,1 @@
 """Godsview OpenBB research package."""
-

@@ -76,7 +76,9 @@ class SignalAgent(Agent):
             signal["setup_validation"] = setup_validation
             scoring = score_setup_pipeline(
                 signal=signal,
-                setup_candidate=setup_candidate if isinstance(setup_candidate, dict) else None,
+                setup_candidate=setup_candidate
+                if isinstance(setup_candidate, dict)
+                else None,
                 market=market if isinstance(market, dict) else None,
                 hard_gates=hard_gates if isinstance(hard_gates, dict) else None,
                 validation=setup_validation,
@@ -93,15 +95,25 @@ class SignalAgent(Agent):
 
             if not hard_gates.get("pass", False):
                 failed = hard_gates.get("failed_reasons", [])
-                first = failed[0] if isinstance(failed, list) and failed else "hard_gate_failed"
+                first = (
+                    failed[0]
+                    if isinstance(failed, list) and failed
+                    else "hard_gate_failed"
+                )
                 state.set_blocked(f"hard_gate_failed:{first}")
                 return state
             if not setup_validation.get("valid", False):
-                state.set_blocked(f"invalid_setup:{setup_validation.get('reason', 'unknown')}")
+                state.set_blocked(
+                    f"invalid_setup:{setup_validation.get('reason', 'unknown')}"
+                )
                 return state
             if not scoring.get("pass", False):
                 reasons = scoring.get("reasons", [])
-                first = reasons[0] if isinstance(reasons, list) and reasons else "score_rejected"
+                first = (
+                    reasons[0]
+                    if isinstance(reasons, list) and reasons
+                    else "score_rejected"
+                )
                 state.set_blocked(f"scoring_rejected:{first}")
                 return state
             if str(signal.get("action", "skip")) == "skip":

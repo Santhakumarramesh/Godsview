@@ -1,11 +1,12 @@
 """Tests for market_data_service.validator"""
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from services.market_data_service.validator import validate_bars, quick_validate
+from services.market_data_service.validator import quick_validate, validate_bars
 from services.shared.types import Bar
 from services.tests.conftest import make_bar, make_bars
 
@@ -31,6 +32,7 @@ class TestValidateBars:
 
     def test_nan_price_removed(self):
         import math
+
         bad = make_bar(close=float("nan"))
         good = make_bar(close=100.0)
         cleaned, report = validate_bars([bad, good])
@@ -43,7 +45,7 @@ class TestValidateBars:
             symbol="TEST",
             timestamp=now,
             open=100.0,
-            high=98.0,    # Below close — invalid
+            high=98.0,  # Below close — invalid
             low=97.0,
             close=99.0,
             volume=1000.0,
@@ -56,7 +58,7 @@ class TestValidateBars:
     def test_duplicate_timestamps_removed(self):
         now = datetime.now(timezone.utc)
         b1 = make_bar(close=100.0, ts=now)
-        b2 = make_bar(close=101.0, ts=now)   # same ts → duplicate
+        b2 = make_bar(close=101.0, ts=now)  # same ts → duplicate
         cleaned, report = validate_bars([b1, b2])
         assert len(cleaned) == 1
         assert report.duplicates == 1
@@ -70,14 +72,14 @@ class TestValidateBars:
     def test_is_usable_threshold(self):
         bars = make_bars(100)
         _, report = validate_bars(bars)
-        assert report.is_usable   # 100 valid bars → pass_rate = 1.0
+        assert report.is_usable  # 100 valid bars → pass_rate = 1.0
 
     def test_gap_detection(self):
         """Insert a 100-bar gap; should register as a gap."""
         now = datetime.now(timezone.utc)
         bars = [
             make_bar(close=100.0, ts=now - timedelta(hours=2)),
-            make_bar(close=101.0, ts=now),   # 2h gap on 15min TF
+            make_bar(close=101.0, ts=now),  # 2h gap on 15min TF
         ]
         _, report = validate_bars(bars)
         assert report.gaps_detected >= 1
@@ -97,7 +99,7 @@ class TestQuickValidate:
             symbol="X",
             timestamp=now,
             open=100.0,
-            high=90.0,   # high < low
+            high=90.0,  # high < low
             low=95.0,
             close=92.0,
             volume=1000.0,

@@ -21,7 +21,9 @@ def get_macro_event_context(symbol: str) -> dict[str, Any]:
             html = resp.text.lower()
             # conservative heuristic; avoids scraping dependency
             if "high impact" in html:
-                high_impact_events.append({"source": "ftmo", "title": "High impact event detected"})
+                high_impact_events.append(
+                    {"source": "ftmo", "title": "High impact event detected"}
+                )
     except Exception:
         pass
 
@@ -36,4 +38,3 @@ def get_macro_event_context(symbol: str) -> dict[str, Any]:
         "high_impact_events": high_impact_events,
         "source": settings.ftmo_calendar_url,
     }
-

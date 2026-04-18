@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from typing import Any
 
 import pandas as pd
@@ -17,7 +17,9 @@ class SwingPoint:
         return asdict(self)
 
 
-def detect_swings(df: pd.DataFrame, left: int = 2, right: int = 2) -> tuple[list[SwingPoint], list[SwingPoint]]:
+def detect_swings(
+    df: pd.DataFrame, left: int = 2, right: int = 2
+) -> tuple[list[SwingPoint], list[SwingPoint]]:
     highs = df["High"].tolist()
     lows = df["Low"].tolist()
     idx = list(df.index)
@@ -29,17 +31,21 @@ def detect_swings(df: pd.DataFrame, left: int = 2, right: int = 2) -> tuple[list
     end = len(df) - right
     for i in range(start, end):
         h = highs[i]
-        l = lows[i]
+        lo = lows[i]
 
         left_high = max(highs[i - left : i])
         right_high = max(highs[i + 1 : i + 1 + right])
         if h > left_high and h > right_high:
-            swing_highs.append(SwingPoint(index=i, ts=str(idx[i]), price=float(h), kind="high"))
+            swing_highs.append(
+                SwingPoint(index=i, ts=str(idx[i]), price=float(h), kind="high")
+            )
 
         left_low = min(lows[i - left : i])
         right_low = min(lows[i + 1 : i + 1 + right])
-        if l < left_low and l < right_low:
-            swing_lows.append(SwingPoint(index=i, ts=str(idx[i]), price=float(l), kind="low"))
+        if lo < left_low and lo < right_low:
+            swing_lows.append(
+                SwingPoint(index=i, ts=str(idx[i]), price=float(lo), kind="low")
+            )
 
     return swing_highs, swing_lows
 
@@ -79,7 +85,10 @@ def analyze_structure(df: pd.DataFrame) -> dict[str, Any]:
         bos = True
         bos_direction = "bearish"
 
-    choch = bos and ((trend == "bullish" and bos_direction == "bearish") or (trend == "bearish" and bos_direction == "bullish"))
+    choch = bos and (
+        (trend == "bullish" and bos_direction == "bearish")
+        or (trend == "bearish" and bos_direction == "bullish")
+    )
 
     score = 0.35
     if trend != "range":
@@ -108,4 +117,3 @@ def analyze_structure(df: pd.DataFrame) -> dict[str, Any]:
         "invalidation": invalidation,
         "structure_score": score,
     }
-

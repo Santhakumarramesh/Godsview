@@ -34,4 +34,3 @@ def save_analysis_screenshot(
         fvgs=fvgs,
         trade=trade,
     )
-
