@@ -58,6 +58,17 @@ shape:
 
 `type` and `severity` are the routing keys. Map them at the receiver.
 
+Concrete adapter examples for Slack, PagerDuty, and fan-out receivers
+are in `docs/ALERT_WEBHOOK_RECEIVERS.md`. Smoke-test any receiver
+without a running api-server:
+
+```bash
+corepack pnpm --filter @workspace/scripts run verify-alert-webhook -- \
+  --url http://localhost:8787/webhook \
+  --type daily_loss_breach \
+  --severity fatal
+```
+
 ---
 
 ## SLO → on-call tier

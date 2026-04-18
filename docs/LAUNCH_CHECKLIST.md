@@ -164,6 +164,19 @@ curl -sf -X POST $API/api/ops/test-alert \
 Expected: a message arrives in the configured Slack / PagerDuty channel
 within 10 seconds.
 
+If the receiver is misconfigured, smoke-test it directly (bypasses the
+api-server) with the shape the router emits:
+
+```bash
+corepack pnpm --filter @workspace/scripts run verify-alert-webhook -- \
+  --url "$GODSVIEW_ALERT_WEBHOOK_URL" \
+  --type daily_loss_breach \
+  --severity fatal
+```
+
+Adapter examples for Slack and PagerDuty receivers are in
+`docs/ALERT_WEBHOOK_RECEIVERS.md`.
+
 ## 8. First strategy promotion
 
 - [ ] Confirm one strategy is in `paper_approved`.
