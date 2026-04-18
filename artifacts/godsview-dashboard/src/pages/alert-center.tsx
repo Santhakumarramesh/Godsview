@@ -73,6 +73,19 @@ const getMockEscalation = () => [
   { level: 4, channel: "Phone", delay: "30m", active: false },
 ];
 
+// Convert an ISO-8601 timestamp to a short relative string like "2m ago".
+// Keeps the Alert Center page compact when the backend emits real ISO times.
+function toRelTime(iso: string | number | null | undefined): string {
+  if (iso === null || iso === undefined || iso === '') return '';
+  const ms = typeof iso === 'number' ? iso : Date.parse(iso);
+  if (Number.isNaN(ms)) return String(iso);
+  const diff = Math.max(0, Date.now() - ms);
+  if (diff < 60_000) return `${Math.floor(diff / 1_000)}s ago`;
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+  return `${Math.floor(diff / 86_400_000)}d ago`;
+}
+
 // Alert Summary Banner Component
 const AlertSummaryBanner = () => {
   const { data, isLoading } = useQuery({
@@ -154,11 +167,27 @@ const ActiveAlertsFeed = () => {
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['activeAlerts'],
-    queryFn: () => fetch('/api/alerts/active').then(r => r.json()),
+    queryFn: () => fetch('/api/alerts/active-feed').then(r => r.json()),
     retry: false,
   });
 
-  const alerts = data || getMockActiveAlerts();
+  // The Phase 8 endpoint returns CenterAlert[] directly. Keep a defensive
+  // fallback to the mock generator so the page still renders if the
+  // backend is unreachable. Normalise backend ISO `triggeredAt` → `time`
+  // so the existing row renderer keeps working untouched.
+  const raw = Array.isArray(data) ? data : getMockActiveAlerts();
+  const alerts = raw.map((a: any) => ({
+    ...a,
+    time: a.time ?? toRelTime(a.triggeredAt),
+    status:
+      a.status === 'active'
+        ? 'New'
+        : a.status === 'acknowledged'
+          ? 'In Review'
+          : a.status === 'resolved'
+            ? 'Resolved'
+            : a.status ?? 'New',
+  }));
 
   useEffect(() => {
     const interval = setInterval(() => refetch(), refreshInterval);
@@ -299,7 +328,14 @@ const AlertRulesManager = () => {
     retry: false,
   });
 
-  const rules = data || getMockRules();
+  const rawRules = Array.isArray(data) ? data : getMockRules();
+  const rules = rawRules.map((r: any) => ({
+    ...r,
+    lastTriggered:
+      typeof r.lastTriggered === 'string' && r.lastTriggered.includes('T')
+        ? toRelTime(r.lastTriggered)
+        : r.lastTriggered,
+  }));
 
   const handleAddRule = () => {
     setShowAddForm(false);
@@ -454,7 +490,14 @@ const NotificationChannels = () => {
     retry: false,
   });
 
-  const channels = data || getMockChannels();
+  const rawChannels = Array.isArray(data) ? data : getMockChannels();
+  const channels = rawChannels.map((c: any) => ({
+    ...c,
+    lastSent:
+      typeof c.lastSent === 'string' && c.lastSent.includes('T')
+        ? toRelTime(c.lastSent)
+        : c.lastSent,
+  }));
 
   const getChannelIcon = (type: string) => {
     switch (type) {
@@ -534,7 +577,17 @@ const AnomalyDetectionPanel = () => {
     retry: false,
   });
 
-  const anomalies = data || getMockAnomalies();
+  const rawAnomalies = data && data.metrics && data.recent ? data : getMockAnomalies();
+  const anomalies = {
+    ...rawAnomalies,
+    recent: rawAnomalies.recent.map((a: any) => ({
+      ...a,
+      time:
+        typeof a.time === 'string' && a.time.includes('T')
+          ? toRelTime(a.time)
+          : a.time,
+    })),
+  };
 
   return (
     <div style={{ padding: '20px', marginBottom: '24px' }}>
@@ -661,7 +714,7 @@ const EscalationTimeline = () => {
     retry: false,
   });
 
-  const escalation = data || getMockEscalation();
+  const escalation = Array.isArray(data) ? data : getMockEscalation();
 
   return (
     <div style={{ padding: '20px' }}>
