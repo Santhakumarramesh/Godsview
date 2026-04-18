@@ -19,6 +19,7 @@ import {
   httpRequestDuration,
   httpRequestsInFlight,
 } from "./lib/metrics";
+import { sloMiddleware } from "./lib/slo/slo_tracker";
 
 // ── ESM __dirname shim (compatible with both tsx source-run and esbuild dist) ─
 const __dirname: string =
@@ -84,6 +85,9 @@ app.use((req, res, next) => {
   });
   next();
 });
+
+// Phase 6: SLO observation recording (must run after path resolution)
+app.use(sloMiddleware);
 app.use(
   cors({
     origin(origin, callback) {

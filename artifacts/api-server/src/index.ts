@@ -16,6 +16,7 @@ import { validateOrExit } from "./lib/ops/startup_validator";
 import { initGracefulShutdown } from "./lib/ops/graceful_shutdown";
 import { GovernanceScheduler } from "./lib/governance/governance_scheduler";
 import { CalibrationScheduler } from "./lib/eval/calibration_scheduler";
+import { sseAlertRouter } from "./lib/alerts/sse_alert_router";
 
 // ── Validate environment before anything else ───────────────────
 validateEnv();
@@ -191,6 +192,18 @@ const server = app.listen(port, (err) => {
   } else {
     logger.info("Calibration scheduler disabled (CALIBRATION_AUTOSTART=false)");
   }
+
+  // Phase 6: SSE alert router (bridges Phase 5 events to webhook + scans SLOs)
+  if ((process.env.SSE_ALERT_ROUTER_AUTOSTART ?? "true") !== "false") {
+    try {
+      sseAlertRouter.start();
+      logger.info("SSE alert router started (Phase 5 events → webhook + SLO burn-rate scanner)");
+    } catch (err: any) {
+      logger.error({ err: err?.message }, "SSE alert router failed to start");
+    }
+  } else {
+    logger.info("SSE alert router disabled (SSE_ALERT_ROUTER_AUTOSTART=false)");
+  }
 });
 
 // ── Graceful shutdown with connection draining ──────────────────
@@ -281,6 +294,16 @@ onShutdown(async () => {
     CalibrationScheduler.getInstance().stop();
   } catch (err: any) {
     logger.warn({ err: err?.message }, "Calibration scheduler stop failed");
+  }
+});
+
+// Phase 6: stop SSE alert router
+onShutdown(async () => {
+  try {
+    logger.info("Stopping SSE alert router...");
+    sseAlertRouter.stop();
+  } catch (err: any) {
+    logger.warn({ err: err?.message }, "SSE alert router stop failed");
   }
 });
 
