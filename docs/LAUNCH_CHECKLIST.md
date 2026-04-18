@@ -129,17 +129,35 @@ on its own schedule; operators only need to approve the last gate.
 
 ## 5. AWS deploy (CDK)
 
-From `infra/cdk` (shipped in Phase 3):
+Phase 13 ships turnkey wrappers around the CDK stacks. Run the
+read-only preflight first, then the deploy:
 
 ```bash
-cd infra/cdk
+GV_ENV=dev bash scripts/aws-preflight.sh      # read-only validator
+GV_ENV=dev bash scripts/aws-deploy.sh         # full turnkey deploy
+```
+
+`scripts/aws-deploy.sh` runs preflight → CDK bootstrap (if needed) →
+install → typecheck → tests → dashboard bundle → ECR image push →
+`cdk deploy --all -c env=dev` → ALB health probe. Swap `GV_ENV=prod`
+for a production deploy (the script prompts for `yes` confirmation
+before touching prod).
+
+Low-level CDK equivalents (still supported):
+
+```bash
+cd infra
 pnpm install
-npx cdk diff                                  # verify the change set
-npx cdk deploy GodsViewProdStack              # roll out
+npx cdk diff    --context env=dev
+npx cdk deploy --all --context env=dev
 ```
 
 Expected: new task definitions land, ALB target group flips to healthy,
 CloudWatch Logs start streaming api-server output.
+
+For migrating off Railway, follow `docs/RAILWAY_TO_AWS_CUTOVER.md` —
+it describes the dev-first, bake-then-cut-over playbook and the gated
+Railway teardown (`scripts/railway-teardown.sh`).
 
 ## 6. Smoke tests (production)
 
@@ -234,23 +252,36 @@ Cut release notes from the phase HANDOFFs:
 - `phase-5/HANDOFF.md` — promotion + calibration cron
 - `phase-6/HANDOFF.md` — SLOs + alert routing + k6 baseline
 - `phase-7/HANDOFF.md` — documentation truth pass + v1.0.0 tag
+- `phase-8/HANDOFF.md` — Alert Center real wiring + channel mapping
+- `phase-9/HANDOFF.md` — Dashboard SSE push for Alert Center
+- `phase-10/HANDOFF.md` — Test-suite hardening + webhook receiver examples
+- `phase-11/HANDOFF.md` — Dashboard MSW smoke tests
+- `phase-12/HANDOFF.md` — CI enforcement for dashboard tests + WebSocket shim
+- `phase-13/HANDOFF.md` — Turnkey AWS deploy + Railway teardown scripts
 
 ---
 
-## Production-readiness status at `v1.0.0`
+## Production-readiness status
 
-| Gate                                                          | Status       |
-| ------------------------------------------------------------- | ------------ |
-| 1. TradingView MCP + webhook router                           | shipped      |
-| 2. Backtesting → paper → assisted live → auto-promotion       | shipped      |
-| 3. AWS production deploy                                      | shipped      |
-| 4. All 68 sidebar pages with RBAC                             | shipped      |
-| 5. SLOs + alert routing + k6 baseline                         | shipped      |
-| 6. Documentation truth pass + launch checklist                | shipped (this doc) |
+| Gate                                                                             | Status       |
+| -------------------------------------------------------------------------------- | ------------ |
+| 1. TradingView MCP + webhook router                                              | shipped      |
+| 2. Backtesting → paper → assisted live → auto-promotion                          | shipped      |
+| 3. AWS production deploy                                                         | shipped      |
+| 4. All 68 sidebar pages with RBAC                                                | shipped      |
+| 5. SLOs + alert routing + k6 baseline                                            | shipped      |
+| 6. Documentation truth pass + launch checklist                                   | shipped (this doc) |
+| 7. Alert Center real wiring + channel mapping                                    | shipped      |
+| 8. Alert Center SSE push + live connection badge                                 | shipped      |
+| 9. Test-suite hardening + concrete receiver adapters + verifier CLI              | shipped      |
+| 10. Dashboard MSW smoke tests                                                    | shipped      |
+| 11. CI enforcement of dashboard tests + regression gate + WebSocket shim         | shipped      |
+| 12. Turnkey AWS deploy + Railway teardown automation                             | shipped      |
 
 **Production readiness: 100%.**
 
-All five original hard gates ship in `v1.0.0` and are backed by codified
-SLOs that page on-call when they degrade. The only remaining work is
-day-2 ops (see `docs/OPERATOR_RUNBOOK.md`) and optional post-v1 backlog
-items listed in each phase HANDOFF.
+All twelve gates ship, backed by codified SLOs that page on-call when
+they degrade and a turnkey deploy path (`scripts/aws-deploy.sh`) that
+takes a clean `main` checkout to a running AWS production stack. The
+only remaining work is day-2 ops (see `docs/OPERATOR_RUNBOOK.md`) and
+optional post-v1 backlog items listed in each phase HANDOFF.
