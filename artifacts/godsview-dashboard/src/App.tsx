@@ -6,79 +6,15 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Shell } from "@/components/layout/Shell";
 import { GlobalDataProvider } from "@/components/GlobalDataProvider";
 import { NotificationSystem } from "@/components/NotificationSystem";
+import { RoleProvider } from "@/auth/role-context";
+import { RouteGuard } from "@/auth/route-guard";
+import { PAGE_MANIFEST, type PageManifestEntry } from "@/pages/page-manifest";
 
 // ── Eager: primary landing page (fastest first paint) ───────────────────────
 import Dashboard from "@/pages/dashboard";
 
-// ── Lazy: all other pages (each becomes its own JS chunk) ───────────────────
-const Signals            = React.lazy(() => import("@/pages/signals"));
-const Trades             = React.lazy(() => import("@/pages/trades"));
-const Performance        = React.lazy(() => import("@/pages/performance"));
-const System             = React.lazy(() => import("@/pages/system"));
-const AlpacaPage         = React.lazy(() => import("@/pages/alpaca"));
-const InfinityPage       = React.lazy(() => import("@/pages/infinity"));
-const BrainPage          = React.lazy(() => import("@/pages/brain"));
-const StitchLabPage      = React.lazy(() => import("@/pages/stitch-lab"));
-const PipelinePage       = React.lazy(() => import("@/pages/pipeline"));
-const CandleXRayPage     = React.lazy(() => import("@/pages/candle-xray"));
-const TradingViewChartPage = React.lazy(() => import("@/pages/tradingview-chart")); // Phase 125
-const BloombergTerminalPage = React.lazy(() => import("@/pages/bloomberg-terminal")); // Phase 126
-const NewsMonitorPage = React.lazy(() => import("@/pages/news-monitor")); // Phase 127
-const SetupExplorerPage  = React.lazy(() => import("@/pages/setup-explorer"));
-const ReportsPage        = React.lazy(() => import("@/pages/reports"));
-const RiskPage           = React.lazy(() => import("@/pages/risk"));
-const SettingsPage       = React.lazy(() => import("@/pages/settings"));
-const SuperIntelligencePage = React.lazy(() => import("@/pages/super-intelligence"));
-const InstitutionalIntelligencePage = React.lazy(() => import("@/pages/institutional-intelligence"));
-const BacktesterPage        = React.lazy(() => import("@/pages/backtester"));
-const IntelligenceCenterPage = React.lazy(() => import("@/pages/intelligence-center"));
-const TradeJournalPage               = React.lazy(() => import("@/pages/trade-journal"));
-const WatchlistPage                  = React.lazy(() => import("@/pages/watchlist"));
-const AnalyticsPage                  = React.lazy(() => import("@/pages/analytics"));
-const WarRoom            = React.lazy(() => import("@/pages/war-room"));
-const Proof              = React.lazy(() => import("@/pages/proof"));
-const Checklist          = React.lazy(() => import("@/pages/checklist"));
-const OpsPage            = React.lazy(() => import("@/pages/ops"));
-const QuantLabPage       = React.lazy(() => import("@/pages/quant-lab"));
-const PortfolioPage      = React.lazy(() => import("@/pages/portfolio"));
-const ExecutionPage      = React.lazy(() => import("@/pages/execution"));
-const AuditPage          = React.lazy(() => import("@/pages/audit"));
-const DecisionReplayPage = React.lazy(() => import("@/pages/decision-replay"));
-const AlertsPage         = React.lazy(() => import("@/pages/alerts"));
-const CommandCenterPage  = React.lazy(() => import("@/pages/command-center"));
-const MarketStructurePage = React.lazy(() => import("@/pages/market-structure"));
-const DailyReviewPage     = React.lazy(() => import("@/pages/daily-review"));
-const SideBySidePage      = React.lazy(() => import("@/pages/side-by-side"));
-const DecisionLoopPage    = React.lazy(() => import("@/pages/decision-loop"));
-const TrustSurfacePage    = React.lazy(() => import("@/pages/trust-surface"));
-const EvalHarnessPage     = React.lazy(() => import("@/pages/eval-harness"));
-const CalibrationPage     = React.lazy(() => import("@/pages/calibration"));
-const MCPSignalsPage      = React.lazy(() => import("@/pages/mcp-signals"));
-const MCPBacktesterPage   = React.lazy(() => import("@/pages/mcp-backtester"));
-const PipelineStatusPage  = React.lazy(() => import("@/pages/pipeline-status"));
-const BrainGraphPage      = React.lazy(() => import("@/pages/brain-graph"));
-const RegimeIntelligencePage = React.lazy(() => import("@/pages/regime-intelligence"));
-const CorrelationLabPage  = React.lazy(() => import("@/pages/correlation-lab"));
-const ExecutionControlPage = React.lazy(() => import("@/pages/execution-control"));
-const SentimentIntelPage  = React.lazy(() => import("@/pages/sentiment-intel"));
-const PerformanceAnalyticsPage = React.lazy(() => import("@/pages/performance-analytics"));
-const AlertCenterPage     = React.lazy(() => import("@/pages/alert-center"));
-const MicrostructurePage  = React.lazy(() => import("@/pages/microstructure"));
-const SystemAuditPage    = React.lazy(() => import("@/pages/system-audit"));
-const DataIntegrityPage  = React.lazy(() => import("@/pages/data-integrity"));
-const BacktestCredibilityPage = React.lazy(() => import("@/pages/backtest-credibility"));
-const ExecReliabilityPage = React.lazy(() => import("@/pages/exec-reliability"));
-const RiskCommandV2Page  = React.lazy(() => import("@/pages/risk-command-v2"));
-const ModelGovernancePage = React.lazy(() => import("@/pages/model-governance"));
-const DecisionExplainabilityPage = React.lazy(() => import("@/pages/decision-explainability"));
-const OpsSecurityPage    = React.lazy(() => import("@/pages/ops-security"));
-const PaperTradingProgramPage = React.lazy(() => import("@/pages/paper-trading-program"));
-const CapitalGatingPage  = React.lazy(() => import("@/pages/capital-gating"));
-const BrainNodesPage     = React.lazy(() => import("@/pages/brain-nodes"));
-const AdvancedRiskPage   = React.lazy(() => import("@/pages/advanced-risk"));
-const EconomicCalendarPage = React.lazy(() => import("@/pages/economic-calendar"));
-const AutonomousBrainPage = React.lazy(() => import("@/pages/autonomous-brain")); // Phase 148
-const NotFound           = React.lazy(() => import("@/pages/not-found"));
+// ── Lazy: 404 fallback ──────────────────────────────────────────────────────
+const NotFound = React.lazy(() => import("@/pages/not-found"));
 
 // ── QueryClient ─────────────────────────────────────────────────────────────
 const queryClient = new QueryClient({
@@ -144,23 +80,22 @@ class AppErrorBoundary extends React.Component<
   }
 }
 
-// ── Route wrapper: Suspense + ErrorBoundary per page ────────────────────────
-function RoutedPage({
-  path,
-  component: Component,
-  scope,
-}: {
-  path: string;
-  component: React.ComponentType;
-  scope: string;
-}) {
+// ── Route wrapper: Suspense + ErrorBoundary + RBAC per page ─────────────────
+function ManifestRoute({ entry }: { entry: PageManifestEntry }) {
+  const Component = entry.component;
+  const body = (
+    <AppErrorBoundary scope={entry.scope}>
+      <Suspense fallback={<PageSkeleton />}>
+        <Component />
+      </Suspense>
+    </AppErrorBoundary>
+  );
+
   return (
-    <Route path={path}>
-      <AppErrorBoundary scope={scope}>
-        <Suspense fallback={<PageSkeleton />}>
-          <Component />
-        </Suspense>
-      </AppErrorBoundary>
+    <Route path={entry.path}>
+      {entry.minRole === "viewer" ? body : (
+        <RouteGuard required={entry.minRole}>{body}</RouteGuard>
+      )}
     </Route>
   );
 }
@@ -177,76 +112,9 @@ function Router() {
           </AppErrorBoundary>
         </Route>
 
-        <RoutedPage path="/signals"           component={Signals}               scope="page:signals" />
-        <RoutedPage path="/trades"            component={Trades}                scope="page:trades" />
-        <RoutedPage path="/performance"       component={Performance}           scope="page:performance" />
-        <RoutedPage path="/system"            component={System}                scope="page:system" />
-        <RoutedPage path="/alpaca"            component={AlpacaPage}            scope="page:alpaca" />
-        <RoutedPage path="/infinity"          component={InfinityPage}          scope="page:infinity" />
-        <RoutedPage path="/brain"             component={BrainPage}             scope="page:brain" />
-        <RoutedPage path="/stitch-lab"        component={StitchLabPage}         scope="page:stitch-lab" />
-        <RoutedPage path="/pipeline"          component={PipelinePage}          scope="page:pipeline" />
-        <RoutedPage path="/candle-xray"       component={CandleXRayPage}        scope="page:candle-xray" />
-        <RoutedPage path="/tradingview-chart" component={TradingViewChartPage}  scope="page:tradingview-chart" />
-        <RoutedPage path="/bloomberg-terminal" component={BloombergTerminalPage} scope="page:bloomberg-terminal" />
-        <RoutedPage path="/news-monitor" component={NewsMonitorPage} scope="page:news-monitor" />
-        <RoutedPage path="/setup-explorer"    component={SetupExplorerPage}     scope="page:setup-explorer" />
-        <RoutedPage path="/reports"           component={ReportsPage}           scope="page:reports" />
-        <RoutedPage path="/risk"              component={RiskPage}              scope="page:risk" />
-        <RoutedPage path="/super-intelligence"       component={SuperIntelligencePage}            scope="page:super-intelligence" />
-        <RoutedPage path="/institutional-intelligence" component={InstitutionalIntelligencePage} scope="page:institutional-intelligence" />
-        <RoutedPage path="/backtester"            component={BacktesterPage}        scope="page:backtester" />
-        <RoutedPage path="/intelligence-center"   component={IntelligenceCenterPage} scope="page:intelligence-center" />
-        <RoutedPage path="/trade-journal"     component={TradeJournalPage}      scope="page:trade-journal" />
-        <RoutedPage path="/watchlist"         component={WatchlistPage}         scope="page:watchlist" />
-        <RoutedPage path="/analytics"         component={AnalyticsPage}         scope="page:analytics" />
-        <RoutedPage path="/settings"          component={SettingsPage}          scope="page:settings" />
-        <RoutedPage path="/war-room"          component={WarRoom}               scope="page:war-room" />
-        <RoutedPage path="/proof"             component={Proof}                 scope="page:proof" />
-        <RoutedPage path="/checklist"         component={Checklist}             scope="page:checklist" />
-        <RoutedPage path="/ops"               component={OpsPage}               scope="page:ops" />
-        <RoutedPage path="/quant-lab"         component={QuantLabPage}          scope="page:quant-lab" />
-        <RoutedPage path="/portfolio"         component={PortfolioPage}         scope="page:portfolio" />
-        <RoutedPage path="/execution"         component={ExecutionPage}         scope="page:execution" />
-        <RoutedPage path="/audit"             component={AuditPage}             scope="page:audit" />
-        <RoutedPage path="/decision-replay"   component={DecisionReplayPage}    scope="page:decision-replay" />
-        <RoutedPage path="/alerts"            component={AlertsPage}            scope="page:alerts" />
-        <RoutedPage path="/command-center"   component={CommandCenterPage}     scope="page:command-center" />
-        <RoutedPage path="/market-structure" component={MarketStructurePage}   scope="page:market-structure" />
-        <RoutedPage path="/daily-review"     component={DailyReviewPage}       scope="page:daily-review" />
-        <RoutedPage path="/side-by-side"     component={SideBySidePage}        scope="page:side-by-side" />
-        <RoutedPage path="/decision-loop"    component={DecisionLoopPage}      scope="page:decision-loop" />
-        <RoutedPage path="/trust-surface"    component={TrustSurfacePage}      scope="page:trust-surface" />
-        <RoutedPage path="/eval-harness"     component={EvalHarnessPage}       scope="page:eval-harness" />
-        <RoutedPage path="/calibration"      component={CalibrationPage}       scope="page:calibration" />
-        <RoutedPage path="/mcp-signals"      component={MCPSignalsPage}        scope="page:mcp-signals" />
-        <RoutedPage path="/mcp-backtester"   component={MCPBacktesterPage}     scope="page:mcp-backtester" />
-        <RoutedPage path="/pipeline-status"  component={PipelineStatusPage}    scope="page:pipeline-status" />
-        <RoutedPage path="/brain-graph"      component={BrainGraphPage}        scope="page:brain-graph" />
-        <RoutedPage path="/regime-intelligence" component={RegimeIntelligencePage} scope="page:regime-intelligence" />
-        <RoutedPage path="/correlation-lab" component={CorrelationLabPage} scope="page:correlation-lab" />
-        <RoutedPage path="/execution-control" component={ExecutionControlPage} scope="page:execution-control" />
-        <RoutedPage path="/sentiment-intel" component={SentimentIntelPage} scope="page:sentiment-intel" />
-        <RoutedPage path="/performance-analytics" component={PerformanceAnalyticsPage} scope="page:performance-analytics" />
-        <RoutedPage path="/alert-center" component={AlertCenterPage} scope="page:alert-center" />
-        <RoutedPage path="/microstructure" component={MicrostructurePage} scope="page:microstructure" />
-        <RoutedPage path="/system-audit" component={SystemAuditPage} scope="page:system-audit" />
-        <RoutedPage path="/data-integrity" component={DataIntegrityPage} scope="page:data-integrity" />
-        <RoutedPage path="/backtest-credibility" component={BacktestCredibilityPage} scope="page:backtest-credibility" />
-        <RoutedPage path="/exec-reliability" component={ExecReliabilityPage} scope="page:exec-reliability" />
-        <RoutedPage path="/risk-command-v2" component={RiskCommandV2Page} scope="page:risk-command-v2" />
-        <RoutedPage path="/model-governance" component={ModelGovernancePage} scope="page:model-governance" />
-        <RoutedPage path="/decision-explainability" component={DecisionExplainabilityPage} scope="page:decision-explainability" />
-        <RoutedPage path="/ops-security" component={OpsSecurityPage} scope="page:ops-security" />
-        <RoutedPage path="/paper-trading-program" component={PaperTradingProgramPage} scope="page:paper-trading-program" />
-        <RoutedPage path="/capital-gating" component={CapitalGatingPage} scope="page:capital-gating" />
-        <RoutedPage path="/tradingview-chart" component={TradingViewChartPage} scope="page:tradingview-chart" />
-        <RoutedPage path="/bloomberg-terminal" component={BloombergTerminalPage} scope="page:bloomberg-terminal" />
-        <RoutedPage path="/news-monitor" component={NewsMonitorPage} scope="page:news-monitor" />
-        <RoutedPage path="/brain-nodes" component={BrainNodesPage} scope="page:brain-nodes" />
-        <RoutedPage path="/advanced-risk" component={AdvancedRiskPage} scope="page:advanced-risk" />
-        <RoutedPage path="/economic-calendar" component={EconomicCalendarPage} scope="page:economic-calendar" />
-        <RoutedPage path="/autonomous-brain" component={AutonomousBrainPage} scope="page:autonomous-brain" />
+        {PAGE_MANIFEST.map((entry) => (
+          <ManifestRoute key={entry.path} entry={entry} />
+        ))}
 
         <Route>
           <AppErrorBoundary scope="page:not-found">
@@ -265,14 +133,16 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <GlobalDataProvider>
-          <AppErrorBoundary scope="app-root">
-            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-              <Router />
-            </WouterRouter>
-          </AppErrorBoundary>
-          <NotificationSystem />
-        </GlobalDataProvider>
+        <RoleProvider>
+          <GlobalDataProvider>
+            <AppErrorBoundary scope="app-root">
+              <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+                <Router />
+              </WouterRouter>
+            </AppErrorBoundary>
+            <NotificationSystem />
+          </GlobalDataProvider>
+        </RoleProvider>
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>
