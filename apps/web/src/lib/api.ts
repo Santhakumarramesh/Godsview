@@ -12,10 +12,13 @@ import {
   authEndpoints,
   featureFlagEndpoints,
   healthEndpoints,
+  marketEndpoints,
   mcpEndpoints,
   opsEndpoints,
   settingsEndpoints,
+  structureEndpoints,
   systemConfigEndpoints,
+  tvIngestEndpoints,
   userEndpoints,
   webhookEndpoints,
 } from "@gv/api-client";
@@ -46,4 +49,7 @@ export const api = {
   audit: auditEndpoints(apiClient),
   ops: opsEndpoints(apiClient),
   settings: settingsEndpoints(apiClient),
+  market: marketEndpoints(apiClient),
+  structure: structureEndpoints(apiClient),
+  tv: tvIngestEndpoints(apiClient),
 };

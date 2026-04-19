@@ -17,3 +17,6 @@ export * from "./endpoints/mcp.js";
 export * from "./endpoints/audit.js";
 export * from "./endpoints/ops.js";
 export * from "./endpoints/settings.js";
+export * from "./endpoints/market.js";
+export * from "./endpoints/structure.js";
+export * from "./endpoints/tv-ingest.js";
