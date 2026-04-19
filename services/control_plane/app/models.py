@@ -683,3 +683,79 @@ class MarketContext(Base):
             "generated_at",
         ),
     )
+
+
+# ─────────────────────────── Phase 3 — order flow ───────────────────────
+
+
+class DepthSnapshot(Base):
+    """Persisted point-in-time order-book snapshot.
+
+    Each row is one moment in the symbol's book life with both sides
+    materialised as JSON ladders ordered best→worst, plus the cumulative
+    traded delta and last print since the previous snapshot. The
+    detector pipeline (``app.detectors.orderflow``) consumes contiguous
+    rows ordered by ``t`` ascending.
+    """
+
+    __tablename__ = "depth_snapshots"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    symbol_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("market_symbols.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    t: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    # Ladders are stored as JSON of [{price, size, orders?}, ...].
+    bids: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    asks: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    delta: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    last: Mapped[float] = mapped_column(nullable=False)
+    source: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="synthetic"
+    )
+    ingested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        Index("ix_depth_snapshots_symbol_t", "symbol_id", "t"),
+        Index("ix_depth_snapshots_source", "source"),
+    )
+
+
+class DeltaBar(Base):
+    """Per-bar order-flow rollup — buy/sell volume + delta + cum delta.
+
+    Keyed on ``(symbol_id, tf, t)`` like ``Bar``. The cumulative-delta
+    column resets at each session boundary; the rollup job in PR4 owns
+    the reset logic (it sees ``Symbol.session_tz``).
+    """
+
+    __tablename__ = "delta_bars"
+
+    symbol_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("market_symbols.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    tf: Mapped[str] = mapped_column(String(8), primary_key=True)
+    t: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), primary_key=True
+    )
+    buy_volume: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    sell_volume: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    delta: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    cumulative_delta: Mapped[float] = mapped_column(
+        nullable=False, default=0.0
+    )
+    ingested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        Index("ix_delta_bars_symbol_tf_t", "symbol_id", "tf", "t"),
+    )

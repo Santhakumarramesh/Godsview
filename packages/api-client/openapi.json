@@ -723,6 +723,164 @@
         "title": "AuditListOut",
         "type": "object"
       },
+      "BookStructuresOut": {
+        "description": "Empty envelope in PR3 \u2014 fields populated by PR4 detectors.",
+        "properties": {
+          "asOf": {
+            "format": "date-time",
+            "title": "Asof",
+            "type": "string"
+          },
+          "clusters": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Clusters",
+            "type": "array"
+          },
+          "symbolId": {
+            "title": "Symbolid",
+            "type": "string"
+          },
+          "walls": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Walls",
+            "type": "array"
+          }
+        },
+        "required": [
+          "symbolId",
+          "asOf"
+        ],
+        "title": "BookStructuresOut",
+        "type": "object"
+      },
+      "DeltaBarIn": {
+        "properties": {
+          "buyVolume": {
+            "default": 0.0,
+            "minimum": 0.0,
+            "title": "Buyvolume",
+            "type": "number"
+          },
+          "cumulativeDelta": {
+            "default": 0.0,
+            "title": "Cumulativedelta",
+            "type": "number"
+          },
+          "delta": {
+            "default": 0.0,
+            "title": "Delta",
+            "type": "number"
+          },
+          "sellVolume": {
+            "default": 0.0,
+            "minimum": 0.0,
+            "title": "Sellvolume",
+            "type": "number"
+          },
+          "symbolId": {
+            "minLength": 1,
+            "title": "Symbolid",
+            "type": "string"
+          },
+          "t": {
+            "format": "date-time",
+            "title": "T",
+            "type": "string"
+          },
+          "tf": {
+            "title": "Tf",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbolId",
+          "tf",
+          "t"
+        ],
+        "title": "DeltaBarIn",
+        "type": "object"
+      },
+      "DeltaBarOut": {
+        "properties": {
+          "buyVolume": {
+            "default": 0.0,
+            "minimum": 0.0,
+            "title": "Buyvolume",
+            "type": "number"
+          },
+          "cumulativeDelta": {
+            "default": 0.0,
+            "title": "Cumulativedelta",
+            "type": "number"
+          },
+          "delta": {
+            "default": 0.0,
+            "title": "Delta",
+            "type": "number"
+          },
+          "sellVolume": {
+            "default": 0.0,
+            "minimum": 0.0,
+            "title": "Sellvolume",
+            "type": "number"
+          },
+          "symbolId": {
+            "minLength": 1,
+            "title": "Symbolid",
+            "type": "string"
+          },
+          "t": {
+            "format": "date-time",
+            "title": "T",
+            "type": "string"
+          },
+          "tf": {
+            "title": "Tf",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbolId",
+          "tf",
+          "t"
+        ],
+        "title": "DeltaBarOut",
+        "type": "object"
+      },
+      "DeltaBarsOut": {
+        "properties": {
+          "bars": {
+            "items": {
+              "$ref": "#/components/schemas/DeltaBarOut"
+            },
+            "title": "Bars",
+            "type": "array"
+          },
+          "symbolId": {
+            "title": "Symbolid",
+            "type": "string"
+          },
+          "tf": {
+            "title": "Tf",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbolId",
+          "tf",
+          "bars"
+        ],
+        "title": "DeltaBarsOut",
+        "type": "object"
+      },
       "DeploymentCreateIn": {
         "properties": {
           "commitSha": {
@@ -896,6 +1054,183 @@
           "rollbackOf"
         ],
         "title": "DeploymentOut",
+        "type": "object"
+      },
+      "DepthLevelDto": {
+        "properties": {
+          "orders": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Orders"
+          },
+          "price": {
+            "title": "Price",
+            "type": "number"
+          },
+          "size": {
+            "minimum": 0.0,
+            "title": "Size",
+            "type": "number"
+          }
+        },
+        "required": [
+          "price",
+          "size"
+        ],
+        "title": "DepthLevelDto",
+        "type": "object"
+      },
+      "DepthSnapshotIn": {
+        "properties": {
+          "asks": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/DepthLevelDto"
+            },
+            "title": "Asks",
+            "type": "array"
+          },
+          "bids": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/DepthLevelDto"
+            },
+            "title": "Bids",
+            "type": "array"
+          },
+          "delta": {
+            "default": 0.0,
+            "title": "Delta",
+            "type": "number"
+          },
+          "last": {
+            "title": "Last",
+            "type": "number"
+          },
+          "source": {
+            "default": "synthetic",
+            "enum": [
+              "bookmap",
+              "databento",
+              "alpaca",
+              "replay",
+              "synthetic"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "symbolId": {
+            "minLength": 1,
+            "title": "Symbolid",
+            "type": "string"
+          },
+          "t": {
+            "format": "date-time",
+            "title": "T",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbolId",
+          "t",
+          "last"
+        ],
+        "title": "DepthSnapshotIn",
+        "type": "object"
+      },
+      "DepthSnapshotOut": {
+        "properties": {
+          "asks": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/DepthLevelDto"
+            },
+            "title": "Asks",
+            "type": "array"
+          },
+          "bids": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/DepthLevelDto"
+            },
+            "title": "Bids",
+            "type": "array"
+          },
+          "delta": {
+            "default": 0.0,
+            "title": "Delta",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last": {
+            "title": "Last",
+            "type": "number"
+          },
+          "source": {
+            "default": "synthetic",
+            "enum": [
+              "bookmap",
+              "databento",
+              "alpaca",
+              "replay",
+              "synthetic"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "symbolId": {
+            "minLength": 1,
+            "title": "Symbolid",
+            "type": "string"
+          },
+          "t": {
+            "format": "date-time",
+            "title": "T",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbolId",
+          "t",
+          "last",
+          "id"
+        ],
+        "title": "DepthSnapshotOut",
+        "type": "object"
+      },
+      "DepthSnapshotsOut": {
+        "properties": {
+          "snapshots": {
+            "items": {
+              "$ref": "#/components/schemas/DepthSnapshotOut"
+            },
+            "title": "Snapshots",
+            "type": "array"
+          },
+          "symbolId": {
+            "title": "Symbolid",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "symbolId",
+          "snapshots",
+          "total"
+        ],
+        "title": "DepthSnapshotsOut",
         "type": "object"
       },
       "ErrorBody": {
@@ -1090,6 +1425,73 @@
           }
         },
         "title": "FlagPatch",
+        "type": "object"
+      },
+      "FvgOut": {
+        "properties": {
+          "bottom": {
+            "title": "Bottom",
+            "type": "number"
+          },
+          "detectedAt": {
+            "format": "date-time",
+            "title": "Detectedat",
+            "type": "string"
+          },
+          "direction": {
+            "title": "Direction",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "mitigated": {
+            "title": "Mitigated",
+            "type": "boolean"
+          },
+          "mitigatedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mitigatedat"
+          },
+          "symbolId": {
+            "title": "Symbolid",
+            "type": "string"
+          },
+          "t": {
+            "format": "date-time",
+            "title": "T",
+            "type": "string"
+          },
+          "tf": {
+            "title": "Tf",
+            "type": "string"
+          },
+          "top": {
+            "title": "Top",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "symbolId",
+          "tf",
+          "direction",
+          "top",
+          "bottom",
+          "t",
+          "mitigated",
+          "detectedAt"
+        ],
+        "title": "FvgOut",
         "type": "object"
       },
       "IncidentCreateIn": {
@@ -1476,6 +1878,58 @@
         "title": "LoginRequest",
         "type": "object"
       },
+      "MarketContextOut": {
+        "properties": {
+          "activeFvgs": {
+            "items": {},
+            "title": "Activefvgs",
+            "type": "array"
+          },
+          "activeOrderBlocks": {
+            "items": {},
+            "title": "Activeorderblocks",
+            "type": "array"
+          },
+          "conflict": {
+            "title": "Conflict",
+            "type": "boolean"
+          },
+          "generatedAt": {
+            "format": "date-time",
+            "title": "Generatedat",
+            "type": "string"
+          },
+          "htfBias": {
+            "title": "Htfbias",
+            "type": "string"
+          },
+          "ltfBias": {
+            "title": "Ltfbias",
+            "type": "string"
+          },
+          "recentEvents": {
+            "items": {},
+            "title": "Recentevents",
+            "type": "array"
+          },
+          "symbolId": {
+            "title": "Symbolid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbolId",
+          "htfBias",
+          "ltfBias",
+          "conflict",
+          "recentEvents",
+          "activeOrderBlocks",
+          "activeFvgs",
+          "generatedAt"
+        ],
+        "title": "MarketContextOut",
+        "type": "object"
+      },
       "McpCreateIn": {
         "properties": {
           "authMode": {
@@ -1742,6 +2196,261 @@
         "title": "McpPatchIn",
         "type": "object"
       },
+      "OrderBlockOut": {
+        "properties": {
+          "detectedAt": {
+            "format": "date-time",
+            "title": "Detectedat",
+            "type": "string"
+          },
+          "direction": {
+            "title": "Direction",
+            "type": "string"
+          },
+          "high": {
+            "title": "High",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "low": {
+            "title": "Low",
+            "type": "number"
+          },
+          "retested": {
+            "title": "Retested",
+            "type": "boolean"
+          },
+          "strength": {
+            "title": "Strength",
+            "type": "number"
+          },
+          "structureEventId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Structureeventid"
+          },
+          "symbolId": {
+            "title": "Symbolid",
+            "type": "string"
+          },
+          "t": {
+            "format": "date-time",
+            "title": "T",
+            "type": "string"
+          },
+          "tf": {
+            "title": "Tf",
+            "type": "string"
+          },
+          "violated": {
+            "title": "Violated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "symbolId",
+          "tf",
+          "direction",
+          "high",
+          "low",
+          "t",
+          "strength",
+          "retested",
+          "violated",
+          "detectedAt"
+        ],
+        "title": "OrderBlockOut",
+        "type": "object"
+      },
+      "OrderFlowEventsOut": {
+        "description": "Empty envelope in PR3 \u2014 fields populated by PR4 detectors.",
+        "properties": {
+          "absorptions": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Absorptions",
+            "type": "array"
+          },
+          "exhaustions": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Exhaustions",
+            "type": "array"
+          },
+          "imbalances": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Imbalances",
+            "type": "array"
+          },
+          "symbolId": {
+            "title": "Symbolid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbolId"
+        ],
+        "title": "OrderFlowEventsOut",
+        "type": "object"
+      },
+      "OrderFlowIngestIn": {
+        "properties": {
+          "deltaBar": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DeltaBarIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "snapshot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DepthSnapshotIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "OrderFlowIngestIn",
+        "type": "object"
+      },
+      "OrderFlowIngestOut": {
+        "properties": {
+          "acceptedAt": {
+            "format": "date-time",
+            "title": "Acceptedat",
+            "type": "string"
+          },
+          "delivered": {
+            "title": "Delivered",
+            "type": "integer"
+          },
+          "symbolId": {
+            "title": "Symbolid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "delivered",
+          "symbolId",
+          "acceptedAt"
+        ],
+        "title": "OrderFlowIngestOut",
+        "type": "object"
+      },
+      "OrderFlowStateOut": {
+        "description": "Rolled-up detector state; PR3 returns a zero-valued shell so the\napps/web typed client never sees a 404 while the pipeline is still\nbeing wired.",
+        "properties": {
+          "activeImbalance": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activeimbalance"
+          },
+          "asOf": {
+            "format": "date-time",
+            "title": "Asof",
+            "type": "string"
+          },
+          "clusters": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Clusters",
+            "type": "array"
+          },
+          "cumulativeDelta": {
+            "default": 0.0,
+            "title": "Cumulativedelta",
+            "type": "number"
+          },
+          "lastDelta": {
+            "default": 0.0,
+            "title": "Lastdelta",
+            "type": "number"
+          },
+          "netBias": {
+            "default": "neutral",
+            "enum": [
+              "long",
+              "short",
+              "neutral"
+            ],
+            "title": "Netbias",
+            "type": "string"
+          },
+          "recentAbsorption": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Recentabsorption",
+            "type": "array"
+          },
+          "recentExhaustion": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Recentexhaustion",
+            "type": "array"
+          },
+          "symbolId": {
+            "title": "Symbolid",
+            "type": "string"
+          },
+          "walls": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Walls",
+            "type": "array"
+          }
+        },
+        "required": [
+          "symbolId",
+          "asOf"
+        ],
+        "title": "OrderFlowStateOut",
+        "type": "object"
+      },
       "PasswordChangeIn": {
         "properties": {
           "currentPassword": {
@@ -1772,6 +2481,35 @@
           }
         },
         "title": "PasswordChangeOut",
+        "type": "object"
+      },
+      "PivotOut": {
+        "properties": {
+          "barIndex": {
+            "title": "Barindex",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "price": {
+            "title": "Price",
+            "type": "number"
+          },
+          "t": {
+            "format": "date-time",
+            "title": "T",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "price",
+          "t",
+          "barIndex"
+        ],
+        "title": "PivotOut",
         "type": "object"
       },
       "PreferencesOut": {
@@ -1901,6 +2639,72 @@
           }
         },
         "title": "ProfilePatchIn",
+        "type": "object"
+      },
+      "QuotePublishIn": {
+        "description": "Admin payload that fans out a single Quote tick over /ws/quotes.\n\nMirrors ``QuoteSchema`` from ``packages/types/src/market.ts`` so an\noperator MCP / replay tool can reuse the same shape end-to-end.",
+        "properties": {
+          "ask": {
+            "title": "Ask",
+            "type": "number"
+          },
+          "askSize": {
+            "minimum": 0.0,
+            "title": "Asksize",
+            "type": "number"
+          },
+          "bid": {
+            "title": "Bid",
+            "type": "number"
+          },
+          "bidSize": {
+            "minimum": 0.0,
+            "title": "Bidsize",
+            "type": "number"
+          },
+          "last": {
+            "title": "Last",
+            "type": "number"
+          },
+          "symbolId": {
+            "minLength": 1,
+            "title": "Symbolid",
+            "type": "string"
+          },
+          "t": {
+            "format": "date-time",
+            "title": "T",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbolId",
+          "bid",
+          "ask",
+          "last",
+          "bidSize",
+          "askSize",
+          "t"
+        ],
+        "title": "QuotePublishIn",
+        "type": "object"
+      },
+      "QuotePublishOut": {
+        "properties": {
+          "delivered": {
+            "title": "Delivered",
+            "type": "integer"
+          },
+          "symbolId": {
+            "title": "Symbolid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "delivered",
+          "symbolId"
+        ],
+        "title": "QuotePublishOut",
         "type": "object"
       },
       "RefreshRequest": {
@@ -2363,6 +3167,261 @@
         "title": "SloPatchIn",
         "type": "object"
       },
+      "StructureEventListOut": {
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/StructureEventOut"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "events",
+          "total"
+        ],
+        "title": "StructureEventListOut",
+        "type": "object"
+      },
+      "StructureEventOut": {
+        "properties": {
+          "brokenPivot": {
+            "$ref": "#/components/schemas/PivotOut"
+          },
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "confirmationT": {
+            "format": "date-time",
+            "title": "Confirmationt",
+            "type": "string"
+          },
+          "detectedAt": {
+            "format": "date-time",
+            "title": "Detectedat",
+            "type": "string"
+          },
+          "direction": {
+            "title": "Direction",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "level": {
+            "title": "Level",
+            "type": "number"
+          },
+          "symbolId": {
+            "title": "Symbolid",
+            "type": "string"
+          },
+          "tf": {
+            "title": "Tf",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "symbolId",
+          "tf",
+          "kind",
+          "direction",
+          "level",
+          "brokenPivot",
+          "confirmationT",
+          "confidence",
+          "detectedAt"
+        ],
+        "title": "StructureEventOut",
+        "type": "object"
+      },
+      "StructureZonesOut": {
+        "properties": {
+          "fvgs": {
+            "items": {
+              "$ref": "#/components/schemas/FvgOut"
+            },
+            "title": "Fvgs",
+            "type": "array"
+          },
+          "orderBlocks": {
+            "items": {
+              "$ref": "#/components/schemas/OrderBlockOut"
+            },
+            "title": "Orderblocks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "orderBlocks",
+          "fvgs"
+        ],
+        "title": "StructureZonesOut",
+        "type": "object"
+      },
+      "SymbolCreateIn": {
+        "properties": {
+          "assetClass": {
+            "enum": [
+              "equity",
+              "crypto",
+              "forex",
+              "futures",
+              "index"
+            ],
+            "title": "Assetclass",
+            "type": "string"
+          },
+          "displayName": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Displayname",
+            "type": "string"
+          },
+          "exchange": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Exchange",
+            "type": "string"
+          },
+          "lotSize": {
+            "default": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Lotsize",
+            "type": "number"
+          },
+          "quoteCurrency": {
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Quotecurrency",
+            "type": "string"
+          },
+          "sessionTz": {
+            "default": "America/New_York",
+            "maxLength": 64,
+            "title": "Sessiontz",
+            "type": "string"
+          },
+          "tickSize": {
+            "exclusiveMinimum": 0.0,
+            "title": "Ticksize",
+            "type": "number"
+          },
+          "ticker": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Ticker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticker",
+          "exchange",
+          "assetClass",
+          "displayName",
+          "tickSize",
+          "quoteCurrency"
+        ],
+        "title": "SymbolCreateIn",
+        "type": "object"
+      },
+      "SymbolListOut": {
+        "properties": {
+          "symbols": {
+            "items": {
+              "$ref": "#/components/schemas/SymbolOut"
+            },
+            "title": "Symbols",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "symbols",
+          "total"
+        ],
+        "title": "SymbolListOut",
+        "type": "object"
+      },
+      "SymbolOut": {
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "assetClass": {
+            "title": "Assetclass",
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "title": "Createdat",
+            "type": "string"
+          },
+          "displayName": {
+            "title": "Displayname",
+            "type": "string"
+          },
+          "exchange": {
+            "title": "Exchange",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "lotSize": {
+            "title": "Lotsize",
+            "type": "number"
+          },
+          "quoteCurrency": {
+            "title": "Quotecurrency",
+            "type": "string"
+          },
+          "sessionTz": {
+            "title": "Sessiontz",
+            "type": "string"
+          },
+          "tickSize": {
+            "title": "Ticksize",
+            "type": "number"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "ticker",
+          "exchange",
+          "assetClass",
+          "displayName",
+          "tickSize",
+          "lotSize",
+          "quoteCurrency",
+          "sessionTz",
+          "active",
+          "createdAt"
+        ],
+        "title": "SymbolOut",
+        "type": "object"
+      },
       "SystemConfigListOut": {
         "properties": {
           "entries": {
@@ -2463,6 +3522,142 @@
           "refreshExpiresAt"
         ],
         "title": "TokenPair",
+        "type": "object"
+      },
+      "TvSignalOut": {
+        "properties": {
+          "alertId": {
+            "title": "Alertid",
+            "type": "string"
+          },
+          "direction": {
+            "title": "Direction",
+            "type": "string"
+          },
+          "entry": {
+            "title": "Entry",
+            "type": "number"
+          },
+          "exchange": {
+            "title": "Exchange",
+            "type": "string"
+          },
+          "family": {
+            "title": "Family",
+            "type": "string"
+          },
+          "firedAt": {
+            "format": "date-time",
+            "title": "Firedat",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "pineConfidence": {
+            "title": "Pineconfidence",
+            "type": "number"
+          },
+          "processedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processedat"
+          },
+          "receivedAt": {
+            "format": "date-time",
+            "title": "Receivedat",
+            "type": "string"
+          },
+          "rejectionReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejectionreason"
+          },
+          "riskReward": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Riskreward"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "stop": {
+            "title": "Stop",
+            "type": "number"
+          },
+          "symbolId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbolid"
+          },
+          "target": {
+            "title": "Target",
+            "type": "number"
+          },
+          "tf": {
+            "title": "Tf",
+            "type": "string"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "alertId",
+          "ticker",
+          "exchange",
+          "tf",
+          "direction",
+          "family",
+          "entry",
+          "stop",
+          "target",
+          "pineConfidence",
+          "firedAt",
+          "receivedAt",
+          "status"
+        ],
+        "title": "TvSignalOut",
         "type": "object"
       },
       "UserCreateIn": {
@@ -9217,6 +10412,1979 @@
         "summary": "Readiness probe",
         "tags": [
           "health"
+        ]
+      }
+    },
+    "/market/quotes": {
+      "post": {
+        "description": "Push a single Quote tick into the realtime fan-out hub.\n\nThe symbol must exist in the registry \u2014 unknown ids return 404\nrather than silently dropping the message. Used by operator tooling\n(replay, synthetic feeds) and by the upstream ingest adapter when\nit can't open a long-lived hub connection.",
+        "operationId": "publish_quote_market_quotes_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuotePublishIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuotePublishOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Malformed request."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Insufficient role for this operation."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "State conflict."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Rate limit exceeded."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Publish Quote",
+        "tags": [
+          "market"
+        ]
+      }
+    },
+    "/market/symbols": {
+      "get": {
+        "operationId": "list_symbols_market_symbols_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "activeOnly",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Activeonly",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "assetClass",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Assetclass"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SymbolListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Malformed request."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Insufficient role for this operation."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "State conflict."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Rate limit exceeded."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server error."
+          }
+        },
+        "summary": "List Symbols",
+        "tags": [
+          "market"
+        ]
+      },
+      "post": {
+        "operationId": "create_symbol_market_symbols_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SymbolCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SymbolOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Malformed request."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Insufficient role for this operation."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "State conflict."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Rate limit exceeded."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Create Symbol",
+        "tags": [
+          "market"
+        ]
+      }
+    },
+    "/market/symbols/{symbol_id}": {
+      "get": {
+        "operationId": "get_symbol_market_symbols__symbol_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "symbol_id",
+            "required": true,
+            "schema": {
+              "title": "Symbol Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SymbolOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Malformed request."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Insufficient role for this operation."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "State conflict."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Rate limit exceeded."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Get Symbol",
+        "tags": [
+          "market"
+        ]
+      }
+    },
+    "/market/symbols/{symbol_id}/context": {
+      "get": {
+        "operationId": "get_market_context_market_symbols__symbol_id__context_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "symbol_id",
+            "required": true,
+            "schema": {
+              "title": "Symbol Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketContextOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Malformed request."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Insufficient role for this operation."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "State conflict."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Rate limit exceeded."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Get Market Context",
+        "tags": [
+          "market"
+        ]
+      }
+    },
+    "/market/symbols/{symbol_id}/structure/events": {
+      "get": {
+        "operationId": "list_structure_events_market_symbols__symbol_id__structure_events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "symbol_id",
+            "required": true,
+            "schema": {
+              "title": "Symbol Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tf",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tf"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StructureEventListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Malformed request."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Insufficient role for this operation."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "State conflict."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Rate limit exceeded."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server error."
+          }
+        },
+        "summary": "List Structure Events",
+        "tags": [
+          "market"
+        ]
+      }
+    },
+    "/market/symbols/{symbol_id}/structure/zones": {
+      "get": {
+        "operationId": "list_structure_zones_market_symbols__symbol_id__structure_zones_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "symbol_id",
+            "required": true,
+            "schema": {
+              "title": "Symbol Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tf",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tf"
+            }
+          },
+          {
+            "in": "query",
+            "name": "includeInactive",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Includeinactive",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StructureZonesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Malformed request."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Insufficient role for this operation."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "State conflict."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Rate limit exceeded."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server error."
+          }
+        },
+        "summary": "List Structure Zones",
+        "tags": [
+          "market"
+        ]
+      }
+    },
+    "/orderflow/ingest": {
+      "post": {
+        "description": "Persist a DepthSnapshot + / or DeltaBar for a known symbol.\n\nAt least one of ``snapshot`` / ``deltaBar`` must be supplied. The\n``symbolId`` is taken from whichever sub-payload is present (they\nmust agree if both are supplied).",
+        "operationId": "ingest_orderflow_ingest_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderFlowIngestIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderFlowIngestOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Malformed request."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Insufficient role for this operation."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "State conflict."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Rate limit exceeded."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Ingest",
+        "tags": [
+          "orderflow"
+        ]
+      }
+    },
+    "/orderflow/symbols/{symbol_id}/book": {
+      "get": {
+        "operationId": "get_book_structures_orderflow_symbols__symbol_id__book_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "symbol_id",
+            "required": true,
+            "schema": {
+              "title": "Symbol Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookStructuresOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Malformed request."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Insufficient role for this operation."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "State conflict."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Rate limit exceeded."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Get Book Structures",
+        "tags": [
+          "orderflow"
+        ]
+      }
+    },
+    "/orderflow/symbols/{symbol_id}/delta": {
+      "get": {
+        "operationId": "get_delta_bars_orderflow_symbols__symbol_id__delta_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "symbol_id",
+            "required": true,
+            "schema": {
+              "title": "Symbol Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tf",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "Tf",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "fromTs",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Fromts"
+            }
+          },
+          {
+            "in": "query",
+            "name": "toTs",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tots"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 500,
+              "maximum": 5000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeltaBarsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Malformed request."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Insufficient role for this operation."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "State conflict."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Rate limit exceeded."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Get Delta Bars",
+        "tags": [
+          "orderflow"
+        ]
+      }
+    },
+    "/orderflow/symbols/{symbol_id}/depth": {
+      "get": {
+        "operationId": "get_depth_orderflow_symbols__symbol_id__depth_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "symbol_id",
+            "required": true,
+            "schema": {
+              "title": "Symbol Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "fromTs",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Fromts"
+            }
+          },
+          {
+            "in": "query",
+            "name": "toTs",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tots"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 2000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DepthSnapshotsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Malformed request."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Insufficient role for this operation."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "State conflict."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Rate limit exceeded."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Get Depth",
+        "tags": [
+          "orderflow"
+        ]
+      }
+    },
+    "/orderflow/symbols/{symbol_id}/events": {
+      "get": {
+        "operationId": "get_events_orderflow_symbols__symbol_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "symbol_id",
+            "required": true,
+            "schema": {
+              "title": "Symbol Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderFlowEventsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Malformed request."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Insufficient role for this operation."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "State conflict."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Rate limit exceeded."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Get Events",
+        "tags": [
+          "orderflow"
+        ]
+      }
+    },
+    "/orderflow/symbols/{symbol_id}/state": {
+      "get": {
+        "operationId": "get_state_orderflow_symbols__symbol_id__state_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "symbol_id",
+            "required": true,
+            "schema": {
+              "title": "Symbol Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderFlowStateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Malformed request."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Insufficient role for this operation."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "State conflict."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Rate limit exceeded."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Get State",
+        "tags": [
+          "orderflow"
+        ]
+      }
+    },
+    "/tv-webhook": {
+      "post": {
+        "operationId": "ingest_tv_webhook_tv_webhook_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Webhook-Id",
+            "required": true,
+            "schema": {
+              "title": "X-Webhook-Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Godsview-Signature",
+            "required": true,
+            "schema": {
+              "title": "X-Godsview-Signature",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TvSignalOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Schema or HMAC validation failed"
+          },
+          "403": {
+            "description": "Webhook inactive"
+          },
+          "404": {
+            "description": "Webhook id unknown"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "State conflict."
+          },
+          "422": {
+            "description": "Unprocessable payload"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Rate limit exceeded."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Ingest Tv Webhook",
+        "tags": [
+          "tv-webhook"
         ]
       }
     },
