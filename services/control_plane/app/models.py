@@ -390,3 +390,109 @@ class AuditExport(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (Index("ix_audit_exports_requested", "requested_at"),)
+
+
+# ────────────────────────────────────────────────────────────────────────
+# Phase 2 — Market structure + MCP ingest
+# ────────────────────────────────────────────────────────────────────────
+
+
+class Symbol(Base):
+    """Tradable instrument registry.
+
+    Populated by operator action via /admin/market/symbols and read by
+    the TV webhook ingest path to resolve incoming ticker+exchange
+    pairs to stable internal ids. The assetClass + sessionTz fields
+    drive session-aware structure detection in later PRs.
+    """
+
+    __tablename__ = "market_symbols"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    ticker: Mapped[str] = mapped_column(String(32), nullable=False)
+    exchange: Mapped[str] = mapped_column(String(32), nullable=False)
+    asset_class: Mapped[str] = mapped_column(String(16), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    tick_size: Mapped[float] = mapped_column(nullable=False)
+    lot_size: Mapped[float] = mapped_column(nullable=False, default=1.0)
+    quote_currency: Mapped[str] = mapped_column(String(3), nullable=False, default="USD")
+    session_tz: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="America/New_York"
+    )
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("ticker", "exchange", name="uq_market_symbols_ticker_exchange"),
+        Index("ix_market_symbols_asset_class", "asset_class"),
+    )
+
+
+class TvSignal(Base):
+    """Persisted TradingView signal from /v1/tv-webhook.
+
+    Each row captures the full verified payload plus pipeline-status
+    metadata. Deduplication is keyed on (payload.alertId, received window)
+    in the route handler; this table stores the canonical record for
+    the operator drill-down + replay surfaces.
+    """
+
+    __tablename__ = "tv_signals"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    webhook_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("webhooks.id", ondelete="SET NULL"), nullable=True
+    )
+    alert_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    symbol_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("market_symbols.id", ondelete="SET NULL"), nullable=True
+    )
+    ticker: Mapped[str] = mapped_column(String(32), nullable=False)
+    exchange: Mapped[str] = mapped_column(String(32), nullable=False)
+    tf: Mapped[str] = mapped_column(String(8), nullable=False)
+    direction: Mapped[str] = mapped_column(String(8), nullable=False)
+    family: Mapped[str] = mapped_column(String(32), nullable=False)
+    entry: Mapped[float] = mapped_column(nullable=False)
+    stop: Mapped[float] = mapped_column(nullable=False)
+    target: Mapped[float] = mapped_column(nullable=False)
+    pine_confidence: Mapped[float] = mapped_column(nullable=False, default=0.5)
+    risk_reward: Mapped[float | None] = mapped_column(nullable=True)
+    fired_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    payload: Mapped[Any] = mapped_column(JSON, nullable=False, default=dict)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="received")
+    rejection_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    processed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (
+        Index("ix_tv_signals_alert_id", "alert_id"),
+        Index("ix_tv_signals_received_at", "received_at"),
+        Index("ix_tv_signals_status", "status"),
+        Index("ix_tv_signals_symbol_id", "symbol_id"),
+    )
+
+
+class TvSignalAuditStep(Base):
+    """Per-step audit trail for a TV signal's pipeline run."""
+
+    __tablename__ = "tv_signal_audit_steps"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    signal_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("tv_signals.id", ondelete="CASCADE"), nullable=False
+    )
+    step: Mapped[str] = mapped_column(String(48), nullable=False)
+    ok: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    message: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    t: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    __table_args__ = (Index("ix_tv_signal_audit_steps_signal_id", "signal_id"),)
