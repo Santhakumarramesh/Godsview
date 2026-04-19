@@ -11,6 +11,7 @@ Responses wiring:
 from fastapi import APIRouter
 
 from app.errors import AUTH_ERROR_RESPONSES, COMMON_ERROR_RESPONSES
+from app.routes.api_keys import router as api_keys_router
 from app.routes.audit import router as audit_router
 from app.routes.auth import router as auth_router
 from app.routes.flags import router as flags_router
@@ -39,5 +40,9 @@ api_router.include_router(
 )
 api_router.include_router(
     users_router,
+    responses={**COMMON_ERROR_RESPONSES, **AUTH_ERROR_RESPONSES},
+)
+api_router.include_router(
+    api_keys_router,
     responses={**COMMON_ERROR_RESPONSES, **AUTH_ERROR_RESPONSES},
 )
