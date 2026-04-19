@@ -496,3 +496,80 @@ class TvSignalAuditStep(Base):
     )
 
     __table_args__ = (Index("ix_tv_signal_audit_steps_signal_id", "signal_id"),)
+
+
+class Bar(Base):
+    """OHLCV bar for a (symbol, timeframe).
+
+    The detector pipelines (BOS/CHOCH, OB, FVG) consume contiguous Bar
+    rows ordered by `t` ascending. We keep only `closed=True` bars in
+    the detector windows; live in-progress bars stream through the
+    quote/WebSocket path in PR8.
+    """
+
+    __tablename__ = "market_bars"
+
+    symbol_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("market_symbols.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    tf: Mapped[str] = mapped_column(String(8), primary_key=True)
+    t: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), primary_key=True
+    )
+    o: Mapped[float] = mapped_column(nullable=False)
+    h: Mapped[float] = mapped_column(nullable=False)
+    l: Mapped[float] = mapped_column(nullable=False)
+    c: Mapped[float] = mapped_column(nullable=False)
+    v: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    closed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    ingested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        Index("ix_market_bars_symbol_tf_t", "symbol_id", "tf", "t"),
+    )
+
+
+class StructureEvent(Base):
+    """Detector output — BOS, CHOCH, inducement, equilibrium.
+
+    Each row records the pivot that was broken, the bar that confirmed
+    the break, and a confidence in [0, 1] derived from the displacement
+    magnitude relative to the prior swing leg. Consumed by the Fusion
+    Engine (PR6) and surfaced via /v1/structure/symbols/:id/events
+    (PR7).
+    """
+
+    __tablename__ = "structure_events"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    symbol_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("market_symbols.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    tf: Mapped[str] = mapped_column(String(8), nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    direction: Mapped[str] = mapped_column(String(8), nullable=False)
+    level: Mapped[float] = mapped_column(nullable=False)
+    broken_pivot_t: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    broken_pivot_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    broken_pivot_price: Mapped[float] = mapped_column(nullable=False)
+    broken_pivot_bar_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    confirmation_t: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    confidence: Mapped[float] = mapped_column(nullable=False, default=0.5)
+    detected_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        Index("ix_structure_events_symbol_tf_t", "symbol_id", "tf", "confirmation_t"),
+        Index("ix_structure_events_kind", "kind"),
+    )
