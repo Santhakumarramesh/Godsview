@@ -16,6 +16,7 @@ from app.routes.auth import router as auth_router
 from app.routes.flags import router as flags_router
 from app.routes.health import router as health_router
 from app.routes.system_config import router as system_config_router
+from app.routes.users import router as users_router
 
 api_router = APIRouter()
 
@@ -34,5 +35,9 @@ api_router.include_router(
 )
 api_router.include_router(
     audit_router,
+    responses={**COMMON_ERROR_RESPONSES, **AUTH_ERROR_RESPONSES},
+)
+api_router.include_router(
+    users_router,
     responses={**COMMON_ERROR_RESPONSES, **AUTH_ERROR_RESPONSES},
 )
