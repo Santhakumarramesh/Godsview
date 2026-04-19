@@ -915,3 +915,305 @@ class PaperTrade(Base):
             "ix_paper_trades_symbol_status", "symbol_id", "status"
         ),
     )
+
+
+# ──────────────────────────── Phase 4 — execution + risk ─────────────────
+
+
+def _broker_account_id() -> str:
+    return f"bac_{uuid.uuid4().hex}"
+
+
+def _broker_order_id() -> str:
+    return f"bor_{uuid.uuid4().hex}"
+
+
+def _broker_fill_id() -> str:
+    return f"bfl_{uuid.uuid4().hex}"
+
+
+def _position_id() -> str:
+    return f"pos_{uuid.uuid4().hex}"
+
+
+def _live_trade_id() -> str:
+    return f"liv_{uuid.uuid4().hex}"
+
+
+def _equity_snapshot_id() -> str:
+    return f"eqs_{uuid.uuid4().hex}"
+
+
+def _risk_budget_id() -> str:
+    return f"rsk_{uuid.uuid4().hex}"
+
+
+class BrokerAccount(Base):
+    """An operator-configured broker account (Alpaca paper + live share a shape).
+
+    A single GodsView account may register multiple broker accounts — e.g.
+    one Alpaca paper + one Alpaca live — keyed by provider + display name.
+    The active account for live approvals is whichever one the operator
+    pins via ``system_config.execution.live_account_id``.
+    """
+
+    __tablename__ = "broker_accounts"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=_broker_account_id
+    )
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    mode: Mapped[str] = mapped_column(String(8), nullable=False, default="paper")
+    api_key_ref: Mapped[str] = mapped_column(String(120), nullable=False)
+    api_secret_ref: Mapped[str] = mapped_column(String(120), nullable=False)
+    base_url: Mapped[str] = mapped_column(String(255), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("provider", "display_name", name="uq_broker_accounts_name"),
+    )
+
+
+class RiskBudget(Base):
+    """Per-account risk envelope consumed by the live gate."""
+
+    __tablename__ = "risk_budgets"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=_risk_budget_id
+    )
+    account_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("broker_accounts.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    max_risk_per_trade_r: Mapped[float] = mapped_column(nullable=False, default=0.005)
+    max_daily_drawdown_r: Mapped[float] = mapped_column(nullable=False, default=0.03)
+    max_open_positions: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    max_correlated_exposure: Mapped[float] = mapped_column(nullable=False, default=1.0)
+    max_gross_exposure: Mapped[float] = mapped_column(nullable=False, default=2.0)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False
+    )
+
+
+class AccountEquitySnapshot(Base):
+    """Point-in-time broker equity snapshot — the numerator of every risk ratio."""
+
+    __tablename__ = "account_equity_snapshots"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=_equity_snapshot_id
+    )
+    account_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("broker_accounts.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    total_equity: Mapped[float] = mapped_column(nullable=False)
+    start_of_day_equity: Mapped[float] = mapped_column(nullable=False)
+    realized_pnl: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    unrealized_pnl: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    margin_used: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    buying_power: Mapped[float] = mapped_column(nullable=False)
+
+    __table_args__ = (
+        Index("ix_equity_snap_account_ts", "account_id", "observed_at"),
+    )
+
+
+class Position(Base):
+    """Canonical live position row — one per open symbol per account."""
+
+    __tablename__ = "positions"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=_position_id
+    )
+    account_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("broker_accounts.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    symbol_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("market_symbols.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    direction: Mapped[str] = mapped_column(String(8), nullable=False)
+    qty: Mapped[float] = mapped_column(nullable=False)
+    avg_entry_price: Mapped[float] = mapped_column(nullable=False)
+    mark_price: Mapped[float] = mapped_column(nullable=False)
+    unrealized_pnl: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    status: Mapped[str] = mapped_column(String(8), nullable=False, default="open")
+    opened_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    closed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    setup_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("setups.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    live_trade_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+
+    __table_args__ = (
+        Index("ix_positions_account_status", "account_id", "status"),
+        Index("ix_positions_account_symbol_status", "account_id", "symbol_id", "status"),
+    )
+
+
+class BrokerOrder(Base):
+    """One idempotent broker order envelope + broker-side order id once accepted."""
+
+    __tablename__ = "broker_orders"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=_broker_order_id
+    )
+    client_order_id: Mapped[str] = mapped_column(
+        String(128), nullable=False, unique=True
+    )
+    account_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("broker_accounts.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    symbol_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("market_symbols.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    direction: Mapped[str] = mapped_column(String(8), nullable=False)
+    qty: Mapped[float] = mapped_column(nullable=False)
+    order_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    time_in_force: Mapped[str] = mapped_column(String(8), nullable=False)
+    limit_price: Mapped[float | None] = mapped_column(nullable=True)
+    stop_price: Mapped[float | None] = mapped_column(nullable=True)
+    take_profit_price: Mapped[float | None] = mapped_column(nullable=True)
+    stop_loss_price: Mapped[float | None] = mapped_column(nullable=True)
+    setup_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("setups.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    broker_order_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    submitted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+
+class BrokerFill(Base):
+    """One broker execution report — a single order can produce many fills."""
+
+    __tablename__ = "broker_fills"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=_broker_fill_id
+    )
+    client_order_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    broker_order_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    symbol_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("market_symbols.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    direction: Mapped[str] = mapped_column(String(8), nullable=False)
+    filled_qty: Mapped[float] = mapped_column(nullable=False)
+    avg_fill_price: Mapped[float | None] = mapped_column(nullable=True)
+    status: Mapped[str] = mapped_column(String(24), nullable=False)
+    commission: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    slippage: Mapped[float | None] = mapped_column(nullable=True)
+    observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    __table_args__ = (
+        Index("ix_broker_fills_client_order", "client_order_id"),
+        Index("ix_broker_fills_symbol_ts", "symbol_id", "observed_at"),
+    )
+
+
+class LiveTrade(Base):
+    """Live sibling of PaperTrade.
+
+    Adds the broker round-trip fields + realised PnL in dollars (paper
+    tracks R-multiples only). The row starts at ``pending_submit``, flips
+    to ``submitted`` once the broker acknowledges the order, then
+    ``partially_filled``/``filled`` on execution, and finally one of
+    ``won``, ``lost``, ``scratched``, ``cancelled``, or ``rejected``.
+    """
+
+    __tablename__ = "live_trades"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=_live_trade_id
+    )
+    setup_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("setups.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    symbol_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("market_symbols.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    account_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("broker_accounts.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    direction: Mapped[str] = mapped_column(String(8), nullable=False)
+    entry_ref: Mapped[float] = mapped_column(nullable=False)
+    stop_loss: Mapped[float] = mapped_column(nullable=False)
+    take_profit: Mapped[float] = mapped_column(nullable=False)
+    size_multiplier: Mapped[float] = mapped_column(nullable=False, default=1.0)
+    qty: Mapped[float] = mapped_column(nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="pending_submit"
+    )
+    client_order_id: Mapped[str] = mapped_column(
+        String(128), nullable=False, unique=True
+    )
+    broker_order_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    approved_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    approved_by_user_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    submitted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    filled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    closed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    avg_fill_price: Mapped[float | None] = mapped_column(nullable=True)
+    filled_qty: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    commission: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    realized_pnl_dollars: Mapped[float | None] = mapped_column(nullable=True)
+    pnl_r: Mapped[float | None] = mapped_column(nullable=True)
+    note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    __table_args__ = (
+        Index("ix_live_trades_setup", "setup_id"),
+        Index("ix_live_trades_account_status", "account_id", "status"),
+        Index("ix_live_trades_symbol_status", "symbol_id", "status"),
+    )

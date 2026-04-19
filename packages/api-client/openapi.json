@@ -820,6 +820,242 @@
         "title": "BookStructuresOut",
         "type": "object"
       },
+      "BrokerFillDto": {
+        "description": "Mirrors ``packages/types/src/execution.ts::BrokerFillSchema``.",
+        "properties": {
+          "avgFillPrice": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avgfillprice"
+          },
+          "brokerOrderId": {
+            "title": "Brokerorderid",
+            "type": "string"
+          },
+          "clientOrderId": {
+            "title": "Clientorderid",
+            "type": "string"
+          },
+          "commission": {
+            "title": "Commission",
+            "type": "number"
+          },
+          "direction": {
+            "enum": [
+              "long",
+              "short"
+            ],
+            "title": "Direction",
+            "type": "string"
+          },
+          "errorCode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Errorcode"
+          },
+          "errorMessage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Errormessage"
+          },
+          "filledQty": {
+            "title": "Filledqty",
+            "type": "number"
+          },
+          "observedAt": {
+            "format": "date-time",
+            "title": "Observedat",
+            "type": "string"
+          },
+          "slippage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slippage"
+          },
+          "status": {
+            "enum": [
+              "accepted",
+              "rejected",
+              "submitted",
+              "partially_filled",
+              "filled",
+              "cancelled",
+              "expired"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "clientOrderId",
+          "brokerOrderId",
+          "symbol",
+          "direction",
+          "filledQty",
+          "status",
+          "commission",
+          "observedAt"
+        ],
+        "title": "BrokerFillDto",
+        "type": "object"
+      },
+      "BrokerFillsOut": {
+        "properties": {
+          "accountId": {
+            "title": "Accountid",
+            "type": "string"
+          },
+          "fills": {
+            "items": {
+              "$ref": "#/components/schemas/BrokerFillDto"
+            },
+            "title": "Fills",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "mode": {
+            "enum": [
+              "paper",
+              "live"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "accountId",
+          "provider",
+          "mode",
+          "fills",
+          "total",
+          "limit"
+        ],
+        "title": "BrokerFillsOut",
+        "type": "object"
+      },
+      "BrokerPositionDto": {
+        "description": "Mirrors ``packages/types/src/execution.ts::PositionSchema``.",
+        "properties": {
+          "avgEntryPrice": {
+            "title": "Avgentryprice",
+            "type": "number"
+          },
+          "direction": {
+            "enum": [
+              "long",
+              "short"
+            ],
+            "title": "Direction",
+            "type": "string"
+          },
+          "markPrice": {
+            "title": "Markprice",
+            "type": "number"
+          },
+          "qty": {
+            "title": "Qty",
+            "type": "number"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "unrealizedPnl": {
+            "title": "Unrealizedpnl",
+            "type": "number"
+          }
+        },
+        "required": [
+          "symbol",
+          "direction",
+          "qty",
+          "avgEntryPrice",
+          "markPrice",
+          "unrealizedPnl"
+        ],
+        "title": "BrokerPositionDto",
+        "type": "object"
+      },
+      "BrokerPositionsOut": {
+        "properties": {
+          "accountId": {
+            "title": "Accountid",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "paper",
+              "live"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "observedAt": {
+            "format": "date-time",
+            "title": "Observedat",
+            "type": "string"
+          },
+          "positions": {
+            "items": {
+              "$ref": "#/components/schemas/BrokerPositionDto"
+            },
+            "title": "Positions",
+            "type": "array"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "accountId",
+          "provider",
+          "mode",
+          "positions",
+          "observedAt"
+        ],
+        "title": "BrokerPositionsOut",
+        "type": "object"
+      },
       "ConfidenceComponentsDto": {
         "properties": {
           "historyScore": {
@@ -10963,6 +11199,342 @@
         "summary": "Refresh",
         "tags": [
           "auth"
+        ]
+      }
+    },
+    "/broker/fills": {
+      "get": {
+        "description": "Return broker-reported fills, newest-first, capped at ``limit``.",
+        "operationId": "list_fills_broker_fills_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "accountId",
+            "required": true,
+            "schema": {
+              "title": "Accountid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "symbol",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Symbol"
+            }
+          },
+          {
+            "in": "query",
+            "name": "fromTs",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Fromts"
+            }
+          },
+          {
+            "in": "query",
+            "name": "toTs",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tots"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrokerFillsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Malformed request."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Insufficient role for this operation."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "State conflict."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Rate limit exceeded."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server error."
+          }
+        },
+        "summary": "List Fills",
+        "tags": [
+          "broker"
+        ]
+      }
+    },
+    "/broker/positions": {
+      "get": {
+        "description": "Return live broker-reported open positions.",
+        "operationId": "list_positions_broker_positions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "accountId",
+            "required": true,
+            "schema": {
+              "title": "Accountid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "symbol",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Symbol"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrokerPositionsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Malformed request."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Insufficient role for this operation."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "State conflict."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Rate limit exceeded."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server error."
+          }
+        },
+        "summary": "List Positions",
+        "tags": [
+          "broker"
         ]
       }
     },
