@@ -20,3 +20,5 @@ export * from "./endpoints/settings.js";
 export * from "./endpoints/market.js";
 export * from "./endpoints/structure.js";
 export * from "./endpoints/tv-ingest.js";
+export * from "./endpoints/orderflow.js";
+export * from "./endpoints/setups.js";
