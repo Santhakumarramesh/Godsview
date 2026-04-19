@@ -1,4 +1,8 @@
 packages:
+  # v2 monorepo roots (Phase 0+)
+  - apps/*
+  - packages/*
+  # v1 legacy roots (still built and exercised by verify:prod; removed in later phases)
   - artifacts/*
   - lib/*
   - lib/integrations/*

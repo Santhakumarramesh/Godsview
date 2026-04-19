@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "isolatedModules": true,
-    "lib": ["es2022"],
+    "lib": ["es2022", "dom", "dom.iterable"],
     "module": "esnext",
     "moduleResolution": "bundler",
     "noEmitOnError": true,
@@ -18,8 +18,21 @@
     "useUnknownInCatchVariables": true,
     "alwaysStrict": true,
     "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
     "target": "es2022",
     "types": [],
+    "baseUrl": ".",
+    "paths": {
+      "@gv/ui": ["packages/ui/src/index.ts"],
+      "@gv/ui/*": ["packages/ui/src/*"],
+      "@gv/api-client": ["packages/api-client/src/index.ts"],
+      "@gv/api-client/*": ["packages/api-client/src/*"],
+      "@gv/types": ["packages/types/src/index.ts"],
+      "@gv/types/*": ["packages/types/src/*"],
+      "@gv/config": ["packages/config/index.ts"],
+      "@gv/config/*": ["packages/config/*"]
+    },
     "customConditions": ["workspace"]
   }
 }

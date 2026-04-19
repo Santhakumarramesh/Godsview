@@ -104,3 +104,32 @@ credentials.json
 
 # Nested clone
 Godsview/
+
+# ── GodsView v2 monorepo (Phase 0+) ─────────────────────────────────────
+# Turborepo cache
+.turbo/
+**/.turbo/
+
+# Next.js
+.next/
+apps/*/.next/
+
+# Package build outputs
+packages/*/dist/
+packages/*/lib/
+apps/*/dist/
+
+# Python (control_plane + future services)
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.venv/
+**/*.egg-info/
+
+# CDK / AWS
+cdk.out/
+infra/cdk/cdk.out/
+
+# OpenAPI codegen staging
+packages/api-client/openapi.json
+packages/api-client/src/generated/

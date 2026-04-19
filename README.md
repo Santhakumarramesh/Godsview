@@ -1,5 +1,35 @@
 # GodsView — AI-Native Trading Operating System
 
+> **v2 is under construction.** The repository is mid-migration from the single-service v1 architecture to the multi-service v2 architecture described in `docs/blueprint/BLUEPRINT.md`. v1 apps (`artifacts/api-server`, `artifacts/godsview-dashboard`, `lib/**`) continue to build and verify green. v2 code is landing under `apps/`, `packages/`, and `services/control_plane/` phase by phase. See [`docs/blueprint/BLUEPRINT.md`](docs/blueprint/BLUEPRINT.md) for the phase plan, tag schedule, and acceptance gates.
+
+## v2 quickstart (Phase 0+)
+
+```bash
+make bootstrap     # pnpm install + control_plane python deps
+make up            # start dev stack: postgres, redis, minio, localstack, mailhog
+make migrate       # alembic upgrade head
+make seed          # bootstrap admin user + default feature flags
+make dev           # next.js web + fastapi control_plane in parallel
+make verify        # typecheck + unit + build (phase gate)
+```
+
+Web dev: `http://localhost:3000` — control_plane: `http://localhost:8000/docs`
+
+## Blueprint references
+
+- [`docs/blueprint/BLUEPRINT.md`](docs/blueprint/BLUEPRINT.md) — index, decisions, phase graph, tag schedule
+- [`docs/blueprint/reference/ARCHITECTURE.md`](docs/blueprint/reference/ARCHITECTURE.md) — 10-service topology, event bus, RBAC
+- [`docs/blueprint/reference/DB_SCHEMA.md`](docs/blueprint/reference/DB_SCHEMA.md) — 30 tables across 10 domains
+- [`docs/blueprint/reference/API_SURFACE.md`](docs/blueprint/reference/API_SURFACE.md) — canonical HTTP + SSE + event catalog
+- [`docs/blueprint/reference/SIDEBAR_MAP.md`](docs/blueprint/reference/SIDEBAR_MAP.md) — 68 pages, per-page RBAC and phase
+- [`docs/blueprint/reference/AWS_RESOURCES.md`](docs/blueprint/reference/AWS_RESOURCES.md) — 3-account topology, CDK stacks, cost model
+- [`docs/blueprint/phases/PHASES_0_TO_7.md`](docs/blueprint/phases/PHASES_0_TO_7.md) — Phase 0 → 7 specs
+- [`docs/blueprint/phases/PHASES_8_TO_15.md`](docs/blueprint/phases/PHASES_8_TO_15.md) — Phase 8 → 15 specs (launch at v3.0.0)
+
+---
+
+## v1 overview (still running; removed by Phase 15)
+
 An intelligent trading operating system that manages the complete strategy lifecycle: from idea to validation to autonomous execution. Every trade passes through multiple intelligence layers and explicit safety gates before execution.
 
 GodsView is built for discretionary traders who want deterministic decision rules, full audit trails, and measurable edge proof before autonomous trading.
