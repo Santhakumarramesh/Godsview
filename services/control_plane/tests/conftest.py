@@ -29,7 +29,7 @@ os.environ.setdefault(
 os.environ.setdefault("JWT_SIGNING_KEY", "test-signing-key-0123456789abcdef-test")
 os.environ.setdefault("JWT_ALGORITHM", "HS256")
 os.environ.setdefault("GODSVIEW_ENV", "local")
-os.environ.setdefault("BOOTSTRAP_ADMIN_EMAIL", "admin@godsview.test")
+os.environ.setdefault("BOOTSTRAP_ADMIN_EMAIL", "admin@godsview.io")
 os.environ.setdefault("BOOTSTRAP_ADMIN_PASSWORD", "godsview-admin-test")
 
 
@@ -116,7 +116,7 @@ async def admin_user(
     password = "admin-password-123"
     user = User(
         id=f"usr_{uuid.uuid4().hex}",
-        email="admin@godsview.test",
+        email="admin@godsview.io",
         display_name="Test Admin",
         password_hash=hash_password(password),
         roles=["admin"],
