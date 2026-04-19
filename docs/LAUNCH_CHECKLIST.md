@@ -40,7 +40,7 @@ open an issue against the phase whose module regressed.
 
 ```bash
 pnpm -r test                                  # all workspaces
-pnpm -F api-server test                       # api-server focus (3654 tests)
+pnpm -F api-server test                       # api-server focus (3658 tests)
 pnpm -F @workspace/godsview-dashboard test    # dashboard smoke tests (Phase 11)
 ```
 
@@ -59,9 +59,22 @@ every PR runs the jsdom tests in the `typecheck-and-test` job and the
 `build` job enforces a regression floor (≥ 10 passing dashboard tests).
 Phase 12 also adds a `FakeWebSocket` shim to `src/test/setup.ts`, which
 unblocks smoke tests for any page that subscribes to a WebSocket feed.
-Current dashboard suite at `v1.5.0`: 13 tests across 6 files covering
+Current dashboard suite at `v1.7.0`: 13 tests across 6 files covering
 `not-found`, `alert-center`, `alerts`, `checklist`, `proof`, and
 `news-monitor`.
+
+Phase 14 adds a real end-to-end integration test at
+`artifacts/api-server/src/__tests__/e2e/webhook_to_sse_e2e.test.ts` that
+exercises the `signal_stream` hub over actual HTTP. An SSE subscriber
+opens `/api/alerts/stream`, a minimal test-only webhook calls
+`publishAlert()`, and the test asserts the event reaches the subscriber
+with the expected tag/symbol/source shape. Unlike
+`streaming_route.test.ts` (which mocks `signal_stream`), this test
+mounts the real `signalHub` singleton and proves the transport wiring
+— Express → `http.Server` → SSE frames → client parser — works against
+production code paths. CI hard-gates the presence of the e2e test file
+so a silent deletion trips a red build. Current api-server suite at
+`v1.7.0`: 3658 passed | 18 skipped (179 files + 1 skip).
 
 ## 3. k6 performance baseline
 
@@ -258,6 +271,7 @@ Cut release notes from the phase HANDOFFs:
 - `phase-11/HANDOFF.md` — Dashboard MSW smoke tests
 - `phase-12/HANDOFF.md` — CI enforcement for dashboard tests + WebSocket shim
 - `phase-13/HANDOFF.md` — Turnkey AWS deploy + Railway teardown scripts
+- `phase-14/HANDOFF.md` — End-to-end webhook → SSE integration test + CI file-presence gate
 
 ---
 
@@ -277,11 +291,14 @@ Cut release notes from the phase HANDOFFs:
 | 10. Dashboard MSW smoke tests                                                    | shipped      |
 | 11. CI enforcement of dashboard tests + regression gate + WebSocket shim         | shipped      |
 | 12. Turnkey AWS deploy + Railway teardown automation                             | shipped      |
+| 13. End-to-end webhook → SSE integration test + CI file-presence gate            | shipped      |
 
 **Production readiness: 100%.**
 
-All twelve gates ship, backed by codified SLOs that page on-call when
-they degrade and a turnkey deploy path (`scripts/aws-deploy.sh`) that
-takes a clean `main` checkout to a running AWS production stack. The
+All thirteen gates ship, backed by codified SLOs that page on-call when
+they degrade, a turnkey deploy path (`scripts/aws-deploy.sh`) that
+takes a clean `main` checkout to a running AWS production stack, and a
+real end-to-end integration test that proves the webhook → SSE
+transport wiring works against the live `signalHub` singleton. The
 only remaining work is day-2 ops (see `docs/OPERATOR_RUNBOOK.md`) and
 optional post-v1 backlog items listed in each phase HANDOFF.

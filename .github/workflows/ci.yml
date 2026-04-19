@@ -239,6 +239,10 @@ jobs:
         run: pnpm --filter @workspace/godsview-dashboard build
 
       - name: Verify test count (regression gate — api-server)
+        # Phase 14 added 4 e2e webhook → SSE tests under src/__tests__/e2e/
+        # (3654 → 3658 passing). Floor stays at 3000 — the 3000 floor
+        # catches a catastrophic regression without blocking legitimate
+        # test-suite refactors.
         run: |
           TEST_COUNT=$(GODSVIEW_DATA_DIR=artifacts/api-server/.runtime pnpm --filter @workspace/api-server exec vitest run --reporter=json 2>/dev/null | grep -o '"numPassedTests":[0-9]*' | grep -o '[0-9]*' || echo "0")
           echo "Tests passed: $TEST_COUNT"
@@ -246,6 +250,15 @@ jobs:
             echo "::error::Test count regression: $TEST_COUNT < 3000 minimum"
             exit 1
           fi
+
+      - name: Verify e2e test file is present (Phase 14 hard gate)
+        # The e2e webhook → SSE test is a load-bearing production gate:
+        # it exercises the real signal_stream hub over HTTP, the only
+        # test path that does. If someone deletes it, we want CI red.
+        run: |
+          test -f artifacts/api-server/src/__tests__/e2e/webhook_to_sse_e2e.test.ts \
+            || { echo "::error::Phase 14 e2e test file missing"; exit 1; }
+          echo "e2e gate file present"
 
       - name: Verify test count (regression gate — dashboard)
         # Phase 11 shipped 7 tests across 3 files; Phase 12 expanded to
