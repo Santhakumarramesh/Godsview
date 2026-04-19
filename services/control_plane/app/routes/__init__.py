@@ -17,6 +17,7 @@ from app.routes.auth import router as auth_router
 from app.routes.flags import router as flags_router
 from app.routes.health import router as health_router
 from app.routes.mcp_servers import router as mcp_servers_router
+from app.routes.ops import router as ops_router
 from app.routes.system_config import router as system_config_router
 from app.routes.users import router as users_router
 from app.routes.webhooks import router as webhooks_router
@@ -54,5 +55,9 @@ api_router.include_router(
 )
 api_router.include_router(
     mcp_servers_router,
+    responses={**COMMON_ERROR_RESPONSES, **AUTH_ERROR_RESPONSES},
+)
+api_router.include_router(
+    ops_router,
     responses={**COMMON_ERROR_RESPONSES, **AUTH_ERROR_RESPONSES},
 )
