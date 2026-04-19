@@ -759,3 +759,91 @@ class DeltaBar(Base):
     __table_args__ = (
         Index("ix_delta_bars_symbol_tf_t", "symbol_id", "tf", "t"),
     )
+
+
+# ─────────────────────────── Phase 3 — setups ───────────────────────
+
+
+def _setup_id() -> str:
+    return f"stp_{uuid.uuid4().hex}"
+
+
+class Setup(Base):
+    """Persisted detector output — one row per fired setup.
+
+    The detector chain (``app.setups.orchestrator.detect_all_setups``)
+    produces immutable :class:`app.setups.types.SetupOut` envelopes.
+    The route layer in PR7 serialises each one into this table so the
+    UI / execution gate can list, filter and update status without
+    re-running the detectors.
+
+    Confidence components are denormalised onto scalar columns so the
+    setup-list UI can sort by ``order_flow_score`` (or any individual
+    component) without unpacking JSON. ``provenance`` is stored as a
+    pair of JSON arrays — these are foreign references to
+    ``structure_events.id`` / order-flow event ids, but we don't add
+    SQL FKs because order-flow events are pure-function output that
+    does not currently round-trip through the DB.
+    """
+
+    __tablename__ = "setups"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=_setup_id
+    )
+    symbol_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("market_symbols.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    tf: Mapped[str] = mapped_column(String(8), nullable=False)
+    type: Mapped[str] = mapped_column(String(32), nullable=False)
+    direction: Mapped[str] = mapped_column(String(8), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="detected"
+    )
+
+    detected_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # PriceZoneOut entry — low/high/ref triple.
+    entry_low: Mapped[float] = mapped_column(nullable=False)
+    entry_high: Mapped[float] = mapped_column(nullable=False)
+    entry_ref: Mapped[float] = mapped_column(nullable=False)
+    stop_loss: Mapped[float] = mapped_column(nullable=False)
+    take_profit: Mapped[float] = mapped_column(nullable=False)
+    rr: Mapped[float] = mapped_column(nullable=False, default=0.0)
+
+    # Calibrated confidence + components (denormalised for filtering).
+    confidence_score: Mapped[float] = mapped_column(nullable=False, default=0.5)
+    structure_score: Mapped[float] = mapped_column(nullable=False, default=0.5)
+    order_flow_score: Mapped[float] = mapped_column(nullable=False, default=0.5)
+    regime_score: Mapped[float] = mapped_column(nullable=False, default=0.5)
+    session_score: Mapped[float] = mapped_column(nullable=False, default=0.5)
+    history_score: Mapped[float] = mapped_column(nullable=False, default=0.5)
+    history_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+
+    reasoning: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    structure_event_ids: Mapped[Any] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    order_flow_event_ids: Mapped[Any] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+
+    closed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    closed_pnl_r: Mapped[float | None] = mapped_column(nullable=True)
+
+    __table_args__ = (
+        Index("ix_setups_symbol_tf_t", "symbol_id", "tf", "detected_at"),
+        Index("ix_setups_status", "status"),
+        Index("ix_setups_type", "type"),
+    )

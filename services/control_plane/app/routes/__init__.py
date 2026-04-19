@@ -21,6 +21,7 @@ from app.routes.mcp_servers import router as mcp_servers_router
 from app.routes.ops import router as ops_router
 from app.routes.orderflow import router as orderflow_router
 from app.routes.settings import router as settings_router
+from app.routes.setups import router as setups_router
 from app.routes.system_config import router as system_config_router
 from app.routes.tv_webhook import router as tv_webhook_router
 from app.routes.users import router as users_router
@@ -76,6 +77,10 @@ api_router.include_router(
 )
 api_router.include_router(
     orderflow_router,
+    responses={**COMMON_ERROR_RESPONSES, **AUTH_ERROR_RESPONSES},
+)
+api_router.include_router(
+    setups_router,
     responses={**COMMON_ERROR_RESPONSES, **AUTH_ERROR_RESPONSES},
 )
 # /v1/tv-webhook is unauthenticated — it is HMAC-gated via the
