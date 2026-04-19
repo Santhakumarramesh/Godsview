@@ -133,3 +133,10 @@ infra/cdk/cdk.out/
 # OpenAPI codegen staging
 packages/api-client/openapi.json
 packages/api-client/src/generated/
+
+# Dev env files (keep only the *.example variants in source control)
+ops/envs/.env.dev
+ops/envs/.env.staging
+ops/envs/.env.prod
+!ops/envs/*.example
+!ops/envs/.env.*.example

@@ -84,3 +84,25 @@ openapi: ## Dump control_plane OpenAPI to packages/api-client
 .PHONY: codegen
 codegen: openapi ## Regenerate TS api-client from OpenAPI
 	$(PNPM) --filter @gv/api-client run codegen
+
+# ── friendly aliases (used by ops/scripts + docs/blueprint) ────────────
+.PHONY: dev-up
+dev-up: up ## Alias for `make up`
+
+.PHONY: dev-down
+dev-down: down ## Alias for `make down`
+
+.PHONY: dev-logs
+dev-logs: logs ## Alias for `make logs`
+
+.PHONY: dev-reset
+dev-reset: ## DESTRUCTIVE — stop compose stack + remove all dev volumes
+	RESET_FORCE=1 ops/scripts/reset.sh
+
+.PHONY: api
+api: ## Run control plane uvicorn in the foreground
+	cd $(CONTROL_PLANE_DIR) && $(PY) -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+.PHONY: web
+web: ## Run the Next.js dev server
+	$(PNPM) --filter @gv/web run dev
