@@ -642,3 +642,44 @@ class Fvg(Base):
         Index("ix_fvgs_symbol_tf_t", "symbol_id", "tf", "t"),
         Index("ix_fvgs_active", "symbol_id", "mitigated"),
     )
+
+
+class MarketContext(Base):
+    """Snapshot of the multi-timeframe Fusion Engine output.
+
+    One row per ``(symbol_id, generated_at)``. Older rows are kept
+    so we can replay context at the time a setup was scored — the
+    PR8 setup detector references this for governance audits.
+    """
+
+    __tablename__ = "market_contexts"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_ulid_str)
+    symbol_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("market_symbols.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    htf_bias: Mapped[str] = mapped_column(String(8), nullable=False)
+    ltf_bias: Mapped[str] = mapped_column(String(8), nullable=False)
+    conflict: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Materialised JSON copies of the lists so the row is self-describing
+    # without a multi-table join. Each list is a ``[StructureEvent]`` /
+    # ``[OrderBlock]`` / ``[Fvg]`` projection — the canonical source of
+    # truth still lives in those tables.
+    recent_events: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    active_order_blocks: Mapped[Any] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    active_fvgs: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    generated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_market_contexts_symbol_generated",
+            "symbol_id",
+            "generated_at",
+        ),
+    )
