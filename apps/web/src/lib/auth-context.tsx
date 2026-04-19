@@ -98,7 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (typeof window === "undefined") return;
     const refreshToken = window.localStorage.getItem(REFRESH_KEY);
     if (!refreshToken) return;
-    const pair = await api.auth.refresh({ refreshToken });
+    const pair = await api.auth.refresh(refreshToken);
     persistTokens(pair);
   }, []);
 

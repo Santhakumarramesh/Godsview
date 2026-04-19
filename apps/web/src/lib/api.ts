@@ -7,10 +7,17 @@
 
 import {
   ApiClient,
+  apiKeyEndpoints,
+  auditEndpoints,
   authEndpoints,
   featureFlagEndpoints,
   healthEndpoints,
+  mcpEndpoints,
+  opsEndpoints,
+  settingsEndpoints,
   systemConfigEndpoints,
+  userEndpoints,
+  webhookEndpoints,
 } from "@gv/api-client";
 
 const baseUrl =
@@ -32,4 +39,11 @@ export const api = {
   flags: featureFlagEndpoints(apiClient),
   systemConfig: systemConfigEndpoints(apiClient),
   health: healthEndpoints(apiClient),
+  users: userEndpoints(apiClient),
+  apiKeys: apiKeyEndpoints(apiClient),
+  webhooks: webhookEndpoints(apiClient),
+  mcp: mcpEndpoints(apiClient),
+  audit: auditEndpoints(apiClient),
+  ops: opsEndpoints(apiClient),
+  settings: settingsEndpoints(apiClient),
 };
