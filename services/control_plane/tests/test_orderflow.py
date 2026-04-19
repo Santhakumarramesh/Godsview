@@ -485,7 +485,7 @@ async def test_get_delta_bars_other_tf_filtered_out(
 
 
 @pytest.mark.asyncio
-async def test_events_stub_returns_empty_envelope(
+async def test_events_empty_when_no_bars(
     client: AsyncClient,
     admin_user: dict[str, Any],
     seeded_symbol: Symbol,
@@ -503,6 +503,61 @@ async def test_events_stub_returns_empty_envelope(
         "absorptions": [],
         "exhaustions": [],
     }
+
+
+@pytest.mark.asyncio
+async def test_events_surfaces_imbalances_from_delta_bars(
+    client: AsyncClient,
+    admin_user: dict[str, Any],
+    seeded_symbol: Symbol,
+    db: AsyncSession,
+) -> None:
+    """Seeding a buy-skewed delta-bar run should produce a buy imbalance."""
+
+    base = datetime(2026, 4, 18, 12, 0, 0, tzinfo=UTC)
+    rows = [
+        DeltaBar(
+            symbol_id=seeded_symbol.id,
+            tf="1m",
+            t=base + timedelta(minutes=i),
+            buy_volume=10.0,
+            sell_volume=1.0,
+            delta=9.0,
+            cumulative_delta=9.0 * (i + 1),
+        )
+        for i in range(3)
+    ]
+    db.add_all(rows)
+    await db.commit()
+
+    token = await _login(client, admin_user["email"], admin_user["password"])
+    res = await client.get(
+        f"/orderflow/symbols/{seeded_symbol.id}/events?tf=1m",
+        headers={"authorization": f"Bearer {token}"},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert len(body["imbalances"]) == 1
+    ev = body["imbalances"][0]
+    assert ev["side"] == "buy"
+    assert ev["barCount"] == 3
+    assert ev["totalDelta"] == 27.0
+    assert 0.0 < ev["confidence"] <= 1.0
+
+
+@pytest.mark.asyncio
+async def test_events_invalid_tf_400(
+    client: AsyncClient,
+    admin_user: dict[str, Any],
+    seeded_symbol: Symbol,
+) -> None:
+    token = await _login(client, admin_user["email"], admin_user["password"])
+    res = await client.get(
+        f"/orderflow/symbols/{seeded_symbol.id}/events?tf=99h",
+        headers={"authorization": f"Bearer {token}"},
+    )
+    assert res.status_code == 400
+    assert res.json()["error"]["code"] == "invalid_timeframe"
 
 
 @pytest.mark.asyncio
@@ -525,7 +580,7 @@ async def test_book_stub_returns_empty_walls_clusters(
 
 
 @pytest.mark.asyncio
-async def test_state_stub_zero_valued(
+async def test_state_zero_valued_when_no_bars(
     client: AsyncClient,
     admin_user: dict[str, Any],
     seeded_symbol: Symbol,
@@ -549,7 +604,61 @@ async def test_state_stub_zero_valued(
 
 
 @pytest.mark.asyncio
-async def test_stub_unknown_symbol_404(
+async def test_state_reflects_recent_delta_bars(
+    client: AsyncClient,
+    admin_user: dict[str, Any],
+    seeded_symbol: Symbol,
+    db: AsyncSession,
+) -> None:
+    """State endpoint surfaces last_delta + cum_delta + net_bias from rows."""
+
+    base = datetime(2026, 4, 18, 12, 0, 0, tzinfo=UTC)
+    rows = [
+        DeltaBar(
+            symbol_id=seeded_symbol.id,
+            tf="1m",
+            t=base + timedelta(minutes=i),
+            buy_volume=10.0,
+            sell_volume=1.0,
+            delta=9.0,
+            cumulative_delta=9.0 * (i + 1),
+        )
+        for i in range(3)
+    ]
+    db.add_all(rows)
+    await db.commit()
+
+    token = await _login(client, admin_user["email"], admin_user["password"])
+    res = await client.get(
+        f"/orderflow/symbols/{seeded_symbol.id}/state?tf=1m",
+        headers={"authorization": f"Bearer {token}"},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["lastDelta"] == 9.0
+    assert body["cumulativeDelta"] == 27.0
+    assert body["netBias"] == "long"
+    assert body["activeImbalance"] is not None
+    assert body["activeImbalance"]["side"] == "buy"
+
+
+@pytest.mark.asyncio
+async def test_state_invalid_tf_400(
+    client: AsyncClient,
+    admin_user: dict[str, Any],
+    seeded_symbol: Symbol,
+) -> None:
+    token = await _login(client, admin_user["email"], admin_user["password"])
+    res = await client.get(
+        f"/orderflow/symbols/{seeded_symbol.id}/state?tf=99h",
+        headers={"authorization": f"Bearer {token}"},
+    )
+    assert res.status_code == 400
+    assert res.json()["error"]["code"] == "invalid_timeframe"
+
+
+@pytest.mark.asyncio
+async def test_unknown_symbol_404_for_detector_endpoints(
     client: AsyncClient,
     admin_user: dict[str, Any],
 ) -> None:

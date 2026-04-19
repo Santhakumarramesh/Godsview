@@ -31,6 +31,14 @@ from app.db import DbSession
 from app.deps import AdminUser, CurrentUser
 from app.errors import ApiError
 from app.models import DeltaBar, DepthSnapshot, Symbol
+from app.orderflow import (
+    AbsorptionEventOut,
+    ImbalanceEventOut,
+    OrderFlowStateRollup,
+    detect_absorption,
+    detect_imbalances,
+    rollup_state,
+)
 
 router = APIRouter(prefix="/orderflow", tags=["orderflow"])
 
@@ -118,14 +126,46 @@ class DeltaBarsOut(BaseModel):
     bars: list[DeltaBarOut]
 
 
+class ImbalanceEventDto(BaseModel):
+    model_config = {"populate_by_name": True}
+
+    id: str
+    side: Literal["buy", "sell"]
+    startT: datetime
+    endT: datetime
+    barCount: int
+    totalDelta: float
+    totalVolume: float
+    ratio: float
+    confidence: float
+    detectedAt: datetime
+
+
+class AbsorptionEventDto(BaseModel):
+    model_config = {"populate_by_name": True}
+
+    id: str
+    side: Literal["buy", "sell"]
+    t: datetime
+    volume: float
+    delta: float
+    deltaRatio: float
+    zscore: float
+    confidence: float
+    detectedAt: datetime
+
+
 class OrderFlowEventsOut(BaseModel):
-    """Empty envelope in PR3 — fields populated by PR4 detectors."""
+    """Detector-derived envelope.
+
+    ``exhaustions`` is reserved for PR5 (momentum-exhaustion detector).
+    """
 
     model_config = {"populate_by_name": True}
 
     symbolId: str
-    imbalances: list[dict[str, Any]] = []
-    absorptions: list[dict[str, Any]] = []
+    imbalances: list[ImbalanceEventDto] = []
+    absorptions: list[AbsorptionEventDto] = []
     exhaustions: list[dict[str, Any]] = []
 
 
@@ -141,9 +181,12 @@ class BookStructuresOut(BaseModel):
 
 
 class OrderFlowStateOut(BaseModel):
-    """Rolled-up detector state; PR3 returns a zero-valued shell so the
-    apps/web typed client never sees a 404 while the pipeline is still
-    being wired."""
+    """Rolled-up detector state served at ``/symbols/{id}/state``.
+
+    The route runs the detector pipeline against the most recent
+    ``state_window`` delta-bars and returns the rolled-up shell. Walls
+    + clusters remain empty until the book-snapshot detector ships.
+    """
 
     model_config = {"populate_by_name": True}
 
@@ -151,8 +194,8 @@ class OrderFlowStateOut(BaseModel):
     asOf: datetime
     lastDelta: float = 0.0
     cumulativeDelta: float = 0.0
-    activeImbalance: dict[str, Any] | None = None
-    recentAbsorption: list[dict[str, Any]] = []
+    activeImbalance: ImbalanceEventDto | None = None
+    recentAbsorption: list[AbsorptionEventDto] = []
     recentExhaustion: list[dict[str, Any]] = []
     walls: list[dict[str, Any]] = []
     clusters: list[dict[str, Any]] = []
@@ -210,6 +253,47 @@ def _delta_bar_to_dto(row: DeltaBar) -> DeltaBarOut:
         delta=row.delta,
         cumulativeDelta=row.cumulative_delta,
     )
+
+
+def _imbalance_to_dto(ev: ImbalanceEventOut) -> ImbalanceEventDto:
+    return ImbalanceEventDto(
+        id=ev.id,
+        side=ev.side,  # type: ignore[arg-type]
+        startT=ev.start_t,
+        endT=ev.end_t,
+        barCount=ev.bar_count,
+        totalDelta=ev.total_delta,
+        totalVolume=ev.total_volume,
+        ratio=ev.ratio,
+        confidence=ev.confidence,
+        detectedAt=ev.detected_at,
+    )
+
+
+def _absorption_to_dto(ev: AbsorptionEventOut) -> AbsorptionEventDto:
+    return AbsorptionEventDto(
+        id=ev.id,
+        side=ev.side,  # type: ignore[arg-type]
+        t=ev.t,
+        volume=ev.volume,
+        delta=ev.delta,
+        deltaRatio=ev.delta_ratio,
+        zscore=ev.zscore,
+        confidence=ev.confidence,
+        detectedAt=ev.detected_at,
+    )
+
+
+async def _load_recent_delta_bars(
+    db: DbSession, symbol_id: str, *, tf: str, limit: int = 200
+) -> list[DeltaBar]:
+    stmt = (
+        select(DeltaBar)
+        .where(and_(DeltaBar.symbol_id == symbol_id, DeltaBar.tf == tf))
+        .order_by(DeltaBar.t.asc())
+        .limit(limit)
+    )
+    return list((await db.scalars(stmt)).all())
 
 
 # ─────────────────────────── routes ─────────────────────────────────
@@ -374,10 +458,40 @@ async def get_events(
     symbol_id: str,
     user: CurrentUser,
     db: DbSession,
+    tf: str = Query("1m", min_length=1),
+    limit: int = Query(200, ge=1, le=1000),
+    ratio_threshold: float = Query(0.65, ge=0.0, le=1.0),
+    min_consecutive: int = Query(2, ge=1, le=20),
+    absorption_zscore: float = Query(1.5, ge=0.0, le=10.0),
+    absorption_lookback: int = Query(20, ge=2, le=200),
 ) -> OrderFlowEventsOut:
-    # PR3 returns an empty envelope. PR4 wires the detector output here.
+    """Detector output — imbalances + absorptions — for a tf window.
+
+    ``limit`` caps the number of bars fed to the detector; the most
+    recent ``limit`` bars (in ascending-time order) are used.
+    """
+
+    _validate_tf(tf)
     await _load_symbol_or_404(db, symbol_id)
-    return OrderFlowEventsOut(symbolId=symbol_id)
+    rows = await _load_recent_delta_bars(db, symbol_id, tf=tf, limit=limit)
+
+    imbalances = detect_imbalances(
+        rows,
+        ratio_threshold=ratio_threshold,
+        min_consecutive=min_consecutive,
+    )
+    absorptions = detect_absorption(
+        rows,
+        volume_zscore=absorption_zscore,
+        lookback=absorption_lookback,
+    )
+
+    return OrderFlowEventsOut(
+        symbolId=symbol_id,
+        imbalances=[_imbalance_to_dto(e) for e in imbalances],
+        absorptions=[_absorption_to_dto(e) for e in absorptions],
+        exhaustions=[],
+    )
 
 
 @router.get(
@@ -404,9 +518,48 @@ async def get_state(
     symbol_id: str,
     user: CurrentUser,
     db: DbSession,
+    tf: str = Query("1m", min_length=1),
+    state_window: int = Query(50, ge=1, le=500),
 ) -> OrderFlowStateOut:
+    """Rolled-up order-flow state for a symbol on the given tf.
+
+    Uses the most recent ``state_window`` delta-bars to compute the
+    cumulative delta + active imbalance + recent absorption. With no
+    bars present returns a zero-valued shell so the UI never sees a
+    404 in steady state.
+    """
+
+    _validate_tf(tf)
     await _load_symbol_or_404(db, symbol_id)
+    rows = await _load_recent_delta_bars(
+        db, symbol_id, tf=tf, limit=state_window
+    )
+
+    imbalances = detect_imbalances(rows)
+    absorptions = detect_absorption(rows)
+    rollup: OrderFlowStateRollup = rollup_state(
+        rows,
+        imbalances=imbalances,
+        absorptions=absorptions,
+    )
+
+    active_dto = (
+        _imbalance_to_dto(rollup.active_imbalance)
+        if rollup.active_imbalance is not None
+        else None
+    )
+
     return OrderFlowStateOut(
         symbolId=symbol_id,
-        asOf=datetime.now().astimezone(),
+        asOf=rollup.as_of,
+        lastDelta=rollup.last_delta,
+        cumulativeDelta=rollup.cumulative_delta,
+        activeImbalance=active_dto,
+        recentAbsorption=[
+            _absorption_to_dto(a) for a in rollup.recent_absorption
+        ],
+        recentExhaustion=[],
+        walls=[],
+        clusters=[],
+        netBias=rollup.net_bias,
     )

@@ -1,6 +1,65 @@
 {
   "components": {
     "schemas": {
+      "AbsorptionEventDto": {
+        "properties": {
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "delta": {
+            "title": "Delta",
+            "type": "number"
+          },
+          "deltaRatio": {
+            "title": "Deltaratio",
+            "type": "number"
+          },
+          "detectedAt": {
+            "format": "date-time",
+            "title": "Detectedat",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "side": {
+            "enum": [
+              "buy",
+              "sell"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "t": {
+            "format": "date-time",
+            "title": "T",
+            "type": "string"
+          },
+          "volume": {
+            "title": "Volume",
+            "type": "number"
+          },
+          "zscore": {
+            "title": "Zscore",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "side",
+          "t",
+          "volume",
+          "delta",
+          "deltaRatio",
+          "zscore",
+          "confidence",
+          "detectedAt"
+        ],
+        "title": "AbsorptionEventDto",
+        "type": "object"
+      },
       "AlertCreateIn": {
         "properties": {
           "description": {
@@ -1494,6 +1553,71 @@
         "title": "FvgOut",
         "type": "object"
       },
+      "ImbalanceEventDto": {
+        "properties": {
+          "barCount": {
+            "title": "Barcount",
+            "type": "integer"
+          },
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "detectedAt": {
+            "format": "date-time",
+            "title": "Detectedat",
+            "type": "string"
+          },
+          "endT": {
+            "format": "date-time",
+            "title": "Endt",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "ratio": {
+            "title": "Ratio",
+            "type": "number"
+          },
+          "side": {
+            "enum": [
+              "buy",
+              "sell"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "startT": {
+            "format": "date-time",
+            "title": "Startt",
+            "type": "string"
+          },
+          "totalDelta": {
+            "title": "Totaldelta",
+            "type": "number"
+          },
+          "totalVolume": {
+            "title": "Totalvolume",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "side",
+          "startT",
+          "endT",
+          "barCount",
+          "totalDelta",
+          "totalVolume",
+          "ratio",
+          "confidence",
+          "detectedAt"
+        ],
+        "title": "ImbalanceEventDto",
+        "type": "object"
+      },
       "IncidentCreateIn": {
         "properties": {
           "code": {
@@ -2273,13 +2397,12 @@
         "type": "object"
       },
       "OrderFlowEventsOut": {
-        "description": "Empty envelope in PR3 \u2014 fields populated by PR4 detectors.",
+        "description": "Detector-derived envelope.\n\n``exhaustions`` is reserved for PR5 (momentum-exhaustion detector).",
         "properties": {
           "absorptions": {
             "default": [],
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/AbsorptionEventDto"
             },
             "title": "Absorptions",
             "type": "array"
@@ -2296,8 +2419,7 @@
           "imbalances": {
             "default": [],
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/ImbalanceEventDto"
             },
             "title": "Imbalances",
             "type": "array"
@@ -2364,19 +2486,17 @@
         "type": "object"
       },
       "OrderFlowStateOut": {
-        "description": "Rolled-up detector state; PR3 returns a zero-valued shell so the\napps/web typed client never sees a 404 while the pipeline is still\nbeing wired.",
+        "description": "Rolled-up detector state served at ``/symbols/{id}/state``.\n\nThe route runs the detector pipeline against the most recent\n``state_window`` delta-bars and returns the rolled-up shell. Walls\n+ clusters remain empty until the book-snapshot detector ships.",
         "properties": {
           "activeImbalance": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/ImbalanceEventDto"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Activeimbalance"
+            ]
           },
           "asOf": {
             "format": "date-time",
@@ -2415,8 +2535,7 @@
           "recentAbsorption": {
             "default": [],
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/AbsorptionEventDto"
             },
             "title": "Recentabsorption",
             "type": "array"
@@ -12051,6 +12170,7 @@
     },
     "/orderflow/symbols/{symbol_id}/events": {
       "get": {
+        "description": "Detector output \u2014 imbalances + absorptions \u2014 for a tf window.\n\n``limit`` caps the number of bars fed to the detector; the most\nrecent ``limit`` bars (in ascending-time order) are used.",
         "operationId": "get_events_orderflow_symbols__symbol_id__events_get",
         "parameters": [
           {
@@ -12060,6 +12180,77 @@
             "schema": {
               "title": "Symbol Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tf",
+            "required": false,
+            "schema": {
+              "default": "1m",
+              "minLength": 1,
+              "title": "Tf",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ratio_threshold",
+            "required": false,
+            "schema": {
+              "default": 0.65,
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "title": "Ratio Threshold",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "min_consecutive",
+            "required": false,
+            "schema": {
+              "default": 2,
+              "maximum": 20,
+              "minimum": 1,
+              "title": "Min Consecutive",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "absorption_zscore",
+            "required": false,
+            "schema": {
+              "default": 1.5,
+              "maximum": 10.0,
+              "minimum": 0.0,
+              "title": "Absorption Zscore",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "absorption_lookback",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 200,
+              "minimum": 2,
+              "title": "Absorption Lookback",
+              "type": "integer"
             }
           },
           {
@@ -12179,6 +12370,7 @@
     },
     "/orderflow/symbols/{symbol_id}/state": {
       "get": {
+        "description": "Rolled-up order-flow state for a symbol on the given tf.\n\nUses the most recent ``state_window`` delta-bars to compute the\ncumulative delta + active imbalance + recent absorption. With no\nbars present returns a zero-valued shell so the UI never sees a\n404 in steady state.",
         "operationId": "get_state_orderflow_symbols__symbol_id__state_get",
         "parameters": [
           {
@@ -12188,6 +12380,29 @@
             "schema": {
               "title": "Symbol Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tf",
+            "required": false,
+            "schema": {
+              "default": "1m",
+              "minLength": 1,
+              "title": "Tf",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state_window",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "State Window",
+              "type": "integer"
             }
           },
           {
