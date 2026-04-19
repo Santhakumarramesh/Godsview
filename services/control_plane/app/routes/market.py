@@ -49,6 +49,7 @@ from app.models import (
     StructureEvent,
     Symbol,
 )
+from app.realtime import QuoteMessage, get_quote_hub
 
 router = APIRouter(prefix="/market", tags=["market"])
 
@@ -174,6 +175,29 @@ class MarketContextOut(BaseModel):
     generatedAt: datetime
 
     model_config = {"populate_by_name": True}
+
+
+class QuotePublishIn(BaseModel):
+    """Admin payload that fans out a single Quote tick over /ws/quotes.
+
+    Mirrors ``QuoteSchema`` from ``packages/types/src/market.ts`` so an
+    operator MCP / replay tool can reuse the same shape end-to-end.
+    """
+
+    symbolId: str = Field(..., min_length=1)
+    bid: float
+    ask: float
+    last: float
+    bidSize: float = Field(..., ge=0)
+    askSize: float = Field(..., ge=0)
+    t: datetime
+
+    model_config = {"populate_by_name": True}
+
+
+class QuotePublishOut(BaseModel):
+    delivered: int
+    symbolId: str
 
 
 # ─────────────────────────── helpers ─────────────────────────────────
@@ -501,3 +525,34 @@ async def get_market_context(
         activeFvgs=list(ctx.active_fvgs or []),
         generatedAt=ctx.generated_at,
     )
+
+
+@router.post(
+    "/quotes",
+    response_model=QuotePublishOut,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def publish_quote(
+    body: QuotePublishIn,
+    user: AdminUser,
+    db: DbSession,
+) -> QuotePublishOut:
+    """Push a single Quote tick into the realtime fan-out hub.
+
+    The symbol must exist in the registry — unknown ids return 404
+    rather than silently dropping the message. Used by operator tooling
+    (replay, synthetic feeds) and by the upstream ingest adapter when
+    it can't open a long-lived hub connection.
+    """
+    await _load_symbol_or_404(db, body.symbolId)
+    msg = QuoteMessage(
+        symbol_id=body.symbolId,
+        bid=body.bid,
+        ask=body.ask,
+        last=body.last,
+        bid_size=body.bidSize,
+        ask_size=body.askSize,
+        t=body.t,
+    )
+    delivered = await get_quote_hub().publish(msg)
+    return QuotePublishOut(delivered=delivered, symbolId=body.symbolId)

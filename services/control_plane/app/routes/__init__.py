@@ -24,6 +24,7 @@ from app.routes.system_config import router as system_config_router
 from app.routes.tv_webhook import router as tv_webhook_router
 from app.routes.users import router as users_router
 from app.routes.webhooks import router as webhooks_router
+from app.routes.ws_quotes import router as ws_quotes_router
 
 api_router = APIRouter()
 
@@ -79,3 +80,6 @@ api_router.include_router(
     tv_webhook_router,
     responses=COMMON_ERROR_RESPONSES,
 )
+# /ws/quotes is a WebSocket route — auth happens in-handler (close-with-4401
+# on failure) so the OpenAPI 401/403 envelope is irrelevant here.
+api_router.include_router(ws_quotes_router)

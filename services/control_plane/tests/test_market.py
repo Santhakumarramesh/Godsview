@@ -454,6 +454,119 @@ async def test_context_404_when_no_snapshot(
     assert res.json()["error"]["code"] == "context_not_found"
 
 
+# ───────────────────── publish quote (admin) ───────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_publish_quote_fans_out_through_hub(
+    client: AsyncClient,
+    admin_user: dict[str, Any],
+    seeded_symbol: Symbol,
+) -> None:
+    """POST /market/quotes hands the message to the hub. With no
+    subscribers attached the delivered count is 0 and the request still
+    returns 202."""
+
+    from app.realtime import get_quote_hub
+    from app.realtime.quotes import reset_quote_hub_for_tests
+
+    reset_quote_hub_for_tests()
+    hub = get_quote_hub()
+
+    class _Sub:
+        def __init__(self, cid: str) -> None:
+            self.connection_id = cid
+            self.received: list[dict[str, Any]] = []
+
+        async def send_json(self, msg: dict[str, Any]) -> None:
+            self.received.append(msg)
+
+    sub = _Sub("test-ws")
+    await hub.subscribe(sub, [seeded_symbol.id])
+
+    token = await _login(client, admin_user["email"], admin_user["password"])
+    res = await client.post(
+        "/market/quotes",
+        headers={"authorization": f"Bearer {token}"},
+        json={
+            "symbolId": seeded_symbol.id,
+            "bid": 1.0849,
+            "ask": 1.0851,
+            "last": 1.0850,
+            "bidSize": 10.0,
+            "askSize": 10.0,
+            "t": "2026-04-19T12:00:00+00:00",
+        },
+    )
+    assert res.status_code == 202, res.text
+    body = res.json()
+    assert body["delivered"] == 1
+    assert body["symbolId"] == seeded_symbol.id
+    assert sub.received[0]["type"] == "quote"
+    assert sub.received[0]["data"]["last"] == 1.0850
+    reset_quote_hub_for_tests()
+
+
+@pytest.mark.asyncio
+async def test_publish_quote_unknown_symbol_404(
+    client: AsyncClient, admin_user: dict[str, Any]
+) -> None:
+    token = await _login(client, admin_user["email"], admin_user["password"])
+    res = await client.post(
+        "/market/quotes",
+        headers={"authorization": f"Bearer {token}"},
+        json={
+            "symbolId": "sym_does_not_exist",
+            "bid": 1.0,
+            "ask": 1.0,
+            "last": 1.0,
+            "bidSize": 0.0,
+            "askSize": 0.0,
+            "t": "2026-04-19T12:00:00+00:00",
+        },
+    )
+    assert res.status_code == 404
+    assert res.json()["error"]["code"] == "symbol_not_found"
+
+
+@pytest.mark.asyncio
+async def test_publish_quote_viewer_forbidden(
+    client: AsyncClient,
+    admin_user: dict[str, Any],
+    seeded_symbol: Symbol,
+) -> None:
+    admin_token = await _login(
+        client, admin_user["email"], admin_user["password"]
+    )
+    await client.post(
+        "/admin/users",
+        headers={"authorization": f"Bearer {admin_token}"},
+        json={
+            "email": "viewer-quote@godsview.io",
+            "displayName": "Viewer Only",
+            "password": "viewer-pass-9876",
+            "roles": ["viewer"],
+        },
+    )
+    viewer_token = await _login(
+        client, "viewer-quote@godsview.io", "viewer-pass-9876"
+    )
+    res = await client.post(
+        "/market/quotes",
+        headers={"authorization": f"Bearer {viewer_token}"},
+        json={
+            "symbolId": seeded_symbol.id,
+            "bid": 1.0,
+            "ask": 1.0,
+            "last": 1.0,
+            "bidSize": 0.0,
+            "askSize": 0.0,
+            "t": "2026-04-19T12:00:00+00:00",
+        },
+    )
+    assert res.status_code == 403
+
+
 @pytest.mark.asyncio
 async def test_context_returns_latest_snapshot(
     client: AsyncClient,
