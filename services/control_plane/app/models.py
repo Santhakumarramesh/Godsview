@@ -847,3 +847,71 @@ class Setup(Base):
         Index("ix_setups_status", "status"),
         Index("ix_setups_type", "type"),
     )
+
+
+def _paper_trade_id() -> str:
+    return f"pap_{uuid.uuid4().hex}"
+
+
+class PaperTrade(Base):
+    """Paper-mode trade approved by the Phase 3 PR8 execution gate.
+
+    Mirrors ``packages/types/src/setups.ts::PaperTradeSchema``. Each
+    row is an approved Setup that the gate has cleared for paper-mode
+    execution. Lifecycle:
+
+        pending_fill → filled → won | lost | scratched
+                              \\→ cancelled  (operator override)
+
+    A Setup may have at most one *active* (non-terminal) PaperTrade at
+    a time — enforced by the route layer rather than a partial unique
+    index for portability across SQLite + Postgres.
+    """
+
+    __tablename__ = "paper_trades"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=_paper_trade_id
+    )
+    setup_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("setups.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    symbol_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("market_symbols.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    direction: Mapped[str] = mapped_column(String(8), nullable=False)
+    entry_ref: Mapped[float] = mapped_column(nullable=False)
+    stop_loss: Mapped[float] = mapped_column(nullable=False)
+    take_profit: Mapped[float] = mapped_column(nullable=False)
+    size_multiplier: Mapped[float] = mapped_column(nullable=False, default=1.0)
+    status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="pending_fill"
+    )
+
+    approved_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    approved_by_user_id: Mapped[str] = mapped_column(
+        String(64), nullable=False
+    )
+    note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    filled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    closed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    pnl_r: Mapped[float | None] = mapped_column(nullable=True)
+
+    __table_args__ = (
+        Index("ix_paper_trades_setup", "setup_id"),
+        Index("ix_paper_trades_status", "status"),
+        Index(
+            "ix_paper_trades_symbol_status", "symbol_id", "status"
+        ),
+    )

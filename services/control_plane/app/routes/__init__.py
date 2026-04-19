@@ -14,6 +14,7 @@ from app.errors import AUTH_ERROR_RESPONSES, COMMON_ERROR_RESPONSES
 from app.routes.api_keys import router as api_keys_router
 from app.routes.audit import router as audit_router
 from app.routes.auth import router as auth_router
+from app.routes.execution import router as execution_router
 from app.routes.flags import router as flags_router
 from app.routes.health import router as health_router
 from app.routes.market import router as market_router
@@ -81,6 +82,10 @@ api_router.include_router(
 )
 api_router.include_router(
     setups_router,
+    responses={**COMMON_ERROR_RESPONSES, **AUTH_ERROR_RESPONSES},
+)
+api_router.include_router(
+    execution_router,
     responses={**COMMON_ERROR_RESPONSES, **AUTH_ERROR_RESPONSES},
 )
 # /v1/tv-webhook is unauthenticated — it is HMAC-gated via the

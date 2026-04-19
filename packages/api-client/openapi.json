@@ -2625,6 +2625,194 @@
         "title": "OrderFlowStateOut",
         "type": "object"
       },
+      "OverrideRiskDto": {
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "sizeMultiplier": {
+            "default": 1.0,
+            "exclusiveMinimum": 0.0,
+            "maximum": 5.0,
+            "title": "Sizemultiplier",
+            "type": "number"
+          }
+        },
+        "title": "OverrideRiskDto",
+        "type": "object"
+      },
+      "PaperTradeDto": {
+        "description": "Matches ``PaperTradeSchema`` in @gv/types.",
+        "properties": {
+          "approvedAt": {
+            "format": "date-time",
+            "title": "Approvedat",
+            "type": "string"
+          },
+          "approvedByUserId": {
+            "title": "Approvedbyuserid",
+            "type": "string"
+          },
+          "closedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closedat"
+          },
+          "direction": {
+            "enum": [
+              "long",
+              "short"
+            ],
+            "title": "Direction",
+            "type": "string"
+          },
+          "entryRef": {
+            "title": "Entryref",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "pnlR": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pnlr"
+          },
+          "setupId": {
+            "title": "Setupid",
+            "type": "string"
+          },
+          "sizeMultiplier": {
+            "title": "Sizemultiplier",
+            "type": "number"
+          },
+          "status": {
+            "enum": [
+              "pending_fill",
+              "filled",
+              "won",
+              "lost",
+              "scratched",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "stopLoss": {
+            "title": "Stoploss",
+            "type": "number"
+          },
+          "symbolId": {
+            "title": "Symbolid",
+            "type": "string"
+          },
+          "takeProfit": {
+            "title": "Takeprofit",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "setupId",
+          "symbolId",
+          "direction",
+          "entryRef",
+          "stopLoss",
+          "takeProfit",
+          "sizeMultiplier",
+          "status",
+          "approvedAt",
+          "approvedByUserId"
+        ],
+        "title": "PaperTradeDto",
+        "type": "object"
+      },
+      "PaperTradeStatusPatchIn": {
+        "properties": {
+          "pnlR": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pnlr"
+          },
+          "status": {
+            "enum": [
+              "pending_fill",
+              "filled",
+              "won",
+              "lost",
+              "scratched",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "PaperTradeStatusPatchIn",
+        "type": "object"
+      },
+      "PaperTradesListOut": {
+        "properties": {
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "trades": {
+            "items": {
+              "$ref": "#/components/schemas/PaperTradeDto"
+            },
+            "title": "Trades",
+            "type": "array"
+          }
+        },
+        "required": [
+          "trades",
+          "total",
+          "offset",
+          "limit"
+        ],
+        "title": "PaperTradesListOut",
+        "type": "object"
+      },
       "PasswordChangeIn": {
         "properties": {
           "currentPassword": {
@@ -3198,6 +3386,65 @@
           "JWT_SIGNING_KEY"
         ],
         "title": "Settings",
+        "type": "object"
+      },
+      "SetupApprovalIn": {
+        "description": "Matches ``SetupApprovalRequestSchema`` in @gv/types.",
+        "properties": {
+          "mode": {
+            "default": "paper",
+            "enum": [
+              "paper",
+              "live"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "overrideRisk": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OverrideRiskDto"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "SetupApprovalIn",
+        "type": "object"
+      },
+      "SetupApprovalOut": {
+        "properties": {
+          "approved": {
+            "title": "Approved",
+            "type": "boolean"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "paperTrade": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaperTradeDto"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "approved",
+          "reason",
+          "detail"
+        ],
+        "title": "SetupApprovalOut",
         "type": "object"
       },
       "SetupDto": {
@@ -12873,6 +13120,496 @@
         ]
       }
     },
+    "/paper-trades": {
+      "get": {
+        "operationId": "list_paper_trades_paper_trades_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "symbolId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Symbolid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "setupId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Setupid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "fromTs",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Fromts"
+            }
+          },
+          {
+            "in": "query",
+            "name": "toTs",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tots"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperTradesListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Malformed request."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Insufficient role for this operation."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "State conflict."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Rate limit exceeded."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server error."
+          }
+        },
+        "summary": "List Paper Trades",
+        "tags": [
+          "execution"
+        ]
+      }
+    },
+    "/paper-trades/{trade_id}": {
+      "get": {
+        "operationId": "get_paper_trade_paper_trades__trade_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "trade_id",
+            "required": true,
+            "schema": {
+              "title": "Trade Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperTradeDto"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Malformed request."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Insufficient role for this operation."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "State conflict."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Rate limit exceeded."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Get Paper Trade",
+        "tags": [
+          "execution"
+        ]
+      }
+    },
+    "/paper-trades/{trade_id}/status": {
+      "patch": {
+        "operationId": "patch_paper_trade_status_paper_trades__trade_id__status_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "trade_id",
+            "required": true,
+            "schema": {
+              "title": "Trade Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PaperTradeStatusPatchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperTradeDto"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Malformed request."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Insufficient role for this operation."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "State conflict."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Rate limit exceeded."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Patch Paper Trade Status",
+        "tags": [
+          "execution"
+        ]
+      }
+    },
     "/setups": {
       "get": {
         "description": "Paginated list of persisted setups with filter support.",
@@ -13401,6 +14138,145 @@
         "summary": "Get Setup",
         "tags": [
           "setups"
+        ]
+      }
+    },
+    "/setups/{setup_id}/approve": {
+      "post": {
+        "description": "Run the execution gate and, on approval, create a paper trade.",
+        "operationId": "approve_setup_setups__setup_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "setup_id",
+            "required": true,
+            "schema": {
+              "title": "Setup Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetupApprovalIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupApprovalOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Malformed request."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Insufficient role for this operation."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "State conflict."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Rate limit exceeded."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Approve Setup",
+        "tags": [
+          "execution"
         ]
       }
     },
