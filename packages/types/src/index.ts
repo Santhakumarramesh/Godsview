@@ -23,3 +23,6 @@ export * from "./webhooks.js";
 export * from "./mcp.js";
 export * from "./ops.js";
 export * from "./settings.js";
+export * from "./market.js";
+export * from "./structure.js";
+export * from "./signals.js";
