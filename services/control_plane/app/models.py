@@ -573,3 +573,72 @@ class StructureEvent(Base):
         Index("ix_structure_events_symbol_tf_t", "symbol_id", "tf", "confirmation_t"),
         Index("ix_structure_events_kind", "kind"),
     )
+
+
+class OrderBlock(Base):
+    """Persisted Order Block emitted by ``app.structure.order_blocks``.
+
+    The (high, low) pair is the OB body — the zone of interest for
+    retest entries. ``retested`` and ``violated`` are mutated by the
+    fusion engine as new bars arrive.
+    """
+
+    __tablename__ = "order_blocks"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    symbol_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("market_symbols.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    tf: Mapped[str] = mapped_column(String(8), nullable=False)
+    direction: Mapped[str] = mapped_column(String(8), nullable=False)
+    high: Mapped[float] = mapped_column(nullable=False)
+    low: Mapped[float] = mapped_column(nullable=False)
+    t: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    strength: Mapped[float] = mapped_column(nullable=False, default=0.5)
+    retested: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    violated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    structure_event_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("structure_events.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    detected_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        Index("ix_order_blocks_symbol_tf_t", "symbol_id", "tf", "t"),
+        Index("ix_order_blocks_active", "symbol_id", "violated"),
+    )
+
+
+class Fvg(Base):
+    """Persisted Fair Value Gap emitted by ``app.structure.fvgs``."""
+
+    __tablename__ = "fvgs"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    symbol_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("market_symbols.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    tf: Mapped[str] = mapped_column(String(8), nullable=False)
+    direction: Mapped[str] = mapped_column(String(8), nullable=False)
+    top: Mapped[float] = mapped_column(nullable=False)
+    bottom: Mapped[float] = mapped_column(nullable=False)
+    t: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    mitigated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    mitigated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    detected_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        Index("ix_fvgs_symbol_tf_t", "symbol_id", "tf", "t"),
+        Index("ix_fvgs_active", "symbol_id", "mitigated"),
+    )

@@ -15,12 +15,18 @@ from app.structure.bos_choch import (
     StructureEventOut,
     detect_bos_choch,
 )
+from app.structure.fvgs import FvgOut, detect_fvgs
+from app.structure.order_blocks import OrderBlockOut, detect_order_blocks
 from app.structure.pivots import PivotOut, detect_pivots
 
 __all__ = [
     "BarLike",
+    "FvgOut",
+    "OrderBlockOut",
     "PivotOut",
     "StructureEventOut",
     "detect_bos_choch",
+    "detect_fvgs",
+    "detect_order_blocks",
     "detect_pivots",
 ]
