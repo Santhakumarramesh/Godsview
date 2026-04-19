@@ -78,8 +78,16 @@ clean: ## Remove build artifacts and caches
 verify: typecheck test build ## Phase gate: typecheck + tests + build
 
 .PHONY: openapi
-openapi: ## Dump control_plane OpenAPI to packages/api-client
-	cd $(CONTROL_PLANE_DIR) && $(PY) -m app.scripts.dump_openapi ../../packages/api-client/openapi.json
+openapi: ## Dump control_plane OpenAPI to packages/api-client/openapi.json (deterministic)
+	cd $(CONTROL_PLANE_DIR) && \
+	  DATABASE_URL="$${DATABASE_URL:-postgresql+asyncpg://x:x@localhost:5432/x}" \
+	  JWT_SIGNING_KEY="$${JWT_SIGNING_KEY:-openapi-dump-placeholder-not-used}" \
+	  $(PY) -m app.scripts.dump_openapi ../../packages/api-client/openapi.json
+
+.PHONY: lint
+lint: ## Lint TS workspaces and ruff control_plane
+	$(PNPM) -w run typecheck:v2
+	cd $(CONTROL_PLANE_DIR) && $(PY) -m ruff check app tests && $(PY) -m ruff format --check app tests
 
 .PHONY: codegen
 codegen: openapi ## Regenerate TS api-client from OpenAPI

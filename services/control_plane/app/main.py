@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import ORJSONResponse
 
 from app import __version__
 from app.config import get_settings
@@ -44,7 +45,7 @@ def _create_app() -> FastAPI:
     app = FastAPI(
         title="GodsView control_plane",
         version=__version__,
-        default_response_class=None,  # default JSONResponse is fine; orjson wired later.
+        default_response_class=ORJSONResponse,
         openapi_url="/openapi.json",
         docs_url="/docs",
         redoc_url=None,

@@ -130,8 +130,8 @@ apps/*/dist/
 cdk.out/
 infra/cdk/cdk.out/
 
-# OpenAPI codegen staging
-packages/api-client/openapi.json
+# OpenAPI codegen staging — keep openapi.json in VCS (contract-validation.yml
+# diffs the generated spec against this file; breaking changes fail CI).
 packages/api-client/src/generated/
 
 # Dev env files (keep only the *.example variants in source control)

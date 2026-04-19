@@ -40,6 +40,6 @@ affected surface has been updated.
 - [x] PR3: control plane boots against compose postgres; `/ready` green.
 - [x] PR4: auth + users + flags + audit routes covered by tests (folded into PR3).
 - [x] PR5: web app renders all 66 sidebar routes (6 functional, 60 stubs).
-- [ ] PR6: `make dev-up` stands up postgres + redis + minio + localstack + mailhog; docs/blueprint committed.
-- [ ] PR7: CI workflows (lint + typecheck + test + contract validation).
+- [x] PR6: `make dev-up` stands up postgres + redis + minio + localstack + mailhog; docs/blueprint committed.
+- [x] PR7: CI workflows (lint + typecheck + test + contract validation).
 - [ ] PR8: HANDOFF.md + patch file + `git tag v2.0.0`.

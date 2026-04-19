@@ -19,10 +19,27 @@ Smoke: curl `http://localhost:8000/ready`. Every dep should read `ok`.
 
 Handled by the CDK stack under `infra/cdk`. The relevant targets are
 documented in `docs/AWS_DEPLOY.md` and wired through
-`.github/workflows/ci.yml` once PR7 lands.
+`.github/workflows/ci.yml` (legacy) and `.github/workflows/v2-ci.yml`
+(v2 monorepo).
 
 Never deploy a PR whose CI has `contract-validation.yml` in a non-green
-state — the failing job gates every deploy workflow.
+state — the failing job gates every deploy workflow. Regenerate the spec
+locally with `make openapi` and commit the diff; a breaking change that
+the OpenAPI diff surfaces requires a contract RFC before merge.
+
+## CI surface (Phase 0+)
+
+| Workflow                            | Purpose                                           |
+|-------------------------------------|---------------------------------------------------|
+| `.github/workflows/ci.yml`          | Legacy workspace (artifacts/api-server, dashboard). |
+| `.github/workflows/v2-ci.yml`       | v2 monorepo: pnpm/turbo + control plane pytest.   |
+| `.github/workflows/contract-validation.yml` | OpenAPI spec parity + ErrorEnvelope + auth-gate enforcement. |
+
+The `v2-ci.yml` workflow has a terminal `v2-gate` job that aggregates the
+matrix legs; treat it as the required check on the branch protection rule
+once the repo migrates fully to v2. `contract-validation.yml` is a
+separate required check so a missing codegen commit blocks merge even
+when the rest of CI passes.
 
 ## Incident: `/ready` returns `degraded`
 
