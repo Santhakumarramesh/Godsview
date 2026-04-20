@@ -44,6 +44,7 @@ from app.governance.anomaly import (
     list_anomalies,
     resolve_anomaly,
 )
+from app.governance.detectors import run_all_detectors
 from app.governance.approvals import (
     ApprovalError,
     create_approval,
@@ -58,6 +59,7 @@ from app.governance.dto import (
     AnomalyAlertsListDto,
     ApprovalPolicyDto,
     ApprovalPolicyListDto,
+    DetectorRunResultDto,
     ApprovalPolicyUpdateDto,
     AssignTrustTierRequestDto,
     CreateApprovalRequestDto,
@@ -511,6 +513,47 @@ async def resolve_anomaly_route(
     )
     await db.commit()
     return dto
+
+
+# ───────────────────────────── detectors ────────────────────────────────
+
+
+@router.post(
+    "/detectors/run",
+    response_model=DetectorRunResultDto,
+    summary="Run every anomaly detector once and return a rollup report",
+    status_code=status.HTTP_200_OK,
+)
+async def run_detectors_route(
+    request: Request,
+    db: DbSession,
+    user: AdminUser,
+) -> DetectorRunResultDto:
+    """Admin-gated: fan out across every registered anomaly detector.
+
+    The runner wraps each detector in its own ``try/except`` so one
+    failing detector never silences the rest. Emitted anomalies land
+    in the ``anomaly_alerts`` table and become visible through the
+    list/get endpoints above.
+    """
+    result = await run_all_detectors(db)
+    await log_event(
+        db,
+        request=request,
+        actor_user_id=user.id,
+        actor_email=user.email,
+        action="governance.detectors.run",
+        resource_type="governance.detectors",
+        resource_id=None,
+        outcome="success",
+        details={
+            "totalEmitted": result.total_emitted,
+            "totalSuppressed": result.total_suppressed,
+            "detectorCount": len(result.detectors),
+        },
+    )
+    await db.commit()
+    return result
 
 
 # ───────────────────────────── trust ────────────────────────────────────

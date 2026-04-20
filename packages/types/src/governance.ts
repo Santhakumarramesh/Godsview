@@ -203,6 +203,9 @@ export const AnomalySourceSchema = z.enum([
   "kill_switch_tripped",
   "allocation_breach",
   "auth_anomaly",
+  "venue_latency_breach",
+  "broker_outage",
+  "calibration_brier_regression",
   "other",
 ]);
 export type AnomalySource = z.infer<typeof AnomalySourceSchema>;
@@ -246,6 +249,33 @@ export const AnomalyAlertsListSchema = z.object({
   total: z.number().int().nonnegative(),
 });
 export type AnomalyAlertsList = z.infer<typeof AnomalyAlertsListSchema>;
+
+// ──────────────────────────── detector run surface ──────────────────────
+
+/**
+ * Per-detector summary inside a `DetectorRunResult`. Emitted by the
+ * `POST /governance/detectors/run` admin route and the scheduled cron.
+ */
+export const DetectorRunSummarySchema = z.object({
+  source: AnomalySourceSchema,
+  emitted: z.number().int().nonnegative(),
+  suppressed: z.number().int().nonnegative(),
+  samplesExamined: z.number().int().nonnegative(),
+  notes: z.string().nullable().optional(),
+});
+export type DetectorRunSummary = z.infer<typeof DetectorRunSummarySchema>;
+
+/**
+ * Envelope returned by a detector-pass run. Adds up per-detector
+ * counters so UIs can render a single status pill without iterating.
+ */
+export const DetectorRunResultSchema = z.object({
+  ranAt: z.string().datetime(),
+  totalEmitted: z.number().int().nonnegative(),
+  totalSuppressed: z.number().int().nonnegative(),
+  detectors: z.array(DetectorRunSummarySchema),
+});
+export type DetectorRunResult = z.infer<typeof DetectorRunResultSchema>;
 
 export const AnomalyFilterSchema = z.object({
   status: AnomalyStatusSchema.optional(),

@@ -73,6 +73,9 @@ AnomalySource = Literal[
     "kill_switch_tripped",
     "allocation_breach",
     "auth_anomaly",
+    "venue_latency_breach",
+    "broker_outage",
+    "calibration_brier_regression",
     "other",
 ]
 
@@ -199,6 +202,28 @@ class ResolveAnomalyRequestDto(_CamelBase):
     comment: Optional[str] = Field(None, max_length=280)
 
 
+# ──────────────────────────── detector run surface ─────────────────────
+
+
+class DetectorRunSummaryDto(_CamelBase):
+    """Per-detector summary inside a detector-pass response."""
+
+    source: AnomalySource
+    emitted: int = Field(..., ge=0)
+    suppressed: int = Field(..., ge=0)
+    samples_examined: int = Field(..., alias="samplesExamined", ge=0)
+    notes: Optional[str] = None
+
+
+class DetectorRunResultDto(_CamelBase):
+    """Envelope returned by ``POST /v1/governance/detectors/run``."""
+
+    ran_at: datetime = Field(..., alias="ranAt")
+    total_emitted: int = Field(..., alias="totalEmitted", ge=0)
+    total_suppressed: int = Field(..., alias="totalSuppressed", ge=0)
+    detectors: List[DetectorRunSummaryDto]
+
+
 # ──────────────────────────── trust registry ────────────────────────────
 
 
@@ -249,6 +274,8 @@ __all__ = [
     "AnomalyAlertsListDto",
     "AcknowledgeAnomalyRequestDto",
     "ResolveAnomalyRequestDto",
+    "DetectorRunSummaryDto",
+    "DetectorRunResultDto",
     "TrustTierAssignmentDto",
     "TrustRegistryEntryDto",
     "TrustRegistryListDto",

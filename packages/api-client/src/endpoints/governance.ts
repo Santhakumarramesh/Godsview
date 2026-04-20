@@ -26,6 +26,7 @@ import type {
   AssignTrustTierRequest,
   CreateApprovalRequest,
   DecideApprovalRequest,
+  DetectorRunResult,
   GovernanceAction,
   GovernanceApproval,
   GovernanceApprovalFilter,
@@ -172,6 +173,26 @@ export function governanceAnomalyEndpoints(
         `/governance/anomalies/${encodeURIComponent(id)}/resolve`,
         req,
       ),
+  };
+}
+
+// ───────────────────────────── detector run surface ───────────────────
+
+export interface GovernanceDetectorEndpoints {
+  /**
+   * POST /governance/detectors/run — admin-only. Fans out across every
+   * registered anomaly detector and returns a per-source rollup. The
+   * same entry point is driven by the scheduled cron, so the UI
+   * trigger and the automatic pass produce identical reports.
+   */
+  run: () => Promise<DetectorRunResult>;
+}
+
+export function governanceDetectorEndpoints(
+  client: ApiClient,
+): GovernanceDetectorEndpoints {
+  return {
+    run: () => client.post<DetectorRunResult>(`/governance/detectors/run`, {}),
   };
 }
 
