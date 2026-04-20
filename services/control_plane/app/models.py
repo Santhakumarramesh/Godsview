@@ -1217,3 +1217,831 @@ class LiveTrade(Base):
         Index("ix_live_trades_account_status", "account_id", "status"),
         Index("ix_live_trades_symbol_status", "symbol_id", "status"),
     )
+
+
+# ──────────────────────────── Phase 5 — Quant Lab ───────────────────────
+#
+# Twenty-one additive tables that back the Phase 5 control-plane surfaces.
+# Everything is strictly additive — no Phase 0-4 table is modified — so a
+# v2.4.0 database can run ``alembic upgrade head`` without downtime.
+#
+# Persistence boundaries:
+#
+#   Quant Lab               strategies, strategy_versions, backtest_runs,
+#                           backtest_trades, backtest_equity_points,
+#                           replay_runs, replay_frames, experiments,
+#                           experiment_backtests, strategy_rankings,
+#                           promotion_events
+#   Recall                  recall_trades, recall_embeddings,
+#                           recall_screenshots, missed_trades
+#   Learning + Governance   learning_events, confidence_calibrations,
+#                           regime_snapshots, session_snapshots,
+#                           data_truth_checks, strategy_dna_cells
+
+
+def _strategy_id() -> str:
+    return f"stg_{uuid.uuid4().hex}"
+
+
+def _strategy_version_id() -> str:
+    return f"stv_{uuid.uuid4().hex}"
+
+
+def _backtest_run_id() -> str:
+    return f"bkt_{uuid.uuid4().hex}"
+
+
+def _backtest_trade_id() -> str:
+    return f"bkt_trd_{uuid.uuid4().hex}"
+
+
+def _backtest_equity_id() -> str:
+    return f"bkt_eq_{uuid.uuid4().hex}"
+
+
+def _replay_run_id() -> str:
+    return f"rpl_{uuid.uuid4().hex}"
+
+
+def _replay_frame_id() -> str:
+    return f"rpl_fr_{uuid.uuid4().hex}"
+
+
+def _experiment_id() -> str:
+    return f"exp_{uuid.uuid4().hex}"
+
+
+def _ranking_id() -> str:
+    return f"rnk_{uuid.uuid4().hex}"
+
+
+def _promotion_event_id() -> str:
+    return f"prm_{uuid.uuid4().hex}"
+
+
+def _recall_trade_id() -> str:
+    return f"rct_{uuid.uuid4().hex}"
+
+
+def _recall_embedding_id() -> str:
+    return f"rce_{uuid.uuid4().hex}"
+
+
+def _recall_screenshot_id() -> str:
+    return f"scr_{uuid.uuid4().hex}"
+
+
+def _missed_trade_id() -> str:
+    return f"mis_{uuid.uuid4().hex}"
+
+
+def _learning_event_id() -> str:
+    return f"lrn_{uuid.uuid4().hex}"
+
+
+def _calibration_id() -> str:
+    return f"cal_{uuid.uuid4().hex}"
+
+
+def _regime_snap_id() -> str:
+    return f"rgm_{uuid.uuid4().hex}"
+
+
+def _session_snap_id() -> str:
+    return f"sss_{uuid.uuid4().hex}"
+
+
+def _data_truth_id() -> str:
+    return f"dtc_{uuid.uuid4().hex}"
+
+
+def _dna_cell_id() -> str:
+    return f"dna_{uuid.uuid4().hex}"
+
+
+class Strategy(Base):
+    """A named trading strategy registered in Quant Lab.
+
+    ``active_version_id`` points at the currently-blessed
+    :class:`StrategyVersion`. Versions are immutable, so a ``Strategy``
+    row only tracks mutable governance state (tier, promotion state).
+    """
+
+    __tablename__ = "strategies"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_strategy_id)
+    name: Mapped[str] = mapped_column(String(120), nullable=False, unique=True)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    setup_type: Mapped[str] = mapped_column(String(48), nullable=False)
+    active_version_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    current_tier: Mapped[str] = mapped_column(String(2), nullable=False, default="C")
+    current_state: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="experimental"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False
+    )
+    created_by_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    __table_args__ = (
+        Index("ix_strategies_state_tier", "current_state", "current_tier"),
+        Index("ix_strategies_setup_type", "setup_type"),
+    )
+
+
+class StrategyVersion(Base):
+    """Immutable configuration snapshot for a :class:`Strategy`.
+
+    Every backtest + replay pins to a specific version so historical
+    runs remain reproducible. ``code_hash`` is a content hash of the
+    serialised strategy config — two identical configs share the hash.
+    """
+
+    __tablename__ = "strategy_versions"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=_strategy_version_id
+    )
+    strategy_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("strategies.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    code_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    config: Mapped[Any] = mapped_column(JSON, nullable=False)
+    notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    created_by_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("strategy_id", "version", name="uq_strategy_versions_n"),
+        Index("ix_strategy_versions_strategy", "strategy_id"),
+    )
+
+
+class BacktestRun(Base):
+    """One backtest execution of a ``StrategyVersion`` over a window.
+
+    Aggregate metrics land in ``metrics`` as a JSON envelope mirroring
+    :class:`BacktestMetricsSchema`. Per-trade and equity-curve detail
+    live in companion tables (``backtest_trades``, ``backtest_equity_points``).
+    """
+
+    __tablename__ = "backtest_runs"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=_backtest_run_id
+    )
+    strategy_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("strategies.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    version_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("strategy_versions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="queued"
+    )
+    requested_by_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    symbol_ids: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    tf: Mapped[str] = mapped_column(String(8), nullable=False)
+    from_ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    to_ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    slippage_bps: Mapped[float] = mapped_column(nullable=False, default=1.0)
+    spread_bps: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    latency_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    commission_per_share: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    seed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    requested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    error: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    metrics: Mapped[Any] = mapped_column(JSON, nullable=False, default=dict)
+
+    __table_args__ = (
+        Index("ix_backtest_runs_strategy_status", "strategy_id", "status"),
+        Index("ix_backtest_runs_requested_at", "requested_at"),
+    )
+
+
+class BacktestTrade(Base):
+    """One simulated trade inside a :class:`BacktestRun`."""
+
+    __tablename__ = "backtest_trades"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=_backtest_trade_id
+    )
+    run_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("backtest_runs.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    trade_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    symbol_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    direction: Mapped[str] = mapped_column(String(8), nullable=False)
+    entry_ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    exit_ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    entry_price: Mapped[float] = mapped_column(nullable=False)
+    exit_price: Mapped[float] = mapped_column(nullable=False)
+    stop_loss: Mapped[float] = mapped_column(nullable=False)
+    take_profit: Mapped[float] = mapped_column(nullable=False)
+    qty: Mapped[float] = mapped_column(nullable=False, default=1.0)
+    pnl_r: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    pnl_dollars: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    mae_r: Mapped[float | None] = mapped_column(nullable=True)
+    mfe_r: Mapped[float | None] = mapped_column(nullable=True)
+    setup_type: Mapped[str] = mapped_column(String(48), nullable=False)
+    exit_reason: Mapped[str] = mapped_column(String(16), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("run_id", "trade_index", name="uq_backtest_trade_index"),
+        Index("ix_backtest_trades_run", "run_id"),
+    )
+
+
+class BacktestEquityPoint(Base):
+    """One equity-curve sample for a :class:`BacktestRun`."""
+
+    __tablename__ = "backtest_equity_points"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=_backtest_equity_id
+    )
+    run_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("backtest_runs.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    equity: Mapped[float] = mapped_column(nullable=False)
+    drawdown: Mapped[float] = mapped_column(nullable=False, default=0.0)
+
+    __table_args__ = (
+        Index("ix_backtest_equity_run_ts", "run_id", "ts"),
+    )
+
+
+class ReplayRun(Base):
+    """Candle-by-candle simulation cursor persisted across restarts.
+
+    A replay can run without a ``Strategy`` (pure chart time-travel for
+    operator inspection). Frames stream via SSE in real time when
+    ``step_ms > 0``, and are persisted via ``replay_frames`` so the UI
+    can seek backward.
+    """
+
+    __tablename__ = "replay_runs"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=_replay_run_id
+    )
+    strategy_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("strategies.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    version_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("strategy_versions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="queued"
+    )
+    symbol_ids: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    tf: Mapped[str] = mapped_column(String(8), nullable=False)
+    from_ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    to_ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    cursor_ts: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    step_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    requested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    requested_by_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+
+    __table_args__ = (
+        Index("ix_replay_runs_status", "status"),
+        Index("ix_replay_runs_strategy", "strategy_id"),
+    )
+
+
+class ReplayFrameRow(Base):
+    """One persisted decision envelope for a :class:`ReplayRun`.
+
+    Named ``replay_frames`` in SQL but ``ReplayFrameRow`` in Python so
+    it doesn't collide with the Phase 4 :class:`app.execution.replay`
+    value-object that has the same concept but a different shape
+    (tick-level cursor vs. decision envelope).
+    """
+
+    __tablename__ = "replay_frames"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=_replay_frame_id
+    )
+    replay_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("replay_runs.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    frame_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    decision: Mapped[Any] = mapped_column(JSON, nullable=False, default=dict)
+    bars_applied: Mapped[Any] = mapped_column(JSON, nullable=False, default=dict)
+
+    __table_args__ = (
+        UniqueConstraint("replay_id", "frame_index", name="uq_replay_frame_index"),
+        Index("ix_replay_frames_replay", "replay_id"),
+    )
+
+
+class Experiment(Base):
+    """A hypothesis that groups several :class:`BacktestRun` candidates."""
+
+    __tablename__ = "experiments"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_experiment_id)
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    hypothesis: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    strategy_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("strategies.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="draft")
+    winning_backtest_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("backtest_runs.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    verdict: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_by_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    __table_args__ = (
+        Index("ix_experiments_strategy_status", "strategy_id", "status"),
+    )
+
+
+class ExperimentBacktest(Base):
+    """Join row attaching a ``BacktestRun`` to an :class:`Experiment`."""
+
+    __tablename__ = "experiment_backtests"
+
+    experiment_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("experiments.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    backtest_run_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("backtest_runs.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    role: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="candidate"
+    )
+    attached_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+
+class StrategyRanking(Base):
+    """Daily tier snapshot — drives the promotion / demotion pipeline."""
+
+    __tablename__ = "strategy_rankings"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_ranking_id)
+    computed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    strategy_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("strategies.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    tier: Mapped[str] = mapped_column(String(2), nullable=False, default="C")
+    score: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    sample_size: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    sharpe: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    profit_factor: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    win_rate: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    drawdown: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    expectancy: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    reasons: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+
+    __table_args__ = (
+        Index("ix_strategy_rankings_ts", "computed_at"),
+        Index("ix_strategy_rankings_strategy_ts", "strategy_id", "computed_at"),
+    )
+
+
+class PromotionEvent(Base):
+    """Audit row for every ``Strategy.current_state`` FSM transition."""
+
+    __tablename__ = "promotion_events"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=_promotion_event_id
+    )
+    strategy_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("strategies.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    from_state: Mapped[str] = mapped_column(String(32), nullable=False)
+    to_state: Mapped[str] = mapped_column(String(32), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    actor_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    auto: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    ranking_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("strategy_rankings.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    __table_args__ = (
+        Index("ix_promotion_events_strategy_ts", "strategy_id", "occurred_at"),
+    )
+
+
+# ──────────────────────────── Phase 5 — Recall ──────────────────────────
+
+
+class RecallTrade(Base):
+    """Canonical trade memory — superset of paper + live + backtest outcomes.
+
+    One row per completed trade. The companion :class:`RecallEmbedding`
+    row holds the 64-dimensional feature vector powering similarity
+    search so the hot recall list query never has to touch the JSON
+    vector column.
+    """
+
+    __tablename__ = "recall_trades"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=_recall_trade_id
+    )
+    source_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    source_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    symbol_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("market_symbols.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    tf: Mapped[str] = mapped_column(String(8), nullable=False)
+    setup_type: Mapped[str] = mapped_column(String(48), nullable=False)
+    direction: Mapped[str] = mapped_column(String(8), nullable=False)
+    entry_ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    exit_ts: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    entry_price: Mapped[float] = mapped_column(nullable=False)
+    exit_price: Mapped[float | None] = mapped_column(nullable=True)
+    stop_loss: Mapped[float] = mapped_column(nullable=False)
+    take_profit: Mapped[float] = mapped_column(nullable=False)
+    pnl_r: Mapped[float | None] = mapped_column(nullable=True)
+    outcome: Mapped[str] = mapped_column(String(16), nullable=False, default="scratch")
+    regime: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    session: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    structure_flags: Mapped[Any] = mapped_column(JSON, nullable=False, default=dict)
+    order_flow_sign: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    confidence_at_detection: Mapped[float | None] = mapped_column(nullable=True)
+    strategy_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("strategies.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    captured_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "source_kind", "source_id", name="uq_recall_trades_source",
+        ),
+        Index("ix_recall_trades_symbol_ts", "symbol_id", "captured_at"),
+        Index("ix_recall_trades_setup_type", "setup_type"),
+        Index("ix_recall_trades_outcome", "outcome"),
+        Index("ix_recall_trades_strategy", "strategy_id"),
+    )
+
+
+class RecallEmbedding(Base):
+    """64-dim feature vector + structured projection for similarity search."""
+
+    __tablename__ = "recall_embeddings"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=_recall_embedding_id
+    )
+    trade_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("recall_trades.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    dims: Mapped[int] = mapped_column(Integer, nullable=False, default=64)
+    vector: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    norm: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    features: Mapped[Any] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+
+class RecallScreenshot(Base):
+    """Chart screenshot attached to a :class:`Setup` or :class:`RecallTrade`."""
+
+    __tablename__ = "recall_screenshots"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=_recall_screenshot_id
+    )
+    trade_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("recall_trades.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    setup_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("setups.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    symbol_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("market_symbols.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    tf: Mapped[str] = mapped_column(String(8), nullable=False)
+    captured_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    image_url: Mapped[str] = mapped_column(String(1024), nullable=False)
+    annotations: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    note: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+
+    __table_args__ = (
+        Index("ix_recall_screenshots_symbol_ts", "symbol_id", "captured_at"),
+        Index("ix_recall_screenshots_setup", "setup_id"),
+    )
+
+
+class MissedTrade(Base):
+    """A setup that should have traded but didn't — the systematic-miss log."""
+
+    __tablename__ = "missed_trades"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=_missed_trade_id
+    )
+    setup_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("setups.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    symbol_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("market_symbols.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    detected_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    reason: Mapped[str] = mapped_column(String(32), nullable=False)
+    would_be_direction: Mapped[str] = mapped_column(String(8), nullable=False)
+    theoretical_pnl_r: Mapped[float | None] = mapped_column(nullable=True)
+    detected_confidence: Mapped[float | None] = mapped_column(nullable=True)
+    notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+    __table_args__ = (
+        Index("ix_missed_trades_symbol_ts", "symbol_id", "detected_at"),
+        Index("ix_missed_trades_reason", "reason"),
+    )
+
+
+# ──────────────────────────── Phase 5 — Learning + Governance ───────────
+
+
+class LearningEvent(Base):
+    """Append-only event-bus tail used by the Learning Agent.
+
+    Every emitter (detectors, gate, broker adapter, calibration worker,
+    promotion worker) writes here so the UI + downstream analytics have
+    a single unified stream to tail.
+    """
+
+    __tablename__ = "learning_events"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=_learning_event_id
+    )
+    kind: Mapped[str] = mapped_column(String(48), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    ingested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    symbol_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("market_symbols.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    setup_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("setups.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    strategy_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("strategies.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    payload: Mapped[Any] = mapped_column(JSON, nullable=False, default=dict)
+
+    __table_args__ = (
+        Index("ix_learning_events_kind_ts", "kind", "occurred_at"),
+        Index("ix_learning_events_strategy_ts", "strategy_id", "occurred_at"),
+        Index("ix_learning_events_symbol_ts", "symbol_id", "occurred_at"),
+    )
+
+
+class ConfidenceCalibration(Base):
+    """Per-scope reliability curve so raw scores can be calibrated to truth."""
+
+    __tablename__ = "confidence_calibrations"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_calibration_id)
+    scope_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    scope_ref: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False, default="bucket")
+    bins: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    platt_a: Mapped[float | None] = mapped_column(nullable=True)
+    platt_b: Mapped[float | None] = mapped_column(nullable=True)
+    ece: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    brier: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    sample_size: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    computed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_confidence_calibrations_scope_ts",
+            "scope_kind",
+            "scope_ref",
+            "computed_at",
+        ),
+    )
+
+
+class RegimeSnapshot(Base):
+    """Per ``(symbol, tf)`` regime classification observed at a point in time."""
+
+    __tablename__ = "regime_snapshots"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_regime_snap_id)
+    symbol_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("market_symbols.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    tf: Mapped[str] = mapped_column(String(8), nullable=False)
+    regime: Mapped[str] = mapped_column(String(16), nullable=False)
+    confidence: Mapped[float] = mapped_column(nullable=False, default=0.5)
+    observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    atr: Mapped[float | None] = mapped_column(nullable=True)
+    adx: Mapped[float | None] = mapped_column(nullable=True)
+    news_pressure: Mapped[float | None] = mapped_column(nullable=True)
+    details: Mapped[Any] = mapped_column(JSON, nullable=False, default=dict)
+
+    __table_args__ = (
+        Index("ix_regime_snapshots_symbol_tf_ts", "symbol_id", "tf", "observed_at"),
+    )
+
+
+class SessionSnapshot(Base):
+    """Per-session (asia/london/ny_am/ny_pm/off_hours) rollup."""
+
+    __tablename__ = "session_snapshots"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_session_snap_id)
+    symbol_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("market_symbols.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    session: Mapped[str] = mapped_column(String(16), nullable=False)
+    bucket_ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    avg_range_r: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    avg_volume: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    setup_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    win_rate: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    computed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        Index("ix_session_snapshots_session_ts", "session", "bucket_ts"),
+        Index("ix_session_snapshots_symbol_session", "symbol_id", "session"),
+    )
+
+
+class DataTruthCheck(Base):
+    """Per-check feed/broker health row consumed by the kill-switch."""
+
+    __tablename__ = "data_truth_checks"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_data_truth_id)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(8), nullable=False, default="green")
+    last_observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    last_value: Mapped[float | None] = mapped_column(nullable=True)
+    threshold: Mapped[float | None] = mapped_column(nullable=True)
+    message: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    kill_switch_tripped: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    kill_switch_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("kind", name="uq_data_truth_checks_kind"),
+        Index("ix_data_truth_checks_status", "status"),
+    )
+
+
+class StrategyDNACell(Base):
+    """One cell of a strategy's (regime × session) performance grid.
+
+    Together these rows form the Strategy DNA grid — "this strategy
+    wins 64% in ranging / london and only 31% in volatile / ny_pm".
+    """
+
+    __tablename__ = "strategy_dna_cells"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_dna_cell_id)
+    strategy_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("strategies.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    regime: Mapped[str] = mapped_column(String(16), nullable=False)
+    session: Mapped[str] = mapped_column(String(16), nullable=False)
+    win_rate: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    mean_r: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    median_r: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    drawdown: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    sample_size: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    computed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "strategy_id", "regime", "session", name="uq_strategy_dna_cells",
+        ),
+        Index("ix_strategy_dna_strategy", "strategy_id"),
+    )
