@@ -2494,3 +2494,172 @@ class KillSwitchEventRow(Base):
         Index("ix_kill_switch_events_occurred_at", "occurred_at"),
         Index("ix_kill_switch_events_action", "action"),
     )
+
+
+# ──────────────────────────── Phase 7 multi-broker registry ────────────
+# A first-class adapter registry sits alongside the Phase 4 ``broker_accounts``
+# row. Every downstream broker connection is a ``broker_adapters`` row (kind
+# + role + masked credential projection + current status). Each
+# (adapter, account) pair is a ``broker_account_bindings`` row consumed by
+# the live gate + portfolio rebalancer. Rolling probe snapshots land in
+# ``broker_health_snapshots`` with one row per adapter per probe window.
+
+
+def _broker_adapter_id() -> str:
+    return f"bka_{uuid.uuid4().hex}"
+
+
+def _broker_account_binding_id() -> str:
+    return f"bkb_{uuid.uuid4().hex}"
+
+
+def _broker_health_snapshot_id() -> str:
+    return f"bkh_{uuid.uuid4().hex}"
+
+
+class BrokerAdapterRow(Base):
+    """One registered downstream broker connection.
+
+    The adapter kind (``alpaca_paper`` / ``alpaca_live`` / ``ib_paper`` /
+    ``ib_live``) controls which concrete ``BrokerProtocol`` implementation
+    the registry resolves at process boot. ``role`` drives live-gate
+    routing — only ``primary`` adapters with ``status='healthy'`` are
+    live-routable; ``paper`` role is unrestricted.
+    """
+
+    __tablename__ = "broker_adapters"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=_broker_adapter_id
+    )
+    kind: Mapped[str] = mapped_column(String(24), nullable=False)
+    role: Mapped[str] = mapped_column(String(16), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    host: Mapped[str] = mapped_column(String(253), nullable=False)
+    api_key_masked: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
+    api_secret_ref: Mapped[str] = mapped_column(
+        String(120), nullable=False, default=""
+    )
+    latest_snapshot_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="unknown"
+    )
+    live_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    probe_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "kind", "display_name", name="uq_broker_adapters_kind_name"
+        ),
+        Index("ix_broker_adapters_kind", "kind"),
+        Index("ix_broker_adapters_role", "role"),
+        Index("ix_broker_adapters_status", "status"),
+    )
+
+
+class BrokerAccountBindingRow(Base):
+    """One binding between a registered adapter and a GodsView account.
+
+    The portfolio engine rolls up positions across bindings that share an
+    ``account_id``. The live gate uses ``role`` + ``enabled`` +
+    ``weight`` to pick an adapter when a strategy fires — ties break on
+    weight, then on insertion order.
+    """
+
+    __tablename__ = "broker_account_bindings"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=_broker_account_binding_id
+    )
+    adapter_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("broker_adapters.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    account_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("broker_accounts.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    external_account_id: Mapped[str] = mapped_column(
+        String(128), nullable=False
+    )
+    display_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    role: Mapped[str] = mapped_column(String(16), nullable=False)
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
+    weight: Mapped[float] = mapped_column(nullable=False, default=1.0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "adapter_id",
+            "account_id",
+            name="uq_broker_account_bindings_adapter_account",
+        ),
+        Index("ix_broker_account_bindings_adapter", "adapter_id"),
+        Index("ix_broker_account_bindings_account", "account_id"),
+        Index("ix_broker_account_bindings_enabled", "enabled"),
+    )
+
+
+class BrokerHealthSnapshotRow(Base):
+    """Rolling probe snapshot for a broker adapter.
+
+    The probe cron (Phase 7 PR3) writes one row per adapter per minute
+    when ``probe_enabled=True``. The live gate reads the latest row and
+    refuses to route a live order unless ``status='healthy'`` on at
+    least one bound primary adapter.
+    """
+
+    __tablename__ = "broker_health_snapshots"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=_broker_health_snapshot_id
+    )
+    adapter_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("broker_adapters.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    last_probe_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    sample_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    latency_p50_ms: Mapped[float | None] = mapped_column(nullable=True)
+    latency_p95_ms: Mapped[float | None] = mapped_column(nullable=True)
+    latency_p99_ms: Mapped[float | None] = mapped_column(nullable=True)
+    error_rate: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        Index("ix_broker_health_snapshots_adapter", "adapter_id"),
+        Index("ix_broker_health_snapshots_observed_at", "observed_at"),
+        Index("ix_broker_health_snapshots_status", "status"),
+    )

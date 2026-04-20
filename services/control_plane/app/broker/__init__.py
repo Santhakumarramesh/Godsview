@@ -25,6 +25,7 @@ from app.broker.base import (
     broker_registry,
 )
 from app.broker.fake import FakeAdapter
+from app.broker.ib import IBAdapter
 
 __all__ = [
     "BrokerProtocol",
@@ -32,5 +33,6 @@ __all__ = [
     "BrokerSubmitResult",
     "BrokerUnavailable",
     "FakeAdapter",
+    "IBAdapter",
     "broker_registry",
 ]
