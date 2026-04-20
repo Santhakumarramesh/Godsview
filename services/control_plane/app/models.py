@@ -41,6 +41,13 @@ class User(Base):
     roles: Mapped[list[str]] = mapped_column(
         ARRAY(String(32)), nullable=False, default=list, server_default="{}"
     )
+    # Phase 6 governance: effective trust tier for this user. The
+    # ``trust_tier_assignments`` table holds the authoritative history.
+    # A missing/default value of "operator" keeps Phase 0–5 behaviour
+    # intact.
+    trust_tier: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="operator", server_default="operator"
+    )
     mfa_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     mfa_secret: Mapped[str | None] = mapped_column(String(64), nullable=True)
     disabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -2106,4 +2113,247 @@ class AllocationPlanRow(Base):
             "account_id", "strategy_id", name="uq_allocation_plans_account_strategy"
         ),
         Index("ix_allocation_plans_account", "account_id"),
+    )
+
+
+# ──────────────────────────── Phase 6 — Governance ──────────────────────
+#
+# The governance surface is split across five tables:
+#
+#   * approval_policies      — (action → requirements) lookup.
+#   * governance_approvals   — one row per request, append-only state.
+#   * approval_decisions     — per-approver signature row (append-only).
+#   * anomaly_alerts         — detector-emitted alert with ack/resolve
+#                              state machine.
+#   * trust_tier_assignments — per-user tier history (append-only).
+#
+# User.trust_tier remains the *current* effective tier for fast reads; the
+# history table is authoritative.
+
+
+def _approval_policy_id() -> str:
+    return f"pol_{uuid.uuid4().hex}"
+
+
+def _governance_approval_id() -> str:
+    return f"apr_{uuid.uuid4().hex}"
+
+
+def _approval_decision_id() -> str:
+    return f"apd_{uuid.uuid4().hex}"
+
+
+def _anomaly_alert_id() -> str:
+    return f"ano_{uuid.uuid4().hex}"
+
+
+def _trust_assignment_id() -> str:
+    return f"tra_{uuid.uuid4().hex}"
+
+
+class ApprovalPolicyRow(Base):
+    """Policy row — which actions require approval and by whom.
+
+    Keyed on ``action`` (unique). A missing row for an action means
+    ``requires_approval=False`` and the default minimum tier from
+    ``system_config.governance.default_min_tier`` applies.
+    """
+
+    __tablename__ = "approval_policies"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=_approval_policy_id
+    )
+    action: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    requires_approval: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
+    min_requester_tier: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="operator"
+    )
+    min_approver_tier: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="senior_operator"
+    )
+    approver_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1
+    )
+    ttl_seconds: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=86400
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False
+    )
+    updated_by_user_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+
+    __table_args__ = (
+        UniqueConstraint("action", name="uq_approval_policies_action"),
+    )
+
+
+class GovernanceApprovalRow(Base):
+    """A single approval request.
+
+    Lifecycle: ``pending → approved | rejected | expired | withdrawn``.
+    Terminal rows are never mutated — a withdrawn + re-requested flow
+    produces two rows.
+    """
+
+    __tablename__ = "governance_approvals"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=_governance_approval_id
+    )
+    action: Mapped[str] = mapped_column(String(64), nullable=False)
+    subject_key: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    payload: Mapped[Any] = mapped_column(JSON, nullable=False, default=dict)
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    state: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="pending"
+    )
+    requested_by_user_id: Mapped[str] = mapped_column(
+        String(64), nullable=False
+    )
+    requested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    resolved_by_user_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    required_approver_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1
+    )
+
+    __table_args__ = (
+        Index("ix_governance_approvals_action", "action"),
+        Index("ix_governance_approvals_state", "state"),
+        Index(
+            "ix_governance_approvals_requested_at",
+            "requested_at",
+        ),
+    )
+
+
+class ApprovalDecisionRow(Base):
+    """One signature on a governance approval.
+
+    Unique on (approval_id, approver_user_id) — a given approver can
+    only sign once per approval. ``decision`` ∈ {approve, reject, abstain}.
+    """
+
+    __tablename__ = "approval_decisions"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=_approval_decision_id
+    )
+    approval_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("governance_approvals.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    approver_user_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    decision: Mapped[str] = mapped_column(String(16), nullable=False)
+    decided_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "approval_id",
+            "approver_user_id",
+            name="uq_approval_decisions_approval_user",
+        ),
+        Index("ix_approval_decisions_approval", "approval_id"),
+    )
+
+
+class AnomalyAlertRow(Base):
+    """Detector-emitted anomaly.
+
+    Lifecycle: ``open → acknowledged → resolved``. Acknowledge may set
+    ``suppressed_until`` to suppress re-fires of the same (source,
+    subject_key) tuple until that timestamp. ``evidence`` is a free-form
+    JSON payload the detector writes.
+    """
+
+    __tablename__ = "anomaly_alerts"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=_anomaly_alert_id
+    )
+    detected_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    source: Mapped[str] = mapped_column(String(40), nullable=False)
+    severity: Mapped[str] = mapped_column(String(16), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="open"
+    )
+    subject_key: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence: Mapped[Any] = mapped_column(JSON, nullable=False, default=dict)
+    acknowledged_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    acknowledged_by_user_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    resolved_by_user_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    suppressed_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    related_approval_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+
+    __table_args__ = (
+        Index("ix_anomaly_alerts_status", "status"),
+        Index("ix_anomaly_alerts_detected_at", "detected_at"),
+        Index("ix_anomaly_alerts_source_subject", "source", "subject_key"),
+    )
+
+
+class TrustTierAssignmentRow(Base):
+    """Append-only history of trust-tier changes for a user.
+
+    Writes land one row per change. The ``User.trust_tier`` column stays
+    in sync with the latest row by user_id.
+    """
+
+    __tablename__ = "trust_tier_assignments"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=_trust_assignment_id
+    )
+    user_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    tier: Mapped[str] = mapped_column(String(24), nullable=False)
+    assigned_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    assigned_by_user_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+    __table_args__ = (
+        Index("ix_trust_tier_assignments_user", "user_id"),
+        Index("ix_trust_tier_assignments_assigned_at", "assigned_at"),
     )

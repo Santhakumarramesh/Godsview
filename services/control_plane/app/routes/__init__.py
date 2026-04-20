@@ -17,6 +17,7 @@ from app.routes.auth import router as auth_router
 from app.routes.broker import router as broker_router
 from app.routes.execution import router as execution_router
 from app.routes.flags import router as flags_router
+from app.routes.governance import router as governance_router
 from app.routes.health import router as health_router
 from app.routes.learning import router as learning_router
 from app.routes.live_trades import router as live_trades_router
@@ -131,6 +132,10 @@ api_router.include_router(
 )
 api_router.include_router(
     portfolio_router,
+    responses={**COMMON_ERROR_RESPONSES, **AUTH_ERROR_RESPONSES},
+)
+api_router.include_router(
+    governance_router,
     responses={**COMMON_ERROR_RESPONSES, **AUTH_ERROR_RESPONSES},
 )
 # /v1/tv-webhook is unauthenticated — it is HMAC-gated via the
