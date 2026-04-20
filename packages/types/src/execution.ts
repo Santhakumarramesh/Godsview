@@ -360,13 +360,129 @@ export const LiveTradeFilterSchema = z.object({
   symbolId: z.string().optional(),
   setupId: z.string().optional(),
   accountId: z.string().optional(),
+  direction: DirectionSchema.optional(),
   status: LiveTradeStatusSchema.optional(),
   fromTs: z.string().datetime().optional(),
   toTs: z.string().datetime().optional(),
-  cursor: z.string().datetime().optional(),
-  limit: z.number().int().min(1).max(200).default(50),
+  /** Pagination — server uses offset + limit, not cursor. */
+  offset: z.number().int().min(0).optional(),
+  limit: z.number().int().min(1).max(1000).default(100),
 });
 export type LiveTradeFilter = z.infer<typeof LiveTradeFilterSchema>;
+
+/**
+ * Response envelope from ``GET /v1/live-trades`` — mirrors
+ * ``LiveTradesListOut`` in ``services/control_plane/app/routes/live_trades.py``.
+ */
+export const LiveTradesListOutSchema = z.object({
+  trades: z.array(LiveTradeSchema),
+  total: z.number().int().nonnegative(),
+  offset: z.number().int().nonnegative(),
+  limit: z.number().int().positive(),
+});
+export type LiveTradesListOut = z.infer<typeof LiveTradesListOutSchema>;
+
+// ──────────────────────────── preview / approve envelopes ────────────────
+
+/**
+ * Sizing projection returned by the live-gate dry-run + approve-live
+ * paths. Mirrors ``LiveSizingDto`` on the server.
+ */
+export const LiveSizingSchema = z.object({
+  qty: z.number(),
+  notional: z.number(),
+  dollarRisk: z.number(),
+  rRisk: z.number(),
+});
+export type LiveSizing = z.infer<typeof LiveSizingSchema>;
+
+/**
+ * Risk projection returned alongside sizing. Mirrors
+ * ``LiveRiskProjectionDto`` on the server.
+ */
+export const LiveRiskProjectionSchema = z.object({
+  projectedGross: z.number(),
+  projectedCorrelated: z.number(),
+  drawdownR: z.number(),
+});
+export type LiveRiskProjection = z.infer<typeof LiveRiskProjectionSchema>;
+
+/**
+ * Optional per-call risk override. Admins can tighten (never loosen)
+ * the effective budget for a single preview / approve.
+ */
+export const OverrideRiskSchema = z.object({
+  maxDollarRisk: z.number().nonnegative().optional(),
+  maxGrossExposure: z.number().nonnegative().optional(),
+  maxCorrelatedExposure: z.number().nonnegative().optional(),
+});
+export type OverrideRisk = z.infer<typeof OverrideRiskSchema>;
+
+/**
+ * Request body for POST /v1/execution/live/preview. Mirrors
+ * ``LivePreviewIn`` on the server.
+ */
+export const LivePreviewInSchema = z.object({
+  setupId: z.string().min(1),
+  accountId: z.string().min(1),
+  mode: ExecutionModeSchema.default("live"),
+  overrideRisk: OverrideRiskSchema.optional(),
+});
+export type LivePreviewIn = z.infer<typeof LivePreviewInSchema>;
+
+/**
+ * Response body for POST /v1/execution/live/preview. Mirrors
+ * ``LivePreviewOut`` on the server — the "dry-run" envelope.
+ */
+export const LivePreviewOutSchema = z.object({
+  approved: z.boolean(),
+  reason: z.string(),
+  detail: z.string(),
+  sizing: LiveSizingSchema.nullable().optional(),
+  risk: LiveRiskProjectionSchema.nullable().optional(),
+});
+export type LivePreviewOut = z.infer<typeof LivePreviewOutSchema>;
+
+/**
+ * Response body for POST /v1/setups/:id/approve-live. Mirrors
+ * ``LiveApprovalOut`` on the server. On reject, ``liveTrade`` is
+ * null; on approve, it carries the freshly-minted live trade row.
+ */
+export const LiveApprovalOutSchema = z.object({
+  approved: z.boolean(),
+  reason: z.string(),
+  detail: z.string(),
+  liveTrade: LiveTradeSchema.nullable().optional(),
+});
+export type LiveApprovalOut = z.infer<typeof LiveApprovalOutSchema>;
+
+// ──────────────────────────── broker list envelopes ──────────────────────
+
+/**
+ * Response envelope from ``GET /v1/broker/positions``. Mirrors
+ * ``BrokerPositionsOut`` on the server.
+ */
+export const BrokerPositionsOutSchema = z.object({
+  accountId: z.string(),
+  mode: ExecutionModeSchema,
+  positions: z.array(PositionSchema),
+  observedAt: z.string().datetime(),
+});
+export type BrokerPositionsOut = z.infer<typeof BrokerPositionsOutSchema>;
+
+/**
+ * Response envelope from ``GET /v1/broker/fills``. Mirrors
+ * ``BrokerFillsOut`` on the server.
+ */
+export const BrokerFillsOutSchema = z.object({
+  accountId: z.string(),
+  provider: z.string(),
+  mode: ExecutionModeSchema,
+  fills: z.array(BrokerFillSchema),
+  total: z.number().int().nonnegative(),
+  limit: z.number().int().positive(),
+});
+export type BrokerFillsOut = z.infer<typeof BrokerFillsOutSchema>;
 
 // ──────────────────────────── replay envelope ────────────────────────────
 
