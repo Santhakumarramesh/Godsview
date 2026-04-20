@@ -19,6 +19,19 @@ from app.quant_lab.engine import (
     EngineBar,
     run_backtest,
 )
+from app.quant_lab.replay import (
+    ReplayConfig,
+    iter_frames,
+    iter_frames_stream,
+)
+from app.quant_lab.replay_types import (
+    QuantReplayFrameDto,
+    QuantReplayFramesOut,
+    ReplayRunDto,
+    ReplayRunRequestDto,
+    ReplayRunsListOut,
+    ReplayStatusLiteral,
+)
 from app.quant_lab.seeder import DeterministicRng
 from app.quant_lab.types import (
     BacktestEquityPointDto,
@@ -41,9 +54,18 @@ __all__ = [
     "BacktestTradeDto",
     "DeterministicRng",
     "EngineBar",
+    "QuantReplayFrameDto",
+    "QuantReplayFramesOut",
+    "ReplayConfig",
+    "ReplayRunDto",
+    "ReplayRunRequestDto",
+    "ReplayRunsListOut",
+    "ReplayStatusLiteral",
     "StrategyCreateRequestDto",
     "StrategyDto",
     "StrategyVersionCreateDto",
     "StrategyVersionDto",
+    "iter_frames",
+    "iter_frames_stream",
     "run_backtest",
 ]
