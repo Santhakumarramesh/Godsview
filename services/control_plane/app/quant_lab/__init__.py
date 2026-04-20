@@ -2,9 +2,13 @@
 
 The :mod:`app.quant_lab` package hosts the deterministic research tooling:
 
-* :mod:`app.quant_lab.types`     — Pydantic v2 DTOs (camelCase wire).
-* :mod:`app.quant_lab.seeder`    — deterministic PRNG for friction / noise.
-* :mod:`app.quant_lab.engine`    — event-driven backtest simulator.
+* :mod:`app.quant_lab.types`             — Pydantic v2 DTOs (camelCase wire).
+* :mod:`app.quant_lab.seeder`            — deterministic PRNG for friction / noise.
+* :mod:`app.quant_lab.engine`            — event-driven backtest simulator.
+* :mod:`app.quant_lab.replay`            — candle-by-candle replay simulator.
+* :mod:`app.quant_lab.replay_types`      — Pydantic v2 replay DTOs.
+* :mod:`app.quant_lab.experiment_types`  — Pydantic v2 experiment/ranking/promotion DTOs.
+* :mod:`app.quant_lab.ranking`           — pure scoring + promotion FSM.
 
 The engine is pure: given identical (strategy config, bars, friction,
 latency, seed) it produces bit-identical trade ledgers, equity curves,
@@ -18,6 +22,32 @@ from app.quant_lab.engine import (
     BacktestOutcome,
     EngineBar,
     run_backtest,
+)
+from app.quant_lab.experiment_types import (
+    ExperimentCompleteRequestDto,
+    ExperimentCreateRequestDto,
+    ExperimentDto,
+    ExperimentStatusLiteral,
+    ExperimentsListOut,
+    PromotionEventDto,
+    PromotionEventsListOut,
+    PromotionRequestDto,
+    RankingsHistoryOut,
+    RankingsListOut,
+    StrategyRankingDto,
+)
+from app.quant_lab.ranking import (
+    DEFAULT_THRESHOLDS,
+    InvalidPromotionError,
+    PROMOTION_STATES,
+    RankingOutcome,
+    TierThresholds,
+    classify_tier,
+    compute_composite_score,
+    compute_transition,
+    outcome_to_ranking_dto,
+    rank_strategies,
+    score_metrics,
 )
 from app.quant_lab.replay import (
     ReplayConfig,
@@ -52,10 +82,24 @@ __all__ = [
     "BacktestRequestDto",
     "BacktestRunDto",
     "BacktestTradeDto",
+    "DEFAULT_THRESHOLDS",
     "DeterministicRng",
     "EngineBar",
+    "ExperimentCompleteRequestDto",
+    "ExperimentCreateRequestDto",
+    "ExperimentDto",
+    "ExperimentStatusLiteral",
+    "ExperimentsListOut",
+    "InvalidPromotionError",
+    "PROMOTION_STATES",
+    "PromotionEventDto",
+    "PromotionEventsListOut",
+    "PromotionRequestDto",
     "QuantReplayFrameDto",
     "QuantReplayFramesOut",
+    "RankingOutcome",
+    "RankingsHistoryOut",
+    "RankingsListOut",
     "ReplayConfig",
     "ReplayRunDto",
     "ReplayRunRequestDto",
@@ -63,9 +107,17 @@ __all__ = [
     "ReplayStatusLiteral",
     "StrategyCreateRequestDto",
     "StrategyDto",
+    "StrategyRankingDto",
     "StrategyVersionCreateDto",
     "StrategyVersionDto",
+    "TierThresholds",
+    "classify_tier",
+    "compute_composite_score",
+    "compute_transition",
     "iter_frames",
     "iter_frames_stream",
+    "outcome_to_ranking_dto",
+    "rank_strategies",
     "run_backtest",
+    "score_metrics",
 ]
