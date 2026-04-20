@@ -63,6 +63,7 @@ DEFAULT_POLICIES: List[_PolicyDefault] = [
     _PolicyDefault("calibration_recompute", False, "operator", "senior_operator", 1, 86400),
     _PolicyDefault("dna_rebuild", False, "operator", "senior_operator", 1, 86400),
     _PolicyDefault("data_truth_override", True, "senior_operator", "admin", 2, 14400),
+    _PolicyDefault("rebalance_execute", True, "operator", "senior_operator", 1, 86400),
 ]
 
 

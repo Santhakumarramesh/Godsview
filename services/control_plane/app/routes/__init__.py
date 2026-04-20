@@ -31,6 +31,7 @@ from app.routes.portfolio import router as portfolio_router
 from app.routes.quant_experiments import router as quant_experiments_router
 from app.routes.quant_lab import router as quant_lab_router
 from app.routes.quant_replay import router as quant_replay_router
+from app.routes.rebalance import router as rebalance_router
 from app.routes.recall import router as recall_router
 from app.routes.risk import router as risk_router
 from app.routes.settings import router as settings_router
@@ -126,6 +127,10 @@ api_router.include_router(
 )
 api_router.include_router(
     quant_experiments_router,
+    responses={**COMMON_ERROR_RESPONSES, **AUTH_ERROR_RESPONSES},
+)
+api_router.include_router(
+    rebalance_router,
     responses={**COMMON_ERROR_RESPONSES, **AUTH_ERROR_RESPONSES},
 )
 api_router.include_router(

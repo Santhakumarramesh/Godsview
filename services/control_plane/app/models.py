@@ -2663,3 +2663,149 @@ class BrokerHealthSnapshotRow(Base):
         Index("ix_broker_health_snapshots_observed_at", "observed_at"),
         Index("ix_broker_health_snapshots_status", "status"),
     )
+
+
+# ──────────────────────────── Phase 7 portfolio rebalancer ─────────────
+# The rebalancer cron proposes a ``RebalancePlanRow`` per account per
+# scheduled pass. Each plan decomposes into one ``RebalanceIntentRow`` per
+# (strategy, symbol) pair whose current notional drifts from the
+# allocation target by more than the configured band. A plan is inert
+# until approved via governance action ``rebalance_execute`` — approval
+# flips ``state`` to ``approved`` and records the paired approval id.
+# Execution drains the intent rows into the Phase 4 execution bus one at
+# a time; each intent carries a stable id used as ``clientOrderId`` for
+# idempotent routing so retries are safe.
+
+
+def _rebalance_plan_id() -> str:
+    return f"rbp_{uuid.uuid4().hex}"
+
+
+def _rebalance_intent_id() -> str:
+    return f"rbi_{uuid.uuid4().hex}"
+
+
+class RebalancePlanRow(Base):
+    """Rollup row for a single rebalance pass on one account.
+
+    FSM: ``proposed → approved → executing → complete`` with
+    ``rejected``/``cancelled``/``failed`` as terminal branches. Reads
+    from the detail endpoint pull intent rows via ``plan_id`` FK.
+    """
+
+    __tablename__ = "rebalance_plans"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=_rebalance_plan_id
+    )
+    account_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("broker_accounts.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="proposed"
+    )
+    trigger: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="scheduled"
+    )
+    initiated_by_user_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    approval_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    intent_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    gross_delta_notional: Mapped[float] = mapped_column(
+        nullable=False, default=0.0
+    )
+    net_delta_notional: Mapped[float] = mapped_column(
+        nullable=False, default=0.0
+    )
+    estimated_r: Mapped[float | None] = mapped_column(nullable=True)
+    warnings: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    proposed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    executed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        Index("ix_rebalance_plans_account", "account_id"),
+        Index("ix_rebalance_plans_status", "status"),
+        Index("ix_rebalance_plans_proposed_at", "proposed_at"),
+    )
+
+
+class RebalanceIntentRow(Base):
+    """One symbol-scoped intent inside a rebalance plan.
+
+    The execution bus uses ``id`` as the ``clientOrderId`` so a retried
+    intent lands on the same broker envelope. ``delta_notional > 0`` means
+    the plan will add exposure; ``delta_notional < 0`` means the plan will
+    trim exposure.
+    """
+
+    __tablename__ = "rebalance_intents"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=_rebalance_intent_id
+    )
+    plan_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("rebalance_plans.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    strategy_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("strategies.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    symbol_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("market_symbols.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    correlation_class: Mapped[str] = mapped_column(String(32), nullable=False)
+    side: Mapped[str] = mapped_column(String(8), nullable=False)
+    current_notional: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    target_notional: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    delta_notional: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    current_percent: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    target_percent: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    delta_percent: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="queued"
+    )
+    execution_intent_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    adapter_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    filled_notional: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        Index("ix_rebalance_intents_plan", "plan_id"),
+        Index("ix_rebalance_intents_strategy", "strategy_id"),
+        Index("ix_rebalance_intents_symbol", "symbol_id"),
+        Index("ix_rebalance_intents_status", "status"),
+    )

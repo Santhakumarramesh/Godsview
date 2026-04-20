@@ -50,6 +50,7 @@ GovernanceAction = Literal[
     "calibration_recompute",
     "dna_rebuild",
     "data_truth_override",
+    "rebalance_execute",
 ]
 
 ApprovalState = Literal[
