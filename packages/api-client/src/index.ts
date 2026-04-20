@@ -26,3 +26,6 @@ export * from "./endpoints/execution.js";
 export * from "./endpoints/quant-lab.js";
 export * from "./endpoints/recall.js";
 export * from "./endpoints/learning.js";
+export * from "./endpoints/portfolio.js";
+export * from "./endpoints/governance.js";
+export * from "./endpoints/autonomy.js";
