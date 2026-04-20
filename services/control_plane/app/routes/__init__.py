@@ -18,6 +18,7 @@ from app.routes.broker import router as broker_router
 from app.routes.execution import router as execution_router
 from app.routes.flags import router as flags_router
 from app.routes.health import router as health_router
+from app.routes.live_trades import router as live_trades_router
 from app.routes.market import router as market_router
 from app.routes.mcp_servers import router as mcp_servers_router
 from app.routes.ops import router as ops_router
@@ -88,6 +89,10 @@ api_router.include_router(
 )
 api_router.include_router(
     execution_router,
+    responses={**COMMON_ERROR_RESPONSES, **AUTH_ERROR_RESPONSES},
+)
+api_router.include_router(
+    live_trades_router,
     responses={**COMMON_ERROR_RESPONSES, **AUTH_ERROR_RESPONSES},
 )
 api_router.include_router(
