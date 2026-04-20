@@ -316,7 +316,7 @@ async def ingest_tv_webhook(
             pine_confidence=payload.pineConfidence,
             fired_at=payload.firedAt,
             note=payload.note,
-            payload=payload.model_dump(by_alias=True),
+            payload=payload.model_dump(by_alias=True, mode="json"),
             status_value="rejected_unknown_symbol",
             rejection_reason=f"unknown symbol {payload.ticker}@{payload.exchange}",
             alert_id=payload.alertId,
@@ -355,7 +355,7 @@ async def ingest_tv_webhook(
             ),
             fired_at=payload.firedAt,
             note=payload.note,
-            payload=payload.model_dump(by_alias=True),
+            payload=payload.model_dump(by_alias=True, mode="json"),
             status="deduped",
             rejection_reason=f"duplicate of {existing.id} within {_DEDUP_WINDOW}",
         )
@@ -384,7 +384,7 @@ async def ingest_tv_webhook(
         risk_reward=_compute_rr(payload.entry, payload.stop, payload.target, payload.direction),
         fired_at=payload.firedAt,
         note=payload.note,
-        payload=payload.model_dump(by_alias=True),
+        payload=payload.model_dump(by_alias=True, mode="json"),
         status="queued",
     )
     db.add(row)
