@@ -2232,6 +2232,370 @@
         "title": "LatencySeriesOut",
         "type": "object"
       },
+      "LiveApprovalOut": {
+        "properties": {
+          "approved": {
+            "title": "Approved",
+            "type": "boolean"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "liveTrade": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LiveTradeDto"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "approved",
+          "reason",
+          "detail"
+        ],
+        "title": "LiveApprovalOut",
+        "type": "object"
+      },
+      "LivePreviewIn": {
+        "description": "Request body for POST /v1/execution/live/preview.\n\nMatches the admin-facing *preview* envelope \u2014 no side effects, just\na dry-run of the live gate + sizing math so operators see exactly\nwhat a subsequent approve-live would do.",
+        "properties": {
+          "accountId": {
+            "minLength": 1,
+            "title": "Accountid",
+            "type": "string"
+          },
+          "mode": {
+            "default": "live",
+            "enum": [
+              "paper",
+              "live"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "overrideRisk": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OverrideRiskDto"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "setupId": {
+            "minLength": 1,
+            "title": "Setupid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "setupId",
+          "accountId"
+        ],
+        "title": "LivePreviewIn",
+        "type": "object"
+      },
+      "LivePreviewOut": {
+        "description": "Matches the ``LiveApprovalPreviewSchema`` contract in @gv/types.",
+        "properties": {
+          "approved": {
+            "title": "Approved",
+            "type": "boolean"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "risk": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LiveRiskProjectionDto"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sizing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LiveSizingDto"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "approved",
+          "reason",
+          "detail"
+        ],
+        "title": "LivePreviewOut",
+        "type": "object"
+      },
+      "LiveRiskProjectionDto": {
+        "properties": {
+          "drawdownR": {
+            "title": "Drawdownr",
+            "type": "number"
+          },
+          "projectedCorrelated": {
+            "title": "Projectedcorrelated",
+            "type": "number"
+          },
+          "projectedGross": {
+            "title": "Projectedgross",
+            "type": "number"
+          }
+        },
+        "required": [
+          "projectedGross",
+          "projectedCorrelated",
+          "drawdownR"
+        ],
+        "title": "LiveRiskProjectionDto",
+        "type": "object"
+      },
+      "LiveSizingDto": {
+        "properties": {
+          "dollarRisk": {
+            "title": "Dollarrisk",
+            "type": "number"
+          },
+          "notional": {
+            "title": "Notional",
+            "type": "number"
+          },
+          "qty": {
+            "title": "Qty",
+            "type": "number"
+          },
+          "rRisk": {
+            "title": "Rrisk",
+            "type": "number"
+          }
+        },
+        "required": [
+          "qty",
+          "notional",
+          "dollarRisk",
+          "rRisk"
+        ],
+        "title": "LiveSizingDto",
+        "type": "object"
+      },
+      "LiveTradeDto": {
+        "description": "Mirrors ``LiveTradeSchema`` in ``packages/types/src/execution.ts``.",
+        "properties": {
+          "accountId": {
+            "title": "Accountid",
+            "type": "string"
+          },
+          "approvedAt": {
+            "format": "date-time",
+            "title": "Approvedat",
+            "type": "string"
+          },
+          "approvedByUserId": {
+            "title": "Approvedbyuserid",
+            "type": "string"
+          },
+          "avgFillPrice": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avgfillprice"
+          },
+          "brokerOrderId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brokerorderid"
+          },
+          "clientOrderId": {
+            "title": "Clientorderid",
+            "type": "string"
+          },
+          "closedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closedat"
+          },
+          "commission": {
+            "default": 0.0,
+            "title": "Commission",
+            "type": "number"
+          },
+          "direction": {
+            "enum": [
+              "long",
+              "short"
+            ],
+            "title": "Direction",
+            "type": "string"
+          },
+          "entryRef": {
+            "title": "Entryref",
+            "type": "number"
+          },
+          "filledAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filledat"
+          },
+          "filledQty": {
+            "default": 0.0,
+            "title": "Filledqty",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "pnlR": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pnlr"
+          },
+          "qty": {
+            "title": "Qty",
+            "type": "number"
+          },
+          "realizedPnLDollars": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Realizedpnldollars"
+          },
+          "setupId": {
+            "title": "Setupid",
+            "type": "string"
+          },
+          "sizeMultiplier": {
+            "title": "Sizemultiplier",
+            "type": "number"
+          },
+          "status": {
+            "enum": [
+              "pending_submit",
+              "submitted",
+              "partially_filled",
+              "filled",
+              "won",
+              "lost",
+              "scratched",
+              "cancelled",
+              "rejected"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "stopLoss": {
+            "title": "Stoploss",
+            "type": "number"
+          },
+          "submittedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submittedat"
+          },
+          "symbolId": {
+            "title": "Symbolid",
+            "type": "string"
+          },
+          "takeProfit": {
+            "title": "Takeprofit",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "setupId",
+          "symbolId",
+          "accountId",
+          "direction",
+          "entryRef",
+          "stopLoss",
+          "takeProfit",
+          "sizeMultiplier",
+          "qty",
+          "status",
+          "clientOrderId",
+          "approvedAt",
+          "approvedByUserId"
+        ],
+        "title": "LiveTradeDto",
+        "type": "object"
+      },
       "LogLineOut": {
         "properties": {
           "actorEmail": {
@@ -11714,6 +12078,136 @@
         ]
       }
     },
+    "/execution/live/preview": {
+      "post": {
+        "description": "Dry-run the live gate without side effects.\n\nLoads the setup + budget + equity + positions + counters, runs the\nlive gate, and returns the verdict plus the sizing projection so\nthe operator sees the R-risk, notional, projected gross, and\nprojected correlated exposure *before* clicking approve-live.",
+        "operationId": "live_execution_preview_execution_live_preview_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LivePreviewIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LivePreviewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Malformed request."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Insufficient role for this operation."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "State conflict."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Rate limit exceeded."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Live Execution Preview",
+        "tags": [
+          "execution"
+        ]
+      }
+    },
     "/health/live": {
       "get": {
         "operationId": "live_health_live_get",
@@ -15426,6 +15920,145 @@
           }
         },
         "summary": "Approve Setup",
+        "tags": [
+          "execution"
+        ]
+      }
+    },
+    "/setups/{setup_id}/approve-live": {
+      "post": {
+        "description": "Run the live gate and, on approval, submit the order to the broker.\n\n* Loads the full live-gate context + runs the deterministic gate.\n* On reject \u2014 returns 409 with the gate's enumerated ``reason`` code\n  and writes a ``setup.live_rejected`` audit event.\n* On approve \u2014 sizes via :func:`app.risk.size_for_trade`, mints a\n  :class:`LiveTrade` row at ``pending_submit`` with a unique\n  ``client_order_id``, calls :meth:`BrokerProtocol.submit_order`,\n  then flips the row to ``submitted`` (or ``rejected`` if the broker\n  ack says so). Transitions the Setup to ``approved_live`` and\n  writes a ``setup.live_approved`` audit event.",
+        "operationId": "approve_setup_live_setups__setup_id__approve_live_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "setup_id",
+            "required": true,
+            "schema": {
+              "title": "Setup Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LivePreviewIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveApprovalOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Malformed request."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Insufficient role for this operation."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Resource not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "State conflict."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Rate limit exceeded."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal server error."
+          }
+        },
+        "summary": "Approve Setup Live",
         "tags": [
           "execution"
         ]

@@ -1,23 +1,27 @@
-"""Execution gate — Setup → paper-trade approval path.
+"""Execution gate — Setup → paper-trade + live-trade approval path.
 
-The execution module is a *deterministic safety floor*: a pure-function
-gate that inspects a ``Setup`` row + the runtime risk/flag state and
-returns either:
+The execution module is a *deterministic safety floor*: pure-function
+gates that inspect a ``Setup`` row + the runtime risk/flag state and
+return either an approval or an enumerated rejection reason.
 
-  * :class:`GateDecision.approve(...)` — the setup is cleared; the
-    caller can create the paper-trade row, or
-  * :class:`GateDecision.reject(reason=..., code=...)` — the setup is
-    blocked; the caller returns a 409 / 403 to the operator.
+Phase 3 shipped the paper-mode gate (:mod:`app.execution.gate`). Phase 4
+adds the live-mode gate (:mod:`app.execution.live_gate`), which extends
+the paper gate's setup-level checks with the risk engine's dollar-math
+rules (per-trade R, daily drawdown, gross + correlated exposure,
+buying power, equity freshness).
 
-Rejections are enumerated (not stringly-typed) so the UI can localise
-and the recall/calibration pipeline can bucket them for post-hoc
-analysis. No I/O, no DB, no audit — this is a unit-testable predicate
-that the ``/v1/setups/{id}/approve`` route calls after loading the
-relevant state.
+Both gates share the same contract:
 
-Phase 3 ships the paper-mode branch. The ``mode='live'`` branch is a
-hard reject until Phase 4's risk engine + kill-switch wiring is in
-place.
+  * :class:`GateDecision.approve(...)` / :class:`LiveGateDecision.approve(...)`
+    — the setup is cleared; the route can create the paper- or live-trade
+    row.
+  * :class:`GateDecision.reject(reason=..., detail=...)` — the setup is
+    blocked; the route returns a 409 with the enumerated reason code.
+
+Rejections are a closed Literal so the UI can localise and the recall /
+calibration pipeline can bucket them for post-hoc analysis. No I/O, no
+DB, no audit — these are unit-testable predicates the route layer calls
+after loading the relevant state.
 """
 
 from app.execution.gate import (
@@ -26,10 +30,26 @@ from app.execution.gate import (
     GateReason,
     evaluate_gate,
 )
+from app.execution.live_gate import (
+    DEFAULT_MAX_EQUITY_AGE_S,
+    LiveGateDecision,
+    LiveGateInput,
+    LiveGateReason,
+    LiveSizingPreview,
+    evaluate_live_gate,
+    preview_live_sizing,
+)
 
 __all__ = [
+    "DEFAULT_MAX_EQUITY_AGE_S",
     "GateDecision",
     "GateInput",
     "GateReason",
+    "LiveGateDecision",
+    "LiveGateInput",
+    "LiveGateReason",
+    "LiveSizingPreview",
     "evaluate_gate",
+    "evaluate_live_gate",
+    "preview_live_sizing",
 ]
