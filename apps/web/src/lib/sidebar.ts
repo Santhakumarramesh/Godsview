@@ -116,10 +116,11 @@ export const SIDEBAR: ReadonlyArray<SidebarSection> = [
   {
     label: "Governance",
     items: [
-      { label: "Trust tiers", href: "/governance/trust", stub: true },
-      { label: "Approvals", href: "/governance/approvals", stub: true },
-      { label: "Demotions", href: "/governance/demotions", stub: true },
-      { label: "Policies", href: "/governance/policies", stub: true },
+      { label: "Trust tiers", href: "/governance/trust" },
+      { label: "Approvals", href: "/governance/approvals" },
+      { label: "Anomalies", href: "/governance/anomalies" },
+      { label: "Demotions", href: "/governance/demotions" },
+      { label: "Policies", href: "/governance/policies" },
     ],
   },
   {
