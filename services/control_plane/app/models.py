@@ -2357,3 +2357,140 @@ class TrustTierAssignmentRow(Base):
         Index("ix_trust_tier_assignments_user", "user_id"),
         Index("ix_trust_tier_assignments_assigned_at", "assigned_at"),
     )
+
+
+# ──────────────────────────── Phase 6 autonomy + kill-switch ────────────
+# The autonomy engine sits above the Phase 5 strategy FSM; one record row
+# per strategy holds the current tier, the history table is append-only,
+# and the kill-switch event log derives live state from the latest row
+# per (scope, subject_key) tuple.
+
+
+def _autonomy_record_id() -> str:
+    return f"aur_{uuid.uuid4().hex}"
+
+
+def _autonomy_history_id() -> str:
+    return f"auh_{uuid.uuid4().hex}"
+
+
+def _killswitch_event_id() -> str:
+    return f"ksw_{uuid.uuid4().hex}"
+
+
+class AutonomyRecordRow(Base):
+    """Record-of-truth for a strategy's autonomy tier.
+
+    One row per strategy (unique on ``strategy_id``). The ``current_state``
+    is always the ``to_state`` of the latest AutonomyHistoryEventRow.
+    """
+
+    __tablename__ = "autonomy_records"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=_autonomy_record_id
+    )
+    strategy_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("strategies.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    current_state: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="assisted_live"
+    )
+    entered_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    last_reason: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="initial_promotion"
+    )
+    last_transition_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    next_review_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    lockout_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    fills_in_state: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    r_in_state: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    # Gate snapshot is kept in a single JSON blob so new gates can be
+    # added without a schema migration.
+    gates: Mapped[Any] = mapped_column(JSON, nullable=False, default=dict)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("strategy_id", name="uq_autonomy_records_strategy"),
+        Index("ix_autonomy_records_current_state", "current_state"),
+        Index("ix_autonomy_records_next_review_at", "next_review_at"),
+    )
+
+
+class AutonomyHistoryEventRow(Base):
+    """Append-only transition row.
+
+    Writes land one row per transition; ``from_state`` is NULL for the
+    initial promotion seed event.
+    """
+
+    __tablename__ = "autonomy_history_events"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=_autonomy_history_id
+    )
+    strategy_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("strategies.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    from_state: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    to_state: Mapped[str] = mapped_column(String(24), nullable=False)
+    reason: Mapped[str] = mapped_column(String(32), nullable=False)
+    actor_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    approval_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    gate_snapshot: Mapped[Any] = mapped_column(JSON, nullable=True, default=None)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        Index("ix_autonomy_history_strategy", "strategy_id"),
+        Index("ix_autonomy_history_occurred_at", "occurred_at"),
+        Index("ix_autonomy_history_to_state", "to_state"),
+    )
+
+
+class KillSwitchEventRow(Base):
+    """Append-only kill-switch trip/reset event.
+
+    The ``active`` state for a (scope, subject_key) pair is derived from
+    the most recent row for that pair — a trip is active iff the latest
+    action is ``trip``. Global scope uses subject_key=NULL.
+    """
+
+    __tablename__ = "kill_switch_events"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=_killswitch_event_id
+    )
+    scope: Mapped[str] = mapped_column(String(16), nullable=False)
+    subject_key: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    action: Mapped[str] = mapped_column(String(16), nullable=False)
+    trigger: Mapped[str] = mapped_column(String(32), nullable=False)
+    actor_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    approval_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    evidence: Mapped[Any] = mapped_column(JSON, nullable=False, default=dict)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        Index("ix_kill_switch_events_scope_subject", "scope", "subject_key"),
+        Index("ix_kill_switch_events_occurred_at", "occurred_at"),
+        Index("ix_kill_switch_events_action", "action"),
+    )
