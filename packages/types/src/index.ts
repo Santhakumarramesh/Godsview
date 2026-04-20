@@ -32,3 +32,6 @@ export * from "./execution.js";
 export * from "./quant-lab.js";
 export * from "./recall.js";
 export * from "./learning.js";
+export * from "./portfolio.js";
+export * from "./governance.js";
+export * from "./autonomy.js";
