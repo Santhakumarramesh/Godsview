@@ -90,6 +90,7 @@ export const SIDEBAR: ReadonlyArray<SidebarSection> = [
       { label: "Correlation", href: "/portfolio/correlation", stub: true },
       { label: "Allocation", href: "/portfolio/allocation", stub: true },
       { label: "Drawdown", href: "/portfolio/drawdown", stub: true },
+      { label: "Rebalance", href: "/portfolio/rebalance" },
     ],
   },
   {
@@ -102,6 +103,7 @@ export const SIDEBAR: ReadonlyArray<SidebarSection> = [
       { label: "Incidents", href: "/ops/incidents", stub: true },
       { label: "Deployments", href: "/ops/deployments", stub: true },
       { label: "Latency", href: "/ops/latency", stub: true },
+      { label: "Venues", href: "/ops/venues" },
       { label: "Feeds", href: "/ops/feeds", stub: true },
       { label: "Logs", href: "/ops/logs", stub: true },
     ],
@@ -148,6 +150,7 @@ export const SIDEBAR: ReadonlyArray<SidebarSection> = [
       { label: "API keys", href: "/admin/api-keys", stub: true, roles: ["admin"] },
       { label: "Webhooks", href: "/admin/webhooks", stub: true, roles: ["admin"] },
       { label: "MCP servers", href: "/admin/mcp", stub: true, roles: ["admin"] },
+      { label: "Brokers", href: "/admin/brokers", roles: ["admin"] },
     ],
   },
   {
