@@ -2809,3 +2809,59 @@ class RebalanceIntentRow(Base):
         Index("ix_rebalance_intents_symbol", "symbol_id"),
         Index("ix_rebalance_intents_status", "status"),
     )
+
+
+# ─────────────────────────── mobile operator inbox (Phase 7) ─────────────
+# The mobile inbox itself is a read-only aggregation over AnomalyAlertRow,
+# GovernanceApprovalRow, KillSwitchEventRow, and RebalancePlanRow — it is
+# never materialised. Only the ack-events audit is persisted, one row per
+# (item, user, second) ack. A row with ``acknowledged_at`` newer than the
+# underlying object's ``updated_at`` flips that object to ``acknowledged``
+# in the projected feed.
+
+
+def _mobile_ack_event_id() -> str:
+    return f"mba_{uuid.uuid4().hex}"
+
+
+class MobileInboxAckEventRow(Base):
+    """Append-only audit of mobile-inbox acknowledgements.
+
+    ``inbox_item_id`` encodes the underlying row identity (e.g.
+    ``anomaly:ano_...``, ``approval:apr_...``, ``rebalance:reb_...``).
+    ``subject_key`` mirrors the ``subject_key`` of the source row when
+    available, otherwise the opaque item id. The tuple (inbox_item_id,
+    user_id, acknowledged_at) is unique so a repeated ack from the same
+    operator within one wall-clock second is de-duplicated to a single
+    audit row.
+    """
+
+    __tablename__ = "mobile_inbox_ack_events"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=_mobile_ack_event_id
+    )
+    inbox_item_id: Mapped[str] = mapped_column(String(120), nullable=False)
+    kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    subject_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    user_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    acknowledged_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "inbox_item_id",
+            "user_id",
+            "acknowledged_at",
+            name="uq_mobile_inbox_ack_events_item_user",
+        ),
+        Index(
+            "ix_mobile_inbox_ack_events_inbox_item", "inbox_item_id"
+        ),
+        Index("ix_mobile_inbox_ack_events_user", "user_id"),
+        Index(
+            "ix_mobile_inbox_ack_events_acknowledged_at", "acknowledged_at"
+        ),
+    )
