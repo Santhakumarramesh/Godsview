@@ -28,6 +28,19 @@ from app.recall.calibrator import (
     feature_fingerprint,
     neighbour_win_rate,
 )
+from app.recall.features import (
+    DIRECTIONS,
+    RECALL_FEATURE_DIMS,
+    REGIMES,
+    RecallFeatures,
+    SESSIONS,
+    SETUP_TYPES,
+    TIMEFRAMES,
+    cosine_similarity,
+    features_to_vector,
+    pack_features,
+    vector_norm,
+)
 from app.recall.store import (
     InMemoryRecallStore,
     RecallNeighbour,
@@ -38,13 +51,24 @@ from app.recall.store import (
 )
 
 __all__ = [
+    "DIRECTIONS",
     "InMemoryRecallStore",
+    "RECALL_FEATURE_DIMS",
+    "REGIMES",
+    "RecallFeatures",
     "RecallNeighbour",
     "RecallRecord",
     "RecallStore",
+    "SESSIONS",
+    "SETUP_TYPES",
+    "TIMEFRAMES",
     "calibrate_confidence",
+    "cosine_similarity",
     "feature_fingerprint",
+    "features_to_vector",
     "get_recall_store",
     "neighbour_win_rate",
+    "pack_features",
     "reset_recall_store",
+    "vector_norm",
 ]

@@ -26,6 +26,7 @@ from app.routes.orderflow import router as orderflow_router
 from app.routes.quant_experiments import router as quant_experiments_router
 from app.routes.quant_lab import router as quant_lab_router
 from app.routes.quant_replay import router as quant_replay_router
+from app.routes.recall import router as recall_router
 from app.routes.risk import router as risk_router
 from app.routes.settings import router as settings_router
 from app.routes.setups import router as setups_router
@@ -116,6 +117,10 @@ api_router.include_router(
 )
 api_router.include_router(
     quant_experiments_router,
+    responses={**COMMON_ERROR_RESPONSES, **AUTH_ERROR_RESPONSES},
+)
+api_router.include_router(
+    recall_router,
     responses={**COMMON_ERROR_RESPONSES, **AUTH_ERROR_RESPONSES},
 )
 # /v1/tv-webhook is unauthenticated — it is HMAC-gated via the
