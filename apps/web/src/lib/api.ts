@@ -12,7 +12,10 @@ import {
   authEndpoints,
   autonomyEndpoints,
   backtestEndpoints,
+  brokerAdapterEndpoints,
+  brokerBindingEndpoints,
   brokerEndpoints,
+  brokerHealthEndpoints,
   calibrationEndpoints,
   dataTruthEndpoints,
   experimentEndpoints,
@@ -28,6 +31,7 @@ import {
   liveTradeEndpoints,
   marketEndpoints,
   mcpEndpoints,
+  mobileInboxEndpoints,
   opsEndpoints,
   orderflowEndpoints,
   portfolioAccountsEndpoints,
@@ -37,6 +41,8 @@ import {
   promotionEndpoints,
   quantReplayEndpoints,
   rankingEndpoints,
+  rebalanceIntentEndpoints,
+  rebalancePlanEndpoints,
   recallEndpoints,
   regimeEndpoints,
   replayEndpoints,
@@ -50,6 +56,9 @@ import {
   systemConfigEndpoints,
   tvIngestEndpoints,
   userEndpoints,
+  venueLatencyEndpoints,
+  venueOutageEndpoints,
+  venueRegistryEndpoints,
   webhookEndpoints,
 } from "@gv/api-client";
 
@@ -124,4 +133,23 @@ export const api = {
   // Phase 6 — Autonomy + kill switch
   autonomy: autonomyEndpoints(apiClient),
   killSwitch: killSwitchEndpoints(apiClient),
+  // Phase 7 — Multi-broker registry
+  brokers: {
+    adapters: brokerAdapterEndpoints(apiClient),
+    bindings: brokerBindingEndpoints(apiClient),
+    health: brokerHealthEndpoints(apiClient),
+  },
+  // Phase 7 — Portfolio rebalance
+  rebalance: {
+    plans: rebalancePlanEndpoints(apiClient),
+    intents: rebalanceIntentEndpoints(apiClient),
+  },
+  // Phase 7 — Venue latency + outages
+  venue: {
+    latency: venueLatencyEndpoints(apiClient),
+    outages: venueOutageEndpoints(apiClient),
+    registry: venueRegistryEndpoints(apiClient),
+  },
+  // Phase 7 — Mobile operator inbox
+  mobileInbox: mobileInboxEndpoints(apiClient),
 };

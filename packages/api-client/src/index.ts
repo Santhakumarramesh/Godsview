@@ -29,3 +29,7 @@ export * from "./endpoints/learning.js";
 export * from "./endpoints/portfolio.js";
 export * from "./endpoints/governance.js";
 export * from "./endpoints/autonomy.js";
+export * from "./endpoints/brokers.js";
+export * from "./endpoints/rebalance.js";
+export * from "./endpoints/venue.js";
+export * from "./endpoints/mobile.js";
