@@ -2045,3 +2045,65 @@ class StrategyDNACell(Base):
         ),
         Index("ix_strategy_dna_strategy", "strategy_id"),
     )
+
+
+# ──────────────────────────── Phase 6 — Portfolio Intelligence ──────────
+#
+# Only one new table is required for the portfolio layer: operator-set
+# strategy allocation targets. Everything else (exposure, PnL timeseries)
+# is projected at read time from Phase 4 state (positions, live_trades,
+# account_equity_snapshots).
+
+
+def _allocation_plan_id() -> str:
+    return f"alc_{uuid.uuid4().hex}"
+
+
+class AllocationPlanRow(Base):
+    """Operator-set allocation target for a single strategy on a single account.
+
+    ``actual_percent`` and ``delta_r`` are NOT persisted — they are
+    recomputed each read from live equity + open live-trade risk. This
+    row is only the operator's *intent*: "strategy stg_xxx should take
+    up ≤ 20% of equity on account brk_yyy".
+
+    A missing row means the strategy inherits the catalog default in
+    ``system_config.portfolio.default_strategy_target``.
+    """
+
+    __tablename__ = "allocation_plans"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=_allocation_plan_id
+    )
+    account_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("broker_accounts.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    strategy_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("strategies.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    target_percent: Mapped[float] = mapped_column(nullable=False)
+    source: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="operator"
+    )
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    reviewed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False
+    )
+    updated_by_user_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "account_id", "strategy_id", name="uq_allocation_plans_account_strategy"
+        ),
+        Index("ix_allocation_plans_account", "account_id"),
+    )
