@@ -23,3 +23,6 @@ export * from "./endpoints/tv-ingest.js";
 export * from "./endpoints/orderflow.js";
 export * from "./endpoints/setups.js";
 export * from "./endpoints/execution.js";
+export * from "./endpoints/quant-lab.js";
+export * from "./endpoints/recall.js";
+export * from "./endpoints/learning.js";
