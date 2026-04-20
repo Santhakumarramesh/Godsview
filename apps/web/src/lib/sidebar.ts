@@ -58,6 +58,7 @@ export const SIDEBAR: ReadonlyArray<SidebarSection> = [
       { label: "Builder", href: "/strategies/builder", stub: true },
       { label: "Active", href: "/strategies/active", stub: true },
       { label: "Promotions", href: "/strategies/promotions", stub: true },
+      { label: "Autonomy", href: "/strategies/autonomy" },
       { label: "DNA", href: "/strategies/dna", stub: true },
     ],
   },
@@ -78,7 +79,7 @@ export const SIDEBAR: ReadonlyArray<SidebarSection> = [
       { label: "Fills", href: "/execution/fills", stub: true },
       { label: "Positions", href: "/execution/positions", stub: true },
       { label: "Risk", href: "/execution/risk", stub: true },
-      { label: "Kill switch", href: "/execution/killswitch", stub: true },
+      { label: "Kill switch", href: "/execution/killswitch" },
     ],
   },
   {
