@@ -29,3 +29,6 @@ export * from "./signals.js";
 export * from "./orderflow.js";
 export * from "./setups.js";
 export * from "./execution.js";
+export * from "./quant-lab.js";
+export * from "./recall.js";
+export * from "./learning.js";
