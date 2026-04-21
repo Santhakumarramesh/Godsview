@@ -47,6 +47,12 @@ class Settings(BaseSettings):
     risk_url: str = Field(default="http://risk:8006", alias="RISK_URL")
     memory_url: str = Field(default="http://memory:8007", alias="MEMORY_URL")
     scheduler_url: str = Field(default="http://scheduler:8008", alias="SCHEDULER_URL")
+    tv_bridge_url: str = Field(
+        default="http://tv-bridge:8009", alias="TV_BRIDGE_URL"
+    )
+    orderflow_url: str = Field(
+        default="http://orderflow:8010", alias="ORDERFLOW_URL"
+    )
 
     # ── Alpaca ─────────────────────────────────────────────────────────────────
     alpaca_key_id: str = Field(default="", alias="ALPACA_KEY_ID")

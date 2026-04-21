@@ -1,0 +1,2914 @@
+From 867699bafb91d4a44de82916eb35d62993f93d1a Mon Sep 17 00:00:00 2001
+From: claude-bot <noreply@anthropic.com>
+Date: Sun, 19 Apr 2026 00:53:59 -0400
+Subject: [PATCH 4/6] =?UTF-8?q?phase-0(pr5):=20apps/web=20Next.js=2015=20s?=
+ =?UTF-8?q?keleton=20=E2=80=94=206=20functional=20+=2060=20sidebar=20stubs?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Materialize the v2 web app under apps/web (legacy app under apps stays untouched
+per the Phase 0 coexistence contract — full deletion lands in a later sub-PR).
+
+Stack: Next.js 15.0.3 App Router · React 19 RC · TanStack Query 5 ·
+TailwindCSS dark palette · @gv/api-client + @gv/types via workspace.
+
+Chrome:
+  - RootLayout → Providers (QueryClient + AuthProvider)
+  - (app) layout → AuthGate + Sidebar + TopBar + main grid
+  - (auth) layout → centered login form
+  - Sidebar: 14 sections, role-filtered, stub badges; ALL_HREFS export
+  - TopBar: env badge + user roles + sign-out
+  - AuthGate: redirects unauthenticated to /login
+  - Token lifecycle: localStorage (gv.accessToken/refreshToken/accessExpiresAt)
+  - api singleton wraps @gv/api-client with mutable tokenGetter closure
+
+Functional pages (wired to control plane):
+  - /login                 — email/password sign-in
+  - /overview              — landing cards (control plane status, roles, links)
+  - /market/symbols        — filterable Phase 0 watchlist
+  - /ops/health            — /ready + /live probes with dep checks
+  - /ops/flags             — list + admin-gated PATCH toggle
+  - /admin/system          — admin-gated inline JSON CRUD on KV store
+
+Stub pages (60 total) — each renders <ToDoBanner title=... phase=... />:
+  Command(1) replay
+  Market(5) watchlist levels regimes sessions liquidity
+  Intelligence(7) fusion structure flow setups recall agents calibration
+  Strategies(5) catalog builder active promotions dna
+  Quant Lab(5) backtests replay experiments metrics ranking
+  Execution(5) orders fills positions risk killswitch
+  Portfolio(5) pnl exposure correlation allocation drawdown
+  Operations(7) slos alerts incidents deployments latency feeds logs
+  Audit(3) events kv-changes exports
+  Governance(4) trust approvals demotions policies
+  Learning(3) feedback missed drift
+  Research(2) brainstorm regimes
+  Admin(5) users roles api-keys webhooks mcp
+  Settings(3) profile preferences api-tokens
+
+Each stub names its scheduled phase + describes the planned feature so
+sidebar drill-downs show real intent rather than a 404.
+
+Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+---
+ apps/web/.env.example                         |   8 +
+ apps/web/next-env.d.ts                        |   5 +
+ apps/web/next.config.mjs                      |  20 +++
+ apps/web/package.json                         |  41 +++++
+ apps/web/postcss.config.mjs                   |   6 +
+ .../web/src/app/(app)/admin/api-keys/page.tsx |  11 ++
+ apps/web/src/app/(app)/admin/mcp/page.tsx     |  11 ++
+ apps/web/src/app/(app)/admin/roles/page.tsx   |  11 ++
+ apps/web/src/app/(app)/admin/system/page.tsx  | 164 ++++++++++++++++++
+ apps/web/src/app/(app)/admin/users/page.tsx   |  12 ++
+ .../web/src/app/(app)/admin/webhooks/page.tsx |  11 ++
+ apps/web/src/app/(app)/audit/events/page.tsx  |  12 ++
+ apps/web/src/app/(app)/audit/exports/page.tsx |  11 ++
+ .../src/app/(app)/audit/kv-changes/page.tsx   |  11 ++
+ .../src/app/(app)/execution/fills/page.tsx    |  11 ++
+ .../app/(app)/execution/killswitch/page.tsx   |  15 ++
+ .../src/app/(app)/execution/orders/page.tsx   |  12 ++
+ .../app/(app)/execution/positions/page.tsx    |  12 ++
+ .../web/src/app/(app)/execution/risk/page.tsx |  12 ++
+ .../app/(app)/governance/approvals/page.tsx   |  11 ++
+ .../app/(app)/governance/demotions/page.tsx   |  11 ++
+ .../app/(app)/governance/policies/page.tsx    |  11 ++
+ .../src/app/(app)/governance/trust/page.tsx   |  12 ++
+ apps/web/src/app/(app)/intel/agents/page.tsx  |  11 ++
+ .../src/app/(app)/intel/calibration/page.tsx  |  12 ++
+ apps/web/src/app/(app)/intel/flow/page.tsx    |  12 ++
+ apps/web/src/app/(app)/intel/fusion/page.tsx  |  15 ++
+ apps/web/src/app/(app)/intel/recall/page.tsx  |  12 ++
+ apps/web/src/app/(app)/intel/setups/page.tsx  |  12 ++
+ .../src/app/(app)/intel/structure/page.tsx    |  12 ++
+ apps/web/src/app/(app)/layout.tsx             |  18 ++
+ .../web/src/app/(app)/learning/drift/page.tsx |  12 ++
+ .../src/app/(app)/learning/feedback/page.tsx  |  11 ++
+ .../src/app/(app)/learning/missed/page.tsx    |  12 ++
+ apps/web/src/app/(app)/market/levels/page.tsx |  12 ++
+ .../src/app/(app)/market/liquidity/page.tsx   |  12 ++
+ .../web/src/app/(app)/market/regimes/page.tsx |  15 ++
+ .../src/app/(app)/market/sessions/page.tsx    |  11 ++
+ .../web/src/app/(app)/market/symbols/page.tsx |  83 +++++++++
+ .../src/app/(app)/market/watchlist/page.tsx   |  12 ++
+ apps/web/src/app/(app)/ops/alerts/page.tsx    |  11 ++
+ .../src/app/(app)/ops/deployments/page.tsx    |  11 ++
+ apps/web/src/app/(app)/ops/feeds/page.tsx     |  11 ++
+ apps/web/src/app/(app)/ops/flags/page.tsx     | 120 +++++++++++++
+ apps/web/src/app/(app)/ops/health/page.tsx    |  96 ++++++++++
+ apps/web/src/app/(app)/ops/incidents/page.tsx |  11 ++
+ apps/web/src/app/(app)/ops/latency/page.tsx   |  11 ++
+ apps/web/src/app/(app)/ops/logs/page.tsx      |  12 ++
+ apps/web/src/app/(app)/ops/slos/page.tsx      |  12 ++
+ apps/web/src/app/(app)/overview/page.tsx      | 131 ++++++++++++++
+ .../app/(app)/portfolio/allocation/page.tsx   |  12 ++
+ .../app/(app)/portfolio/correlation/page.tsx  |  11 ++
+ .../src/app/(app)/portfolio/drawdown/page.tsx |  11 ++
+ .../src/app/(app)/portfolio/exposure/page.tsx |  11 ++
+ apps/web/src/app/(app)/portfolio/pnl/page.tsx |  11 ++
+ .../src/app/(app)/quant/backtests/page.tsx    |  12 ++
+ .../src/app/(app)/quant/experiments/page.tsx  |  11 ++
+ apps/web/src/app/(app)/quant/metrics/page.tsx |  11 ++
+ apps/web/src/app/(app)/quant/ranking/page.tsx |  12 ++
+ apps/web/src/app/(app)/quant/replay/page.tsx  |  12 ++
+ apps/web/src/app/(app)/replay/page.tsx        |  15 ++
+ .../app/(app)/research/brainstorm/page.tsx    |  11 ++
+ .../src/app/(app)/research/regimes/page.tsx   |  12 ++
+ .../app/(app)/settings/api-tokens/page.tsx    |  12 ++
+ .../app/(app)/settings/preferences/page.tsx   |  11 ++
+ .../src/app/(app)/settings/profile/page.tsx   |  11 ++
+ .../src/app/(app)/strategies/active/page.tsx  |  12 ++
+ .../src/app/(app)/strategies/builder/page.tsx |  11 ++
+ .../web/src/app/(app)/strategies/dna/page.tsx |  11 ++
+ apps/web/src/app/(app)/strategies/page.tsx    |  15 ++
+ .../app/(app)/strategies/promotions/page.tsx  |  12 ++
+ apps/web/src/app/(auth)/layout.tsx            |   9 +
+ apps/web/src/app/(auth)/login/page.tsx        | 102 +++++++++++
+ apps/web/src/app/globals.css                  |  26 +++
+ apps/web/src/app/layout.tsx                   |  19 ++
+ apps/web/src/app/page.tsx                     |   5 +
+ apps/web/src/components/AuthGate.tsx          |  26 +++
+ apps/web/src/components/Sidebar.tsx           |  69 ++++++++
+ apps/web/src/components/ToDoBanner.tsx        |  49 ++++++
+ apps/web/src/components/TopBar.tsx            |  45 +++++
+ apps/web/src/lib/api.ts                       |  35 ++++
+ apps/web/src/lib/auth-context.tsx             | 117 +++++++++++++
+ apps/web/src/lib/providers.tsx                |  26 +++
+ apps/web/src/lib/sidebar.ts                   | 164 ++++++++++++++++++
+ apps/web/tailwind.config.ts                   |  43 +++++
+ apps/web/tsconfig.json                        |  34 ++++
+ 86 files changed, 2167 insertions(+)
+ create mode 100644 apps/web/.env.example
+ create mode 100644 apps/web/next-env.d.ts
+ create mode 100644 apps/web/next.config.mjs
+ create mode 100644 apps/web/package.json
+ create mode 100644 apps/web/postcss.config.mjs
+ create mode 100644 apps/web/src/app/(app)/admin/api-keys/page.tsx
+ create mode 100644 apps/web/src/app/(app)/admin/mcp/page.tsx
+ create mode 100644 apps/web/src/app/(app)/admin/roles/page.tsx
+ create mode 100644 apps/web/src/app/(app)/admin/system/page.tsx
+ create mode 100644 apps/web/src/app/(app)/admin/users/page.tsx
+ create mode 100644 apps/web/src/app/(app)/admin/webhooks/page.tsx
+ create mode 100644 apps/web/src/app/(app)/audit/events/page.tsx
+ create mode 100644 apps/web/src/app/(app)/audit/exports/page.tsx
+ create mode 100644 apps/web/src/app/(app)/audit/kv-changes/page.tsx
+ create mode 100644 apps/web/src/app/(app)/execution/fills/page.tsx
+ create mode 100644 apps/web/src/app/(app)/execution/killswitch/page.tsx
+ create mode 100644 apps/web/src/app/(app)/execution/orders/page.tsx
+ create mode 100644 apps/web/src/app/(app)/execution/positions/page.tsx
+ create mode 100644 apps/web/src/app/(app)/execution/risk/page.tsx
+ create mode 100644 apps/web/src/app/(app)/governance/approvals/page.tsx
+ create mode 100644 apps/web/src/app/(app)/governance/demotions/page.tsx
+ create mode 100644 apps/web/src/app/(app)/governance/policies/page.tsx
+ create mode 100644 apps/web/src/app/(app)/governance/trust/page.tsx
+ create mode 100644 apps/web/src/app/(app)/intel/agents/page.tsx
+ create mode 100644 apps/web/src/app/(app)/intel/calibration/page.tsx
+ create mode 100644 apps/web/src/app/(app)/intel/flow/page.tsx
+ create mode 100644 apps/web/src/app/(app)/intel/fusion/page.tsx
+ create mode 100644 apps/web/src/app/(app)/intel/recall/page.tsx
+ create mode 100644 apps/web/src/app/(app)/intel/setups/page.tsx
+ create mode 100644 apps/web/src/app/(app)/intel/structure/page.tsx
+ create mode 100644 apps/web/src/app/(app)/layout.tsx
+ create mode 100644 apps/web/src/app/(app)/learning/drift/page.tsx
+ create mode 100644 apps/web/src/app/(app)/learning/feedback/page.tsx
+ create mode 100644 apps/web/src/app/(app)/learning/missed/page.tsx
+ create mode 100644 apps/web/src/app/(app)/market/levels/page.tsx
+ create mode 100644 apps/web/src/app/(app)/market/liquidity/page.tsx
+ create mode 100644 apps/web/src/app/(app)/market/regimes/page.tsx
+ create mode 100644 apps/web/src/app/(app)/market/sessions/page.tsx
+ create mode 100644 apps/web/src/app/(app)/market/symbols/page.tsx
+ create mode 100644 apps/web/src/app/(app)/market/watchlist/page.tsx
+ create mode 100644 apps/web/src/app/(app)/ops/alerts/page.tsx
+ create mode 100644 apps/web/src/app/(app)/ops/deployments/page.tsx
+ create mode 100644 apps/web/src/app/(app)/ops/feeds/page.tsx
+ create mode 100644 apps/web/src/app/(app)/ops/flags/page.tsx
+ create mode 100644 apps/web/src/app/(app)/ops/health/page.tsx
+ create mode 100644 apps/web/src/app/(app)/ops/incidents/page.tsx
+ create mode 100644 apps/web/src/app/(app)/ops/latency/page.tsx
+ create mode 100644 apps/web/src/app/(app)/ops/logs/page.tsx
+ create mode 100644 apps/web/src/app/(app)/ops/slos/page.tsx
+ create mode 100644 apps/web/src/app/(app)/overview/page.tsx
+ create mode 100644 apps/web/src/app/(app)/portfolio/allocation/page.tsx
+ create mode 100644 apps/web/src/app/(app)/portfolio/correlation/page.tsx
+ create mode 100644 apps/web/src/app/(app)/portfolio/drawdown/page.tsx
+ create mode 100644 apps/web/src/app/(app)/portfolio/exposure/page.tsx
+ create mode 100644 apps/web/src/app/(app)/portfolio/pnl/page.tsx
+ create mode 100644 apps/web/src/app/(app)/quant/backtests/page.tsx
+ create mode 100644 apps/web/src/app/(app)/quant/experiments/page.tsx
+ create mode 100644 apps/web/src/app/(app)/quant/metrics/page.tsx
+ create mode 100644 apps/web/src/app/(app)/quant/ranking/page.tsx
+ create mode 100644 apps/web/src/app/(app)/quant/replay/page.tsx
+ create mode 100644 apps/web/src/app/(app)/replay/page.tsx
+ create mode 100644 apps/web/src/app/(app)/research/brainstorm/page.tsx
+ create mode 100644 apps/web/src/app/(app)/research/regimes/page.tsx
+ create mode 100644 apps/web/src/app/(app)/settings/api-tokens/page.tsx
+ create mode 100644 apps/web/src/app/(app)/settings/preferences/page.tsx
+ create mode 100644 apps/web/src/app/(app)/settings/profile/page.tsx
+ create mode 100644 apps/web/src/app/(app)/strategies/active/page.tsx
+ create mode 100644 apps/web/src/app/(app)/strategies/builder/page.tsx
+ create mode 100644 apps/web/src/app/(app)/strategies/dna/page.tsx
+ create mode 100644 apps/web/src/app/(app)/strategies/page.tsx
+ create mode 100644 apps/web/src/app/(app)/strategies/promotions/page.tsx
+ create mode 100644 apps/web/src/app/(auth)/layout.tsx
+ create mode 100644 apps/web/src/app/(auth)/login/page.tsx
+ create mode 100644 apps/web/src/app/globals.css
+ create mode 100644 apps/web/src/app/layout.tsx
+ create mode 100644 apps/web/src/app/page.tsx
+ create mode 100644 apps/web/src/components/AuthGate.tsx
+ create mode 100644 apps/web/src/components/Sidebar.tsx
+ create mode 100644 apps/web/src/components/ToDoBanner.tsx
+ create mode 100644 apps/web/src/components/TopBar.tsx
+ create mode 100644 apps/web/src/lib/api.ts
+ create mode 100644 apps/web/src/lib/auth-context.tsx
+ create mode 100644 apps/web/src/lib/providers.tsx
+ create mode 100644 apps/web/src/lib/sidebar.ts
+ create mode 100644 apps/web/tailwind.config.ts
+ create mode 100644 apps/web/tsconfig.json
+
+diff --git a/apps/web/.env.example b/apps/web/.env.example
+new file mode 100644
+index 0000000..89059bc
+--- /dev/null
++++ b/apps/web/.env.example
+@@ -0,0 +1,8 @@
++# Public origin of the FastAPI control plane consumed by /api/v1/* rewrites.
++GODSVIEW_CONTROL_PLANE_ORIGIN=http://localhost:8000
++
++# Public-facing base URL the React client uses when calling the API.
++NEXT_PUBLIC_GODSVIEW_API_BASE=/api/v1
++
++# Display label shown in the top bar.
++NEXT_PUBLIC_GODSVIEW_ENV=local
+diff --git a/apps/web/next-env.d.ts b/apps/web/next-env.d.ts
+new file mode 100644
+index 0000000..1b3be08
+--- /dev/null
++++ b/apps/web/next-env.d.ts
+@@ -0,0 +1,5 @@
++/// <reference types="next" />
++/// <reference types="next/image-types/global" />
++
++// NOTE: This file should not be edited
++// see https://nextjs.org/docs/app/api-reference/config/typescript for more information.
+diff --git a/apps/web/next.config.mjs b/apps/web/next.config.mjs
+new file mode 100644
+index 0000000..bf847b7
+--- /dev/null
++++ b/apps/web/next.config.mjs
+@@ -0,0 +1,20 @@
++/** @type {import('next').NextConfig} */
++const nextConfig = {
++  reactStrictMode: true,
++  transpilePackages: ["@gv/ui", "@gv/api-client", "@gv/types", "@gv/config"],
++  experimental: {
++    // Phase 0: keep features conservative; turn on selectively in later phases.
++    typedRoutes: true,
++  },
++  async rewrites() {
++    const apiBase = process.env.GODSVIEW_CONTROL_PLANE_ORIGIN || "http://localhost:8000";
++    return [
++      {
++        source: "/api/v1/:path*",
++        destination: `${apiBase}/:path*`,
++      },
++    ];
++  },
++};
++
++export default nextConfig;
+diff --git a/apps/web/package.json b/apps/web/package.json
+new file mode 100644
+index 0000000..d8eb3de
+--- /dev/null
++++ b/apps/web/package.json
+@@ -0,0 +1,41 @@
++{
++  "name": "@gv/web",
++  "version": "2.0.0-rc.0",
++  "private": true,
++  "type": "module",
++  "scripts": {
++    "dev": "next dev --port 3000",
++    "build": "next build",
++    "start": "next start --port 3000",
++    "lint": "next lint",
++    "typecheck": "tsc --noEmit",
++    "test": "vitest run"
++  },
++  "dependencies": {
++    "@gv/api-client": "workspace:*",
++    "@gv/config": "workspace:*",
++    "@gv/types": "workspace:*",
++    "@gv/ui": "workspace:*",
++    "@tanstack/react-query": "^5.59.20",
++    "clsx": "^2.1.1",
++    "lucide-react": "^0.454.0",
++    "next": "15.0.3",
++    "react": "19.0.0-rc-02c0e824-20241028",
++    "react-dom": "19.0.0-rc-02c0e824-20241028",
++    "tailwind-merge": "^2.5.4",
++    "zod": "^3.23.8",
++    "zustand": "^5.0.1"
++  },
++  "devDependencies": {
++    "@types/node": "^22.9.0",
++    "@types/react": "^18.3.12",
++    "@types/react-dom": "^18.3.1",
++    "autoprefixer": "^10.4.20",
++    "eslint": "^9.14.0",
++    "eslint-config-next": "15.0.3",
++    "postcss": "^8.4.47",
++    "tailwindcss": "^3.4.14",
++    "typescript": "^5.6.3",
++    "vitest": "^2.1.4"
++  }
++}
+diff --git a/apps/web/postcss.config.mjs b/apps/web/postcss.config.mjs
+new file mode 100644
+index 0000000..2aa7205
+--- /dev/null
++++ b/apps/web/postcss.config.mjs
+@@ -0,0 +1,6 @@
++export default {
++  plugins: {
++    tailwindcss: {},
++    autoprefixer: {},
++  },
++};
+diff --git a/apps/web/src/app/(app)/admin/api-keys/page.tsx b/apps/web/src/app/(app)/admin/api-keys/page.tsx
+new file mode 100644
+index 0000000..f150de9
+--- /dev/null
++++ b/apps/web/src/app/(app)/admin/api-keys/page.tsx
+@@ -0,0 +1,11 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function AdminApiKeysPage() {
++  return (
++    <ToDoBanner
++      title="Admin · API keys"
++      phase="Phase 1"
++      description="Issue, rotate, and revoke programmatic API keys with fine-grained scopes. Last-used timestamps and rate-limit bucket assignment shown per key."
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/admin/mcp/page.tsx b/apps/web/src/app/(app)/admin/mcp/page.tsx
+new file mode 100644
+index 0000000..e4de80a
+--- /dev/null
++++ b/apps/web/src/app/(app)/admin/mcp/page.tsx
+@@ -0,0 +1,11 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function AdminMcpPage() {
++  return (
++    <ToDoBanner
++      title="Admin · MCP servers"
++      phase="Phase 1"
++      description="Register and health-check MCP servers — TradingView signal bridge, execution adapters, data feeds. Per-server state and last-handshake timestamp."
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/admin/roles/page.tsx b/apps/web/src/app/(app)/admin/roles/page.tsx
+new file mode 100644
+index 0000000..cd6ba06
+--- /dev/null
++++ b/apps/web/src/app/(app)/admin/roles/page.tsx
+@@ -0,0 +1,11 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function AdminRolesPage() {
++  return (
++    <ToDoBanner
++      title="Admin · Roles"
++      phase="Phase 1"
++      description="Role definitions — viewer / analyst / operator / admin — and the permissions matrix they grant across the control plane."
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/admin/system/page.tsx b/apps/web/src/app/(app)/admin/system/page.tsx
+new file mode 100644
+index 0000000..8c8c6e5
+--- /dev/null
++++ b/apps/web/src/app/(app)/admin/system/page.tsx
+@@ -0,0 +1,164 @@
++"use client";
++
++import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
++import { useState } from "react";
++import { api } from "@/lib/api";
++import { useAuth } from "@/lib/auth-context";
++import { ApiError } from "@gv/api-client";
++
++export default function AdminSystemConfigPage() {
++  const { user } = useAuth();
++  const isAdmin = user?.roles.includes("admin") ?? false;
++  const qc = useQueryClient();
++
++  const list = useQuery({
++    queryKey: ["system-config"],
++    queryFn: () => api.systemConfig.list(),
++  });
++
++  const upsert = useMutation({
++    mutationFn: ({
++      key,
++      value,
++      description,
++    }: {
++      key: string;
++      value: unknown;
++      description?: string;
++    }) => api.systemConfig.upsert(key, { value, description }),
++    onSuccess: () => qc.invalidateQueries({ queryKey: ["system-config"] }),
++  });
++
++  const [editKey, setEditKey] = useState<string | null>(null);
++  const [draft, setDraft] = useState<string>("");
++
++  return (
++    <section className="space-y-4">
++      <header className="space-y-1">
++        <h1 className="text-2xl font-semibold">Admin · System config</h1>
++        <p className="text-sm text-muted">
++          Typed key/value store driving safety thresholds and runtime knobs.
++          All writes are audit-logged.
++        </p>
++      </header>
++
++      {list.isLoading ? (
++        <p className="text-sm text-muted">Loading system config…</p>
++      ) : null}
++      {list.isError ? (
++        <p className="text-sm text-danger">Failed to load system config.</p>
++      ) : null}
++
++      {list.data ? (
++        <div className="overflow-hidden rounded-lg border border-border">
++          <table className="w-full text-sm">
++            <thead className="bg-surface/80 text-left text-xs uppercase text-muted">
++              <tr>
++                <th className="px-3 py-2 font-medium">Key</th>
++                <th className="px-3 py-2 font-medium">Value</th>
++                <th className="px-3 py-2 font-medium">Description</th>
++                <th className="px-3 py-2 font-medium">Updated</th>
++                <th className="px-3 py-2" />
++              </tr>
++            </thead>
++            <tbody>
++              {list.data.entries.map((entry) => {
++                const editing = editKey === entry.key;
++                return (
++                  <tr key={entry.key} className="border-t border-border align-top">
++                    <td className="px-3 py-2 font-mono">{entry.key}</td>
++                    <td className="px-3 py-2 font-mono text-xs">
++                      {editing ? (
++                        <textarea
++                          className="w-full rounded border border-border bg-background p-2 font-mono text-xs"
++                          rows={3}
++                          value={draft}
++                          onChange={(e) => setDraft(e.target.value)}
++                        />
++                      ) : (
++                        <pre className="whitespace-pre-wrap break-words">
++                          {JSON.stringify(entry.value, null, 2)}
++                        </pre>
++                      )}
++                    </td>
++                    <td className="px-3 py-2 text-muted">{entry.description}</td>
++                    <td className="px-3 py-2 text-xs text-muted">
++                      <div>{new Date(entry.updatedAt).toLocaleString()}</div>
++                      <div className="font-mono">{entry.updatedBy}</div>
++                    </td>
++                    <td className="px-3 py-2 text-right">
++                      {editing ? (
++                        <div className="flex gap-1 justify-end">
++                          <button
++                            className="rounded border border-border px-2 py-1 text-xs"
++                            onClick={() => setEditKey(null)}
++                          >
++                            Cancel
++                          </button>
++                          <button
++                            className="rounded bg-primary px-2 py-1 text-xs text-background disabled:opacity-50"
++                            disabled={!isAdmin || upsert.isPending}
++                            onClick={() => {
++                              try {
++                                const parsed = JSON.parse(draft);
++                                upsert.mutate(
++                                  { key: entry.key, value: parsed },
++                                  { onSuccess: () => setEditKey(null) },
++                                );
++                              } catch {
++                                /* keep in edit mode on parse failure */
++                              }
++                            }}
++                          >
++                            Save
++                          </button>
++                        </div>
++                      ) : (
++                        <button
++                          type="button"
++                          disabled={!isAdmin}
++                          className="rounded border border-border px-2 py-1 text-xs hover:bg-surface disabled:opacity-50"
++                          onClick={() => {
++                            setEditKey(entry.key);
++                            setDraft(JSON.stringify(entry.value, null, 2));
++                          }}
++                        >
++                          Edit
++                        </button>
++                      )}
++                    </td>
++                  </tr>
++                );
++              })}
++              {list.data.entries.length === 0 ? (
++                <tr>
++                  <td className="px-3 py-6 text-center text-muted" colSpan={5}>
++                    No system config entries yet. Seeded defaults land via
++                    <code className="mx-1 font-mono">make seed</code>.
++                  </td>
++                </tr>
++              ) : null}
++            </tbody>
++          </table>
++        </div>
++      ) : null}
++
++      {upsert.isError ? (
++        <p className="text-sm text-danger">
++          Save failed:{" "}
++          {upsert.error instanceof ApiError
++            ? upsert.error.body?.error?.message ?? `HTTP ${upsert.error.status}`
++            : upsert.error instanceof Error
++              ? upsert.error.message
++              : "unknown error"}
++        </p>
++      ) : null}
++
++      {!isAdmin ? (
++        <p className="text-xs text-muted">
++          Read-only view. Admin role required to edit config.
++        </p>
++      ) : null}
++    </section>
++  );
++}
+diff --git a/apps/web/src/app/(app)/admin/users/page.tsx b/apps/web/src/app/(app)/admin/users/page.tsx
+new file mode 100644
+index 0000000..6679d69
+--- /dev/null
++++ b/apps/web/src/app/(app)/admin/users/page.tsx
+@@ -0,0 +1,12 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function AdminUsersPage() {
++  return (
++    <ToDoBanner
++      title="Admin · Users"
++      phase="Phase 1"
++      description="User management — invite, deactivate, reset password, role assignment. All actions audit-logged."
++      related={[{ label: "Admin · Roles", href: "/admin/roles" }]}
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/admin/webhooks/page.tsx b/apps/web/src/app/(app)/admin/webhooks/page.tsx
+new file mode 100644
+index 0000000..339876a
+--- /dev/null
++++ b/apps/web/src/app/(app)/admin/webhooks/page.tsx
+@@ -0,0 +1,11 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function AdminWebhooksPage() {
++  return (
++    <ToDoBanner
++      title="Admin · Webhooks"
++      phase="Phase 1"
++      description="Webhook endpoints, HMAC secrets, delivery attempts, and replay tooling for TradingView MCP + partner integrations."
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/audit/events/page.tsx b/apps/web/src/app/(app)/audit/events/page.tsx
+new file mode 100644
+index 0000000..e0eb568
+--- /dev/null
++++ b/apps/web/src/app/(app)/audit/events/page.tsx
+@@ -0,0 +1,12 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function AuditEventsPage() {
++  return (
++    <ToDoBanner
++      title="Audit · Events"
++      phase="Phase 1"
++      description="Full audit event log — actor, action, resource, before/after snapshots, correlation ID. Write-once, immutable."
++      related={[{ label: "Audit · KV changes", href: "/audit/kv-changes" }]}
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/audit/exports/page.tsx b/apps/web/src/app/(app)/audit/exports/page.tsx
+new file mode 100644
+index 0000000..55b57f0
+--- /dev/null
++++ b/apps/web/src/app/(app)/audit/exports/page.tsx
+@@ -0,0 +1,11 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function AuditExportsPage() {
++  return (
++    <ToDoBanner
++      title="Audit · Exports"
++      phase="Phase 1"
++      description="Export audit data for compliance or investigation — signed CSV / JSONL bundles with date range and resource filters."
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/audit/kv-changes/page.tsx b/apps/web/src/app/(app)/audit/kv-changes/page.tsx
+new file mode 100644
+index 0000000..853fd1e
+--- /dev/null
++++ b/apps/web/src/app/(app)/audit/kv-changes/page.tsx
+@@ -0,0 +1,11 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function AuditKvChangesPage() {
++  return (
++    <ToDoBanner
++      title="Audit · KV changes"
++      phase="Phase 1"
++      description="Feature flag + system config mutation history. Every toggle and value change is recorded with actor, reason, and diff."
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/execution/fills/page.tsx b/apps/web/src/app/(app)/execution/fills/page.tsx
+new file mode 100644
+index 0000000..b4e89ac
+--- /dev/null
++++ b/apps/web/src/app/(app)/execution/fills/page.tsx
+@@ -0,0 +1,11 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function ExecutionFillsPage() {
++  return (
++    <ToDoBanner
++      title="Execution · Fills"
++      phase="Phase 9"
++      description="Trade-by-trade fill log with slippage analysis vs. model-expected price and venue-quality scoring."
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/execution/killswitch/page.tsx b/apps/web/src/app/(app)/execution/killswitch/page.tsx
+new file mode 100644
+index 0000000..9874ac2
+--- /dev/null
++++ b/apps/web/src/app/(app)/execution/killswitch/page.tsx
+@@ -0,0 +1,15 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function ExecutionKillSwitchPage() {
++  return (
++    <ToDoBanner
++      title="Execution · Kill switch"
++      phase="Phase 9"
++      description="Global execution halt. Triggers on config, SLO breach, or manual operator action. Defaults to ENABLED by the Phase 0 safety floor (Decision #4)."
++      related={[
++        { label: "Operations · Flags", href: "/ops/flags" },
++        { label: "Admin · System config", href: "/admin/system" },
++      ]}
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/execution/orders/page.tsx b/apps/web/src/app/(app)/execution/orders/page.tsx
+new file mode 100644
+index 0000000..18e2b13
+--- /dev/null
++++ b/apps/web/src/app/(app)/execution/orders/page.tsx
+@@ -0,0 +1,12 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function ExecutionOrdersPage() {
++  return (
++    <ToDoBanner
++      title="Execution · Orders"
++      phase="Phase 9"
++      description="Live order blotter from the Alpaca execution adapter — market, limit, bracket — with per-order state, attempts, and latency breakdown."
++      related={[{ label: "Execution · Fills", href: "/execution/fills" }]}
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/execution/positions/page.tsx b/apps/web/src/app/(app)/execution/positions/page.tsx
+new file mode 100644
+index 0000000..1dfacf9
+--- /dev/null
++++ b/apps/web/src/app/(app)/execution/positions/page.tsx
+@@ -0,0 +1,12 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function ExecutionPositionsPage() {
++  return (
++    <ToDoBanner
++      title="Execution · Positions"
++      phase="Phase 9"
++      description="Open positions across accounts with realtime mark-to-market, unrealized PnL, and the strategy/decision that opened each leg."
++      related={[{ label: "Portfolio · PnL", href: "/portfolio/pnl" }]}
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/execution/risk/page.tsx b/apps/web/src/app/(app)/execution/risk/page.tsx
+new file mode 100644
+index 0000000..7ddcdc0
+--- /dev/null
++++ b/apps/web/src/app/(app)/execution/risk/page.tsx
+@@ -0,0 +1,12 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function ExecutionRiskPage() {
++  return (
++    <ToDoBanner
++      title="Execution · Risk"
++      phase="Phase 9"
++      description="Max drawdown, daily loss cap, exposure limits, and correlation guardrails from the Risk Engine — with real-time utilization meters."
++      related={[{ label: "Execution · Kill switch", href: "/execution/killswitch" }]}
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/governance/approvals/page.tsx b/apps/web/src/app/(app)/governance/approvals/page.tsx
+new file mode 100644
+index 0000000..0da05ae
+--- /dev/null
++++ b/apps/web/src/app/(app)/governance/approvals/page.tsx
+@@ -0,0 +1,11 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function GovernanceApprovalsPage() {
++  return (
++    <ToDoBanner
++      title="Governance · Approvals"
++      phase="Phase 11"
++      description="Pending approval queue — strategy promotions, threshold changes, kill-switch bypass requests. Dual-control gating for high-risk actions."
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/governance/demotions/page.tsx b/apps/web/src/app/(app)/governance/demotions/page.tsx
+new file mode 100644
+index 0000000..4ca4e60
+--- /dev/null
++++ b/apps/web/src/app/(app)/governance/demotions/page.tsx
+@@ -0,0 +1,11 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function GovernanceDemotionsPage() {
++  return (
++    <ToDoBanner
++      title="Governance · Demotions"
++      phase="Phase 11"
++      description="Auto-demotion log — strategies kicked down a tier by SLO breach, drawdown, anomaly detection, or calibration drift."
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/governance/policies/page.tsx b/apps/web/src/app/(app)/governance/policies/page.tsx
+new file mode 100644
+index 0000000..4a8a580
+--- /dev/null
++++ b/apps/web/src/app/(app)/governance/policies/page.tsx
+@@ -0,0 +1,11 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function GovernancePoliciesPage() {
++  return (
++    <ToDoBanner
++      title="Governance · Policies"
++      phase="Phase 11"
++      description="Policy authoring — approval workflows, anomaly thresholds, dual-control rules. All edits audit-logged with diffs."
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/governance/trust/page.tsx b/apps/web/src/app/(app)/governance/trust/page.tsx
+new file mode 100644
+index 0000000..01f793e
+--- /dev/null
++++ b/apps/web/src/app/(app)/governance/trust/page.tsx
+@@ -0,0 +1,12 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function GovernanceTrustPage() {
++  return (
++    <ToDoBanner
++      title="Governance · Trust tiers"
++      phase="Phase 11"
++      description="Per-strategy trust tier — Tier A autonomous, Tier B assisted, Tier C paper. Drives execution sizing and approval gates."
++      related={[{ label: "Governance · Demotions", href: "/governance/demotions" }]}
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/intel/agents/page.tsx b/apps/web/src/app/(app)/intel/agents/page.tsx
+new file mode 100644
+index 0000000..551f7c7
+--- /dev/null
++++ b/apps/web/src/app/(app)/intel/agents/page.tsx
+@@ -0,0 +1,11 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function IntelAgentsPage() {
++  return (
++    <ToDoBanner
++      title="Intelligence · Agents"
++      phase="Phase 8"
++      description="The multi-agent brain — Structure / Flow / Setup / Macro / Recall / Scoring / Risk / Execution / Learning / Governance agents and their per-decision votes."
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/intel/calibration/page.tsx b/apps/web/src/app/(app)/intel/calibration/page.tsx
+new file mode 100644
+index 0000000..a071802
+--- /dev/null
++++ b/apps/web/src/app/(app)/intel/calibration/page.tsx
+@@ -0,0 +1,12 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function IntelCalibrationPage() {
++  return (
++    <ToDoBanner
++      title="Intelligence · Calibration"
++      phase="Phase 8"
++      description="Confidence calibration curves — adjusts predicted probabilities based on rolling realized accuracy from the Confidence Calibration Engine."
++      related={[{ label: "Learning · Calibration drift", href: "/learning/drift" }]}
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/intel/flow/page.tsx b/apps/web/src/app/(app)/intel/flow/page.tsx
+new file mode 100644
+index 0000000..cb1c106
+--- /dev/null
++++ b/apps/web/src/app/(app)/intel/flow/page.tsx
+@@ -0,0 +1,12 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function IntelOrderFlowPage() {
++  return (
++    <ToDoBanner
++      title="Intelligence · Order flow"
++      phase="Phase 3"
++      description="Real-time delta, imbalance, absorption, and continuation-probability scoring from the Order Flow Engine."
++      related={[{ label: "Market · Liquidity", href: "/market/liquidity" }]}
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/intel/fusion/page.tsx b/apps/web/src/app/(app)/intel/fusion/page.tsx
+new file mode 100644
+index 0000000..04ea724
+--- /dev/null
++++ b/apps/web/src/app/(app)/intel/fusion/page.tsx
+@@ -0,0 +1,15 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function IntelFusionPage() {
++  return (
++    <ToDoBanner
++      title="Intelligence · Fusion"
++      phase="Phase 4"
++      description="Combines structure, order flow, regime, and macro context into a single weighted confidence score with conflict-resolution rationale."
++      related={[
++        { label: "Intelligence · Structure", href: "/intel/structure" },
++        { label: "Intelligence · Order flow", href: "/intel/flow" },
++      ]}
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/intel/recall/page.tsx b/apps/web/src/app/(app)/intel/recall/page.tsx
+new file mode 100644
+index 0000000..e9f0077
+--- /dev/null
++++ b/apps/web/src/app/(app)/intel/recall/page.tsx
+@@ -0,0 +1,12 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function IntelRecallPage() {
++  return (
++    <ToDoBanner
++      title="Intelligence · Recall"
++      phase="Phase 7"
++      description="Similarity search across past trades and chart screenshots — surfaces the historical setups that most resemble the current state, plus their outcomes."
++      related={[{ label: "Learning · Missed trades", href: "/learning/missed" }]}
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/intel/setups/page.tsx b/apps/web/src/app/(app)/intel/setups/page.tsx
+new file mode 100644
+index 0000000..5055f01
+--- /dev/null
++++ b/apps/web/src/app/(app)/intel/setups/page.tsx
+@@ -0,0 +1,12 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function IntelSetupsPage() {
++  return (
++    <ToDoBanner
++      title="Intelligence · Setups"
++      phase="Phase 5"
++      description="Live setup catalog — sweep+reclaim, OB retest, breakout+retest, FVG reaction — scored with RR, SL, TP from the Setup Detection Engine."
++      related={[{ label: "Strategies · Catalog", href: "/strategies" }]}
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/intel/structure/page.tsx b/apps/web/src/app/(app)/intel/structure/page.tsx
+new file mode 100644
+index 0000000..c481625
+--- /dev/null
++++ b/apps/web/src/app/(app)/intel/structure/page.tsx
+@@ -0,0 +1,12 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function IntelStructurePage() {
++  return (
++    <ToDoBanner
++      title="Intelligence · Structure"
++      phase="Phase 2"
++      description="Live BOS / CHOCH / OB / FVG state per symbol with multi-timeframe alignment, sourced from the Market Structure Engine and the TradingView MCP layer."
++      related={[{ label: "Market · Levels", href: "/market/levels" }]}
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/layout.tsx b/apps/web/src/app/(app)/layout.tsx
+new file mode 100644
+index 0000000..637965c
+--- /dev/null
++++ b/apps/web/src/app/(app)/layout.tsx
+@@ -0,0 +1,18 @@
++import type { ReactNode } from "react";
++import { AuthGate } from "@/components/AuthGate";
++import { Sidebar } from "@/components/Sidebar";
++import { TopBar } from "@/components/TopBar";
++
++export default function AppLayout({ children }: { children: ReactNode }) {
++  return (
++    <AuthGate>
++      <div className="grid h-screen grid-cols-[260px_1fr] grid-rows-[auto_1fr]">
++        <div className="row-span-2 h-screen">
++          <Sidebar />
++        </div>
++        <TopBar />
++        <main className="overflow-y-auto bg-background p-6">{children}</main>
++      </div>
++    </AuthGate>
++  );
++}
+diff --git a/apps/web/src/app/(app)/learning/drift/page.tsx b/apps/web/src/app/(app)/learning/drift/page.tsx
+new file mode 100644
+index 0000000..0db0447
+--- /dev/null
++++ b/apps/web/src/app/(app)/learning/drift/page.tsx
+@@ -0,0 +1,12 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function LearningDriftPage() {
++  return (
++    <ToDoBanner
++      title="Learning · Calibration drift"
++      phase="Phase 8"
++      description="Rolling reliability of confidence scores — Brier scores, ECE, and per-bucket realized vs. predicted. Triggers calibration retraining."
++      related={[{ label: "Intelligence · Calibration", href: "/intel/calibration" }]}
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/learning/feedback/page.tsx b/apps/web/src/app/(app)/learning/feedback/page.tsx
+new file mode 100644
+index 0000000..3af4bba
+--- /dev/null
++++ b/apps/web/src/app/(app)/learning/feedback/page.tsx
+@@ -0,0 +1,11 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function LearningFeedbackPage() {
++  return (
++    <ToDoBanner
++      title="Learning · Feedback loop"
++      phase="Phase 8"
++      description="Closed-loop learning — outcomes feed back into agent priors, strategy DNA, and the calibration model."
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/learning/missed/page.tsx b/apps/web/src/app/(app)/learning/missed/page.tsx
+new file mode 100644
+index 0000000..54b0eb7
+--- /dev/null
++++ b/apps/web/src/app/(app)/learning/missed/page.tsx
+@@ -0,0 +1,12 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function LearningMissedPage() {
++  return (
++    <ToDoBanner
++      title="Learning · Missed trades"
++      phase="Phase 7"
++      description="Detected setups that weren't taken — with hindsight gain/loss, reason for skipping, and a 'would-have-been' equity contribution."
++      related={[{ label: "Intelligence · Recall", href: "/intel/recall" }]}
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/market/levels/page.tsx b/apps/web/src/app/(app)/market/levels/page.tsx
+new file mode 100644
+index 0000000..5bf97df
+--- /dev/null
++++ b/apps/web/src/app/(app)/market/levels/page.tsx
+@@ -0,0 +1,12 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function MarketLevelsPage() {
++  return (
++    <ToDoBanner
++      title="Market · Levels"
++      phase="Phase 2"
++      description="Order blocks, fair-value gaps, prior-session highs/lows, and premium/discount zones rendered per symbol from the Market Structure Engine."
++      related={[{ label: "Intelligence · Structure", href: "/intel/structure" }]}
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/market/liquidity/page.tsx b/apps/web/src/app/(app)/market/liquidity/page.tsx
+new file mode 100644
+index 0000000..0fa6000
+--- /dev/null
++++ b/apps/web/src/app/(app)/market/liquidity/page.tsx
+@@ -0,0 +1,12 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function MarketLiquidityPage() {
++  return (
++    <ToDoBanner
++      title="Market · Liquidity"
++      phase="Phase 3"
++      description="Liquidity walls, volume clusters, absorption and exhaustion footprints sourced from the Order Flow Engine (Bookmap-style depth feed)."
++      related={[{ label: "Intelligence · Order flow", href: "/intel/flow" }]}
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/market/regimes/page.tsx b/apps/web/src/app/(app)/market/regimes/page.tsx
+new file mode 100644
+index 0000000..cf74ea3
+--- /dev/null
++++ b/apps/web/src/app/(app)/market/regimes/page.tsx
+@@ -0,0 +1,15 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function MarketRegimesPage() {
++  return (
++    <ToDoBanner
++      title="Market · Regimes"
++      phase="Phase 4"
++      description="Regime classification per symbol — trending, ranging, volatile, news-driven — produced by the Regime Detection Engine and consumed by the Fusion brain."
++      related={[
++        { label: "Intelligence · Fusion", href: "/intel/fusion" },
++        { label: "Research · Regimes", href: "/research/regimes" },
++      ]}
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/market/sessions/page.tsx b/apps/web/src/app/(app)/market/sessions/page.tsx
+new file mode 100644
+index 0000000..5f009eb
+--- /dev/null
++++ b/apps/web/src/app/(app)/market/sessions/page.tsx
+@@ -0,0 +1,11 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function MarketSessionsPage() {
++  return (
++    <ToDoBanner
++      title="Market · Sessions"
++      phase="Phase 2"
++      description="London / New York / Asia session windows, killzone overlays, and session-volatility heatmaps from the Session Intelligence engine."
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/market/symbols/page.tsx b/apps/web/src/app/(app)/market/symbols/page.tsx
+new file mode 100644
+index 0000000..d805a0e
+--- /dev/null
++++ b/apps/web/src/app/(app)/market/symbols/page.tsx
+@@ -0,0 +1,83 @@
++"use client";
++
++import { useMemo, useState } from "react";
++
++// Phase 0 deterministic watchlist; wired to real market-data APIs later.
++const INITIAL_SYMBOLS = [
++  { ticker: "ES", venue: "CME", lastRefresh: "—" },
++  { ticker: "NQ", venue: "CME", lastRefresh: "—" },
++  { ticker: "CL", venue: "NYMEX", lastRefresh: "—" },
++  { ticker: "BTC-USD", venue: "Coinbase", lastRefresh: "—" },
++  { ticker: "AAPL", venue: "NASDAQ", lastRefresh: "—" },
++  { ticker: "SPY", venue: "NYSE", lastRefresh: "—" },
++];
++
++export default function MarketSymbolsPage() {
++  const [query, setQuery] = useState("");
++  const filtered = useMemo(
++    () =>
++      INITIAL_SYMBOLS.filter((s) =>
++        s.ticker.toLowerCase().includes(query.toLowerCase()),
++      ),
++    [query],
++  );
++
++  return (
++    <section className="space-y-4">
++      <header className="space-y-1">
++        <h1 className="text-2xl font-semibold">Market · Symbols</h1>
++        <p className="text-sm text-muted">
++          Phase 0 watchlist. Live quote feed + order-book overlay lands in
++          Phase 2 (Market Structure Engine).
++        </p>
++      </header>
++
++      <div className="flex items-center gap-2">
++        <input
++          type="search"
++          value={query}
++          onChange={(e) => setQuery(e.target.value)}
++          placeholder="Filter tickers…"
++          className="w-64 rounded border border-border bg-background px-3 py-1.5 text-sm outline-none focus:border-primary"
++        />
++        <span className="text-xs text-muted">
++          {filtered.length} of {INITIAL_SYMBOLS.length}
++        </span>
++      </div>
++
++      <div className="overflow-hidden rounded-lg border border-border">
++        <table className="w-full text-sm">
++          <thead className="bg-surface/80 text-left text-xs uppercase text-muted">
++            <tr>
++              <th className="px-3 py-2 font-medium">Ticker</th>
++              <th className="px-3 py-2 font-medium">Venue</th>
++              <th className="px-3 py-2 font-medium">Last refresh</th>
++              <th className="px-3 py-2" />
++            </tr>
++          </thead>
++          <tbody>
++            {filtered.map((s) => (
++              <tr key={s.ticker} className="border-t border-border hover:bg-surface/40">
++                <td className="px-3 py-2 font-mono">{s.ticker}</td>
++                <td className="px-3 py-2 text-muted">{s.venue}</td>
++                <td className="px-3 py-2 text-muted">{s.lastRefresh}</td>
++                <td className="px-3 py-2 text-right text-xs">
++                  <span className="rounded bg-warn/15 px-2 py-0.5 font-mono uppercase text-warn">
++                    awaiting feed
++                  </span>
++                </td>
++              </tr>
++            ))}
++            {filtered.length === 0 ? (
++              <tr>
++                <td className="px-3 py-6 text-center text-muted" colSpan={4}>
++                  No symbols match "{query}".
++                </td>
++              </tr>
++            ) : null}
++          </tbody>
++        </table>
++      </div>
++    </section>
++  );
++}
+diff --git a/apps/web/src/app/(app)/market/watchlist/page.tsx b/apps/web/src/app/(app)/market/watchlist/page.tsx
+new file mode 100644
+index 0000000..f724c8f
+--- /dev/null
++++ b/apps/web/src/app/(app)/market/watchlist/page.tsx
+@@ -0,0 +1,12 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function MarketWatchlistPage() {
++  return (
++    <ToDoBanner
++      title="Market · Watchlist"
++      phase="Phase 2"
++      description="User-curated watchlist with live quote feed, BOS/CHOCH overlays, and per-symbol confidence glow once the Market Structure Engine is online."
++      related={[{ label: "Market · Symbols", href: "/market/symbols" }]}
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/ops/alerts/page.tsx b/apps/web/src/app/(app)/ops/alerts/page.tsx
+new file mode 100644
+index 0000000..11a8d3c
+--- /dev/null
++++ b/apps/web/src/app/(app)/ops/alerts/page.tsx
+@@ -0,0 +1,11 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function OpsAlertsPage() {
++  return (
++    <ToDoBanner
++      title="Operations · Alerts"
++      phase="Phase 1"
++      description="Active + recent alerts with channel routing (PagerDuty, Slack, email) and per-rule silence windows."
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/ops/deployments/page.tsx b/apps/web/src/app/(app)/ops/deployments/page.tsx
+new file mode 100644
+index 0000000..5561d55
+--- /dev/null
++++ b/apps/web/src/app/(app)/ops/deployments/page.tsx
+@@ -0,0 +1,11 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function OpsDeploymentsPage() {
++  return (
++    <ToDoBanner
++      title="Operations · Deployments"
++      phase="Phase 1"
++      description="Deployment ledger — every control plane / web / worker roll-out with git SHA, actor, duration, and rollback status."
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/ops/feeds/page.tsx b/apps/web/src/app/(app)/ops/feeds/page.tsx
+new file mode 100644
+index 0000000..6f8bdda
+--- /dev/null
++++ b/apps/web/src/app/(app)/ops/feeds/page.tsx
+@@ -0,0 +1,11 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function OpsFeedsPage() {
++  return (
++    <ToDoBanner
++      title="Operations · Feeds"
++      phase="Phase 2"
++      description="Data Truth & Latency Monitor — per-feed health, gap detection, freshness, and an auto-disable guard when reliability drops."
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/ops/flags/page.tsx b/apps/web/src/app/(app)/ops/flags/page.tsx
+new file mode 100644
+index 0000000..24320d2
+--- /dev/null
++++ b/apps/web/src/app/(app)/ops/flags/page.tsx
+@@ -0,0 +1,120 @@
++"use client";
++
++import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
++import { useState } from "react";
++import { api } from "@/lib/api";
++import { ApiError } from "@gv/api-client";
++import { useAuth } from "@/lib/auth-context";
++
++export default function OpsFlagsPage() {
++  const { user } = useAuth();
++  const isAdmin = user?.roles.includes("admin") ?? false;
++  const qc = useQueryClient();
++
++  const flags = useQuery({
++    queryKey: ["flags"],
++    queryFn: () => api.flags.list(),
++  });
++
++  const patch = useMutation({
++    mutationFn: ({ key, enabled }: { key: string; enabled: boolean }) =>
++      api.flags.update(key, { enabled }),
++    onSuccess: () => qc.invalidateQueries({ queryKey: ["flags"] }),
++  });
++
++  const [pendingKey, setPendingKey] = useState<string | null>(null);
++
++  return (
++    <section className="space-y-4">
++      <header className="space-y-1">
++        <h1 className="text-2xl font-semibold">Operations · Feature flags</h1>
++        <p className="text-sm text-muted">
++          Toggle runtime-gated features. Changes are audit-logged. Admin role
++          required to mutate.
++        </p>
++      </header>
++
++      {flags.isLoading ? <p className="text-sm text-muted">Loading flags…</p> : null}
++      {flags.isError ? (
++        <p className="text-sm text-danger">
++          Failed to load flags —{" "}
++          {flags.error instanceof Error ? flags.error.message : "unknown error"}
++        </p>
++      ) : null}
++
++      {flags.data ? (
++        <div className="overflow-hidden rounded-lg border border-border">
++          <table className="w-full text-sm">
++            <thead className="bg-surface/80 text-left text-xs uppercase text-muted">
++              <tr>
++                <th className="px-3 py-2 font-medium">Key</th>
++                <th className="px-3 py-2 font-medium">Description</th>
++                <th className="px-3 py-2 font-medium">Scope</th>
++                <th className="px-3 py-2 font-medium">State</th>
++                <th className="px-3 py-2" />
++              </tr>
++            </thead>
++            <tbody>
++              {flags.data.flags.map((flag) => {
++                const busy = pendingKey === flag.key && patch.isPending;
++                return (
++                  <tr key={flag.key} className="border-t border-border hover:bg-surface/40">
++                    <td className="px-3 py-2 font-mono text-foreground">{flag.key}</td>
++                    <td className="px-3 py-2 text-muted">{flag.description}</td>
++                    <td className="px-3 py-2 font-mono text-xs text-muted">
++                      {flag.scope}
++                      {flag.scopeRef ? `:${flag.scopeRef}` : ""}
++                    </td>
++                    <td className="px-3 py-2">
++                      <span
++                        className={
++                          "rounded px-2 py-0.5 text-xs font-mono " +
++                          (flag.enabled
++                            ? "bg-success/15 text-success"
++                            : "bg-muted/20 text-muted")
++                        }
++                      >
++                        {flag.enabled ? "enabled" : "disabled"}
++                      </span>
++                    </td>
++                    <td className="px-3 py-2 text-right">
++                      <button
++                        type="button"
++                        disabled={!isAdmin || busy}
++                        onClick={() => {
++                          setPendingKey(flag.key);
++                          patch.mutate({ key: flag.key, enabled: !flag.enabled });
++                        }}
++                        className="rounded border border-border px-2 py-1 text-xs hover:bg-surface disabled:opacity-50"
++                      >
++                        {busy ? "…" : flag.enabled ? "Disable" : "Enable"}
++                      </button>
++                    </td>
++                  </tr>
++                );
++              })}
++            </tbody>
++          </table>
++        </div>
++      ) : null}
++
++      {patch.isError ? (
++        <p className="text-sm text-danger">
++          Update failed:{" "}
++          {patch.error instanceof ApiError
++            ? patch.error.body?.error?.message ?? `HTTP ${patch.error.status}`
++            : patch.error instanceof Error
++              ? patch.error.message
++              : "unknown error"}
++        </p>
++      ) : null}
++
++      {!isAdmin ? (
++        <p className="text-xs text-muted">
++          You are viewing in read-only mode. Admin role required to toggle
++          flags.
++        </p>
++      ) : null}
++    </section>
++  );
++}
+diff --git a/apps/web/src/app/(app)/ops/health/page.tsx b/apps/web/src/app/(app)/ops/health/page.tsx
+new file mode 100644
+index 0000000..3088828
+--- /dev/null
++++ b/apps/web/src/app/(app)/ops/health/page.tsx
+@@ -0,0 +1,96 @@
++"use client";
++
++import { useQuery } from "@tanstack/react-query";
++import { api } from "@/lib/api";
++
++export default function OpsHealthPage() {
++  const ready = useQuery({
++    queryKey: ["health", "ready", "detail"],
++    queryFn: () => api.health.ready(),
++    refetchInterval: 10_000,
++  });
++  const live = useQuery({
++    queryKey: ["health", "live"],
++    queryFn: () => api.health.live(),
++    refetchInterval: 10_000,
++  });
++
++  return (
++    <section className="space-y-4">
++      <header className="space-y-1">
++        <h1 className="text-2xl font-semibold">Operations · Health</h1>
++        <p className="text-sm text-muted">
++          Real-time probe of the control plane and its dependencies.
++        </p>
++      </header>
++
++      <div className="grid gap-4 md:grid-cols-2">
++        <div className="rounded-lg border border-border bg-surface p-4">
++          <h2 className="mb-2 text-sm font-medium">Liveness</h2>
++          <Status ok={live.data?.status === "ok"} label={live.data?.status ?? "unknown"} />
++          {live.isError ? <p className="mt-2 text-xs text-danger">Probe failed.</p> : null}
++        </div>
++
++        <div className="rounded-lg border border-border bg-surface p-4">
++          <h2 className="mb-2 text-sm font-medium">Readiness</h2>
++          <Status
++            ok={ready.data?.status === "ok"}
++            label={ready.data?.status ?? "unknown"}
++          />
++          {ready.data ? (
++            <dl className="mt-3 space-y-1 text-xs">
++              <Row label="Service" value={ready.data.service} />
++              <Row label="Version" value={ready.data.version} />
++              <Row
++                label="Uptime"
++                value={`${ready.data.uptimeSeconds.toFixed(1)}s`}
++              />
++            </dl>
++          ) : null}
++        </div>
++      </div>
++
++      {ready.data ? (
++        <div className="rounded-lg border border-border bg-surface p-4">
++          <h2 className="mb-2 text-sm font-medium">Dependency checks</h2>
++          <ul className="divide-y divide-border text-sm">
++            {Object.entries(ready.data.checks).map(([name, state]) => (
++              <li key={name} className="flex items-center justify-between py-2">
++                <span className="font-mono">{name}</span>
++                <Status ok={state.status === "ok"} label={state.status} />
++              </li>
++            ))}
++          </ul>
++        </div>
++      ) : null}
++    </section>
++  );
++}
++
++function Status({ ok, label }: { ok: boolean; label: string }) {
++  return (
++    <span
++      className={
++        "inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-mono " +
++        (ok ? "bg-success/15 text-success" : "bg-danger/15 text-danger")
++      }
++    >
++      <span
++        className={
++          "inline-block h-1.5 w-1.5 rounded-full " +
++          (ok ? "bg-success" : "bg-danger")
++        }
++      />
++      {label}
++    </span>
++  );
++}
++
++function Row({ label, value }: { label: string; value: string }) {
++  return (
++    <div className="flex items-center justify-between">
++      <dt className="text-muted">{label}</dt>
++      <dd className="font-mono">{value}</dd>
++    </div>
++  );
++}
+diff --git a/apps/web/src/app/(app)/ops/incidents/page.tsx b/apps/web/src/app/(app)/ops/incidents/page.tsx
+new file mode 100644
+index 0000000..1d962ec
+--- /dev/null
++++ b/apps/web/src/app/(app)/ops/incidents/page.tsx
+@@ -0,0 +1,11 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function OpsIncidentsPage() {
++  return (
++    <ToDoBanner
++      title="Operations · Incidents"
++      phase="Phase 1"
++      description="Incident timeline, status, commander, and blameless postmortem links."
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/ops/latency/page.tsx b/apps/web/src/app/(app)/ops/latency/page.tsx
+new file mode 100644
+index 0000000..4221e62
+--- /dev/null
++++ b/apps/web/src/app/(app)/ops/latency/page.tsx
+@@ -0,0 +1,11 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function OpsLatencyPage() {
++  return (
++    <ToDoBanner
++      title="Operations · Latency"
++      phase="Phase 1"
++      description="End-to-end latency — webhook → signal → decision → broker → ack — broken down by stage, percentile, and venue."
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/ops/logs/page.tsx b/apps/web/src/app/(app)/ops/logs/page.tsx
+new file mode 100644
+index 0000000..ed8a951
+--- /dev/null
++++ b/apps/web/src/app/(app)/ops/logs/page.tsx
+@@ -0,0 +1,12 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function OpsLogsPage() {
++  return (
++    <ToDoBanner
++      title="Operations · Logs"
++      phase="Phase 1"
++      description="Structured log tail with correlation-ID search, severity filter, and jump-to-audit-event linking."
++      related={[{ label: "Audit · Events", href: "/audit/events" }]}
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/ops/slos/page.tsx b/apps/web/src/app/(app)/ops/slos/page.tsx
+new file mode 100644
+index 0000000..a8fb412
+--- /dev/null
++++ b/apps/web/src/app/(app)/ops/slos/page.tsx
+@@ -0,0 +1,12 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function OpsSlosPage() {
++  return (
++    <ToDoBanner
++      title="Operations · SLOs"
++      phase="Phase 1"
++      description="Service-level objectives — availability, latency, error budgets, burn rates — per surface and dependency."
++      related={[{ label: "Operations · Alerts", href: "/ops/alerts" }]}
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/overview/page.tsx b/apps/web/src/app/(app)/overview/page.tsx
+new file mode 100644
+index 0000000..0b20ac5
+--- /dev/null
++++ b/apps/web/src/app/(app)/overview/page.tsx
+@@ -0,0 +1,131 @@
++"use client";
++
++import { useQuery } from "@tanstack/react-query";
++import Link from "next/link";
++import { useAuth } from "@/lib/auth-context";
++import { api } from "@/lib/api";
++
++export default function OverviewPage() {
++  const { user } = useAuth();
++  const ready = useQuery({
++    queryKey: ["health", "ready"],
++    queryFn: () => api.health.ready(),
++    refetchInterval: 30_000,
++  });
++
++  return (
++    <section className="space-y-6">
++      <header className="space-y-1">
++        <h1 className="text-2xl font-semibold">
++          Welcome back, {user?.displayName ?? "trader"}.
++        </h1>
++        <p className="text-sm text-muted">
++          GodsView v2 command center — Phase 0 foundation. The remaining
++          surface area lights up phase by phase.
++        </p>
++      </header>
++
++      <div className="grid gap-4 md:grid-cols-3">
++        <Card title="Control plane" subtitle="FastAPI · postgres · redis">
++          <StatusBadge
++            ok={ready.data?.status === "ok"}
++            label={ready.data?.status ?? "checking"}
++          />
++          <Detail
++            label="Uptime"
++            value={
++              ready.data ? `${ready.data.uptimeSeconds.toFixed(1)}s` : "—"
++            }
++          />
++          <Detail label="Version" value={ready.data?.version ?? "—"} />
++        </Card>
++
++        <Card title="Roles" subtitle="What you can do">
++          <ul className="space-y-1 text-sm">
++            {(user?.roles ?? []).map((r) => (
++              <li key={r} className="rounded bg-background px-2 py-1 font-mono">
++                {r}
++              </li>
++            ))}
++            {user && user.roles.length === 0 ? (
++              <li className="text-muted">no roles assigned</li>
++            ) : null}
++          </ul>
++        </Card>
++
++        <Card title="Quick links" subtitle="Functional in Phase 0">
++          <ul className="space-y-1 text-sm">
++            <li>
++              <Link className="text-primary hover:underline" href="/market/symbols">
++                Market · Symbols
++              </Link>
++            </li>
++            <li>
++              <Link className="text-primary hover:underline" href="/ops/health">
++                Ops · Health
++              </Link>
++            </li>
++            <li>
++              <Link className="text-primary hover:underline" href="/ops/flags">
++                Ops · Feature flags
++              </Link>
++            </li>
++            <li>
++              <Link className="text-primary hover:underline" href="/admin/system">
++                Admin · System config
++              </Link>
++            </li>
++          </ul>
++        </Card>
++      </div>
++    </section>
++  );
++}
++
++function Card({
++  title,
++  subtitle,
++  children,
++}: {
++  title: string;
++  subtitle?: string;
++  children: React.ReactNode;
++}) {
++  return (
++    <div className="rounded-lg border border-border bg-surface p-4">
++      <header className="mb-3">
++        <div className="text-sm font-medium">{title}</div>
++        {subtitle ? <div className="text-xs text-muted">{subtitle}</div> : null}
++      </header>
++      <div className="space-y-2">{children}</div>
++    </div>
++  );
++}
++
++function Detail({ label, value }: { label: string; value: string }) {
++  return (
++    <div className="flex justify-between text-xs">
++      <span className="text-muted">{label}</span>
++      <span className="font-mono">{value}</span>
++    </div>
++  );
++}
++
++function StatusBadge({ ok, label }: { ok: boolean; label: string }) {
++  return (
++    <span
++      className={
++        "inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-mono " +
++        (ok ? "bg-success/15 text-success" : "bg-warn/15 text-warn")
++      }
++    >
++      <span
++        className={
++          "inline-block h-1.5 w-1.5 rounded-full " +
++          (ok ? "bg-success" : "bg-warn")
++        }
++      />
++      {label}
++    </span>
++  );
++}
+diff --git a/apps/web/src/app/(app)/portfolio/allocation/page.tsx b/apps/web/src/app/(app)/portfolio/allocation/page.tsx
+new file mode 100644
+index 0000000..cab528a
+--- /dev/null
++++ b/apps/web/src/app/(app)/portfolio/allocation/page.tsx
+@@ -0,0 +1,12 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function PortfolioAllocationPage() {
++  return (
++    <ToDoBanner
++      title="Portfolio · Allocation"
++      phase="Phase 10"
++      description="Capital allocation engine — per-strategy sizing informed by trust tier, regime fit, and recent calibration drift."
++      related={[{ label: "Governance · Trust tiers", href: "/governance/trust" }]}
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/portfolio/correlation/page.tsx b/apps/web/src/app/(app)/portfolio/correlation/page.tsx
+new file mode 100644
+index 0000000..747b748
+--- /dev/null
++++ b/apps/web/src/app/(app)/portfolio/correlation/page.tsx
+@@ -0,0 +1,11 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function PortfolioCorrelationPage() {
++  return (
++    <ToDoBanner
++      title="Portfolio · Correlation"
++      phase="Phase 10"
++      description="Rolling correlation matrix across open positions and tracked symbols, flagging crowded-trade risk."
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/portfolio/drawdown/page.tsx b/apps/web/src/app/(app)/portfolio/drawdown/page.tsx
+new file mode 100644
+index 0000000..9e7bdb5
+--- /dev/null
++++ b/apps/web/src/app/(app)/portfolio/drawdown/page.tsx
+@@ -0,0 +1,11 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function PortfolioDrawdownPage() {
++  return (
++    <ToDoBanner
++      title="Portfolio · Drawdown"
++      phase="Phase 10"
++      description="Drawdown protection — equity-curve peak-to-trough tracking, per-strategy and portfolio-wide, with auto-demotion triggers."
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/portfolio/exposure/page.tsx b/apps/web/src/app/(app)/portfolio/exposure/page.tsx
+new file mode 100644
+index 0000000..d8ac109
+--- /dev/null
++++ b/apps/web/src/app/(app)/portfolio/exposure/page.tsx
+@@ -0,0 +1,11 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function PortfolioExposurePage() {
++  return (
++    <ToDoBanner
++      title="Portfolio · Exposure"
++      phase="Phase 10"
++      description="Per-asset, per-sector, per-venue exposure — long/short, notional, beta-adjusted — with concentration alerts."
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/portfolio/pnl/page.tsx b/apps/web/src/app/(app)/portfolio/pnl/page.tsx
+new file mode 100644
+index 0000000..9e3d787
+--- /dev/null
++++ b/apps/web/src/app/(app)/portfolio/pnl/page.tsx
+@@ -0,0 +1,11 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function PortfolioPnlPage() {
++  return (
++    <ToDoBanner
++      title="Portfolio · PnL"
++      phase="Phase 10"
++      description="Realized + unrealized PnL per account, strategy, and symbol with intraday equity curve."
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/quant/backtests/page.tsx b/apps/web/src/app/(app)/quant/backtests/page.tsx
+new file mode 100644
+index 0000000..6d51c50
+--- /dev/null
++++ b/apps/web/src/app/(app)/quant/backtests/page.tsx
+@@ -0,0 +1,12 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function QuantBacktestsPage() {
++  return (
++    <ToDoBanner
++      title="Quant Lab · Backtests"
++      phase="Phase 6"
++      description="Multi-timeframe backtest runner with realistic fills, slippage, latency modeling, and equity-curve plots."
++      related={[{ label: "Quant Lab · Metrics", href: "/quant/metrics" }]}
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/quant/experiments/page.tsx b/apps/web/src/app/(app)/quant/experiments/page.tsx
+new file mode 100644
+index 0000000..4b714a5
+--- /dev/null
++++ b/apps/web/src/app/(app)/quant/experiments/page.tsx
+@@ -0,0 +1,11 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function QuantExperimentsPage() {
++  return (
++    <ToDoBanner
++      title="Quant Lab · Experiments"
++      phase="Phase 6"
++      description="Experiment tracker — version strategies, log configs, compare runs side-by-side with parameter diffs and metric deltas."
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/quant/metrics/page.tsx b/apps/web/src/app/(app)/quant/metrics/page.tsx
+new file mode 100644
+index 0000000..95e22a2
+--- /dev/null
++++ b/apps/web/src/app/(app)/quant/metrics/page.tsx
+@@ -0,0 +1,11 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function QuantMetricsPage() {
++  return (
++    <ToDoBanner
++      title="Quant Lab · Metrics"
++      phase="Phase 6"
++      description="Win rate, Sharpe, Sortino, profit factor, expectancy, max drawdown, and MAE / MFE distributions across strategies and time windows."
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/quant/ranking/page.tsx b/apps/web/src/app/(app)/quant/ranking/page.tsx
+new file mode 100644
+index 0000000..4d29e0d
+--- /dev/null
++++ b/apps/web/src/app/(app)/quant/ranking/page.tsx
+@@ -0,0 +1,12 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function QuantRankingPage() {
++  return (
++    <ToDoBanner
++      title="Quant Lab · Ranking"
++      phase="Phase 6"
++      description="Strategy ranking and tier assignment — Tier A (live), Tier B (paper), Tier C (experimental) — derived from rolling, regime-aware metrics."
++      related={[{ label: "Strategies · Promotions", href: "/strategies/promotions" }]}
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/quant/replay/page.tsx b/apps/web/src/app/(app)/quant/replay/page.tsx
+new file mode 100644
+index 0000000..b97792a
+--- /dev/null
++++ b/apps/web/src/app/(app)/quant/replay/page.tsx
+@@ -0,0 +1,12 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function QuantReplayPage() {
++  return (
++    <ToDoBanner
++      title="Quant Lab · Replay"
++      phase="Phase 6"
++      description="Candle-by-candle replay engine — rewind any market session and ask 'what would GodsView do here?' with full agent-vote audit trail."
++      related={[{ label: "Command · Replay", href: "/replay" }]}
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/replay/page.tsx b/apps/web/src/app/(app)/replay/page.tsx
+new file mode 100644
+index 0000000..3cc8353
+--- /dev/null
++++ b/apps/web/src/app/(app)/replay/page.tsx
+@@ -0,0 +1,15 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function ReplayPage() {
++  return (
++    <ToDoBanner
++      title="Command · Replay"
++      phase="Phase 6"
++      description="Time-travel the market candle-by-candle and re-run GodsView's reasoning at any historical bar. Powered by the Quant Lab Replay Engine."
++      related={[
++        { label: "Quant Lab · Replay", href: "/quant/replay" },
++        { label: "Overview", href: "/overview" },
++      ]}
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/research/brainstorm/page.tsx b/apps/web/src/app/(app)/research/brainstorm/page.tsx
+new file mode 100644
+index 0000000..55b3d4f
+--- /dev/null
++++ b/apps/web/src/app/(app)/research/brainstorm/page.tsx
+@@ -0,0 +1,11 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function ResearchBrainstormPage() {
++  return (
++    <ToDoBanner
++      title="Research · Brainstorm"
++      phase="Phase 6"
++      description="Free-form research workspace — prompt the agents to draft new strategy hypotheses, propose filters, or explain regime quirks."
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/research/regimes/page.tsx b/apps/web/src/app/(app)/research/regimes/page.tsx
+new file mode 100644
+index 0000000..a3f9b0f
+--- /dev/null
++++ b/apps/web/src/app/(app)/research/regimes/page.tsx
+@@ -0,0 +1,12 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function ResearchRegimesPage() {
++  return (
++    <ToDoBanner
++      title="Research · Regimes"
++      phase="Phase 4"
++      description="Historical regime atlas — per-symbol regime transition probabilities, dwell times, and per-regime strategy fitness."
++      related={[{ label: "Market · Regimes", href: "/market/regimes" }]}
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/settings/api-tokens/page.tsx b/apps/web/src/app/(app)/settings/api-tokens/page.tsx
+new file mode 100644
+index 0000000..2bb59c3
+--- /dev/null
++++ b/apps/web/src/app/(app)/settings/api-tokens/page.tsx
+@@ -0,0 +1,12 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function SettingsApiTokensPage() {
++  return (
++    <ToDoBanner
++      title="Settings · API tokens"
++      phase="Phase 1"
++      description="Personal access tokens — scoped, revocable, audit-logged. For scripting against the control plane API without juggling your login session."
++      related={[{ label: "Admin · API keys", href: "/admin/api-keys" }]}
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/settings/preferences/page.tsx b/apps/web/src/app/(app)/settings/preferences/page.tsx
+new file mode 100644
+index 0000000..35c747f
+--- /dev/null
++++ b/apps/web/src/app/(app)/settings/preferences/page.tsx
+@@ -0,0 +1,11 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function SettingsPreferencesPage() {
++  return (
++    <ToDoBanner
++      title="Settings · Preferences"
++      phase="Phase 1"
++      description="Per-user UI preferences — default symbol, timezone, chart layout, notification routing."
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/settings/profile/page.tsx b/apps/web/src/app/(app)/settings/profile/page.tsx
+new file mode 100644
+index 0000000..6ae06fc
+--- /dev/null
++++ b/apps/web/src/app/(app)/settings/profile/page.tsx
+@@ -0,0 +1,11 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function SettingsProfilePage() {
++  return (
++    <ToDoBanner
++      title="Settings · Profile"
++      phase="Phase 1"
++      description="Personal profile — display name, email, password rotation, MFA enrollment."
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/strategies/active/page.tsx b/apps/web/src/app/(app)/strategies/active/page.tsx
+new file mode 100644
+index 0000000..68d5bfd
+--- /dev/null
++++ b/apps/web/src/app/(app)/strategies/active/page.tsx
+@@ -0,0 +1,12 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function StrategiesActivePage() {
++  return (
++    <ToDoBanner
++      title="Strategies · Active"
++      phase="Phase 5"
++      description="Strategies currently live or paper-trading with realtime PnL, exposure, and the last 20 decisions. Click a row to drill into per-trade reasoning."
++      related={[{ label: "Execution · Orders", href: "/execution/orders" }]}
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/strategies/builder/page.tsx b/apps/web/src/app/(app)/strategies/builder/page.tsx
+new file mode 100644
+index 0000000..1214141
+--- /dev/null
++++ b/apps/web/src/app/(app)/strategies/builder/page.tsx
+@@ -0,0 +1,11 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function StrategiesBuilderPage() {
++  return (
++    <ToDoBanner
++      title="Strategies · Builder"
++      phase="Phase 5"
++      description="Define entries, exits, and filters with a typed DSL backed by the Quant Lab Strategy Builder. Versioned, diff-able, and promotable to paper."
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/strategies/dna/page.tsx b/apps/web/src/app/(app)/strategies/dna/page.tsx
+new file mode 100644
+index 0000000..128987a
+--- /dev/null
++++ b/apps/web/src/app/(app)/strategies/dna/page.tsx
+@@ -0,0 +1,11 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function StrategiesDnaPage() {
++  return (
++    <ToDoBanner
++      title="Strategies · DNA"
++      phase="Phase 6"
++      description="Strategy DNA fingerprint — the regimes, sessions, and symbols where each strategy thrives or fails, derived from rolling MAE/MFE and outcome distributions."
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/strategies/page.tsx b/apps/web/src/app/(app)/strategies/page.tsx
+new file mode 100644
+index 0000000..54e62fb
+--- /dev/null
++++ b/apps/web/src/app/(app)/strategies/page.tsx
+@@ -0,0 +1,15 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function StrategiesCatalogPage() {
++  return (
++    <ToDoBanner
++      title="Strategies · Catalog"
++      phase="Phase 5"
++      description="The full strategy library — promoted live, paper-trading, experimental — with tier badges, owners, win-rate, and last-touched timestamps."
++      related={[
++        { label: "Strategies · Builder", href: "/strategies/builder" },
++        { label: "Strategies · Active", href: "/strategies/active" },
++      ]}
++    />
++  );
++}
+diff --git a/apps/web/src/app/(app)/strategies/promotions/page.tsx b/apps/web/src/app/(app)/strategies/promotions/page.tsx
+new file mode 100644
+index 0000000..feec650
+--- /dev/null
++++ b/apps/web/src/app/(app)/strategies/promotions/page.tsx
+@@ -0,0 +1,12 @@
++import { ToDoBanner } from "@/components/ToDoBanner";
++
++export default function StrategiesPromotionsPage() {
++  return (
++    <ToDoBanner
++      title="Strategies · Promotions"
++      phase="Phase 6"
++      description="Quant Lab → Paper → Assisted Live → Autonomous promotion pipeline with auto-demotion triggers when SLOs or drawdown thresholds breach."
++      related={[{ label: "Governance · Trust tiers", href: "/governance/trust" }]}
++    />
++  );
++}
+diff --git a/apps/web/src/app/(auth)/layout.tsx b/apps/web/src/app/(auth)/layout.tsx
+new file mode 100644
+index 0000000..6bbdd19
+--- /dev/null
++++ b/apps/web/src/app/(auth)/layout.tsx
+@@ -0,0 +1,9 @@
++import type { ReactNode } from "react";
++
++export default function AuthLayout({ children }: { children: ReactNode }) {
++  return (
++    <div className="grid min-h-screen place-items-center bg-background p-4">
++      {children}
++    </div>
++  );
++}
+diff --git a/apps/web/src/app/(auth)/login/page.tsx b/apps/web/src/app/(auth)/login/page.tsx
+new file mode 100644
+index 0000000..8e01263
+--- /dev/null
++++ b/apps/web/src/app/(auth)/login/page.tsx
+@@ -0,0 +1,102 @@
++"use client";
++
++import { useRouter } from "next/navigation";
++import { useState, type FormEvent } from "react";
++import { useAuth } from "@/lib/auth-context";
++import { ApiError } from "@gv/api-client";
++
++export default function LoginPage() {
++  const { signIn } = useAuth();
++  const router = useRouter();
++  const [email, setEmail] = useState("");
++  const [password, setPassword] = useState("");
++  const [submitting, setSubmitting] = useState(false);
++  const [error, setError] = useState<string | null>(null);
++
++  async function onSubmit(e: FormEvent<HTMLFormElement>) {
++    e.preventDefault();
++    setError(null);
++    setSubmitting(true);
++    try {
++      await signIn(email, password);
++      router.replace("/overview");
++    } catch (err) {
++      if (err instanceof ApiError) {
++        setError(err.body?.error?.message ?? `HTTP ${err.status}`);
++      } else if (err instanceof Error) {
++        setError(err.message);
++      } else {
++        setError("Unknown error");
++      }
++    } finally {
++      setSubmitting(false);
++    }
++  }
++
++  return (
++    <form
++      onSubmit={onSubmit}
++      className="w-full max-w-sm space-y-4 rounded-lg border border-border bg-surface p-6"
++    >
++      <header className="space-y-1">
++        <div className="font-mono text-xs uppercase tracking-widest text-muted">
++          GodsView
++        </div>
++        <h1 className="text-xl font-semibold">Sign in</h1>
++        <p className="text-sm text-muted">
++          Access the multi-agent trading command center.
++        </p>
++      </header>
++
++      <div className="space-y-1">
++        <label className="block text-xs uppercase tracking-wider text-muted" htmlFor="email">
++          Email
++        </label>
++        <input
++          id="email"
++          name="email"
++          type="email"
++          required
++          autoComplete="email"
++          value={email}
++          onChange={(e) => setEmail(e.target.value)}
++          className="w-full rounded border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
++        />
++      </div>
++
++      <div className="space-y-1">
++        <label className="block text-xs uppercase tracking-wider text-muted" htmlFor="password">
++          Password
++        </label>
++        <input
++          id="password"
++          name="password"
++          type="password"
++          required
++          minLength={8}
++          autoComplete="current-password"
++          value={password}
++          onChange={(e) => setPassword(e.target.value)}
++          className="w-full rounded border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
++        />
++      </div>
++
++      {error ? (
++        <div
++          role="alert"
++          className="rounded border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger"
++        >
++          {error}
++        </div>
++      ) : null}
++
++      <button
++        type="submit"
++        disabled={submitting}
++        className="w-full rounded bg-primary px-3 py-2 text-sm font-medium text-background disabled:opacity-60"
++      >
++        {submitting ? "Signing in…" : "Sign in"}
++      </button>
++    </form>
++  );
++}
+diff --git a/apps/web/src/app/globals.css b/apps/web/src/app/globals.css
+new file mode 100644
+index 0000000..2ad7144
+--- /dev/null
++++ b/apps/web/src/app/globals.css
+@@ -0,0 +1,26 @@
++@tailwind base;
++@tailwind components;
++@tailwind utilities;
++
++:root {
++  color-scheme: dark;
++}
++
++html,
++body {
++  height: 100%;
++  background: hsl(220 25% 7%);
++  color: hsl(210 20% 96%);
++  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
++}
++
++*,
++*::before,
++*::after {
++  box-sizing: border-box;
++}
++
++a {
++  color: inherit;
++  text-decoration: none;
++}
+diff --git a/apps/web/src/app/layout.tsx b/apps/web/src/app/layout.tsx
+new file mode 100644
+index 0000000..2471bba
+--- /dev/null
++++ b/apps/web/src/app/layout.tsx
+@@ -0,0 +1,19 @@
++import type { Metadata } from "next";
++import type { ReactNode } from "react";
++import "./globals.css";
++import { Providers } from "@/lib/providers";
++
++export const metadata: Metadata = {
++  title: "GodsView",
++  description: "Multi-agent trading intelligence — v2 command center",
++};
++
++export default function RootLayout({ children }: { children: ReactNode }) {
++  return (
++    <html lang="en" className="dark">
++      <body>
++        <Providers>{children}</Providers>
++      </body>
++    </html>
++  );
++}
+diff --git a/apps/web/src/app/page.tsx b/apps/web/src/app/page.tsx
+new file mode 100644
+index 0000000..b563aa1
+--- /dev/null
++++ b/apps/web/src/app/page.tsx
+@@ -0,0 +1,5 @@
++import { redirect } from "next/navigation";
++
++export default function Root() {
++  redirect("/overview");
++}
+diff --git a/apps/web/src/components/AuthGate.tsx b/apps/web/src/components/AuthGate.tsx
+new file mode 100644
+index 0000000..febe84d
+--- /dev/null
++++ b/apps/web/src/components/AuthGate.tsx
+@@ -0,0 +1,26 @@
++"use client";
++
++import { useRouter } from "next/navigation";
++import { useEffect, type ReactNode } from "react";
++import { useAuth } from "@/lib/auth-context";
++
++export function AuthGate({ children }: { children: ReactNode }) {
++  const { user, loading } = useAuth();
++  const router = useRouter();
++
++  useEffect(() => {
++    if (!loading && !user) {
++      router.replace("/login");
++    }
++  }, [loading, user, router]);
++
++  if (loading) {
++    return (
++      <div className="grid h-full place-items-center text-sm text-muted">
++        Loading session…
++      </div>
++    );
++  }
++  if (!user) return null;
++  return <>{children}</>;
++}
+diff --git a/apps/web/src/components/Sidebar.tsx b/apps/web/src/components/Sidebar.tsx
+new file mode 100644
+index 0000000..3ded232
+--- /dev/null
++++ b/apps/web/src/components/Sidebar.tsx
+@@ -0,0 +1,69 @@
++"use client";
++
++import Link from "next/link";
++import { usePathname } from "next/navigation";
++import clsx from "clsx";
++import { SIDEBAR, type SidebarItem } from "@/lib/sidebar";
++import { useAuth } from "@/lib/auth-context";
++
++function allowedFor(item: SidebarItem, roles: ReadonlyArray<string>): boolean {
++  if (!item.roles || item.roles.length === 0) return true;
++  return item.roles.some((r) => roles.includes(r));
++}
++
++export function Sidebar() {
++  const pathname = usePathname();
++  const { user } = useAuth();
++  const roles = user?.roles ?? [];
++
++  return (
++    <nav
++      aria-label="Primary"
++      className="h-full overflow-y-auto border-r border-border bg-surface/60 py-4 text-sm"
++    >
++      <div className="px-4 pb-3">
++        <span className="font-mono text-xs uppercase tracking-widest text-muted">
++          GodsView
++        </span>
++        <div className="text-lg font-semibold text-foreground">Command center</div>
++      </div>
++      {SIDEBAR.map((section) => {
++        const visible = section.items.filter((it) => allowedFor(it, roles));
++        if (visible.length === 0) return null;
++        return (
++          <div key={section.label} className="mb-3 px-2">
++            <div className="px-2 pb-1 text-[11px] font-medium uppercase tracking-wider text-muted">
++              {section.label}
++            </div>
++            <ul>
++              {visible.map((item) => {
++                const active =
++                  pathname === item.href || pathname.startsWith(item.href + "/");
++                return (
++                  <li key={item.href}>
++                    <Link
++                      href={item.href}
++                      className={clsx(
++                        "flex items-center justify-between rounded px-2 py-1.5 transition-colors",
++                        active
++                          ? "bg-primary/15 text-primary"
++                          : "text-foreground/80 hover:bg-surface hover:text-foreground",
++                      )}
++                    >
++                      <span>{item.label}</span>
++                      {item.stub ? (
++                        <span className="ml-2 rounded bg-warn/15 px-1.5 py-0.5 text-[10px] font-mono uppercase text-warn">
++                          stub
++                        </span>
++                      ) : null}
++                    </Link>
++                  </li>
++                );
++              })}
++            </ul>
++          </div>
++        );
++      })}
++    </nav>
++  );
++}
+diff --git a/apps/web/src/components/ToDoBanner.tsx b/apps/web/src/components/ToDoBanner.tsx
+new file mode 100644
+index 0000000..4226354
+--- /dev/null
++++ b/apps/web/src/components/ToDoBanner.tsx
+@@ -0,0 +1,49 @@
++"use client";
++
++import Link from "next/link";
++
++type Props = {
++  title: string;
++  /** Phase the page is scheduled to land in (e.g. "Phase 2"). */
++  phase?: string;
++  /** One-paragraph summary of what this page will do. */
++  description?: string;
++  /** Pages that will replace, depend on, or context-link this stub. */
++  related?: ReadonlyArray<{ label: string; href: string }>;
++};
++
++export function ToDoBanner({ title, phase, description, related }: Props) {
++  return (
++    <section className="space-y-4">
++      <header className="flex items-center justify-between gap-3">
++        <h1 className="text-2xl font-semibold">{title}</h1>
++        <span className="rounded bg-warn/15 px-2 py-1 font-mono text-xs uppercase text-warn">
++          {phase ?? "Phase 0"} · stub
++        </span>
++      </header>
++
++      <div className="rounded-lg border border-border bg-surface p-4 text-sm">
++        <p className="text-foreground/80">
++          {description ??
++            "This page is a Phase 0 placeholder. The full feature lands in a later phase per the GodsView v2 blueprint."}
++        </p>
++        {related && related.length > 0 ? (
++          <div className="mt-3">
++            <div className="mb-1 text-xs uppercase tracking-wider text-muted">
++              Related
++            </div>
++            <ul className="space-y-1">
++              {related.map((r) => (
++                <li key={r.href}>
++                  <Link className="text-primary hover:underline" href={r.href}>
++                    {r.label}
++                  </Link>
++                </li>
++              ))}
++            </ul>
++          </div>
++        ) : null}
++      </div>
++    </section>
++  );
++}
+diff --git a/apps/web/src/components/TopBar.tsx b/apps/web/src/components/TopBar.tsx
+new file mode 100644
+index 0000000..0356986
+--- /dev/null
++++ b/apps/web/src/components/TopBar.tsx
+@@ -0,0 +1,45 @@
++"use client";
++
++import { useRouter } from "next/navigation";
++import { useAuth } from "@/lib/auth-context";
++
++export function TopBar() {
++  const { user, signOut } = useAuth();
++  const router = useRouter();
++  const env = process.env.NEXT_PUBLIC_GODSVIEW_ENV || "local";
++
++  return (
++    <header className="flex items-center justify-between border-b border-border bg-surface/80 px-6 py-3 backdrop-blur">
++      <div className="flex items-center gap-3">
++        <span className="rounded border border-border px-2 py-0.5 font-mono text-[11px] uppercase text-muted">
++          env: {env}
++        </span>
++        <span className="text-sm text-foreground/80">
++          Multi-agent trading intelligence
++        </span>
++      </div>
++      <div className="flex items-center gap-4 text-sm">
++        {user ? (
++          <>
++            <div className="text-right">
++              <div className="text-foreground">{user.displayName}</div>
++              <div className="text-xs text-muted">
++                {user.roles.join(" · ") || "no roles"}
++              </div>
++            </div>
++            <button
++              type="button"
++              onClick={async () => {
++                await signOut();
++                router.push("/login");
++              }}
++              className="rounded border border-border px-2 py-1 text-xs text-foreground/80 hover:bg-surface"
++            >
++              Sign out
++            </button>
++          </>
++        ) : null}
++      </div>
++    </header>
++  );
++}
+diff --git a/apps/web/src/lib/api.ts b/apps/web/src/lib/api.ts
+new file mode 100644
+index 0000000..0cb47f9
+--- /dev/null
++++ b/apps/web/src/lib/api.ts
+@@ -0,0 +1,35 @@
++/**
++ * Configured singleton ApiClient bound to the web app's environment.
++ *
++ * The base URL points at /api/v1, which next.config.mjs rewrites to the
++ * FastAPI control plane. This keeps browser CORS surface area at zero.
++ */
++
++import {
++  ApiClient,
++  authEndpoints,
++  featureFlagEndpoints,
++  healthEndpoints,
++  systemConfigEndpoints,
++} from "@gv/api-client";
++
++const baseUrl =
++  process.env.NEXT_PUBLIC_GODSVIEW_API_BASE?.replace(/\/+$/, "") || "/api/v1";
++
++let tokenGetter: () => string | null = () => null;
++
++export const apiClient = new ApiClient({
++  baseUrl,
++  getAccessToken: () => tokenGetter(),
++});
++
++export const api = {
++  client: apiClient,
++  setAccessTokenGetter(getter: () => string | null): void {
++    tokenGetter = getter;
++  },
++  auth: authEndpoints(apiClient),
++  flags: featureFlagEndpoints(apiClient),
++  systemConfig: systemConfigEndpoints(apiClient),
++  health: healthEndpoints(apiClient),
++};
+diff --git a/apps/web/src/lib/auth-context.tsx b/apps/web/src/lib/auth-context.tsx
+new file mode 100644
+index 0000000..a74e948
+--- /dev/null
++++ b/apps/web/src/lib/auth-context.tsx
+@@ -0,0 +1,117 @@
++"use client";
++
++import {
++  createContext,
++  useCallback,
++  useContext,
++  useEffect,
++  useMemo,
++  useState,
++  type ReactNode,
++} from "react";
++import type { TokenPair, User } from "@gv/types";
++import { api } from "./api";
++
++const ACCESS_KEY = "gv.accessToken";
++const REFRESH_KEY = "gv.refreshToken";
++const ACCESS_EXP_KEY = "gv.accessExpiresAt";
++
++type AuthState = {
++  user: User | null;
++  loading: boolean;
++  signIn: (email: string, password: string) => Promise<void>;
++  signOut: () => Promise<void>;
++  refresh: () => Promise<void>;
++};
++
++const AuthContext = createContext<AuthState | null>(null);
++
++function readAccessToken(): string | null {
++  if (typeof window === "undefined") return null;
++  return window.localStorage.getItem(ACCESS_KEY);
++}
++
++function persistTokens(pair: TokenPair): void {
++  window.localStorage.setItem(ACCESS_KEY, pair.accessToken);
++  window.localStorage.setItem(REFRESH_KEY, pair.refreshToken);
++  window.localStorage.setItem(ACCESS_EXP_KEY, pair.accessExpiresAt);
++}
++
++function clearTokens(): void {
++  if (typeof window === "undefined") return;
++  window.localStorage.removeItem(ACCESS_KEY);
++  window.localStorage.removeItem(REFRESH_KEY);
++  window.localStorage.removeItem(ACCESS_EXP_KEY);
++}
++
++export function AuthProvider({ children }: { children: ReactNode }) {
++  const [user, setUser] = useState<User | null>(null);
++  const [loading, setLoading] = useState(true);
++
++  // Wire the API client's bearer-token getter to the persisted access token.
++  useEffect(() => {
++    api.setAccessTokenGetter(() => readAccessToken());
++  }, []);
++
++  const loadMe = useCallback(async () => {
++    if (!readAccessToken()) {
++      setUser(null);
++      setLoading(false);
++      return;
++    }
++    try {
++      const me = await api.auth.me();
++      setUser(me);
++    } catch {
++      clearTokens();
++      setUser(null);
++    } finally {
++      setLoading(false);
++    }
++  }, []);
++
++  useEffect(() => {
++    void loadMe();
++  }, [loadMe]);
++
++  const signIn = useCallback(
++    async (email: string, password: string) => {
++      const pair = await api.auth.login({ email, password });
++      persistTokens(pair);
++      const me = await api.auth.me();
++      setUser(me);
++    },
++    [],
++  );
++
++  const signOut = useCallback(async () => {
++    try {
++      await api.auth.logout();
++    } catch {
++      // best-effort — local clear is the source of truth
++    }
++    clearTokens();
++    setUser(null);
++  }, []);
++
++  const refresh = useCallback(async () => {
++    if (typeof window === "undefined") return;
++    const refreshToken = window.localStorage.getItem(REFRESH_KEY);
++    if (!refreshToken) return;
++    const pair = await api.auth.refresh({ refreshToken });
++    persistTokens(pair);
++  }, []);
++
++  const value = useMemo<AuthState>(
++    () => ({ user, loading, signIn, signOut, refresh }),
++    [user, loading, signIn, signOut, refresh],
++  );
++
++  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
++}
++
++export function useAuth(): AuthState {
++  const ctx = useContext(AuthContext);
++  if (!ctx) throw new Error("useAuth must be used inside <AuthProvider>");
++  return ctx;
++}
+diff --git a/apps/web/src/lib/providers.tsx b/apps/web/src/lib/providers.tsx
+new file mode 100644
+index 0000000..7eac516
+--- /dev/null
++++ b/apps/web/src/lib/providers.tsx
+@@ -0,0 +1,26 @@
++"use client";
++
++import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
++import { useState, type ReactNode } from "react";
++import { AuthProvider } from "./auth-context";
++
++export function Providers({ children }: { children: ReactNode }) {
++  const [client] = useState(
++    () =>
++      new QueryClient({
++        defaultOptions: {
++          queries: {
++            staleTime: 30_000,
++            refetchOnWindowFocus: false,
++            retry: 1,
++          },
++        },
++      }),
++  );
++
++  return (
++    <QueryClientProvider client={client}>
++      <AuthProvider>{children}</AuthProvider>
++    </QueryClientProvider>
++  );
++}
+diff --git a/apps/web/src/lib/sidebar.ts b/apps/web/src/lib/sidebar.ts
+new file mode 100644
+index 0000000..ad62644
+--- /dev/null
++++ b/apps/web/src/lib/sidebar.ts
+@@ -0,0 +1,164 @@
++/**
++ * Phase 0 v2 sidebar map.
++ *
++ * 6 sections × ~10 items = 64 routes. The 6 functional pages (login,
++ * overview, market/symbols, ops/health, ops/flags, admin/system) are
++ * marked ``stub: false``. Everything else is a Phase 0 placeholder
++ * rendered with <ToDoBanner> until later phases populate it.
++ */
++
++export type SidebarItem = {
++  label: string;
++  href: string;
++  stub?: boolean;
++  /** Roles allowed to see this entry. Empty = all authenticated users. */
++  roles?: ReadonlyArray<"viewer" | "analyst" | "operator" | "admin">;
++};
++
++export type SidebarSection = {
++  label: string;
++  items: ReadonlyArray<SidebarItem>;
++};
++
++export const SIDEBAR: ReadonlyArray<SidebarSection> = [
++  {
++    label: "Command",
++    items: [
++      { label: "Overview", href: "/overview" },
++      { label: "Replay", href: "/replay", stub: true },
++    ],
++  },
++  {
++    label: "Market",
++    items: [
++      { label: "Symbols", href: "/market/symbols" },
++      { label: "Watchlist", href: "/market/watchlist", stub: true },
++      { label: "Levels", href: "/market/levels", stub: true },
++      { label: "Regimes", href: "/market/regimes", stub: true },
++      { label: "Sessions", href: "/market/sessions", stub: true },
++      { label: "Liquidity", href: "/market/liquidity", stub: true },
++    ],
++  },
++  {
++    label: "Intelligence",
++    items: [
++      { label: "Fusion", href: "/intel/fusion", stub: true },
++      { label: "Structure", href: "/intel/structure", stub: true },
++      { label: "Order flow", href: "/intel/flow", stub: true },
++      { label: "Setups", href: "/intel/setups", stub: true },
++      { label: "Recall", href: "/intel/recall", stub: true },
++      { label: "Agents", href: "/intel/agents", stub: true },
++      { label: "Calibration", href: "/intel/calibration", stub: true },
++    ],
++  },
++  {
++    label: "Strategies",
++    items: [
++      { label: "Catalog", href: "/strategies", stub: true },
++      { label: "Builder", href: "/strategies/builder", stub: true },
++      { label: "Active", href: "/strategies/active", stub: true },
++      { label: "Promotions", href: "/strategies/promotions", stub: true },
++      { label: "DNA", href: "/strategies/dna", stub: true },
++    ],
++  },
++  {
++    label: "Quant lab",
++    items: [
++      { label: "Backtests", href: "/quant/backtests", stub: true },
++      { label: "Replay", href: "/quant/replay", stub: true },
++      { label: "Experiments", href: "/quant/experiments", stub: true },
++      { label: "Metrics", href: "/quant/metrics", stub: true },
++      { label: "Ranking", href: "/quant/ranking", stub: true },
++    ],
++  },
++  {
++    label: "Execution",
++    items: [
++      { label: "Orders", href: "/execution/orders", stub: true },
++      { label: "Fills", href: "/execution/fills", stub: true },
++      { label: "Positions", href: "/execution/positions", stub: true },
++      { label: "Risk", href: "/execution/risk", stub: true },
++      { label: "Kill switch", href: "/execution/killswitch", stub: true },
++    ],
++  },
++  {
++    label: "Portfolio",
++    items: [
++      { label: "PnL", href: "/portfolio/pnl", stub: true },
++      { label: "Exposure", href: "/portfolio/exposure", stub: true },
++      { label: "Correlation", href: "/portfolio/correlation", stub: true },
++      { label: "Allocation", href: "/portfolio/allocation", stub: true },
++      { label: "Drawdown", href: "/portfolio/drawdown", stub: true },
++    ],
++  },
++  {
++    label: "Operations",
++    items: [
++      { label: "Health", href: "/ops/health" },
++      { label: "Flags", href: "/ops/flags", roles: ["admin", "operator"] },
++      { label: "SLOs", href: "/ops/slos", stub: true },
++      { label: "Alerts", href: "/ops/alerts", stub: true },
++      { label: "Incidents", href: "/ops/incidents", stub: true },
++      { label: "Deployments", href: "/ops/deployments", stub: true },
++      { label: "Latency", href: "/ops/latency", stub: true },
++      { label: "Feeds", href: "/ops/feeds", stub: true },
++      { label: "Logs", href: "/ops/logs", stub: true },
++    ],
++  },
++  {
++    label: "Audit",
++    items: [
++      { label: "Events", href: "/audit/events", stub: true, roles: ["admin"] },
++      { label: "KV changes", href: "/audit/kv-changes", stub: true, roles: ["admin"] },
++      { label: "Exports", href: "/audit/exports", stub: true, roles: ["admin"] },
++    ],
++  },
++  {
++    label: "Governance",
++    items: [
++      { label: "Trust tiers", href: "/governance/trust", stub: true },
++      { label: "Approvals", href: "/governance/approvals", stub: true },
++      { label: "Demotions", href: "/governance/demotions", stub: true },
++      { label: "Policies", href: "/governance/policies", stub: true },
++    ],
++  },
++  {
++    label: "Learning",
++    items: [
++      { label: "Feedback loop", href: "/learning/feedback", stub: true },
++      { label: "Missed trades", href: "/learning/missed", stub: true },
++      { label: "Calibration drift", href: "/learning/drift", stub: true },
++    ],
++  },
++  {
++    label: "Research",
++    items: [
++      { label: "Brainstorm", href: "/research/brainstorm", stub: true },
++      { label: "Regimes", href: "/research/regimes", stub: true },
++    ],
++  },
++  {
++    label: "Admin",
++    items: [
++      { label: "System config", href: "/admin/system", roles: ["admin"] },
++      { label: "Users", href: "/admin/users", stub: true, roles: ["admin"] },
++      { label: "Roles", href: "/admin/roles", stub: true, roles: ["admin"] },
++      { label: "API keys", href: "/admin/api-keys", stub: true, roles: ["admin"] },
++      { label: "Webhooks", href: "/admin/webhooks", stub: true, roles: ["admin"] },
++      { label: "MCP servers", href: "/admin/mcp", stub: true, roles: ["admin"] },
++    ],
++  },
++  {
++    label: "Settings",
++    items: [
++      { label: "Profile", href: "/settings/profile", stub: true },
++      { label: "Preferences", href: "/settings/preferences", stub: true },
++      { label: "API tokens", href: "/settings/api-tokens", stub: true },
++    ],
++  },
++];
++
++/** Flat list of every link the sidebar exposes — used for static checks. */
++export const ALL_HREFS: ReadonlyArray<string> = SIDEBAR.flatMap((section) =>
++  section.items.map((it) => it.href),
++);
+diff --git a/apps/web/tailwind.config.ts b/apps/web/tailwind.config.ts
+new file mode 100644
+index 0000000..d69f871
+--- /dev/null
++++ b/apps/web/tailwind.config.ts
+@@ -0,0 +1,43 @@
++import type { Config } from "tailwindcss";
++
++const config: Config = {
++  content: [
++    "./src/**/*.{ts,tsx,js,jsx,mdx}",
++    "../../packages/ui/src/**/*.{ts,tsx}",
++  ],
++  darkMode: ["class"],
++  theme: {
++    extend: {
++      colors: {
++        // Minimal palette — full design tokens land in a later phase.
++        border: "hsl(220 13% 20%)",
++        background: "hsl(220 25% 7%)",
++        surface: "hsl(220 23% 10%)",
++        foreground: "hsl(210 20% 96%)",
++        muted: "hsl(220 13% 50%)",
++        primary: "hsl(199 89% 48%)",
++        success: "hsl(142 71% 45%)",
++        warn: "hsl(38 92% 50%)",
++        danger: "hsl(0 72% 51%)",
++      },
++      borderRadius: {
++        md: "0.5rem",
++        lg: "0.75rem",
++        xl: "1rem",
++      },
++      fontFamily: {
++        sans: [
++          "ui-sans-serif",
++          "system-ui",
++          "-apple-system",
++          "Segoe UI",
++          "sans-serif",
++        ],
++        mono: ["ui-monospace", "SFMono-Regular", "monospace"],
++      },
++    },
++  },
++  plugins: [],
++};
++
++export default config;
+diff --git a/apps/web/tsconfig.json b/apps/web/tsconfig.json
+new file mode 100644
+index 0000000..2ce435a
+--- /dev/null
++++ b/apps/web/tsconfig.json
+@@ -0,0 +1,34 @@
++{
++  "extends": "../../tsconfig.base.json",
++  "compilerOptions": {
++    "target": "ES2022",
++    "lib": ["dom", "dom.iterable", "esnext"],
++    "allowJs": false,
++    "skipLibCheck": true,
++    "strict": true,
++    "noEmit": true,
++    "esModuleInterop": true,
++    "module": "esnext",
++    "moduleResolution": "bundler",
++    "resolveJsonModule": true,
++    "isolatedModules": true,
++    "jsx": "preserve",
++    "incremental": true,
++    "plugins": [{ "name": "next" }],
++    "baseUrl": ".",
++    "paths": {
++      "@/*": ["./src/*"],
++      "@gv/ui": ["../../packages/ui/src/index.ts"],
++      "@gv/api-client": ["../../packages/api-client/src/index.ts"],
++      "@gv/types": ["../../packages/types/src/index.ts"],
++      "@gv/config": ["../../packages/config/index.ts"]
++    },
++    "types": ["node"]
++  },
++  "include": [
++    "next-env.d.ts",
++    "src/**/*",
++    ".next/types/**/*.ts"
++  ],
++  "exclude": ["node_modules", ".next", "out"]
++}
+-- 
+2.34.1
+

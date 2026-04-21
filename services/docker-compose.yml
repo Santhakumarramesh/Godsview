@@ -62,6 +62,8 @@ services:
       - execution
       - risk
       - memory
+      - tradingview-bridge
+      - orderflow
     environment:
       API_GATEWAY_PORT: "8000"
       MARKET_DATA_URL: "http://market-data:8001"
@@ -71,6 +73,8 @@ services:
       EXECUTION_URL: "http://execution:8005"
       RISK_URL: "http://risk:8006"
       MEMORY_URL: "http://memory:8007"
+      TV_BRIDGE_URL: "http://tradingview-bridge:8009"
+      ORDERFLOW_URL: "http://orderflow:8010"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -189,6 +193,41 @@ services:
       LANCEDB_URI: "/app/data/lancedb"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8007/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── TradingView Bridge ─────────────────────────────────────────────────
+  tradingview-bridge:
+    <<: *svc-defaults
+    command: uvicorn services.tradingview_bridge.main:app --host 0.0.0.0 --port 8009
+    ports:
+      - "8009:8009"
+    depends_on:
+      - api-gateway
+    environment:
+      TV_BRIDGE_PORT: "8009"
+      API_GATEWAY_URL: "http://api-gateway:8000"
+      TV_WEBHOOK_SECRET: "${TV_WEBHOOK_SECRET:-godsview-dev-secret}"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8009/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── Order Flow Service ───────────────────────────────────────────────────
+  orderflow:
+    <<: *svc-defaults
+    command: uvicorn services.orderflow_service.main:app --host 0.0.0.0 --port 8010
+    ports:
+      - "8010:8010"
+    depends_on:
+      - feature
+    environment:
+      ORDERFLOW_PORT: "8010"
+      FEATURE_URL: "http://feature:8002"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8010/health"]
       interval: 30s
       timeout: 10s
       retries: 3

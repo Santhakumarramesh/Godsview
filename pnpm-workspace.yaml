@@ -1,7 +1,10 @@
 packages:
   - artifacts/*
+  - apps/*
+  - packages/*
   - lib/*
   - lib/integrations/*
+  - infra
   - scripts
 
 autoInstallPeers: false

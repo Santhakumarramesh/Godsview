@@ -31,7 +31,7 @@ RUN mkdir -p /app/data/models /app/data/lancedb /app/data/market_data
 RUN useradd -m -u 1000 godsview && chown -R godsview /app
 USER godsview
 
-EXPOSE 8000 8001 8002 8003 8004 8005 8006 8007
+EXPOSE 8000 8001 8002 8003 8004 8005 8006 8007 8008 8009 8010
 
 # Default to API gateway; override per service in docker-compose
 CMD ["uvicorn", "services.api_gateway.main:app", "--host", "0.0.0.0", "--port", "8000"]

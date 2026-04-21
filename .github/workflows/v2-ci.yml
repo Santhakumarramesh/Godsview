@@ -1,0 +1,161 @@
+name: v2 · CI
+
+# GodsView v2 monorepo CI.
+# Blueprint: docs/blueprint/09-phase-roadmap.md (Phase 0 exit)
+#
+# Scope:
+#   * pnpm v9 workspace: @gv/web, @gv/types, @gv/config, @gv/api-client, @gv/ui
+#   * services/control_plane: FastAPI + SQLAlchemy + Alembic
+#
+# The legacy workspace pipeline (artifacts/api-server + godsview-dashboard) is
+# gated by .github/workflows/ci.yml — both run on the same triggers. We scope
+# this workflow with path filters so we don't burn minutes when only legacy
+# code is touched.
+
+on:
+  push:
+    branches: [main, "phase-*"]
+    paths:
+      - "apps/**"
+      - "packages/**"
+      - "services/control_plane/**"
+      - "pnpm-workspace.yaml"
+      - "turbo.json"
+      - "tsconfig.base.json"
+      - "pyproject.toml"
+      - ".github/workflows/v2-ci.yml"
+      - ".github/workflows/contract-validation.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "apps/**"
+      - "packages/**"
+      - "services/control_plane/**"
+      - "pnpm-workspace.yaml"
+      - "turbo.json"
+      - "tsconfig.base.json"
+      - "pyproject.toml"
+      - ".github/workflows/v2-ci.yml"
+      - ".github/workflows/contract-validation.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: v2-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ── 1. Web / packages typecheck + unit ───────────────────────────
+  web-and-packages:
+    name: web + packages (pnpm / turbo)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TURBO_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable corepack (pnpm 9)
+        run: corepack enable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install workspace deps
+        # --frozen-lockfile is the CI contract. If it drifts, the fix is
+        # committing an updated pnpm-lock.yaml — never loosening CI.
+        run: pnpm install --frozen-lockfile
+
+      - name: Turbo typecheck (@gv/*)
+        run: pnpm -w run typecheck:v2
+
+      - name: Turbo build (@gv/*)
+        run: pnpm -w run build:v2
+
+      - name: Turbo test (@gv/*)
+        run: pnpm -w run test:v2
+
+      - name: Upload turbo cache summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v2-turbo-summary
+          if-no-files-found: ignore
+          retention-days: 3
+          path: .turbo/runs/*.json
+
+  # ── 2. control_plane python test matrix ──────────────────────────
+  control-plane:
+    name: control_plane (py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12"]
+    defaults:
+      run:
+        working-directory: services/control_plane
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: services/control_plane/pyproject.toml
+
+      - name: Install control_plane (editable, dev extras)
+        run: |
+          python -m pip install --upgrade pip wheel
+          python -m pip install -e '.[dev]'
+
+      - name: Ruff (lint)
+        run: python -m ruff check app tests
+
+      - name: Ruff (format check)
+        run: python -m ruff format --check app tests
+
+      - name: Mypy (strict)
+        run: python -m mypy app
+
+      - name: Pytest (unit + contract)
+        env:
+          # Tests use aiosqlite + an in-process JWT secret. DATABASE_URL is
+          # required by Settings; tests swap it out via dependency override.
+          DATABASE_URL: "sqlite+aiosqlite:///./test.db"
+          JWT_SIGNING_KEY: "ci-jwt-signing-key-not-used-anywhere-real"
+          GODSVIEW_ENV: "test"
+          REDIS_URL: "redis://localhost:6379/0"
+        run: python -m pytest --cov=app --cov-report=term-missing -q
+
+      - name: Upload coverage (py3.11 only)
+        if: matrix.python == '3.11'
+        uses: actions/upload-artifact@v4
+        with:
+          name: control-plane-coverage
+          path: services/control_plane/.coverage
+          if-no-files-found: warn
+          retention-days: 7
+
+  # ── 3. Phase-0 verification summary ──────────────────────────────
+  v2-gate:
+    name: v2 phase-0 gate
+    runs-on: ubuntu-latest
+    needs: [web-and-packages, control-plane]
+    if: always()
+    steps:
+      - name: Evaluate required jobs
+        run: |
+          echo "web-and-packages: ${{ needs.web-and-packages.result }}"
+          echo "control-plane:    ${{ needs.control-plane.result }}"
+          if [[ "${{ needs.web-and-packages.result }}" != "success" || \
+                "${{ needs.control-plane.result }}"    != "success" ]]; then
+            echo "::error::Phase 0 gate failed — a required job did not succeed."
+            exit 1
+          fi
+          echo "Phase 0 gate green."

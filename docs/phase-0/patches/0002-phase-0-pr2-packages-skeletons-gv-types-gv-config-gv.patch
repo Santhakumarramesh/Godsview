@@ -1,0 +1,1109 @@
+From 24c9a49af341f3e0dcd2e4ba9c5889355c025791 Mon Sep 17 00:00:00 2001
+From: godsview-bot <bot@godsview.local>
+Date: Sun, 19 Apr 2026 00:27:46 -0400
+Subject: [PATCH 2/6] =?UTF-8?q?phase-0(pr2):=20packages=20skeletons=20?=
+ =?UTF-8?q?=E2=80=94=20@gv/types=20@gv/config=20@gv/api-client=20@gv/ui?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Adds the four shared workspace packages the rest of v2 depends on.
+
+* @gv/types (src/index.ts + identity/errors/feature-flags/audit/system-config):
+  zod schemas + inferred types for the Phase 0 control_plane surface.
+  Canonical ErrorEnvelope matches docs/blueprint/reference/API_SURFACE.md.
+* @gv/config (index.ts): AppEnv, ControlPlaneEnv, WebEnv zod parsers that
+  refuse to boot if required env keys are missing. DEFAULT_PORTS map for
+  the 11 v2 services.
+* @gv/api-client (src/client.ts + endpoints/): ApiClient with correlation
+  ids, bearer token injection, ErrorEnvelope unwrap into ApiError, and
+  endpoint factories for auth, feature-flags, system-config, health.
+* @gv/ui (src/components/): cn() util, Button, Badge, Card, EmptyState,
+  PageHeader, ToDoBanner (marks stub pages so they can't be mistaken for
+  real screens).
+
+All four packages declare composite tsconfigs referencing tsconfig.base.json
+and expose 'workspace' export conditions so pnpm symlinks resolve without
+a build step.
+
+Phase: 0 / blueprint v3.0.0
+PR: 2 of 8 in v2.0.0
+Refs: docs/blueprint/phases/PHASES_0_TO_7.md (Phase 0)
+      docs/blueprint/reference/API_SURFACE.md (ErrorEnvelope, Auth surface)
+---
+ packages/api-client/package.json              |  35 ++++++
+ packages/api-client/src/client.ts             | 107 ++++++++++++++++++
+ packages/api-client/src/endpoints/auth.ts     |  18 +++
+ .../api-client/src/endpoints/feature-flags.ts |  17 +++
+ packages/api-client/src/endpoints/health.ts   |  21 ++++
+ .../api-client/src/endpoints/system-config.ts |  22 ++++
+ packages/api-client/src/index.ts              |  12 ++
+ packages/api-client/tsconfig.json             |  16 +++
+ packages/config/index.ts                      |  78 +++++++++++++
+ packages/config/package.json                  |  33 ++++++
+ packages/config/tsconfig.json                 |  12 ++
+ packages/types/package.json                   |  33 ++++++
+ packages/types/src/audit.ts                   |  25 ++++
+ packages/types/src/errors.ts                  |  42 +++++++
+ packages/types/src/feature-flags.ts           |  30 +++++
+ packages/types/src/identity.ts                |  30 +++++
+ packages/types/src/index.ts                   |  18 +++
+ packages/types/src/system-config.ts           |  14 +++
+ packages/types/tsconfig.json                  |  13 +++
+ packages/ui/package.json                      |  43 +++++++
+ packages/ui/src/components/Badge.tsx          |  29 +++++
+ packages/ui/src/components/Button.tsx         |  45 ++++++++
+ packages/ui/src/components/Card.tsx           |  23 ++++
+ packages/ui/src/components/EmptyState.tsx     |  24 ++++
+ packages/ui/src/components/PageHeader.tsx     |  31 +++++
+ packages/ui/src/components/ToDoBanner.tsx     |  32 ++++++
+ packages/ui/src/index.ts                      |  15 +++
+ packages/ui/src/utils/cn.ts                   |   7 ++
+ packages/ui/tsconfig.json                     |  14 +++
+ 29 files changed, 839 insertions(+)
+ create mode 100644 packages/api-client/package.json
+ create mode 100644 packages/api-client/src/client.ts
+ create mode 100644 packages/api-client/src/endpoints/auth.ts
+ create mode 100644 packages/api-client/src/endpoints/feature-flags.ts
+ create mode 100644 packages/api-client/src/endpoints/health.ts
+ create mode 100644 packages/api-client/src/endpoints/system-config.ts
+ create mode 100644 packages/api-client/src/index.ts
+ create mode 100644 packages/api-client/tsconfig.json
+ create mode 100644 packages/config/index.ts
+ create mode 100644 packages/config/package.json
+ create mode 100644 packages/config/tsconfig.json
+ create mode 100644 packages/types/package.json
+ create mode 100644 packages/types/src/audit.ts
+ create mode 100644 packages/types/src/errors.ts
+ create mode 100644 packages/types/src/feature-flags.ts
+ create mode 100644 packages/types/src/identity.ts
+ create mode 100644 packages/types/src/index.ts
+ create mode 100644 packages/types/src/system-config.ts
+ create mode 100644 packages/types/tsconfig.json
+ create mode 100644 packages/ui/package.json
+ create mode 100644 packages/ui/src/components/Badge.tsx
+ create mode 100644 packages/ui/src/components/Button.tsx
+ create mode 100644 packages/ui/src/components/Card.tsx
+ create mode 100644 packages/ui/src/components/EmptyState.tsx
+ create mode 100644 packages/ui/src/components/PageHeader.tsx
+ create mode 100644 packages/ui/src/components/ToDoBanner.tsx
+ create mode 100644 packages/ui/src/index.ts
+ create mode 100644 packages/ui/src/utils/cn.ts
+ create mode 100644 packages/ui/tsconfig.json
+
+diff --git a/packages/api-client/package.json b/packages/api-client/package.json
+new file mode 100644
+index 0000000..989a50d
+--- /dev/null
++++ b/packages/api-client/package.json
+@@ -0,0 +1,35 @@
++{
++  "name": "@gv/api-client",
++  "version": "0.1.0",
++  "private": true,
++  "type": "module",
++  "exports": {
++    ".": {
++      "workspace": "./src/index.ts",
++      "import": "./src/index.ts",
++      "types": "./src/index.ts"
++    },
++    "./*": {
++      "workspace": "./src/*.ts",
++      "import": "./src/*.ts",
++      "types": "./src/*.ts"
++    }
++  },
++  "main": "./src/index.ts",
++  "types": "./src/index.ts",
++  "scripts": {
++    "typecheck": "tsc -p tsconfig.json --noEmit",
++    "build": "tsc -p tsconfig.json",
++    "test": "echo 'no tests yet for @gv/api-client' && exit 0",
++    "lint": "echo 'lint todo' && exit 0",
++    "clean": "rm -rf dist .turbo *.tsbuildinfo",
++    "codegen": "echo 'openapi codegen wired in Phase 2 when ingestion ships'"
++  },
++  "dependencies": {
++    "@gv/types": "workspace:*",
++    "zod": "^3.25.76"
++  },
++  "devDependencies": {
++    "typescript": "~5.9.2"
++  }
++}
+diff --git a/packages/api-client/src/client.ts b/packages/api-client/src/client.ts
+new file mode 100644
+index 0000000..e8c3b26
+--- /dev/null
++++ b/packages/api-client/src/client.ts
+@@ -0,0 +1,107 @@
++import type { ErrorEnvelope } from "@gv/types";
++
++export type FetchImpl = typeof fetch;
++
++export interface ApiClientOptions {
++  baseUrl: string;
++  fetchImpl?: FetchImpl;
++  getAccessToken?: () => string | null | Promise<string | null>;
++  correlationIdProvider?: () => string;
++  onError?: (err: ApiError) => void;
++}
++
++export class ApiError extends Error {
++  readonly status: number;
++  readonly body: ErrorEnvelope | null;
++  readonly correlationId: string | null;
++  constructor(status: number, body: ErrorEnvelope | null, correlationId: string | null) {
++    super(body?.error?.message ?? `HTTP ${status}`);
++    this.name = "ApiError";
++    this.status = status;
++    this.body = body;
++    this.correlationId = correlationId;
++  }
++}
++
++function randomCorrelationId(): string {
++  // cor_ + 26 base32 chars ≈ ULID style, but without external dep.
++  const chars = "0123456789abcdefghjkmnpqrstvwxyz";
++  let out = "cor_";
++  for (let i = 0; i < 26; i++) {
++    out += chars[Math.floor(Math.random() * chars.length)];
++  }
++  return out;
++}
++
++export class ApiClient {
++  readonly baseUrl: string;
++  private readonly fetchImpl: FetchImpl;
++  private readonly getAccessToken?: ApiClientOptions["getAccessToken"];
++  private readonly correlationIdProvider: () => string;
++  private readonly onError?: ApiClientOptions["onError"];
++
++  constructor(opts: ApiClientOptions) {
++    this.baseUrl = opts.baseUrl.replace(/\/+$/, "");
++    this.fetchImpl = opts.fetchImpl ?? globalThis.fetch.bind(globalThis);
++    this.getAccessToken = opts.getAccessToken;
++    this.correlationIdProvider = opts.correlationIdProvider ?? randomCorrelationId;
++    this.onError = opts.onError;
++  }
++
++  async request<T>(method: string, path: string, body?: unknown, init?: RequestInit): Promise<T> {
++    const correlationId = this.correlationIdProvider();
++    const headers = new Headers(init?.headers);
++    headers.set("accept", "application/json");
++    headers.set("x-correlation-id", correlationId);
++    if (body !== undefined) {
++      headers.set("content-type", "application/json");
++    }
++    if (this.getAccessToken) {
++      const token = await this.getAccessToken();
++      if (token) {
++        headers.set("authorization", `Bearer ${token}`);
++      }
++    }
++    const res = await this.fetchImpl(`${this.baseUrl}${path}`, {
++      method,
++      headers,
++      body: body === undefined ? undefined : JSON.stringify(body),
++      ...init,
++    });
++    if (!res.ok) {
++      let envelope: ErrorEnvelope | null = null;
++      try {
++        envelope = (await res.json()) as ErrorEnvelope;
++      } catch {
++        envelope = null;
++      }
++      const err = new ApiError(res.status, envelope, envelope?.error?.correlation_id ?? correlationId);
++      this.onError?.(err);
++      throw err;
++    }
++    if (res.status === 204) {
++      return undefined as T;
++    }
++    return (await res.json()) as T;
++  }
++
++  get<T>(path: string, init?: RequestInit): Promise<T> {
++    return this.request<T>("GET", path, undefined, init);
++  }
++  post<T>(path: string, body?: unknown, init?: RequestInit): Promise<T> {
++    return this.request<T>("POST", path, body, init);
++  }
++  put<T>(path: string, body?: unknown, init?: RequestInit): Promise<T> {
++    return this.request<T>("PUT", path, body, init);
++  }
++  patch<T>(path: string, body?: unknown, init?: RequestInit): Promise<T> {
++    return this.request<T>("PATCH", path, body, init);
++  }
++  delete<T>(path: string, init?: RequestInit): Promise<T> {
++    return this.request<T>("DELETE", path, undefined, init);
++  }
++}
++
++export function createApiClient(opts: ApiClientOptions): ApiClient {
++  return new ApiClient(opts);
++}
+diff --git a/packages/api-client/src/endpoints/auth.ts b/packages/api-client/src/endpoints/auth.ts
+new file mode 100644
+index 0000000..123dff4
+--- /dev/null
++++ b/packages/api-client/src/endpoints/auth.ts
+@@ -0,0 +1,18 @@
++import type { LoginRequest, TokenPair, User } from "@gv/types";
++import type { ApiClient } from "../client.js";
++
++export interface AuthEndpoints {
++  login: (payload: LoginRequest) => Promise<TokenPair>;
++  refresh: (refreshToken: string) => Promise<TokenPair>;
++  logout: () => Promise<void>;
++  me: () => Promise<User>;
++}
++
++export function authEndpoints(client: ApiClient): AuthEndpoints {
++  return {
++    login: (payload) => client.post<TokenPair>("/auth/login", payload),
++    refresh: (refreshToken) => client.post<TokenPair>("/auth/refresh", { refreshToken }),
++    logout: () => client.post<void>("/auth/logout"),
++    me: () => client.get<User>("/auth/me"),
++  };
++}
+diff --git a/packages/api-client/src/endpoints/feature-flags.ts b/packages/api-client/src/endpoints/feature-flags.ts
+new file mode 100644
+index 0000000..a9d48e7
+--- /dev/null
++++ b/packages/api-client/src/endpoints/feature-flags.ts
+@@ -0,0 +1,17 @@
++import type { FeatureFlag } from "@gv/types";
++import type { ApiClient } from "../client.js";
++
++export interface FeatureFlagEndpoints {
++  list: () => Promise<{ flags: FeatureFlag[] }>;
++  get: (key: string) => Promise<FeatureFlag>;
++  update: (key: string, patch: { enabled?: boolean; description?: string }) => Promise<FeatureFlag>;
++}
++
++export function featureFlagEndpoints(client: ApiClient): FeatureFlagEndpoints {
++  return {
++    list: () => client.get<{ flags: FeatureFlag[] }>("/admin/flags"),
++    get: (key) => client.get<FeatureFlag>(`/admin/flags/${encodeURIComponent(key)}`),
++    update: (key, patch) =>
++      client.patch<FeatureFlag>(`/admin/flags/${encodeURIComponent(key)}`, patch),
++  };
++}
+diff --git a/packages/api-client/src/endpoints/health.ts b/packages/api-client/src/endpoints/health.ts
+new file mode 100644
+index 0000000..b7dfa91
+--- /dev/null
++++ b/packages/api-client/src/endpoints/health.ts
+@@ -0,0 +1,21 @@
++import type { ApiClient } from "../client.js";
++
++export interface HealthReport {
++  status: "ok" | "degraded" | "down";
++  service: string;
++  version: string;
++  uptimeSeconds: number;
++  checks: Record<string, { status: "ok" | "degraded" | "down"; detail?: string }>;
++}
++
++export interface HealthEndpoints {
++  live: () => Promise<{ status: "ok" }>;
++  ready: () => Promise<HealthReport>;
++}
++
++export function healthEndpoints(client: ApiClient): HealthEndpoints {
++  return {
++    live: () => client.get<{ status: "ok" }>("/health/live"),
++    ready: () => client.get<HealthReport>("/health/ready"),
++  };
++}
+diff --git a/packages/api-client/src/endpoints/system-config.ts b/packages/api-client/src/endpoints/system-config.ts
+new file mode 100644
+index 0000000..690c3e0
+--- /dev/null
++++ b/packages/api-client/src/endpoints/system-config.ts
+@@ -0,0 +1,22 @@
++import type { SystemConfigEntry } from "@gv/types";
++import type { ApiClient } from "../client.js";
++
++export interface SystemConfigEndpoints {
++  list: () => Promise<{ entries: SystemConfigEntry[] }>;
++  get: (key: string) => Promise<SystemConfigEntry>;
++  upsert: (key: string, value: unknown, description?: string) => Promise<SystemConfigEntry>;
++  delete: (key: string) => Promise<void>;
++}
++
++export function systemConfigEndpoints(client: ApiClient): SystemConfigEndpoints {
++  return {
++    list: () => client.get<{ entries: SystemConfigEntry[] }>("/admin/system/config"),
++    get: (key) => client.get<SystemConfigEntry>(`/admin/system/config/${encodeURIComponent(key)}`),
++    upsert: (key, value, description) =>
++      client.put<SystemConfigEntry>(`/admin/system/config/${encodeURIComponent(key)}`, {
++        value,
++        description,
++      }),
++    delete: (key) => client.delete<void>(`/admin/system/config/${encodeURIComponent(key)}`),
++  };
++}
+diff --git a/packages/api-client/src/index.ts b/packages/api-client/src/index.ts
+new file mode 100644
+index 0000000..a71a979
+--- /dev/null
++++ b/packages/api-client/src/index.ts
+@@ -0,0 +1,12 @@
++/**
++ * @gv/api-client — typed client for GodsView v2 control_plane + downstream services.
++ *
++ * Phase 0 surface: client factory, auth endpoints, feature-flag endpoints,
++ * system-config endpoints, health endpoint. Subsequent phases extend this
++ * via OpenAPI codegen (see `pnpm --filter @gv/api-client run codegen`).
++ */
++export * from "./client.js";
++export * from "./endpoints/auth.js";
++export * from "./endpoints/feature-flags.js";
++export * from "./endpoints/system-config.js";
++export * from "./endpoints/health.js";
+diff --git a/packages/api-client/tsconfig.json b/packages/api-client/tsconfig.json
+new file mode 100644
+index 0000000..bf19aea
+--- /dev/null
++++ b/packages/api-client/tsconfig.json
+@@ -0,0 +1,16 @@
++{
++  "extends": "../../tsconfig.base.json",
++  "compilerOptions": {
++    "outDir": "dist",
++    "rootDir": "src",
++    "composite": true,
++    "declaration": true,
++    "declarationMap": true,
++    "sourceMap": true,
++    "tsBuildInfoFile": "dist/.tsbuildinfo"
++  },
++  "references": [
++    { "path": "../types" }
++  ],
++  "include": ["src/**/*"]
++}
+diff --git a/packages/config/index.ts b/packages/config/index.ts
+new file mode 100644
+index 0000000..86d4611
+--- /dev/null
++++ b/packages/config/index.ts
+@@ -0,0 +1,78 @@
++/**
++ * @gv/config — runtime environment schema + helpers for GodsView v2.
++ *
++ * The zod schemas enforce that every deployed service reads the same
++ * shape of env from .env / AWS SSM / Secrets Manager. If a required
++ * key is missing, services MUST refuse to boot.
++ */
++import { z } from "zod";
++
++export const AppEnvSchema = z.enum(["local", "dev", "staging", "prod"]);
++export type AppEnv = z.infer<typeof AppEnvSchema>;
++
++const booleanish = z
++  .union([z.boolean(), z.literal("0"), z.literal("1"), z.literal("true"), z.literal("false")])
++  .transform((v) => v === true || v === 1 || v === "1" || v === "true");
++
++export const ControlPlaneEnvSchema = z.object({
++  GODSVIEW_ENV: AppEnvSchema.default("local"),
++  GODSVIEW_SERVICE_NAME: z.string().default("control_plane"),
++  DATABASE_URL: z.string().url(),
++  REDIS_URL: z.string().url().default("redis://localhost:6379/0"),
++  JWT_SIGNING_KEY: z.string().min(32),
++  JWT_ALGORITHM: z.enum(["HS256", "RS256"]).default("HS256"),
++  JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().positive().default(900),
++  JWT_REFRESH_TTL_SECONDS: z.coerce.number().int().positive().default(604800),
++  ALLOWED_ORIGINS: z
++    .string()
++    .default("http://localhost:3000")
++    .transform((s) => s.split(",").map((o) => o.trim()).filter(Boolean)),
++  KILL_SWITCH_ON_BOOT: booleanish.default(false),
++  LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
++});
++
++export type ControlPlaneEnv = z.infer<typeof ControlPlaneEnvSchema>;
++
++export const WebEnvSchema = z.object({
++  NEXT_PUBLIC_GODSVIEW_API_BASE: z.string().url().default("http://localhost:8000"),
++  NEXT_PUBLIC_GODSVIEW_SSE_BASE: z.string().url().default("http://localhost:8000"),
++  NEXT_PUBLIC_GODSVIEW_ENV: AppEnvSchema.default("local"),
++});
++export type WebEnv = z.infer<typeof WebEnvSchema>;
++
++/** Parse process.env and throw with a helpful message if any key is invalid. */
++export function parseControlPlaneEnv(env: NodeJS.ProcessEnv = process.env): ControlPlaneEnv {
++  const result = ControlPlaneEnvSchema.safeParse(env);
++  if (!result.success) {
++    const lines = result.error.issues
++      .map((i) => `  - ${i.path.join(".")}: ${i.message}`)
++      .join("\n");
++    throw new Error(`Invalid control_plane env:\n${lines}`);
++  }
++  return result.data;
++}
++
++export function parseWebEnv(env: NodeJS.ProcessEnv = process.env): WebEnv {
++  const result = WebEnvSchema.safeParse(env);
++  if (!result.success) {
++    const lines = result.error.issues
++      .map((i) => `  - ${i.path.join(".")}: ${i.message}`)
++      .join("\n");
++    throw new Error(`Invalid web env:\n${lines}`);
++  }
++  return result.data;
++}
++
++export const DEFAULT_PORTS = {
++  web: 3000,
++  control_plane: 8000,
++  ingestion: 8010,
++  orderflow: 8020,
++  backtest_runner: 8030,
++  calibration: 8040,
++  promotion: 8050,
++  intelligence: 8060,
++  execution: 8070,
++  screenshot_renderer: 8080,
++  replay: 8090,
++} as const;
+diff --git a/packages/config/package.json b/packages/config/package.json
+new file mode 100644
+index 0000000..0f2355b
+--- /dev/null
++++ b/packages/config/package.json
+@@ -0,0 +1,33 @@
++{
++  "name": "@gv/config",
++  "version": "0.1.0",
++  "private": true,
++  "type": "module",
++  "exports": {
++    ".": {
++      "workspace": "./index.ts",
++      "import": "./index.ts",
++      "types": "./index.ts"
++    },
++    "./*": {
++      "workspace": "./*.ts",
++      "import": "./*.ts",
++      "types": "./*.ts"
++    }
++  },
++  "main": "./index.ts",
++  "types": "./index.ts",
++  "scripts": {
++    "typecheck": "tsc -p tsconfig.json --noEmit",
++    "build": "tsc -p tsconfig.json",
++    "test": "echo 'no tests yet for @gv/config' && exit 0",
++    "lint": "echo 'lint todo' && exit 0",
++    "clean": "rm -rf dist .turbo *.tsbuildinfo"
++  },
++  "dependencies": {
++    "zod": "^3.25.76"
++  },
++  "devDependencies": {
++    "typescript": "~5.9.2"
++  }
++}
+diff --git a/packages/config/tsconfig.json b/packages/config/tsconfig.json
+new file mode 100644
+index 0000000..cf4fa17
+--- /dev/null
++++ b/packages/config/tsconfig.json
+@@ -0,0 +1,12 @@
++{
++  "extends": "../../tsconfig.base.json",
++  "compilerOptions": {
++    "outDir": "dist",
++    "composite": true,
++    "declaration": true,
++    "declarationMap": true,
++    "sourceMap": true,
++    "tsBuildInfoFile": "dist/.tsbuildinfo"
++  },
++  "include": ["./*.ts"]
++}
+diff --git a/packages/types/package.json b/packages/types/package.json
+new file mode 100644
+index 0000000..3b6c890
+--- /dev/null
++++ b/packages/types/package.json
+@@ -0,0 +1,33 @@
++{
++  "name": "@gv/types",
++  "version": "0.1.0",
++  "private": true,
++  "type": "module",
++  "exports": {
++    ".": {
++      "workspace": "./src/index.ts",
++      "import": "./src/index.ts",
++      "types": "./src/index.ts"
++    },
++    "./*": {
++      "workspace": "./src/*.ts",
++      "import": "./src/*.ts",
++      "types": "./src/*.ts"
++    }
++  },
++  "main": "./src/index.ts",
++  "types": "./src/index.ts",
++  "scripts": {
++    "typecheck": "tsc -p tsconfig.json --noEmit",
++    "build": "tsc -p tsconfig.json",
++    "test": "echo 'no tests yet for @gv/types' && exit 0",
++    "lint": "echo 'lint todo' && exit 0",
++    "clean": "rm -rf dist .turbo *.tsbuildinfo"
++  },
++  "dependencies": {
++    "zod": "^3.25.76"
++  },
++  "devDependencies": {
++    "typescript": "~5.9.2"
++  }
++}
+diff --git a/packages/types/src/audit.ts b/packages/types/src/audit.ts
+new file mode 100644
+index 0000000..f7cff45
+--- /dev/null
++++ b/packages/types/src/audit.ts
+@@ -0,0 +1,25 @@
++import { z } from "zod";
++
++/**
++ * Audit log envelope. Every state-changing API call MUST emit one.
++ * Persisted via control_plane.audit_log + replicated to S3 via Phase 1.
++ */
++export const AuditEventSchema = z.object({
++  id: z.string().min(1),
++  occurredAt: z.string().datetime(),
++  actor: z.object({
++    userId: z.string().nullable(),
++    email: z.string().email().nullable(),
++    sourceIp: z.string().nullable(),
++    userAgent: z.string().nullable(),
++  }),
++  action: z.string(),
++  resource: z.object({
++    type: z.string(),
++    id: z.string().nullable(),
++  }),
++  outcome: z.enum(["success", "denied", "error"]),
++  correlationId: z.string(),
++  details: z.record(z.unknown()).default({}),
++});
++export type AuditEvent = z.infer<typeof AuditEventSchema>;
+diff --git a/packages/types/src/errors.ts b/packages/types/src/errors.ts
+new file mode 100644
+index 0000000..08d91e1
+--- /dev/null
++++ b/packages/types/src/errors.ts
+@@ -0,0 +1,42 @@
++import { z } from "zod";
++
++/**
++ * Canonical error envelope returned by every GodsView v2 service.
++ * See docs/blueprint/reference/API_SURFACE.md §"Error envelope".
++ *
++ * - `code` is a machine-stable identifier (snake_case).
++ * - `correlation_id` is propagated from the inbound request.
++ * - `details[]` carries field-level validation diagnostics when relevant.
++ */
++export const ErrorDetailSchema = z.object({
++  path: z.string(),
++  issue: z.string(),
++  value: z.unknown().optional(),
++});
++export type ErrorDetail = z.infer<typeof ErrorDetailSchema>;
++
++export const ErrorEnvelopeSchema = z.object({
++  error: z.object({
++    code: z.string().min(1),
++    message: z.string().min(1),
++    correlation_id: z.string().min(1),
++    details: z.array(ErrorDetailSchema).optional(),
++    hint: z.string().optional(),
++    docs: z.string().url().optional(),
++  }),
++});
++export type ErrorEnvelope = z.infer<typeof ErrorEnvelopeSchema>;
++
++export const ERROR_CODES = {
++  validation: "validation_error",
++  unauthenticated: "unauthenticated",
++  forbidden: "forbidden",
++  notFound: "not_found",
++  conflict: "conflict",
++  rateLimited: "rate_limited",
++  upstreamUnavailable: "upstream_unavailable",
++  internal: "internal_error",
++  killSwitch: "kill_switch_engaged",
++} as const;
++
++export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
+diff --git a/packages/types/src/feature-flags.ts b/packages/types/src/feature-flags.ts
+new file mode 100644
+index 0000000..f370539
+--- /dev/null
++++ b/packages/types/src/feature-flags.ts
+@@ -0,0 +1,30 @@
++import { z } from "zod";
++
++/**
++ * Feature flags and the deterministic safety floor.
++ *
++ * Per blueprint Decision #4 (deterministic safety floor): every agent
++ * proposal is gated by these flags + risk engine + promotion FSM +
++ * kill switch + calibration drift before being sent to the broker.
++ */
++export const FeatureFlagSchema = z.object({
++  key: z.string().regex(/^[a-z0-9._-]+$/, "must be lowercase dotted slug"),
++  enabled: z.boolean(),
++  description: z.string(),
++  scope: z.enum(["global", "user", "strategy", "symbol"]).default("global"),
++  scopeRef: z.string().nullable().default(null),
++  updatedAt: z.string().datetime(),
++  updatedBy: z.string(),
++});
++export type FeatureFlag = z.infer<typeof FeatureFlagSchema>;
++
++/** Curated set of flag keys recognized by Phase 0 control_plane. */
++export const KNOWN_FLAGS = [
++  "auth.mfa.required",
++  "execution.kill_switch",
++  "execution.allow_live",
++  "intelligence.allow_autonomous",
++  "ui.show_v2_command_center",
++] as const;
++
++export type KnownFlag = (typeof KNOWN_FLAGS)[number];
+diff --git a/packages/types/src/identity.ts b/packages/types/src/identity.ts
+new file mode 100644
+index 0000000..ef2f838
+--- /dev/null
++++ b/packages/types/src/identity.ts
+@@ -0,0 +1,30 @@
++import { z } from "zod";
++
++export const RoleSchema = z.enum(["viewer", "analyst", "operator", "admin"]);
++export type Role = z.infer<typeof RoleSchema>;
++
++export const UserSchema = z.object({
++  id: z.string().min(1),
++  email: z.string().email(),
++  displayName: z.string().min(1),
++  roles: z.array(RoleSchema).min(1),
++  mfaEnabled: z.boolean().default(false),
++  createdAt: z.string().datetime(),
++  lastLoginAt: z.string().datetime().nullable(),
++});
++export type User = z.infer<typeof UserSchema>;
++
++export const TokenPairSchema = z.object({
++  accessToken: z.string().min(20),
++  refreshToken: z.string().min(20),
++  accessExpiresAt: z.string().datetime(),
++  refreshExpiresAt: z.string().datetime(),
++});
++export type TokenPair = z.infer<typeof TokenPairSchema>;
++
++export const LoginRequestSchema = z.object({
++  email: z.string().email(),
++  password: z.string().min(8),
++  mfaCode: z.string().optional(),
++});
++export type LoginRequest = z.infer<typeof LoginRequestSchema>;
+diff --git a/packages/types/src/index.ts b/packages/types/src/index.ts
+new file mode 100644
+index 0000000..3191cf3
+--- /dev/null
++++ b/packages/types/src/index.ts
+@@ -0,0 +1,18 @@
++/**
++ * @gv/types — shared domain types and zod schemas for GodsView v2.
++ *
++ * Phase 0 surface: identity envelope (User, Role), error envelope
++ * (ErrorEnvelope), feature flag, system config, audit event.
++ * Subsequent phases extend this module with signal, strategy, backtest,
++ * order, fill, calibration, promotion, alert, screenshot domains.
++ *
++ * All types must have a corresponding zod schema so wire payloads can be
++ * validated. Always export both the schema (camelCase Schema suffix)
++ * and the inferred type (PascalCase).
++ */
++
++export * from "./identity.js";
++export * from "./errors.js";
++export * from "./feature-flags.js";
++export * from "./audit.js";
++export * from "./system-config.js";
+diff --git a/packages/types/src/system-config.ts b/packages/types/src/system-config.ts
+new file mode 100644
+index 0000000..7741696
+--- /dev/null
++++ b/packages/types/src/system-config.ts
+@@ -0,0 +1,14 @@
++import { z } from "zod";
++
++/**
++ * System config: small KV store managed by admin UI.
++ * Distinct from feature flags because values may be strings/JSON.
++ */
++export const SystemConfigEntrySchema = z.object({
++  key: z.string().regex(/^[a-z0-9._-]+$/),
++  value: z.unknown(),
++  description: z.string(),
++  updatedAt: z.string().datetime(),
++  updatedBy: z.string(),
++});
++export type SystemConfigEntry = z.infer<typeof SystemConfigEntrySchema>;
+diff --git a/packages/types/tsconfig.json b/packages/types/tsconfig.json
+new file mode 100644
+index 0000000..e3cb7d2
+--- /dev/null
++++ b/packages/types/tsconfig.json
+@@ -0,0 +1,13 @@
++{
++  "extends": "../../tsconfig.base.json",
++  "compilerOptions": {
++    "outDir": "dist",
++    "rootDir": "src",
++    "composite": true,
++    "declaration": true,
++    "declarationMap": true,
++    "sourceMap": true,
++    "tsBuildInfoFile": "dist/.tsbuildinfo"
++  },
++  "include": ["src/**/*"]
++}
+diff --git a/packages/ui/package.json b/packages/ui/package.json
+new file mode 100644
+index 0000000..27b602f
+--- /dev/null
++++ b/packages/ui/package.json
+@@ -0,0 +1,43 @@
++{
++  "name": "@gv/ui",
++  "version": "0.1.0",
++  "private": true,
++  "type": "module",
++  "exports": {
++    ".": {
++      "workspace": "./src/index.ts",
++      "import": "./src/index.ts",
++      "types": "./src/index.ts"
++    },
++    "./*": {
++      "workspace": "./src/*.tsx",
++      "import": "./src/*.tsx",
++      "types": "./src/*.tsx"
++    }
++  },
++  "main": "./src/index.ts",
++  "types": "./src/index.ts",
++  "sideEffects": ["*.css"],
++  "scripts": {
++    "typecheck": "tsc -p tsconfig.json --noEmit",
++    "build": "tsc -p tsconfig.json",
++    "test": "echo 'no tests yet for @gv/ui' && exit 0",
++    "lint": "echo 'lint todo' && exit 0",
++    "clean": "rm -rf dist .turbo *.tsbuildinfo"
++  },
++  "peerDependencies": {
++    "react": "^19.0.0",
++    "react-dom": "^19.0.0"
++  },
++  "dependencies": {
++    "clsx": "2.1.1",
++    "tailwind-merge": "3.5.0"
++  },
++  "devDependencies": {
++    "@types/react": "^19.2.0",
++    "@types/react-dom": "^19.2.0",
++    "react": "19.1.0",
++    "react-dom": "19.1.0",
++    "typescript": "~5.9.2"
++  }
++}
+diff --git a/packages/ui/src/components/Badge.tsx b/packages/ui/src/components/Badge.tsx
+new file mode 100644
+index 0000000..7574329
+--- /dev/null
++++ b/packages/ui/src/components/Badge.tsx
+@@ -0,0 +1,29 @@
++import * as React from "react";
++import { cn } from "../utils/cn.js";
++
++export type BadgeTone = "neutral" | "success" | "warn" | "danger" | "info";
++
++export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
++  tone?: BadgeTone;
++}
++
++const toneClasses: Record<BadgeTone, string> = {
++  neutral: "bg-slate-100 text-slate-800",
++  success: "bg-emerald-100 text-emerald-800",
++  warn: "bg-amber-100 text-amber-800",
++  danger: "bg-rose-100 text-rose-800",
++  info: "bg-sky-100 text-sky-800",
++};
++
++export function Badge({ className, tone = "neutral", ...props }: BadgeProps) {
++  return (
++    <span
++      className={cn(
++        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
++        toneClasses[tone],
++        className,
++      )}
++      {...props}
++    />
++  );
++}
+diff --git a/packages/ui/src/components/Button.tsx b/packages/ui/src/components/Button.tsx
+new file mode 100644
+index 0000000..da2af98
+--- /dev/null
++++ b/packages/ui/src/components/Button.tsx
+@@ -0,0 +1,45 @@
++import * as React from "react";
++import { cn } from "../utils/cn.js";
++
++export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
++export type ButtonSize = "sm" | "md" | "lg";
++
++export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
++  variant?: ButtonVariant;
++  size?: ButtonSize;
++  loading?: boolean;
++}
++
++const base =
++  "inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50 disabled:pointer-events-none";
++
++const variantClasses: Record<ButtonVariant, string> = {
++  primary: "bg-slate-900 text-white hover:bg-slate-800 focus-visible:ring-slate-400",
++  secondary: "bg-slate-100 text-slate-900 hover:bg-slate-200 focus-visible:ring-slate-300",
++  ghost: "text-slate-900 hover:bg-slate-100 focus-visible:ring-slate-300",
++  danger: "bg-rose-600 text-white hover:bg-rose-700 focus-visible:ring-rose-400",
++};
++
++const sizeClasses: Record<ButtonSize, string> = {
++  sm: "h-8 px-3 text-xs",
++  md: "h-9 px-4 text-sm",
++  lg: "h-10 px-5 text-base",
++};
++
++export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function Button(
++  { className, variant = "primary", size = "md", loading, disabled, children, ...props },
++  ref,
++) {
++  return (
++    <button
++      ref={ref}
++      disabled={disabled || loading}
++      className={cn(base, variantClasses[variant], sizeClasses[size], className)}
++      aria-busy={loading || undefined}
++      {...props}
++    >
++      {loading ? <span aria-hidden>⏳</span> : null}
++      {children}
++    </button>
++  );
++});
+diff --git a/packages/ui/src/components/Card.tsx b/packages/ui/src/components/Card.tsx
+new file mode 100644
+index 0000000..f74f2ca
+--- /dev/null
++++ b/packages/ui/src/components/Card.tsx
+@@ -0,0 +1,23 @@
++import * as React from "react";
++import { cn } from "../utils/cn.js";
++
++export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
++  return (
++    <div
++      className={cn("rounded-lg border border-slate-200 bg-white shadow-sm", className)}
++      {...props}
++    />
++  );
++}
++
++export function CardHeader({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
++  return <div className={cn("border-b border-slate-200 p-4", className)} {...props} />;
++}
++
++export function CardTitle({ className, ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
++  return <h3 className={cn("text-base font-semibold text-slate-900", className)} {...props} />;
++}
++
++export function CardBody({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
++  return <div className={cn("p-4 text-sm text-slate-700", className)} {...props} />;
++}
+diff --git a/packages/ui/src/components/EmptyState.tsx b/packages/ui/src/components/EmptyState.tsx
+new file mode 100644
+index 0000000..5036dee
+--- /dev/null
++++ b/packages/ui/src/components/EmptyState.tsx
+@@ -0,0 +1,24 @@
++import * as React from "react";
++import { cn } from "../utils/cn.js";
++
++export interface EmptyStateProps {
++  title: string;
++  description?: string;
++  action?: React.ReactNode;
++  className?: string;
++}
++
++export function EmptyState({ title, description, action, className }: EmptyStateProps) {
++  return (
++    <div
++      className={cn(
++        "flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-10 text-center",
++        className,
++      )}
++    >
++      <p className="text-base font-semibold text-slate-900">{title}</p>
++      {description ? <p className="max-w-prose text-sm text-slate-600">{description}</p> : null}
++      {action ? <div className="pt-2">{action}</div> : null}
++    </div>
++  );
++}
+diff --git a/packages/ui/src/components/PageHeader.tsx b/packages/ui/src/components/PageHeader.tsx
+new file mode 100644
+index 0000000..f380506
+--- /dev/null
++++ b/packages/ui/src/components/PageHeader.tsx
+@@ -0,0 +1,31 @@
++import * as React from "react";
++import { cn } from "../utils/cn.js";
++
++export interface PageHeaderProps {
++  title: string;
++  description?: string;
++  actions?: React.ReactNode;
++  breadcrumbs?: React.ReactNode;
++  className?: string;
++}
++
++export function PageHeader({
++  title,
++  description,
++  actions,
++  breadcrumbs,
++  className,
++}: PageHeaderProps) {
++  return (
++    <header className={cn("flex flex-col gap-2 border-b border-slate-200 pb-4", className)}>
++      {breadcrumbs ? <div className="text-xs text-slate-500">{breadcrumbs}</div> : null}
++      <div className="flex items-center justify-between gap-4">
++        <div>
++          <h1 className="text-xl font-semibold text-slate-900">{title}</h1>
++          {description ? <p className="mt-1 text-sm text-slate-600">{description}</p> : null}
++        </div>
++        {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
++      </div>
++    </header>
++  );
++}
+diff --git a/packages/ui/src/components/ToDoBanner.tsx b/packages/ui/src/components/ToDoBanner.tsx
+new file mode 100644
+index 0000000..4c9ec5d
+--- /dev/null
++++ b/packages/ui/src/components/ToDoBanner.tsx
+@@ -0,0 +1,32 @@
++import * as React from "react";
++import { Badge } from "./Badge.js";
++import { cn } from "../utils/cn.js";
++
++export interface ToDoBannerProps {
++  phase: string;
++  note?: string;
++  className?: string;
++}
++
++/**
++ * Banner rendered on v2 stub pages (Phase 0 ships 62 stubs).
++ * Makes it impossible to confuse a stub for a real page. Removed
++ * when the page graduates to real data in its phase.
++ */
++export function ToDoBanner({ phase, note, className }: ToDoBannerProps) {
++  return (
++    <div
++      role="note"
++      className={cn(
++        "flex items-center gap-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900",
++        className,
++      )}
++    >
++      <Badge tone="warn">stub</Badge>
++      <span>
++        This page is scaffolded for <strong>{phase}</strong>.
++        {note ? ` ${note}` : " Real implementation lands in the phase shown."}
++      </span>
++    </div>
++  );
++}
+diff --git a/packages/ui/src/index.ts b/packages/ui/src/index.ts
+new file mode 100644
+index 0000000..70207ff
+--- /dev/null
++++ b/packages/ui/src/index.ts
+@@ -0,0 +1,15 @@
++/**
++ * @gv/ui — shared React primitives for GodsView v2 apps/web.
++ *
++ * Phase 0 surface: cn() utility, Button, Badge, Card, EmptyState,
++ * PageHeader, ToDoBanner. Subsequent phases add charts (TradingView
++ * overlay, depth ladder), table primitives, form controls, and
++ * specialized widgets (KillSwitchPanel, CalibrationCurve, etc).
++ */
++export * from "./utils/cn.js";
++export * from "./components/Button.js";
++export * from "./components/Badge.js";
++export * from "./components/Card.js";
++export * from "./components/EmptyState.js";
++export * from "./components/PageHeader.js";
++export * from "./components/ToDoBanner.js";
+diff --git a/packages/ui/src/utils/cn.ts b/packages/ui/src/utils/cn.ts
+new file mode 100644
+index 0000000..30fc7cb
+--- /dev/null
++++ b/packages/ui/src/utils/cn.ts
+@@ -0,0 +1,7 @@
++import clsx, { type ClassValue } from "clsx";
++import { twMerge } from "tailwind-merge";
++
++/** Compose tailwind classes with clsx + dedup via tailwind-merge. */
++export function cn(...inputs: ClassValue[]): string {
++  return twMerge(clsx(inputs));
++}
+diff --git a/packages/ui/tsconfig.json b/packages/ui/tsconfig.json
+new file mode 100644
+index 0000000..12215bd
+--- /dev/null
++++ b/packages/ui/tsconfig.json
+@@ -0,0 +1,14 @@
++{
++  "extends": "../../tsconfig.base.json",
++  "compilerOptions": {
++    "outDir": "dist",
++    "rootDir": "src",
++    "composite": true,
++    "declaration": true,
++    "declarationMap": true,
++    "sourceMap": true,
++    "jsx": "react-jsx",
++    "tsBuildInfoFile": "dist/.tsbuildinfo"
++  },
++  "include": ["src/**/*"]
++}
+-- 
+2.34.1
+
