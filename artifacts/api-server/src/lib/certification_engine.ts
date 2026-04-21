@@ -23,7 +23,7 @@ import {
   db,
   strategyCertificationsTable,
 } from "@workspace/db";
-import { desc, eq, and } from "@workspace/db";
+import { desc, eq, and } from "drizzle-orm";
 
 // ── Types ──────────────────────────────────────────────────────
 

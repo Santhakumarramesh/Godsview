@@ -12,7 +12,7 @@
 
 import { db } from "@workspace/db";
 import { siDecisionsTable } from "@workspace/db";
-import { desc, eq, and, gte, sql } from "@workspace/db";
+import { desc, eq, and, gte, sql } from "drizzle-orm";
 import { logger } from "./logger";
 
 type SIDecisionRow = {
@@ -63,6 +63,12 @@ export interface SetupMemorySummary {
 }
 
 // Cache
+/**
+ * PRODUCTION: Consider replacing with Redis or memcached for distributed caching.
+ * This in-memory cache survives within a process but is lost on restart.
+ * For multi-instance production deployments, use an external cache.
+ * TTL: 3 minutes — suitable for setup memory that changes infrequently.
+ */
 const memoryCache = new Map<string, { data: SetupMemorySummary; expiresAt: number }>();
 const CACHE_TTL_MS = 3 * 60 * 1000;
 

@@ -13,17 +13,13 @@ from .base_node import NodeBase
 class RiskNode(NodeBase):
     name = "risk_node"
 
-    def run(
-        self, brain: StockBrainState, payload: dict[str, Any], store: BrainStore
-    ) -> StockBrainState:
+    def run(self, brain: StockBrainState, payload: dict[str, Any], store: BrainStore) -> StockBrainState:
         data = payload.get("data", payload)
         signal = data.get("signal", {}) if isinstance(data, dict) else {}
         market = data.get("market", {}) if isinstance(data, dict) else {}
         blocked = bool(payload.get("blocked", False))
 
-        entry_price = float(
-            signal.get("close_price", market.get("last_price", brain.price.last or 0.0))
-        )
+        entry_price = float(signal.get("close_price", market.get("last_price", brain.price.last or 0.0)))
         direction = brain.decision.direction
         if entry_price <= 0 or direction not in {"long", "short"} or blocked:
             brain.risk_gate = RiskGate(
@@ -36,9 +32,7 @@ class RiskNode(NodeBase):
                 daily_loss_remaining_pct=100.0,
             )
             brain.decision.risk_approved = False
-            brain.decision.state = (
-                BrainState.BLOCKED if blocked else BrainState.WATCHING
-            )
+            brain.decision.state = BrainState.BLOCKED if blocked else BrainState.WATCHING
             self.mark_live(brain)
             return brain
 
@@ -61,9 +55,7 @@ class RiskNode(NodeBase):
             reason=decision.reason,
             max_position_size_usd=float(decision.qty * entry_price),
             max_loss_usd=float(risk_dollars),
-            stop_distance_atr=max(
-                0.1, settings.default_stop_pct / max(brain.price.atr_pct, 1e-6)
-            ),
+            stop_distance_atr=max(0.1, settings.default_stop_pct / max(brain.price.atr_pct, 1e-6)),
             reward_risk_ratio=rr,
             portfolio_heat_pct=min(100.0, (risk_dollars / 10_000.0) * 100),
             daily_loss_remaining_pct=100.0,
@@ -94,10 +86,7 @@ def quick_risk_check(
         last_price = float(getattr(brain.price, "last", 0.0) or 0.0)
         if last_price <= 0:
             return False
-        if (
-            supreme is not None
-            and getattr(supreme, "system_health", "healthy") == "halted"
-        ):
+        if supreme is not None and getattr(supreme, "system_health", "healthy") == "halted":
             return False
         return True
     except Exception:
@@ -123,7 +112,6 @@ def evaluate_risk(
         class _NoopStore:
             def update_stock(self, *a: Any, **kw: Any) -> None:
                 return None
-
         node.run(brain, payload, _NoopStore())  # type: ignore[arg-type]
     except Exception:
         pass

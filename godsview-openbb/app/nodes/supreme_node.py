@@ -11,9 +11,7 @@ from app.state.store import BrainStore, get_store
 def _derive_regime(stocks: list[StockBrainState]) -> Regime:
     if not stocks:
         return Regime.RANGING
-    labels = [
-        s.structure.sk_sequence_stage for s in stocks if s.structure.sk_sequence_stage
-    ]
+    labels = [s.structure.sk_sequence_stage for s in stocks if s.structure.sk_sequence_stage]
     if not labels:
         return Regime.RANGING
     top = Counter(labels).most_common(1)[0][0].lower()
@@ -37,14 +35,7 @@ class SupremeNode:
         regime = _derive_regime(stocks)
 
         rankings = sorted(
-            [
-                {
-                    "symbol": s.symbol,
-                    "attention_score": s.attention_score,
-                    "state": s.decision.state.value,
-                }
-                for s in stocks
-            ],
+            [{"symbol": s.symbol, "attention_score": s.attention_score, "state": s.decision.state.value} for s in stocks],
             key=lambda r: r["attention_score"],
             reverse=True,
         )

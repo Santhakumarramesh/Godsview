@@ -1,15 +1,3 @@
-// @ts-nocheck
-/**
- * DESIGN SCAFFOLD — not wired into the live runtime.
- * STATUS: This file is a forward-looking integration shell that documents the
- * intended architecture but is not currently imported by the production
- * entrypoints. Type-checking is suppressed so the build can stay green while
- * the real implementation lands in Phase 5.
- *
- * REMOVE the `// @ts-nocheck` directive once Phase 5 is implemented and the
- * file is actually mounted in `src/index.ts` / `src/routes/index.ts`.
- */
-
 /**
  * attribution_engine_explain.ts — Return Attribution and Factor Analysis
  *

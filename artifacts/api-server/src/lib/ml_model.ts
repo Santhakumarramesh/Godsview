@@ -18,7 +18,7 @@
  */
 
 import { db, accuracyResultsTable } from "@workspace/db";
-import { eq, sql, and, isNotNull, or, desc } from "@workspace/db";
+import { eq, sql, and, isNotNull, or, desc } from "drizzle-orm";
 import { logger } from "./logger";
 
 // ── Types ──────────────────────────────────────────────────────────────────────

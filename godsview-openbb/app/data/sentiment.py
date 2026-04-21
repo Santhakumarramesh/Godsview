@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import re
 from datetime import datetime, timezone
 from typing import Any
+import re
 
 import requests
 
@@ -45,11 +45,7 @@ def _fetch_x_recent(symbol: str, limit: int = 25) -> list[str]:
     query = f"({symbol} OR ${symbol}) lang:en -is:retweet"
     url = "https://api.x.com/2/tweets/search/recent"
     headers = {"Authorization": f"Bearer {settings.x_bearer_token}"}
-    params = {
-        "query": query,
-        "max_results": max(10, min(limit, 100)),
-        "tweet.fields": "created_at,text",
-    }
+    params = {"query": query, "max_results": max(10, min(limit, 100)), "tweet.fields": "created_at,text"}
     try:
         resp = requests.get(url, headers=headers, params=params, timeout=8)
         if resp.status_code != 200:
@@ -79,3 +75,4 @@ def get_sentiment_snapshot(symbol: str) -> dict[str, Any]:
         "sentiment_score": round(float(avg), 6),
         "polarity": polarity,
     }
+

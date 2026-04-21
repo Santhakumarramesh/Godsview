@@ -231,18 +231,20 @@ export class StrategyLab {
       feedback.toLowerCase().includes('profit') ||
       feedback.toLowerCase().includes('target')
     ) {
-      const targets = refinedStrategy.exit.profitTargets ?? [];
-      if (targets.length === 0) {
+      if (refinedStrategy.exit.profitTargets.length === 0) {
         refinedStrategy.exit.profitTargets = [
-          { ratio: 3, closePercent: 1.0 },
+          {
+            threshold: 3,
+            percentPosition: 1.0,
+          },
         ];
-        changesSummary.push('Added default profit target at 3R');
+        changesSummary.push('Added default profit target at 3%');
       } else {
-        const next = (targets[0].ratio ?? 1) * 1.2;
-        targets[0].ratio = next;
-        refinedStrategy.exit.profitTargets = targets;
+        refinedStrategy.exit.profitTargets[0].threshold =
+          refinedStrategy.exit.profitTargets[0].threshold *
+          1.2;
         changesSummary.push(
-          `Increased profit target to ${next.toFixed(2)}R`,
+          `Increased profit target to ${refinedStrategy.exit.profitTargets[0].threshold.toFixed(2)}%`
         );
       }
     }

@@ -1,18 +1,4 @@
-import { StrategyDSL, EntryCondition } from './strategy_dsl';
-
-/**
- * Normalize a strategy entry condition to a lowercased string for the
- * critique engine's pattern-matching helpers. EntrySpec.conditions can
- * be either typed `EntryCondition` objects (with .name) or free-form
- * descriptor strings, so always coerce to the searchable text form.
- */
-function conditionText(c: string | EntryCondition): string {
-  if (typeof c === 'string') return c.toLowerCase();
-  // EntryCondition: combine name + type so token matches still hit
-  // (e.g. an indicator condition named "MACD cross" with type "indicator"
-  // should still match a /macd/ test).
-  return `${c.name ?? ''} ${c.type ?? ''}`.trim().toLowerCase();
-}
+import { StrategyDSL } from './strategy_dsl';
 
 /**
  * Edge analysis result
@@ -133,20 +119,20 @@ export class StrategyCritique {
       notes.push('Multiple entry confirmations suggest higher win rate');
     }
 
-    const profitTargets = strategy.exit.profitTargets ?? [];
     const hasDefinedExits =
-      profitTargets.length > 0 || strategy.exit.stopLoss !== undefined;
+      strategy.exit.profitTargets.length > 0 ||
+      strategy.exit.stopLoss !== undefined;
     if (hasDefinedExits) {
       profitFactor += 0.5;
       notes.push('Defined exits improve profit factor expectation');
     }
 
-    const hasMomentumIndicators = strategy.entry.conditions.some((c) => {
-      const t = conditionText(c);
-      return (
-        t.includes('rsi') || t.includes('macd') || t.includes('stochastic')
-      );
-    });
+    const hasMomentumIndicators = strategy.entry.conditions.some(
+      (c) =>
+        c.includes('rsi') ||
+        c.includes('macd') ||
+        c.includes('stochastic')
+    );
     if (hasMomentumIndicators) {
       expectedWinRate += 0.05;
       notes.push('Momentum indicators typically improve entry timing');
@@ -160,12 +146,12 @@ export class StrategyCritique {
       notes.push('Volatility filters may reduce trade frequency');
     }
 
-    if (strategy.exit.stopLoss && profitTargets.length > 0) {
+    if (
+      strategy.exit.stopLoss &&
+      strategy.exit.profitTargets.length > 0
+    ) {
       const sl = strategy.exit.stopLoss.value || 2;
-      // Use `ratio` (preferred) or legacy `threshold` if the caller supplied
-      // an older-shaped profit target.
-      const first = profitTargets[0] as { ratio?: number; threshold?: number };
-      const tp = first.ratio ?? first.threshold ?? 3;
+      const tp = strategy.exit.profitTargets[0].threshold || 3;
       profitFactor = 1 + (tp - sl) / sl;
     }
 
@@ -196,11 +182,12 @@ export class StrategyCritique {
     const notes: string[] = [];
 
     let riskRewardRatio = 1.5;
-    const pTargetsRR = strategy.exit.profitTargets ?? [];
-    if (strategy.exit.stopLoss && pTargetsRR.length > 0) {
+    if (
+      strategy.exit.stopLoss &&
+      strategy.exit.profitTargets.length > 0
+    ) {
       const risk = strategy.exit.stopLoss.value || 2;
-      const first = pTargetsRR[0] as { ratio?: number; threshold?: number };
-      const reward = first.ratio ?? first.threshold ?? 3;
+      const reward = strategy.exit.profitTargets[0].threshold || 3;
       riskRewardRatio = reward / risk;
       notes.push(
         `Explicit risk/reward ratio: ${riskRewardRatio.toFixed(2)}:1`
@@ -252,18 +239,16 @@ export class StrategyCritique {
       parameterCount += 1;
     }
 
-    parameterCount += (strategy.exit.profitTargets ?? []).length;
+    parameterCount += strategy.exit.profitTargets.length;
     parameterCount += strategy.filters.length * 2;
 
-    const indicatorCount = strategy.entry.conditions.filter((c) => {
-      const t = conditionText(c);
-      return (
-        t.includes('rsi') ||
-        t.includes('macd') ||
-        t.includes('sma') ||
-        t.includes('ema')
-      );
-    }).length;
+    const indicatorCount = strategy.entry.conditions.filter(
+      (c) =>
+        c.includes('rsi') ||
+        c.includes('macd') ||
+        c.includes('sma') ||
+        c.includes('ema')
+    ).length;
     parameterCount += indicatorCount * 2;
 
     const dataPointsRequired = Math.max(100, parameterCount * 30);
@@ -314,16 +299,14 @@ export class StrategyCritique {
   ): RegimeDependencyAnalysis {
     const notes: string[] = [];
 
-    const hasTrendIndicators = strategy.entry.conditions.some((c) => {
-      const t = conditionText(c);
-      return t.includes('sma') || t.includes('ema');
-    });
+    const hasTrendIndicators = strategy.entry.conditions.some(
+      (c) => c.includes('sma') || c.includes('ema')
+    );
     const trendingMarketScore = hasTrendIndicators ? 0.8 : 0.5;
 
-    const hasRangeIndicators = strategy.entry.conditions.some((c) => {
-      const t = conditionText(c);
-      return t.includes('rsi') || t.includes('bollinger');
-    });
+    const hasRangeIndicators = strategy.entry.conditions.some(
+      (c) => c.includes('rsi') || c.includes('bollinger')
+    );
     const rangingMarketScore = hasRangeIndicators ? 0.7 : 0.4;
 
     const hasVolatilityFilter = strategy.filters.some(
@@ -382,12 +365,13 @@ export class StrategyCritique {
 
     const ruleCount =
       strategy.entry.conditions.length +
-      (strategy.exit.exitMethods ?? []).length;
+      strategy.exit.exitMethods.length;
 
-    const indicatorCount = strategy.entry.conditions.filter((c) =>
-      /rsi|macd|sma|ema|atr|bollinger|stochastic|cci|adx/i.test(
-        conditionText(c),
-      ),
+    const indicatorCount = strategy.entry.conditions.filter(
+      (c) =>
+        /rsi|macd|sma|ema|atr|bollinger|stochastic|cci|adx/i.test(
+          c
+        )
     ).length;
 
     const filterCount = strategy.filters.length;
@@ -438,38 +422,37 @@ export class StrategyCritique {
 
     let crowdingScore = 0;
 
-    const hasMACDRSI = strategy.entry.conditions.some((c) => {
-      const t = conditionText(c);
-      return t.includes('macd') && t.includes('rsi');
-    });
+    const hasMACDRSI = strategy.entry.conditions.some(
+      (c) => c.includes('macd') && c.includes('rsi')
+    );
     if (hasMACDRSI) {
       crowdingScore += 2;
       commonPatterns.push('MACD + RSI (very common retail pattern)');
     }
 
     const hasMovingAverageCrossover =
-      strategy.entry.conditions.some((c) => /sma|ema/.test(conditionText(c))) &&
+      strategy.entry.conditions.some((c) =>
+        /sma|ema/.test(c)
+      ) &&
       strategy.entry.conditions.filter((c) =>
-        /sma|ema/.test(conditionText(c)),
+        /sma|ema/.test(c)
       ).length >= 2;
     if (hasMovingAverageCrossover) {
       crowdingScore += 1.5;
       commonPatterns.push('Moving average crossover (common)');
     }
 
-    const hasBollingerRSI = strategy.entry.conditions.some((c) => {
-      const t = conditionText(c);
-      return t.includes('bollinger') && t.includes('rsi');
-    });
+    const hasBollingerRSI = strategy.entry.conditions.some(
+      (c) => c.includes('bollinger') && c.includes('rsi')
+    );
     if (hasBollingerRSI) {
       crowdingScore += 1.5;
       commonPatterns.push('Bollinger Bands + RSI (crowded)');
     }
 
-    const hasSupportResistance = strategy.entry.conditions.some((c) => {
-      const t = conditionText(c);
-      return t.includes('support') || t.includes('resistance');
-    });
+    const hasSupportResistance = strategy.entry.conditions.some(
+      (c) => c.includes('support') || c.includes('resistance')
+    );
     if (hasSupportResistance && !hasMovingAverageCrossover) {
       crowdingScore += 0.5;
       commonPatterns.push('Support/resistance levels');
@@ -536,7 +519,10 @@ export class StrategyCritique {
       );
     }
 
-    if (strategy.entry.type === 'limit' && timingDependency === 'high') {
+    if (
+      strategy.entry.entryMethod === 'limit' &&
+      timingDependency === 'high'
+    ) {
       notes.push(
         'Limit orders with timing filters may miss entries'
       );

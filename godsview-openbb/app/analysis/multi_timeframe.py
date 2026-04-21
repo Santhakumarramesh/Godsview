@@ -7,6 +7,7 @@ from app.analysis.order_blocks import detect_order_blocks
 from app.analysis.structure import analyze_structure
 from app.data_fetch import fetch_price_history
 
+
 DEFAULT_TIMEFRAMES = ["5m", "15m", "1h", "4h", "1d"]
 
 
@@ -36,9 +37,7 @@ def analyze_single_timeframe(symbol: str, timeframe: str) -> dict[str, Any]:
     }
 
 
-def analyze_multi_timeframes(
-    symbol: str, timeframes: list[str] | None = None
-) -> dict[str, Any]:
+def analyze_multi_timeframes(symbol: str, timeframes: list[str] | None = None) -> dict[str, Any]:
     frames = timeframes or DEFAULT_TIMEFRAMES
     results = [analyze_single_timeframe(symbol, tf) for tf in frames]
 
@@ -66,3 +65,4 @@ def analyze_multi_timeframes(
             "confluence": round(float(confluence), 4),
         },
     }
+

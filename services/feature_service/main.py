@@ -3,7 +3,6 @@ GodsView v2 — Feature Service
 
 FastAPI service for feature engineering, signal detection, and batch scanning.
 """
-
 from __future__ import annotations
 
 import time
@@ -14,16 +13,12 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from services.feature_service.builder import (
-    FEATURE_NAMES,
-    build_feature_vector,
-    build_features,
-)
-from services.feature_service.signal_detector import batch_detect, detect_signal
 from services.shared.config import cfg
 from services.shared.http_client import service_client
 from services.shared.logging import configure_structlog, get_logger
 from services.shared.types import HealthResponse
+from services.feature_service.builder import build_features, build_feature_vector, FEATURE_NAMES
+from services.feature_service.signal_detector import detect_signal, batch_detect
 
 log = get_logger(__name__)
 _STARTED_AT = 0.0
@@ -39,20 +34,18 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="GodsView v2 — Feature Service", version="2.0.0", lifespan=lifespan)
-app.add_middleware(
-    CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
-)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
 class SignalRequest(BaseModel):
-    symbol: str
+    symbol:    str
     timeframe: str = "15min"
-    limit: int = 300
+    limit:     int = 300
     use_si_filter: bool = True
 
 
 class BatchRequest(BaseModel):
-    symbols: list[str]
+    symbols:   list[str]
     timeframe: str = "15min"
 
 
@@ -81,26 +74,20 @@ async def generate_signal(req: SignalRequest) -> dict[str, Any]:
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Market data unavailable: {exc}")
 
-    from datetime import datetime, timezone
-
     from services.shared.types import Bar
+    from datetime import datetime, timezone
 
     raw_bars = data.get("bars", [])
     bars: list[Bar] = []
     for r in raw_bars:
         ts = datetime.fromisoformat(r["t"].replace("Z", "+00:00"))
-        bars.append(
-            Bar(
-                symbol=req.symbol,
-                timestamp=ts,
-                open=r["o"],
-                high=r["h"],
-                low=r["l"],
-                close=r["c"],
-                volume=r["v"],
-                timeframe=req.timeframe,
-            )
-        )
+        bars.append(Bar(
+            symbol=req.symbol,
+            timestamp=ts,
+            open=r["o"], high=r["h"], low=r["l"], close=r["c"],
+            volume=r["v"],
+            timeframe=req.timeframe,
+        ))
 
     signal = detect_signal(bars, req.timeframe)
 
@@ -114,25 +101,24 @@ async def generate_signal(req: SignalRequest) -> dict[str, Any]:
         }
 
     from dataclasses import asdict
-
     return {
         "detected": True,
         "signal": {
-            "id": signal.id,
-            "symbol": signal.symbol,
-            "timeframe": signal.timeframe,
-            "timestamp": signal.timestamp.isoformat(),
-            "direction": signal.direction.value,
+            "id":          signal.id,
+            "symbol":      signal.symbol,
+            "timeframe":   signal.timeframe,
+            "timestamp":   signal.timestamp.isoformat(),
+            "direction":   signal.direction.value,
             "signal_type": signal.signal_type.value,
-            "entry": signal.entry,
-            "stop": signal.stop,
-            "target": signal.target,
-            "confidence": signal.confidence,
+            "entry":       signal.entry,
+            "stop":        signal.stop,
+            "target":      signal.target,
+            "confidence":  signal.confidence,
             "risk_reward": signal.risk_reward,
-            "atr": signal.atr,
-            "structure_score": signal.structure_score,
+            "atr":         signal.atr,
+            "structure_score":  signal.structure_score,
             "order_flow_score": signal.order_flow_score,
-            "volume_score": signal.volume_score,
+            "volume_score":     signal.volume_score,
         },
     }
 
@@ -162,52 +148,44 @@ async def batch_signals(req: BatchRequest) -> dict[str, Any]:
 
 @app.get("/features/{symbol}")
 async def get_features(
-    symbol: str,
+    symbol:    str,
     timeframe: str = Query(default="15min"),
-    limit: int = Query(default=200, ge=55, le=1000),
+    limit:     int = Query(default=200, ge=55, le=1000),
 ) -> dict[str, Any]:
     """Return full feature matrix for a symbol."""
     try:
         async with service_client(cfg.market_data_url) as client:
-            resp = await client.get(
-                f"/bars/{symbol}", params={"timeframe": timeframe, "limit": limit}
-            )
+            resp = await client.get(f"/bars/{symbol}", params={"timeframe": timeframe, "limit": limit})
             resp.raise_for_status()
             data = resp.json()
     except Exception as exc:
         raise HTTPException(status_code=503, detail=str(exc))
 
-    from datetime import datetime
-
     from services.shared.types import Bar
+    from datetime import datetime
 
     bars = [
         Bar(
             symbol=symbol,
             timestamp=datetime.fromisoformat(r["t"].replace("Z", "+00:00")),
-            open=r["o"],
-            high=r["h"],
-            low=r["l"],
-            close=r["c"],
-            volume=r["v"],
-            timeframe=timeframe,
+            open=r["o"], high=r["h"], low=r["l"], close=r["c"],
+            volume=r["v"], timeframe=timeframe,
         )
         for r in data.get("bars", [])
     ]
 
     features = build_features(bars)
     return {
-        "symbol": symbol,
+        "symbol":    symbol,
         "timeframe": timeframe,
-        "count": len(features),
+        "count":     len(features),
         "feature_names": FEATURE_NAMES,
-        "features": features,
+        "features":  features,
     }
 
 
 if __name__ == "__main__":
     import uvicorn
-
     uvicorn.run(
         "services.feature_service.main:app",
         host="0.0.0.0",

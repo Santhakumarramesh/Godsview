@@ -4,7 +4,6 @@ GodsView v2 — API Gateway
 Single public entry-point that fans out to downstream microservices.
 Handles: auth, rate-limiting, request ID injection, CORS, health-roll-up.
 """
-
 from __future__ import annotations
 
 import time
@@ -16,17 +15,10 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from services.api_gateway.routers import (
-    backtest,
-    health,
-    market_data,
-    ml,
-    signals,
-    trades,
-)
 from services.shared.config import cfg
 from services.shared.logging import configure_structlog, get_logger
 from services.shared.types import HealthResponse
+from services.api_gateway.routers import health, signals, trades, market_data, backtest, ml, tradingview, orderflow, portfolio, brain
 
 log = get_logger(__name__)
 
@@ -65,7 +57,7 @@ app = FastAPI(
 # ── CORS ──────────────────────────────────────────────────────────────────────
 
 _CORS_ORIGINS = [
-    "http://localhost:5173",  # Vite dev server
+    "http://localhost:5173",   # Vite dev server
     "http://localhost:3000",
     "https://godsview.app",
     "https://app.godsview.ai",
@@ -81,20 +73,16 @@ app.add_middleware(
 
 # ── Request ID middleware ─────────────────────────────────────────────────────
 
-
 @app.middleware("http")
 async def inject_request_id(request: Request, call_next: object) -> Response:
     req_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())[:8]
     import structlog
-
     with structlog.contextvars.bound_contextvars(request_id=req_id):
         response: Response = await call_next(request)  # type: ignore[operator]
     response.headers["X-Request-ID"] = req_id
     return response
 
-
 # ── Timing middleware ─────────────────────────────────────────────────────────
-
 
 @app.middleware("http")
 async def add_process_time(request: Request, call_next: object) -> Response:
@@ -104,27 +92,27 @@ async def add_process_time(request: Request, call_next: object) -> Response:
     response.headers["X-Process-Time-Ms"] = str(ms)
     return response
 
-
 # ── Global exception handler ──────────────────────────────────────────────────
-
 
 @app.exception_handler(Exception)
 async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
     log.error("unhandled_exception", path=request.url.path, err=str(exc), exc_info=exc)
     return JSONResponse(status_code=500, content={"error": "Internal server error"})
 
-
 # ── Routers ───────────────────────────────────────────────────────────────────
 
-app.include_router(health.router, prefix="/health", tags=["health"])
-app.include_router(signals.router, prefix="/api/signals", tags=["signals"])
-app.include_router(trades.router, prefix="/api/trades", tags=["trades"])
-app.include_router(market_data.router, prefix="/api/market", tags=["market-data"])
-app.include_router(backtest.router, prefix="/api/backtest", tags=["backtest"])
-app.include_router(ml.router, prefix="/api/ml", tags=["ml"])
+app.include_router(health.router,      prefix="/health",      tags=["health"])
+app.include_router(signals.router,     prefix="/api/signals", tags=["signals"])
+app.include_router(trades.router,      prefix="/api/trades",  tags=["trades"])
+app.include_router(market_data.router, prefix="/api/market",  tags=["market-data"])
+app.include_router(backtest.router,    prefix="/api/backtest", tags=["backtest"])
+app.include_router(ml.router,          prefix="/api/ml",      tags=["ml"])
+app.include_router(tradingview.router, prefix="/api/tv", tags=["tradingview"])
+app.include_router(orderflow.router,   prefix="/api/flow", tags=["orderflow"])
+app.include_router(portfolio.router,   prefix="/api/portfolio", tags=["portfolio"])
+app.include_router(brain.router,       prefix="/api/brain", tags=["brain"])
 
 # ── Root ──────────────────────────────────────────────────────────────────────
-
 
 @app.get("/", include_in_schema=False)
 async def root() -> dict:
@@ -138,7 +126,6 @@ async def root() -> dict:
 
 if __name__ == "__main__":
     import uvicorn
-
     uvicorn.run(
         "services.api_gateway.main:app",
         host="0.0.0.0",

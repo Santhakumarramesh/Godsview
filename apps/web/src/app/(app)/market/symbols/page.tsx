@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { api } from "@/lib/api";
 
 // Phase 0 deterministic watchlist; wired to real market-data APIs later.
 const INITIAL_SYMBOLS = [

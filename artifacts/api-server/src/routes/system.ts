@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, accuracyResultsTable, auditEventsTable, signalsTable, tradesTable, siDecisionsTable } from "@workspace/db";
-import { and, desc, eq, gte, isNotNull, or, sql } from "@workspace/db";
+import { and, desc, eq, gte, isNotNull, or, sql } from "drizzle-orm";
 import { readFile } from "node:fs/promises";
 import * as path from "node:path";
 import { StockBrainStateSchema, type StockBrainState } from "@workspace/common-types";

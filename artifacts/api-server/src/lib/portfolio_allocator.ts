@@ -1,5 +1,5 @@
 import { db, siDecisionsTable, tradesTable } from "@workspace/db";
-import { and, desc, eq, isNull } from "@workspace/db";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { getStrategyAllocationForSignal } from "./strategy_allocator";
 import { persistWrite, persistRead, persistAppend } from "./persistent_store";
 import { logger } from "./logger";

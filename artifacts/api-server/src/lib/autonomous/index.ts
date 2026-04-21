@@ -1,15 +1,3 @@
-// @ts-nocheck
-/**
- * DESIGN SCAFFOLD — not wired into the live runtime.
- * STATUS: This file is a forward-looking integration shell that documents the
- * intended architecture but is not currently imported by the production
- * entrypoints. Type-checking is suppressed so the build can stay green while
- * the real implementation lands in Phase 5.
- *
- * REMOVE the `// @ts-nocheck` directive once Phase 5 is implemented and the
- * file is actually mounted in `src/index.ts` / `src/routes/index.ts`.
- */
-
 /**
  * autonomous/index.ts — Autonomous System Orchestrator
  *
@@ -39,8 +27,8 @@ const logger = _logger.child({ module: "autonomous_orchestrator" });
 export {
   driftDetector,
   DriftDetector,
-  type DriftReport,
-  type DriftAlert,
+  DriftReport,
+  DriftAlert,
   type LiveMetrics,
   type BacktestMetrics,
   type ExecutionDrift,
@@ -51,10 +39,10 @@ export {
 export {
   selfMonitor,
   SelfMonitor,
-  type SelfCheckReport,
-  type PostTradeReview,
-  type DailyAssessment,
-  type TradingReadinessCheck,
+  SelfCheckReport,
+  PostTradeReview,
+  DailyAssessment,
+  TradingReadinessCheck,
   type ExecutionQualityCheck,
   type ModelHealthCheck,
   type DataHealthCheck,
@@ -66,9 +54,9 @@ export {
 export {
   modeManager,
   ModeManager,
-  type OperatingMode,
-  type ModeDecision,
-  type ModeChangeRecord,
+  OperatingMode,
+  ModeDecision,
+  ModeChangeRecord,
   type Mode,
   type ModeParameters,
   type UpgradeDecision,
@@ -78,10 +66,10 @@ export {
 export {
   safetyBoundaries,
   SafetyBoundaries,
-  type BoundaryReport,
-  type BoundaryViolation,
-  type BoundaryWarning,
-  type BoundaryConfig,
+  BoundaryReport,
+  BoundaryViolation,
+  BoundaryWarning,
+  BoundaryConfig,
   type PositionSafetyCheck,
   type PortfolioSafetyCheck,
   type MarketSafetyCheck,
@@ -92,9 +80,9 @@ export {
 export {
   postTradeLoop,
   PostTradeLoop,
-  type PostTradeAnalysis,
-  type BatchAnalysis,
-  type DailyReviewReport,
+  PostTradeAnalysis,
+  BatchAnalysis,
+  DailyReviewReport,
   type TradeRecord,
   type EntryAnalysis,
   type ExitAnalysis,

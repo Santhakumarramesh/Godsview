@@ -2,6 +2,7 @@ import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { useEffect, useMemo, useState, lazy, Suspense } from "react";
 const BrainFloatingPanel = lazy(() => import("@/components/brain-floating-panel"));
+const DemoDataBanner = lazy(() => import("@/components/DemoDataBanner"));
 import {
   SIDEBAR_SECTION_ORDER,
   SIDEBAR_WATCHLIST,
@@ -9,7 +10,6 @@ import {
   normalizeMarketSymbol,
   toAlpacaSymbol,
 } from "@/lib/market/symbols";
-import { RoleSwitcher } from "@/auth/role-switcher";
 
 type FeedMode = "sse" | "poll" | "hybrid";
 
@@ -466,6 +466,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row" style={{ backgroundColor: "#0e0e0f", color: "#ffffff" }}>
+      {/* Demo Data Warning Banner */}
+      <Suspense fallback={null}><DemoDataBanner /></Suspense>
       {/* Mobile Header */}
       <div className="md:hidden flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: "rgba(72,72,73,0.3)", backgroundColor: "#1a191b" }}>
         <div className="flex items-center gap-2">
@@ -627,7 +629,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
               Crypto · 6-Layer Pipeline
             </div>
           </div>
-          <RoleSwitcher />
         </div>
       </aside>
 

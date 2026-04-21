@@ -69,3 +69,4 @@ def run_backtest() -> dict[str, float | int | str]:
 
 if __name__ == "__main__":
     print(run_backtest())
+

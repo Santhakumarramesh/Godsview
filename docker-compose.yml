@@ -68,12 +68,10 @@ services:
     networks:
       - godsview-net
 
-  # ── Redis (shared cache, required by Python v2 stack) ──────────
+  # ── Redis (shared cache + session store) ────────────────────────
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    profiles:
-      - v2
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -92,10 +90,16 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - api-memory:/data/memory
     environment:
       NODE_ENV: production
       PORT: "3001"
       DATABASE_URL: postgresql://godsview:${POSTGRES_PASSWORD:-godsview_secret}@postgres:5432/godsview
+      REDIS_URL: "redis://redis:6379"
+      MEMORY_STORE_PATH: "/data/memory"
       DB_POOL_MAX: "${DB_POOL_MAX:-10}"
       # Trading keys (inject via .env file)
       ALPACA_API_KEY: "${ALPACA_API_KEY:-}"
@@ -340,6 +344,8 @@ services:
 
 volumes:
   pgdata:
+    driver: local
+  api-memory:
     driver: local
   py-market-data:
     driver: local

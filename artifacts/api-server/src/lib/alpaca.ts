@@ -316,9 +316,25 @@ function normaliseBar(b: Record<string, unknown>): AlpacaBar {
 }
 
 // ── Global bar cache to prevent Alpaca 429 rate limits ──────────────────────
+/**
+ * PRODUCTION: Consider replacing with Redis or memcached for distributed caching.
+ * This in-memory cache is suitable for single-process deployments but will not
+ * survive process restarts. For production multi-instance setups, use an external cache.
+ */
 const _barCache: Map<string, { bars: AlpacaBar[]; ts: number }> = new Map();
 const BAR_CACHE_TTL = 8_000; // 8 seconds — fast enough for live trading, slow enough to avoid 429
 const _barInflight = new Map<string, Promise<AlpacaBar[]>>();
+
+// Log cache policy on module load
+if (typeof window === "undefined" && process.env.NODE_ENV === "production") {
+  // Only log in server-side production mode (not in browser or tests)
+  const cacheMode = process.env.GODSVIEW_CACHE_MODE ?? "in-memory";
+  if (cacheMode === "in-memory") {
+    console.warn(
+      "[alpaca] Using in-memory bar cache (TTL: 8s). For production multi-instance setups, configure GODSVIEW_CACHE_MODE=redis.",
+    );
+  }
+}
 
 function buildBarsCacheKey(
   symbol: string,

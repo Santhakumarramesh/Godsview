@@ -16,33 +16,31 @@ Can be started via:
 """
 
 from __future__ import annotations
-
-import logging
 import os
-import threading
 import time
+import logging
+import threading
 from datetime import datetime, timezone
 
-from .nodes.evolution_node import run_evolution
-from .nodes.execution_node import get_position_tracker
-from .nodes.risk_node import evaluate_risk, quick_risk_check
+from .state.store import get_store
+from .state.schemas import Regime
 from .nodes.stock_node import update_stock_brain
 from .nodes.supreme_node import update_supreme
-from .state.schemas import Regime
-from .state.store import get_store
+from .nodes.risk_node import evaluate_risk, quick_risk_check
+from .nodes.execution_node import get_position_tracker
+from .nodes.evolution_node import run_evolution
 
 logger = logging.getLogger("godsview.brain_loop")
 
 # ─── Configuration ──────────────────────────────────────────────────────────
 
 DEFAULT_SYMBOLS = ["BTC/USD", "ETH/USD"]
-UPDATE_INTERVAL_S = 30  # Full brain cycle every 30s
+UPDATE_INTERVAL_S = 30       # Full brain cycle every 30s
 EVOLUTION_INTERVAL_S = 3600  # Evolution check every hour
-POSITION_CHECK_S = 5  # Check exits every 5s
+POSITION_CHECK_S = 5         # Check exits every 5s
 
 
 # ─── Data Fetcher (Alpaca bars) ─────────────────────────────────────────────
-
 
 def fetch_bars(symbol: str) -> dict:
     """
@@ -51,7 +49,6 @@ def fetch_bars(symbol: str) -> dict:
     """
     try:
         from .data.alpaca_client import AlpacaClient
-
         client = AlpacaClient()
 
         # Map symbol format
@@ -73,7 +70,6 @@ def fetch_bars(symbol: str) -> dict:
 
 
 # ─── Main Brain Cycle ──────────────────────────────────────────────────────
-
 
 def run_brain_cycle(symbols: list[str] = None):
     """
@@ -109,11 +105,9 @@ def run_brain_cycle(symbols: list[str] = None):
                 brain.risk_gate = risk_gate
                 store.update_stock(symbol, brain)
 
-            logger.debug(
-                f"Brain cycle: {symbol} "
-                f"attention={brain.attention_level.value} "
-                f"state={brain.decision.state.value}"
-            )
+            logger.debug(f"Brain cycle: {symbol} "
+                         f"attention={brain.attention_level.value} "
+                         f"state={brain.decision.state.value}")
         except Exception as e:
             logger.error(f"Brain cycle error for {symbol}: {e}", exc_info=True)
 
@@ -137,15 +131,10 @@ def check_position_exits():
         if brain and brain.price.last > 0:
             exits = tracker.update_price(pos.symbol, brain.price.last)
             for exit_signal in exits:
-                logger.info(
-                    f"EXIT SIGNAL: {exit_signal['symbol']} {exit_signal['reason']} "
-                    f"R={exit_signal['r_multiple']:.2f}"
-                )
+                logger.info(f"EXIT SIGNAL: {exit_signal['symbol']} {exit_signal['reason']} "
+                            f"R={exit_signal['r_multiple']:.2f}")
                 # Close the position
-                tracker.close_position(
-                    exit_signal["position_id"], exit_signal["exit_price"]
-                )
-
+                tracker.close_position(exit_signal["position_id"], exit_signal["exit_price"])
 
 # ─── Background Loop ──────────────────────────────────────────────────────
 
@@ -203,7 +192,6 @@ def start_background_loop(symbols: list[str] = None):
     )
     _loop_thread.start()
 
-
 def stop_background_loop():
     """Stop the brain loop."""
     _stop_event.set()
@@ -214,9 +202,7 @@ def stop_background_loop():
 # ─── Standalone Entry ──────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s"
-    )
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
     symbols = os.environ.get("GODSVIEW_SYMBOLS", "BTC/USD,ETH/USD").split(",")
     logger.info(f"Starting brain loop: {symbols}")

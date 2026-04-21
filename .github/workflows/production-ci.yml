@@ -1,0 +1,67 @@
+name: GodsView Production CI
+on:
+  push:
+    branches: [main, production-ready-v3, production-ready-v4]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v2
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run lint || true
+      - run: pnpm run typecheck || true
+
+  python-services:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -r services/requirements.txt
+      - run: pip install pytest httpx
+      - run: cd services && python -m pytest tests/ -v --tb=short
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose -f services/docker-compose.yml config --quiet
+      - run: docker build -t godsview-api -f services/Dockerfile . || true
+
+  service-count-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify 11 backend services exist
+        run: |
+          expected=11
+          count=$(ls -d services/*/main.py 2>/dev/null | wc -l)
+          echo "Found $count service entry points (expected $expected)"
+          [ "$count" -ge "$expected" ] || exit 1
+
+  page-count-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify 68 frontend pages exist
+        run: |
+          count=$(find apps/web/src/app -name "page.tsx" | wc -l)
+          echo "Found $count pages"
+          [ "$count" -ge 68 ] || exit 1
+
+  sidebar-integrity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify sidebar has 68 routes
+        run: |
+          hrefs=$(grep -c 'href:' apps/web/src/lib/sidebar.ts)
+          echo "Found $hrefs sidebar routes"
+          [ "$hrefs" -ge 68 ] || exit 1

@@ -4,7 +4,6 @@ GodsView v2 — Yahoo Finance loader (yfinance).
 Used as a free data source for backtesting, model training, and
 reference data when Alpaca credentials are absent.
 """
-
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -17,37 +16,31 @@ log = get_logger(__name__)
 
 # Yahoo interval mapping
 _YF_INTERVAL: dict[str, str] = {
-    "1min": "1m",
-    "5min": "5m",
+    "1min":  "1m",
+    "5min":  "5m",
     "15min": "15m",
     "30min": "30m",
     "1hour": "1h",
     "2hour": "2h",
     "4hour": "4h",
-    "1day": "1d",
+    "1day":  "1d",
     "1week": "1wk",
 }
 
 # yfinance max lookback per interval
 _MAX_LOOKBACK: dict[str, int] = {
-    "1m": 7,
-    "5m": 60,
-    "15m": 60,
-    "30m": 60,
-    "1h": 730,
-    "2h": 730,
-    "4h": 730,
-    "1d": 3650,
-    "1wk": 3650,
+    "1m": 7, "5m": 60, "15m": 60, "30m": 60,
+    "1h": 730, "2h": 730, "4h": 730,
+    "1d": 3650, "1wk": 3650,
 }
 
 
 async def fetch_bars(
-    symbol: str,
+    symbol:    str,
     timeframe: str = "1day",
-    start: datetime | None = None,
-    end: datetime | None = None,
-    limit: int = 500,
+    start:     datetime | None = None,
+    end:       datetime | None = None,
+    limit:     int = 500,
 ) -> list[Bar]:
     """
     Download OHLCV bars from Yahoo Finance via yfinance.
@@ -66,7 +59,7 @@ async def fetch_bars(
         max_days = _MAX_LOOKBACK.get(interval, 365)
 
         now = datetime.now(timezone.utc)
-        end_dt = end or now
+        end_dt   = end   or now
         start_dt = start or (now - timedelta(days=min(max_days, 90)))
 
         # Clamp start to yfinance max lookback
@@ -101,18 +94,16 @@ async def fetch_bars(
                 if ts_dt.tzinfo is None:
                     ts_dt = ts_dt.replace(tzinfo=timezone.utc)
 
-                bars.append(
-                    Bar(
-                        symbol=symbol,
-                        timestamp=ts_dt,
-                        open=float(row["Open"]),
-                        high=float(row["High"]),
-                        low=float(row["Low"]),
-                        close=float(row["Close"]),
-                        volume=float(row.get("Volume", 0)),
-                        timeframe=timeframe,
-                    )
-                )
+                bars.append(Bar(
+                    symbol=symbol,
+                    timestamp=ts_dt,
+                    open=float(row["Open"]),
+                    high=float(row["High"]),
+                    low=float(row["Low"]),
+                    close=float(row["Close"]),
+                    volume=float(row.get("Volume", 0)),
+                    timeframe=timeframe,
+                ))
             except Exception as exc:
                 log.warning("yf_bar_skip", err=str(exc))
                 continue
@@ -130,21 +121,20 @@ async def fetch_info(symbol: str) -> dict[str, Any]:
     def _get_info() -> dict[str, Any]:
         try:
             import yfinance as yf  # type: ignore[import]
-
             ticker = yf.Ticker(symbol)
             info = ticker.info or {}
             return {
-                "symbol": symbol,
-                "name": info.get("longName", symbol),
-                "sector": info.get("sector", ""),
-                "industry": info.get("industry", ""),
-                "market_cap": info.get("marketCap", 0),
-                "pe_ratio": info.get("trailingPE"),
-                "beta": info.get("beta"),
-                "52w_high": info.get("fiftyTwoWeekHigh"),
-                "52w_low": info.get("fiftyTwoWeekLow"),
-                "avg_volume": info.get("averageVolume"),
-                "description": info.get("longBusinessSummary", ""),
+                "symbol":       symbol,
+                "name":         info.get("longName", symbol),
+                "sector":       info.get("sector", ""),
+                "industry":     info.get("industry", ""),
+                "market_cap":   info.get("marketCap", 0),
+                "pe_ratio":     info.get("trailingPE"),
+                "beta":         info.get("beta"),
+                "52w_high":     info.get("fiftyTwoWeekHigh"),
+                "52w_low":      info.get("fiftyTwoWeekLow"),
+                "avg_volume":   info.get("averageVolume"),
+                "description":  info.get("longBusinessSummary", ""),
             }
         except Exception as exc:
             log.warning("yf_info_failed", symbol=symbol, err=str(exc))

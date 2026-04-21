@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
 from pathlib import Path
+import json
 from typing import Any
 
 from app.config import ROOT_DIR
+
 
 JOURNAL_PATH = ROOT_DIR / "data" / "processed" / "trade_journal.jsonl"
 

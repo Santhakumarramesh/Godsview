@@ -11,7 +11,7 @@
  */
 
 import { db, siDecisionsTable } from "@workspace/db";
-import { desc, gte } from "@workspace/db";
+import { desc, gte } from "drizzle-orm";
 import { logger } from "./logger";
 
 /** Row shape from si_decisions query */

@@ -10,30 +10,21 @@ class ExecutionAgent(Agent):
 
     def run(self, state: AgentState) -> AgentState:
         if state.blocked:
-            state.data["execution"] = {
-                "status": "blocked",
-                "reason": state.block_reason,
-            }
+            state.data["execution"] = {"status": "blocked", "reason": state.block_reason}
             return state
 
         reasoning = state.data.get("reasoning")
         risk = state.data.get("risk")
         if not isinstance(reasoning, dict) or not isinstance(risk, dict):
             state.set_blocked("missing_execution_inputs")
-            state.data["execution"] = {
-                "status": "blocked",
-                "reason": state.block_reason,
-            }
+            state.data["execution"] = {"status": "blocked", "reason": state.block_reason}
             return state
 
         action = str(reasoning.get("final_action", "skip"))
         qty = int(risk.get("qty", 0))
         if action not in {"buy", "sell"} or qty <= 0:
             state.set_blocked("invalid_execution_payload")
-            state.data["execution"] = {
-                "status": "blocked",
-                "reason": state.block_reason,
-            }
+            state.data["execution"] = {"status": "blocked", "reason": state.block_reason}
             return state
 
         human_approval = bool(state.data.get("human_approval", False))

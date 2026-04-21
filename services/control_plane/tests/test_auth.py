@@ -26,7 +26,7 @@ async def test_login_rejects_bad_credentials(
 async def test_login_unknown_email_returns_401(client: AsyncClient) -> None:
     res = await client.post(
         "/auth/login",
-        json={"email": "nobody@godsview.io", "password": "also-wrong-1"},
+        json={"email": "nobody@godsview.test", "password": "also-wrong-1"},
     )
     assert res.status_code == 401
     assert res.json()["error"]["code"] == "unauthenticated"

@@ -4,7 +4,6 @@ API Gateway — /api/signals routes
 Proxies signal queries to the feature service (which computes live signals)
 and the memory service (which retrieves past similar setups).
 """
-
 from __future__ import annotations
 
 from typing import Any
@@ -21,7 +20,7 @@ log = get_logger(__name__)
 
 
 class SignalRequest(BaseModel):
-    symbol: str
+    symbol:    str
     timeframe: str = "15min"
     use_si_filter: bool = True
 
@@ -67,7 +66,7 @@ async def live_signals(
 @router.get("/history")
 async def signal_history(
     symbol: str = Query(...),
-    limit: int = Query(default=50, ge=1, le=500),
+    limit:  int = Query(default=50, ge=1, le=500),
 ) -> dict[str, Any]:
     """Retrieve recent signal history from memory service."""
     async with service_client(cfg.memory_url) as client:

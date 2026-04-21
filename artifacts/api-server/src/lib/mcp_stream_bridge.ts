@@ -1,18 +1,3 @@
-// @ts-nocheck
-/**
- * DESIGN SCAFFOLD — not wired into the live runtime.
- *
- * STATUS: This file is a forward-looking integration shell. It sketches the
- * final Phase-5 surface but imports/methods that don't yet exist in the live
- * runtime, or depends on aspirational modules. Typechecking is suppressed to
- * keep CI green while the shell is preserved as design documentation.
- *
- * Wiring it into the live runtime is tracked in
- * docs/PRODUCTION_READINESS.md (Phase 5: Auto-Promotion Pipeline).
- *
- * REMOVE the `// @ts-nocheck` directive once Phase 5 is implemented and all
- * referenced modules/methods exist.
- */
 /**
  * mcp_stream_bridge.ts — MCP Pipeline to SSE Stream Bridge
  *
@@ -270,7 +255,7 @@ class MCPStreamBridge {
         this.stats.addEvent(event);
         publishEvent("signal", event);
       } catch (error) {
-        logger.error({ err: error }, "MCPStreamBridge: Error publishing enriched event:");
+        logger.error("MCPStreamBridge: Error publishing enriched event:", error);
       }
     });
 
@@ -293,7 +278,7 @@ class MCPStreamBridge {
         this.stats.addEvent(event);
         publishEvent("signal", event);
       } catch (error) {
-        logger.error({ err: error }, "MCPStreamBridge: Error publishing scored event:");
+        logger.error("MCPStreamBridge: Error publishing scored event:", error);
       }
     });
 
@@ -304,12 +289,12 @@ class MCPStreamBridge {
         const latencyMs = Date.now() - startMs;
         this.stats.recordEvent("mcp:decided", latencyMs);
       } catch (error) {
-        logger.error({ err: error }, "MCPStreamBridge: Error publishing decided event:");
+        logger.error("MCPStreamBridge: Error publishing decided event:", error);
       }
     });
 
     processor.on("error", (signalId: string, error: Error) => {
-      logger.error({ err: error }, `MCPStreamBridge: Processor error for signal ${signalId}:`);
+      logger.error(`MCPStreamBridge: Processor error for signal ${signalId}:`, error);
     });
 
     logger.info("MCPStreamBridge: Attached to MCPProcessor");
@@ -350,7 +335,7 @@ class MCPStreamBridge {
         this.stats.addEvent(event);
         publishEvent("signal", event);
       } catch (error) {
-        logger.error({ err: error }, "MCPStreamBridge: Error publishing rejection event:");
+        logger.error("MCPStreamBridge: Error publishing rejection event:", error);
       }
     });
 
@@ -381,7 +366,7 @@ class MCPStreamBridge {
       this.stats.addEvent(event);
       publishEvent("signal", event);
     } catch (error) {
-      logger.error({ err: error }, "MCPStreamBridge: Error publishing decision:");
+      logger.error("MCPStreamBridge: Error publishing decision:", error);
     }
   }
 
@@ -414,7 +399,7 @@ class MCPStreamBridge {
       this.stats.addEvent(event);
       publishEvent("signal", event);
     } catch (error) {
-      logger.error({ err: error }, "MCPStreamBridge: Error publishing execution event:");
+      logger.error("MCPStreamBridge: Error publishing execution event:", error);
     }
   }
 
@@ -448,7 +433,7 @@ class MCPStreamBridge {
       this.stats.addEvent(event);
       publishEvent("signal", event);
     } catch (error) {
-      logger.error({ err: error }, "MCPStreamBridge: Error publishing learning event:");
+      logger.error("MCPStreamBridge: Error publishing learning event:", error);
     }
   }
 
@@ -488,8 +473,8 @@ class MCPStreamBridge {
         publishEvent("signal", event);
       } catch (error) {
         logger.error(
-          { err: error },
-          "MCPStreamBridge: Error publishing status event:"
+          "MCPStreamBridge: Error publishing status event:",
+          error
         );
       }
     }, 5000);

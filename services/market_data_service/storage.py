@@ -7,7 +7,6 @@ The schema is intentionally minimal — this is a read-heavy append-mostly store
 Tables:
   bars  (symbol, timeframe, timestamp, open, high, low, close, volume)
 """
-
 from __future__ import annotations
 
 import json
@@ -17,7 +16,6 @@ from typing import Any
 
 try:
     import aiosqlite  # type: ignore[import]
-
     _AIOSQLITE_OK = True
 except ImportError:
     _AIOSQLITE_OK = False
@@ -81,40 +79,31 @@ class BarStorage:
 
         rows = [
             (
-                b.symbol,
-                b.timeframe,
+                b.symbol, b.timeframe,
                 b.timestamp.isoformat(),
-                b.open,
-                b.high,
-                b.low,
-                b.close,
-                b.volume,
-                b.vwap,
-                b.trades,
+                b.open, b.high, b.low, b.close, b.volume,
+                b.vwap, b.trades,
             )
             for b in bars
         ]
 
         async with aiosqlite.connect(str(self.db_path)) as db:
-            await db.executemany(
-                """
+            await db.executemany("""
                 INSERT OR REPLACE INTO bars
                   (symbol, timeframe, timestamp, open, high, low, close, volume, vwap, trades)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-                rows,
-            )
+            """, rows)
             await db.commit()
         return len(rows)
 
     async def load_bars(
         self,
-        symbol: str,
+        symbol:    str,
         timeframe: str,
         *,
-        start: datetime | None = None,
-        end: datetime | None = None,
-        limit: int = 500,
+        start:     datetime | None = None,
+        end:       datetime | None = None,
+        limit:     int = 500,
     ) -> list[Bar]:
         """Load cached bars from SQLite, newest first then reversed."""
         if not _AIOSQLITE_OK:
@@ -150,25 +139,21 @@ class BarStorage:
                         ts = datetime.fromisoformat(ts_str)
                         if ts.tzinfo is None:
                             ts = ts.replace(tzinfo=timezone.utc)
-                        bars.append(
-                            Bar(
-                                symbol=row[0],
-                                timeframe=row[1],
-                                timestamp=ts,
-                                open=row[3],
-                                high=row[4],
-                                low=row[5],
-                                close=row[6],
-                                volume=row[7],
-                                vwap=row[8],
-                                trades=row[9],
-                            )
-                        )
+                        bars.append(Bar(
+                            symbol=row[0],
+                            timeframe=row[1],
+                            timestamp=ts,
+                            open=row[3], high=row[4],
+                            low=row[5],  close=row[6],
+                            volume=row[7],
+                            vwap=row[8],
+                            trades=row[9],
+                        ))
         except Exception as exc:
             log.error("bar_load_failed", symbol=symbol, err=str(exc))
             return []
 
-        bars.reverse()  # return oldest → newest
+        bars.reverse()   # return oldest → newest
         return bars
 
     async def latest_timestamp(self, symbol: str, timeframe: str) -> datetime | None:
@@ -184,9 +169,7 @@ class BarStorage:
                     row = await cursor.fetchone()
                     if row and row[0]:
                         ts = datetime.fromisoformat(row[0])
-                        return (
-                            ts.replace(tzinfo=timezone.utc) if ts.tzinfo is None else ts
-                        )
+                        return ts.replace(tzinfo=timezone.utc) if ts.tzinfo is None else ts
         except Exception as exc:
             log.warning("latest_ts_failed", symbol=symbol, err=str(exc))
         return None

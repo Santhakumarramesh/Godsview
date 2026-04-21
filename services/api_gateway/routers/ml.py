@@ -1,7 +1,6 @@
 """
 API Gateway — /api/ml routes
 """
-
 from __future__ import annotations
 
 from typing import Any
@@ -16,10 +15,10 @@ router = APIRouter()
 
 
 class TrainRequest(BaseModel):
-    symbol: str | None = None  # None = all symbols
-    retrain_days: int = 90
-    min_samples: int = 200
-    model_type: str = "xgboost"
+    symbol:         str | None = None   # None = all symbols
+    retrain_days:   int = 90
+    min_samples:    int = 200
+    model_type:     str = "xgboost"
 
 
 @router.post("/train")

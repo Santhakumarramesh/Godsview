@@ -29,17 +29,13 @@ def _setup_family(name: str) -> SetupFamily | None:
 class StructureNode(NodeBase):
     name = "structure_node"
 
-    def run(
-        self, brain: StockBrainState, payload: dict[str, Any], store: BrainStore
-    ) -> StockBrainState:
+    def run(self, brain: StockBrainState, payload: dict[str, Any], store: BrainStore) -> StockBrainState:
         data = payload.get("data", payload)
         market = data.get("market", {}) if isinstance(data, dict) else {}
         signal = data.get("signal", {}) if isinstance(data, dict) else {}
         scoring = data.get("scoring", {}) if isinstance(data, dict) else {}
         components = scoring.get("components", {}) if isinstance(scoring, dict) else {}
-        setup_validation = (
-            signal.get("setup_validation", {}) if isinstance(signal, dict) else {}
-        )
+        setup_validation = signal.get("setup_validation", {}) if isinstance(signal, dict) else {}
 
         trend = float(market.get("trend_20", 0.0))
         if trend > 0.002:
@@ -56,24 +52,17 @@ class StructureNode(NodeBase):
         brain.structure.htf_bias = bias
         brain.structure.itf_bias = bias
         brain.structure.ltf_bias = bias
-        brain.structure.bos_count = int(brain.structure.bos_count or 0) + (
-            1 if abs(trend) > 0.015 else 0
-        )
+        brain.structure.bos_count = int(brain.structure.bos_count or 0) + (1 if abs(trend) > 0.015 else 0)
         brain.structure.choch_detected = bool("choch" in setup_name.lower())
         brain.structure.sweep_detected = bool("sweep" in setup_name.lower())
-        brain.structure.sk_sequence_stage = str(
-            market.get("regime", brain.structure.sk_sequence_stage or "none")
-        )
+        brain.structure.sk_sequence_stage = str(market.get("regime", brain.structure.sk_sequence_stage or "none"))
         brain.structure.sk_in_zone = bool(setup_validation.get("valid", False))
         brain.structure.sk_score = max(0.0, min(1.0, structure_score))
 
         brain.decision.setup_name = setup_name or None
         brain.decision.setup_family = family
-        brain.decision.entry_quality = max(
-            brain.decision.entry_quality, brain.structure.sk_score
-        )
-        brain.decision.state = (
-            BrainState.WATCHING if brain.structure.sk_in_zone else BrainState.SCANNING
-        )
+        brain.decision.entry_quality = max(brain.decision.entry_quality, brain.structure.sk_score)
+        brain.decision.state = BrainState.WATCHING if brain.structure.sk_in_zone else BrainState.SCANNING
         self.mark_live(brain)
         return brain
+

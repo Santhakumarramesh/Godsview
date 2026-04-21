@@ -6,7 +6,6 @@ Auth middleware and rate limiter for Godsview API Gateway.
 • JWT verification stub (ready for production JWT library)
 • Public routes bypass (health checks, docs)
 """
-
 from __future__ import annotations
 
 import hashlib
@@ -99,7 +98,6 @@ def register_api_key(raw_key: str, client: str, rate_limit: int | None = None) -
 # Auth middleware
 # ---------------------------------------------------------------------------
 
-
 class AuthMiddleware(BaseHTTPMiddleware):
     """
     Validates X-API-Key on every non-public request.
@@ -149,7 +147,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
 # ---------------------------------------------------------------------------
 # Dependency: require_auth (for individual routes that need it)
 # ---------------------------------------------------------------------------
-
 
 async def require_auth(request: Request) -> str:
     """FastAPI dependency — returns client_id or raises 401."""

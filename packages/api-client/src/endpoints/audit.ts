@@ -1,38 +1,45 @@
-import type {
-  AuditEventList,
-  AuditEventQuery,
-  AuditExport,
-  AuditExportList,
-  CreateAuditExportRequest,
-} from "@gv/types";
 import type { ApiClient } from "../client.js";
 
-function buildQuery(query: AuditEventQuery | undefined): string {
-  if (!query) return "";
-  const params = new URLSearchParams();
-  for (const [k, v] of Object.entries(query)) {
-    if (v === undefined || v === null) continue;
-    params.set(k, String(v));
-  }
-  const s = params.toString();
-  return s ? `?${s}` : "";
+export interface SystemConfig {
+  environment: string;
+  apiVersion: string;
+  dataSource: string;
+  paperTrading: boolean;
+  maxConnections: number;
+  riskLimits: Record<string, unknown>;
+}
+
+export interface FeatureFlag {
+  name: string;
+  enabled: boolean;
+  description?: string;
+  rolloutPercent?: number;
+}
+
+export interface AuditEvent {
+  id: string;
+  action: string;
+  user?: string;
+  resource: string;
+  details: Record<string, unknown>;
+  timestamp: number;
 }
 
 export interface AuditEndpoints {
-  listEvents: (query?: AuditEventQuery) => Promise<AuditEventList>;
-  listExports: () => Promise<AuditExportList>;
-  getExport: (id: string) => Promise<AuditExport>;
-  createExport: (payload: CreateAuditExportRequest) => Promise<AuditExport>;
+  getSystemConfig: () => Promise<SystemConfig>;
+  getFeatureFlags: () => Promise<{ flags: FeatureFlag[] }>;
+  getAuditEvents: (limit?: number) => Promise<{ events: AuditEvent[] }>;
 }
 
 export function auditEndpoints(client: ApiClient): AuditEndpoints {
   return {
-    listEvents: (query) =>
-      client.get<AuditEventList>(`/admin/audit/events${buildQuery(query)}`),
-    listExports: () => client.get<AuditExportList>("/admin/audit/exports"),
-    getExport: (id) =>
-      client.get<AuditExport>(`/admin/audit/exports/${encodeURIComponent(id)}`),
-    createExport: (payload) =>
-      client.post<AuditExport>("/admin/audit/exports", payload),
+    getSystemConfig: () =>
+      client.get<SystemConfig>("/v1/system-config"),
+    getFeatureFlags: () =>
+      client.get<{ flags: FeatureFlag[] }>("/v1/feature-flags"),
+    getAuditEvents: (limit?: number) =>
+      client.get<{ events: AuditEvent[] }>(
+        `/v1/audit/events?limit=${limit || 50}`
+      ),
   };
 }

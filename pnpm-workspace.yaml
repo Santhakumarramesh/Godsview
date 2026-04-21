@@ -1,13 +1,11 @@
 packages:
-  # v2 monorepo roots (Phase 0+)
+  - artifacts/*
   - apps/*
   - packages/*
-  # v1 legacy roots (still built and exercised by verify:prod; removed in later phases)
-  - artifacts/*
   - lib/*
   - lib/integrations/*
-  - scripts
   - infra
+  - scripts
 
 autoInstallPeers: false
 
@@ -42,7 +40,6 @@ minimumReleaseAgeExclude:
 
 onlyBuiltDependencies:
   - '@swc/core'
-  - better-sqlite3
   - esbuild
   - msw
   - unrs-resolver

@@ -51,3 +51,4 @@ def classify_strategy_state(metrics: dict[str, Any]) -> dict[str, Any]:
         "reasons": reasons,
         "metrics": metrics,
     }
+

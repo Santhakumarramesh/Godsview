@@ -5,7 +5,6 @@ Pure functions operating on list[Bar] → list[float].
 All functions return NaN for bars with insufficient lookback
 so callers can safely zip with the original bar list.
 """
-
 from __future__ import annotations
 
 import math
@@ -17,7 +16,6 @@ NaN = float("nan")
 
 
 # ── Simple Moving Average ─────────────────────────────────────────────────────
-
 
 def sma(bars: Sequence[Bar], period: int, attr: str = "close") -> list[float]:
     prices = [getattr(b, attr) for b in bars]
@@ -31,7 +29,6 @@ def sma(bars: Sequence[Bar], period: int, attr: str = "close") -> list[float]:
 
 
 # ── Exponential Moving Average ────────────────────────────────────────────────
-
 
 def ema(bars: Sequence[Bar], period: int, attr: str = "close") -> list[float]:
     prices = [getattr(b, attr) for b in bars]
@@ -55,7 +52,6 @@ def ema(bars: Sequence[Bar], period: int, attr: str = "close") -> list[float]:
 
 # ── Average True Range ────────────────────────────────────────────────────────
 
-
 def atr(bars: Sequence[Bar], period: int = 14) -> list[float]:
     """Average True Range (Wilder smoothing)."""
     n = len(bars)
@@ -65,9 +61,9 @@ def atr(bars: Sequence[Bar], period: int = 14) -> list[float]:
     tr: list[float] = [NaN]
     for i in range(1, n):
         h = bars[i].high
-        lo = bars[i].low
+        l = bars[i].low
         pc = bars[i - 1].close
-        true_range = max(h - lo, abs(h - pc), abs(lo - pc))
+        true_range = max(h - l, abs(h - pc), abs(l - pc))
         tr.append(true_range)
 
     result: list[float] = [NaN] * n
@@ -88,7 +84,6 @@ def atr(bars: Sequence[Bar], period: int = 14) -> list[float]:
 
 
 # ── RSI ───────────────────────────────────────────────────────────────────────
-
 
 def rsi(bars: Sequence[Bar], period: int = 14) -> list[float]:
     prices = [b.close for b in bars]
@@ -125,7 +120,6 @@ def rsi(bars: Sequence[Bar], period: int = 14) -> list[float]:
 
 # ── MACD ──────────────────────────────────────────────────────────────────────
 
-
 def macd(
     bars: Sequence[Bar],
     fast: int = 12,
@@ -133,8 +127,8 @@ def macd(
     signal_period: int = 9,
 ) -> tuple[list[float], list[float], list[float]]:
     """Returns (macd_line, signal_line, histogram)."""
-    fast_ema = ema(bars, fast)
-    slow_ema = ema(bars, slow)
+    fast_ema  = ema(bars, fast)
+    slow_ema  = ema(bars, slow)
     n = len(bars)
 
     macd_line = [
@@ -146,7 +140,7 @@ def macd(
 
     # Signal = EMA of macd_line over non-NaN segment
     signal_line = [NaN] * n
-    hist_line = [NaN] * n
+    hist_line   = [NaN] * n
 
     valid_start = next((i for i, v in enumerate(macd_line) if not math.isnan(v)), None)
     if valid_start is None:
@@ -180,7 +174,6 @@ def macd(
 
 # ── Bollinger Bands ───────────────────────────────────────────────────────────
 
-
 def bollinger(
     bars: Sequence[Bar],
     period: int = 20,
@@ -189,16 +182,16 @@ def bollinger(
     """Returns (upper, middle, lower)."""
     prices = [b.close for b in bars]
     n = len(prices)
-    mid = [NaN] * n
-    upper = [NaN] * n
-    lower = [NaN] * n
+    mid    = [NaN] * n
+    upper  = [NaN] * n
+    lower  = [NaN] * n
 
     for i in range(period - 1, n):
         window = prices[i - period + 1 : i + 1]
         m = sum(window) / period
         variance = sum((x - m) ** 2 for x in window) / period
         std = math.sqrt(variance)
-        mid[i] = m
+        mid[i]   = m
         upper[i] = m + num_std * std
         lower[i] = m - num_std * std
 
@@ -206,7 +199,6 @@ def bollinger(
 
 
 # ── Volume SMA ────────────────────────────────────────────────────────────────
-
 
 def volume_sma(bars: Sequence[Bar], period: int = 20) -> list[float]:
     vols = [b.volume for b in bars]
@@ -219,22 +211,20 @@ def volume_sma(bars: Sequence[Bar], period: int = 20) -> list[float]:
 
 # ── VWAP (session) ────────────────────────────────────────────────────────────
 
-
 def vwap(bars: Sequence[Bar]) -> list[float]:
     """Cumulative VWAP from start of the bar list (treat as one session)."""
     cum_pv = 0.0
-    cum_v = 0.0
+    cum_v  = 0.0
     result: list[float] = []
     for b in bars:
         typical = (b.high + b.low + b.close) / 3
         cum_pv += typical * b.volume
-        cum_v += b.volume
+        cum_v  += b.volume
         result.append(cum_pv / cum_v if cum_v > 0 else NaN)
     return result
 
 
 # ── Highest High / Lowest Low lookback ───────────────────────────────────────
-
 
 def highest_high(bars: Sequence[Bar], lookback: int) -> list[float]:
     n = len(bars)

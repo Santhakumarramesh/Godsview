@@ -1,13 +1,10 @@
 """Tests for backtest_service.engine"""
-
 from __future__ import annotations
 
 import pytest
 
 from services.backtest_service.engine import (
-    SUPPORTED_TIMEFRAMES,
-    BacktestConfig,
-    run_backtest,
+    BacktestConfig, SUPPORTED_TIMEFRAMES, run_backtest,
 )
 from services.shared.types import BacktestResult
 from services.tests.conftest import make_bars

@@ -250,8 +250,8 @@ class StrategyRegistry {
           const merged: StrategyParams = {
             ...defaultParams,
             minConfirmationScore: Number(row.min_confirmation_score),
-            requireMTFAlignment: row.require_mtf_alignment ?? defaultParams.requireMTFAlignment,
-            requireBOS: row.require_bos ?? defaultParams.requireBOS,
+            requireMTFAlignment: row.require_mtf_alignment,
+            requireBOS: row.require_bos,
             minOBQuality: Number(row.min_ob_quality),
             stopATRMultiplier: Number(row.stop_atr_multiplier),
             takeProfitATRMultiplier: Number(row.take_profit_atr_multiplier),
@@ -260,14 +260,14 @@ class StrategyRegistry {
             blacklistedRegimes: row.blacklisted_regimes ? JSON.parse(row.blacklisted_regimes) : [],
             changelog: row.changelog ? JSON.parse(row.changelog) : [],
             tier: (row.tier as StrategyParams["tier"]) ?? "SEED",
-            version: Number(row.version),
+            version: row.version,
           };
           this.strategies.set(key, merged);
         }
       }
       logger.info(`[StrategyRegistry] Warm-loaded ${rows.length} strategy param sets from DB`);
     } catch (err) {
-      logger.warn({ err: err }, "[StrategyRegistry] warmLoad failed — using in-memory defaults:");
+      logger.warn("[StrategyRegistry] warmLoad failed — using in-memory defaults:", err);
     }
   }
 

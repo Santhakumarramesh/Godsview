@@ -8,7 +8,6 @@ import {
   type TargetTier,
 } from "../lib/certification_run";
 import { logger } from "../lib/logger";
-import { paramString } from "../lib/utils/params";
 
 const router = Router();
 
@@ -180,11 +179,10 @@ router.post("/initiate", async (req: Request, res: Response) => {
 
 router.post("/:runId/step/:stepName", async (req: Request, res: Response) => {
   try {
-    const runId = paramString(req.params.runId);
-    const stepName = paramString(req.params.stepName);
-    const rawStep = stepName as CertificationGateStepName;
+    const runId = req.params.runId;
+    const rawStep = req.params.stepName as CertificationGateStepName;
     if (!STEP_NAMES.has(rawStep)) {
-      res.status(400).json({ error: `Unknown step '${stepName}'` });
+      res.status(400).json({ error: `Unknown step '${req.params.stepName}'` });
       return;
     }
 
@@ -198,7 +196,7 @@ router.post("/:runId/step/:stepName", async (req: Request, res: Response) => {
 
 router.post("/:runId/run-full", async (req: Request, res: Response) => {
   try {
-    const result = await certificationRunner.runFull(paramString(req.params.runId));
+    const result = await certificationRunner.runFull(req.params.runId);
     res.json({ success: true, ...result });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -210,7 +208,7 @@ router.post("/:runId/abort", async (req: Request, res: Response) => {
   try {
     const body = (req.body ?? {}) as Record<string, unknown>;
     const reason = asString(body.reason) ?? "Operator requested abort";
-    await certificationRunner.abort(paramString(req.params.runId), reason);
+    await certificationRunner.abort(req.params.runId, reason);
     res.json({ success: true, status: "aborted", reason });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -225,7 +223,7 @@ router.post("/:runId/incident", async (req: Request, res: Response) => {
     const severity = asString(body.severity) ?? "warning";
     const message = asString(body.message) ?? "Incident recorded";
 
-    await certificationRunner.recordIncident(paramString(req.params.runId), {
+    await certificationRunner.recordIncident(req.params.runId, {
       type: incidentType,
       severity:
         severity === "info" || severity === "warning" || severity === "critical"
@@ -248,7 +246,7 @@ router.post("/:runId/incident", async (req: Request, res: Response) => {
 
 router.get("/:runId/status", async (req: Request, res: Response) => {
   try {
-    const status = await certificationRunner.getRunStatus(paramString(req.params.runId));
+    const status = await certificationRunner.getRunStatus(req.params.runId);
     res.json(status);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -258,7 +256,7 @@ router.get("/:runId/status", async (req: Request, res: Response) => {
 
 router.get("/:runId/evidence", async (req: Request, res: Response) => {
   try {
-    const packet = await certificationRunner.getEvidence(paramString(req.params.runId));
+    const packet = await certificationRunner.getEvidence(req.params.runId);
     res.json(packet);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -268,9 +266,8 @@ router.get("/:runId/evidence", async (req: Request, res: Response) => {
 
 router.get("/:runId/steps", async (req: Request, res: Response) => {
   try {
-    const runId = paramString(req.params.runId);
-    const steps = await certificationRunner.getSteps(runId);
-    res.json({ runId, steps, count: steps.length });
+    const steps = await certificationRunner.getSteps(req.params.runId);
+    res.json({ runId: req.params.runId, steps, count: steps.length });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     res.status(errorStatusFrom(message)).json({ error: message });
