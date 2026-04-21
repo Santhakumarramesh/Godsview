@@ -165,4 +165,7 @@ router.use("/api/finnhub", finnhubAltRouter);
 import s3StorageRouter from "./s3_storage";
 router.use("/api/storage", s3StorageRouter);
 
+import seedRouter from "./seed";
+router.use("/api", seedRouter);
+
 export default router;

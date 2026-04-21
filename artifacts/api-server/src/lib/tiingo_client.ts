@@ -9,7 +9,7 @@
  *   Intraday bars (IEX feed):  GET /iex/{ticker}  (resampleFreq: 5min/15min/1hour)
  *   Crypto bars:               GET /tiingo/crypto/prices
  *
- * Fallback chain: Tiingo → Alpha Vantage → Finnhub → synthetic
+ * Fallback chain: Tiingo → Alpha Vantage → Finnhub → Yahoo Finance → synthetic
  */
 
 import { logger } from "./logger";
@@ -243,6 +243,79 @@ async function fetchFinnhubDaily(
   }));
 }
 
+// ── Yahoo Finance: Free Real Data (no API key) ───────────────────────────
+
+const YF_TF_MAP: Record<DataTimeframe, string> = {
+  "5min": "5m", "15min": "15m", "30min": "30m",
+  "1hour": "1h", "4hour": "1h", "1day": "1d",
+};
+
+// Yahoo Finance crypto tickers use -USD suffix (e.g., BTC-USD)
+function toYFTicker(symbol: string): string {
+  if (isCrypto(symbol)) {
+    // BTCUSD → BTC-USD
+    const base = symbol.replace(/USD$/i, "");
+    return `${base}-USD`;
+  }
+  return symbol;
+}
+
+async function fetchYahooFinance(
+  symbol: string,
+  tf: DataTimeframe,
+  lookback_days: number
+): Promise<OHLCVBar[]> {
+  const yfTicker = toYFTicker(symbol);
+  const interval = YF_TF_MAP[tf];
+  // Yahoo limits: intraday data only available for last 60 days for 5m/15m/30m
+  // 1h available for last 730 days, 1d unlimited
+  const range = tf === "1day" ? "1y"
+    : tf === "1hour" || tf === "4hour" ? "6mo"
+    : lookback_days <= 7 ? "5d" : "60d";
+
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yfTicker)}`
+    + `?interval=${interval}&range=${range}&includePrePost=false`;
+
+  const resp = await fetch(url, {
+    headers: {
+      "User-Agent": "GodsView/1.0",
+      "Accept": "application/json",
+    },
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!resp.ok) throw new Error(`Yahoo Finance HTTP ${resp.status}: ${yfTicker}`);
+  const data = await resp.json();
+
+  const result = data?.chart?.result?.[0];
+  if (!result || !result.timestamp || !result.indicators?.quote?.[0]) return [];
+
+  const timestamps: number[] = result.timestamp;
+  const quote = result.indicators.quote[0];
+  const bars: OHLCVBar[] = [];
+
+  for (let i = 0; i < timestamps.length; i++) {
+    const o = quote.open?.[i];
+    const h = quote.high?.[i];
+    const l = quote.low?.[i];
+    const c = quote.close?.[i];
+    const v = quote.volume?.[i];
+    if (o == null || h == null || l == null || c == null) continue;
+    bars.push({
+      timestamp: new Date(timestamps[i] * 1000).toISOString(),
+      open: o, high: h, low: l, close: c,
+      volume: v ?? 0,
+      source: "tiingo" as const, // re-use existing source type for DB compat
+    });
+  }
+
+  // If 4hour requested, aggregate 1h bars
+  if (tf === "4hour" && bars.length > 0) {
+    return aggregateBars(bars, 4);
+  }
+
+  return bars;
+}
+
 // ── Synthetic Fallback ─────────────────────────────────────────────────────
 
 export function generateSyntheticBars(
@@ -306,7 +379,7 @@ export function aggregateBars(bars: OHLCVBar[], groupSize: number): OHLCVBar[] {
 
 /**
  * Fetch up to `lookback_days` of OHLCV bars for the given symbol + timeframe.
- * Tries Tiingo first, falls back to Alpha Vantage, Finnhub, then synthetic.
+ * Tries Tiingo first, falls back to Alpha Vantage, Finnhub, Yahoo Finance, then synthetic.
  */
 export async function getHistoricalBars(
   symbol: string,
@@ -372,7 +445,18 @@ export async function getHistoricalBars(
     }
   }
 
-  // ── 4. Synthetic fallback ──────────────────────────────────────────────
+  // ── 4. Yahoo Finance (free, no key needed) ─────────────────────────────
+  try {
+    const yfBars = await fetchYahooFinance(symbol, tf, lookback_days);
+    if (yfBars.length >= 20) {
+      logger.info({ symbol, tf, count: yfBars.length }, "[yahoo-finance] Free real bars fetched");
+      return { bars: yfBars, source: "yahoo", has_real_data: true };
+    }
+  } catch (err) {
+    logger.warn({ err, symbol, tf }, "[yahoo-finance] Fetch failed, falling back to synthetic");
+  }
+
+  // ── 5. Synthetic fallback ──────────────────────────────────────────────
   const minsPerBar: Record<DataTimeframe, number> = {
     "5min": 5, "15min": 15, "30min": 30,
     "1hour": 60, "4hour": 240, "1day": 1440,

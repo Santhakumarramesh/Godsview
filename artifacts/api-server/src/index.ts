@@ -79,6 +79,31 @@ const server = app.listen(port, (err) => {
   const systemMode = process.env.GODSVIEW_SYSTEM_MODE || "paper";
   startSession(systemMode).catch((err) => logger.error({ err }, "Failed to start trading session"));
 
+
+  // ── Historical data seeder: populate accuracy_results with real market data ──
+  (async () => {
+    try {
+      const { seedHistoricalData } = await import("./lib/historical_seeder.js");
+      const result = await seedHistoricalData();
+      if (result.skipped) {
+        logger.info({ existingRows: result.existingRows }, "Historical seeder: sufficient data exists — skipped");
+      } else {
+        logger.info({ seeded: result.seededRows, symbols: result.symbols_processed, real: result.has_real_data, ms: result.durationMs },
+          "Historical seeder: real data bootstrap complete");
+      }
+    } catch (err: any) {
+      logger.error({ err: err?.message }, "Historical seeder failed (non-fatal)");
+    }
+    // After seeding, also seed brain entities
+    try {
+      const { seedBrainEntities } = await import("./lib/brain_seeder.js");
+      await seedBrainEntities();
+      logger.info("Brain entities seeded");
+    } catch (err: any) {
+      logger.warn({ err: err?.message }, "Brain entity seeder failed (non-fatal)");
+    }
+  })();
+
   // Train ML model from accuracy_results data (non-blocking)
   trainModel().catch((err) => logger.error({ err }, "ML model training failed"));
 
