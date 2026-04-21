@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { usePaperValidationReport, usePaperValidationStatus, useRunPaperValidation } from "@/lib/api";
 import {
@@ -242,15 +242,15 @@ export default function SuperIntelligencePage() {
   const si = bt?.super_intelligence;
   const imp = bt?.improvement;
 
-  // Merge equity curves for overlay chart
-  const equityOverlay = bt ? bt.equity_curve_baseline.map((b, i) => ({
+  // Merge equity curves for overlay chart (memoized to avoid recompute on every render)
+  const equityOverlay = useMemo(() => bt ? bt.equity_curve_baseline.map((b, i) => ({
     idx: b.idx,
     baseline: b.equity,
     si: bt.equity_curve_si[i]?.equity ?? b.equity,
-  })) : [];
+  })) : [], [bt]);
 
   // Regime comparison data for bar chart
-  const regimeData = bt ? Object.entries(bt.by_regime).map(([regime, data]) => ({
+  const regimeData = useMemo(() => bt ? Object.entries(bt.by_regime).map(([regime, data]) => ({
     regime: regime.replace(/_/g, " "),
     baseline_wr: +(data.baseline.win_rate * 100).toFixed(1),
     si_wr: +(data.si.win_rate * 100).toFixed(1),
@@ -258,10 +258,10 @@ export default function SuperIntelligencePage() {
     si_pf: +data.si.profit_factor.toFixed(2),
     baseline_trades: data.baseline.trades_taken,
     si_trades: data.si.trades_taken,
-  })) : [];
+  })) : [], [bt]);
 
   // Setup comparison data
-  const setupData = bt ? Object.entries(bt.by_setup).map(([setup, data]) => ({
+  const setupData = useMemo(() => bt ? Object.entries(bt.by_setup).map(([setup, data]) => ({
     setup: setup.replace(/_/g, " "),
     baseline_wr: +(data.baseline.win_rate * 100).toFixed(1),
     si_wr: +(data.si.win_rate * 100).toFixed(1),
@@ -269,7 +269,7 @@ export default function SuperIntelligencePage() {
     si_pf: +data.si.profit_factor.toFixed(2),
     baseline_trades: data.baseline.trades_taken,
     si_trades: data.si.trades_taken,
-  })) : [];
+  })) : [], [bt]);
 
   return (
     <div className="space-y-4 p-4" style={{ color: C.muted, fontFamily: "Space Grotesk" }}>

@@ -240,9 +240,6 @@ function Router() {
         <RoutedPage path="/ops-security" component={OpsSecurityPage} scope="page:ops-security" />
         <RoutedPage path="/paper-trading-program" component={PaperTradingProgramPage} scope="page:paper-trading-program" />
         <RoutedPage path="/capital-gating" component={CapitalGatingPage} scope="page:capital-gating" />
-        <RoutedPage path="/tradingview-chart" component={TradingViewChartPage} scope="page:tradingview-chart" />
-        <RoutedPage path="/bloomberg-terminal" component={BloombergTerminalPage} scope="page:bloomberg-terminal" />
-        <RoutedPage path="/news-monitor" component={NewsMonitorPage} scope="page:news-monitor" />
         <RoutedPage path="/brain-nodes" component={BrainNodesPage} scope="page:brain-nodes" />
         <RoutedPage path="/advanced-risk" component={AdvancedRiskPage} scope="page:advanced-risk" />
         <RoutedPage path="/economic-calendar" component={EconomicCalendarPage} scope="page:economic-calendar" />
