@@ -12,6 +12,7 @@ import { ScannerScheduler } from "./lib/scanner_scheduler";
 import { startReconciler, stopReconciler } from "./lib/fill_reconciler";
 import { alpacaAccountStream, wireAccountStreamToReconciler } from "./lib/alpaca_account_stream";
 import { startPaperValidationLoop, stopPaperValidationLoop } from "./lib/paper_validation_loop";
+import { startLearningLoop, stopLearningLoop } from "./lib/continuous_learning";
 import { validateOrExit } from "./lib/ops/startup_validator";
 import { initGracefulShutdown } from "./lib/ops/graceful_shutdown";
 
@@ -78,7 +79,6 @@ const server = app.listen(port, (err) => {
   // Start trading session
   const systemMode = process.env.GODSVIEW_SYSTEM_MODE || "paper";
   startSession(systemMode).catch((err) => logger.error({ err }, "Failed to start trading session"));
-
 
   // ── Historical data seeder: populate accuracy_results with real market data ──
   (async () => {
@@ -190,6 +190,10 @@ const server = app.listen(port, (err) => {
       .then((result) => logger.info({ intervalMs: result.interval_ms }, "Paper validation loop started"))
       .catch((err) => logger.error({ err }, "Paper validation loop failed to start"));
   }
+
+  // Continuous Learning Loop — auto-retrain ML model, reconcile trade outcomes,
+  // ingest backtest results, detect drift, promote strategies
+  startLearningLoop();
 });
 
 // ── Graceful shutdown with connection draining ──────────────────
@@ -255,6 +259,12 @@ onShutdown(async () => {
   logger.info("Stopping fill reconciler + account stream...");
   stopReconciler();
   alpacaAccountStream.stop();
+});
+
+// Register cleanup: stop continuous learning loop
+onShutdown(async () => {
+  logger.info("Stopping continuous learning loop...");
+  stopLearningLoop();
 });
 
 // Register cleanup: stop paper validation loop

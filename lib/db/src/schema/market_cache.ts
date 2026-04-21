@@ -32,6 +32,11 @@ export const accuracyResultsTable = pgTable("accuracy_results", {
   forward_bars_checked: integer("forward_bars_checked"),
   regime: text("regime"),
   direction: text("direction"),
+  source: text("source").default("live"),
+  entry_price: numeric("entry_price", { precision: 14, scale: 6 }),
+  stop_loss: numeric("stop_loss", { precision: 14, scale: 6 }),
+  take_profit: numeric("take_profit", { precision: 14, scale: 6 }),
+  realized_pnl: numeric("realized_pnl", { precision: 14, scale: 4 }),
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

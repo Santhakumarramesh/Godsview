@@ -603,6 +603,31 @@ export async function runBacktest(config: BacktestConfig): Promise<BacktestResul
     si.wins, si.trades_taken,
   );
 
+  // ── Bidirectional Learning: feed backtest results into continuous learning ──
+  try {
+    const { ingestBacktestResults } = await import("./continuous_learning.js");
+    const ingestPayload = validTrades.map(t => ({
+      symbol: t.setup_type.includes("/") ? t.setup_type : config.symbols?.[0] ?? "UNKNOWN",
+      setup_type: t.setup_type,
+      direction: t.direction,
+      regime: t.regime,
+      structure_score: t.baseline_quality,
+      order_flow_score: t.si_edge_score ?? 0.5,
+      recall_score: t.si_win_prob ?? 0.5,
+      final_quality: t.enhanced_quality ?? t.baseline_quality,
+      outcome: t.outcome as "win" | "loss",
+      entry_price: t.entry_price,
+      stop_loss: t.stop_loss,
+      take_profit: t.take_profit,
+      realized_pnl: t.pnl_pct,
+    }));
+    await ingestBacktestResults(ingestPayload);
+  } catch (err: any) {
+    // Non-fatal — learning ingestion should never block backtest results
+    const { logger } = await import("./logger.js");
+    logger.warn({ err: err?.message }, "[backtester] Failed to ingest results into learning loop");
+  }
+
   return {
     config,
     baseline,
