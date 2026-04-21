@@ -8,7 +8,6 @@
     "seed": "tsx ./src/seed.ts",
     "health-check": "tsx ./src/health-check.ts",
     "deploy-readiness": "tsx ./src/deploy-readiness.ts",
-    "verify-alert-webhook": "tsx ./src/verify-alert-webhook.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

@@ -7,18 +7,13 @@ bias, confidence, regime, invalidation level, strongest setup, momentum.
 """
 
 from __future__ import annotations
-
-import logging
 import math
+import logging
 from datetime import datetime, timezone
 from typing import Optional
 
 from ..state.schemas import (
-    Bias,
-    Regime,
-    SetupFamily,
-    Timeframe,
-    TimeframeOpinion,
+    Timeframe, TimeframeOpinion, Bias, Regime, SetupFamily,
 )
 
 logger = logging.getLogger("godsview.nodes.timeframe")
@@ -36,7 +31,6 @@ def _clamp(v: float, lo: float = 0.0, hi: float = 1.0) -> float:
 
 
 # ─── Bar helpers ──────────────────────────────────────────────────────────────
-
 
 def _slope(bars: list[dict]) -> float:
     if len(bars) < 2:
@@ -99,7 +93,6 @@ def _rsi(closes: list[float], period: int = 14) -> float:
 
 # ─── Regime Detection ─────────────────────────────────────────────────────────
 
-
 def detect_regime(bars: list[dict]) -> Regime:
     if len(bars) < 20:
         return Regime.RANGING
@@ -115,11 +108,7 @@ def detect_regime(bars: list[dict]) -> Regime:
     low = min(lows) if lows else 0
     mid = (high + low) / 2
 
-    dir_matches = sum(
-        1
-        for b in last20
-        if (s > 0 and b["close"] > b["open"]) or (s < 0 and b["close"] < b["open"])
-    )
+    dir_matches = sum(1 for b in last20 if (s > 0 and b["close"] > b["open"]) or (s < 0 and b["close"] < b["open"]))
     persistence = _safe_div(dir_matches, len(last20))
     range_pct = _safe_div(high - low, mid)
 
@@ -139,7 +128,6 @@ def detect_regime(bars: list[dict]) -> Regime:
 
 
 # ─── Main Compute ─────────────────────────────────────────────────────────────
-
 
 def compute_timeframe_opinion(
     timeframe: Timeframe,
@@ -215,16 +203,12 @@ def compute_timeframe_opinion(
     # Confidence
     total_signals = bull_signals + bear_signals
     agreement = abs(bull_signals - bear_signals)
-    confidence = _clamp(
-        _safe_div(agreement, max(total_signals, 1)) * 0.7 + structure_score * 0.3
-    )
+    confidence = _clamp(_safe_div(agreement, max(total_signals, 1)) * 0.7 + structure_score * 0.3)
 
     # Key levels
     high20 = max(b["high"] for b in last20)
     low20 = min(b["low"] for b in last20)
-    # NOTE: atr_val was previously computed here but unused (dead assignment).
-    # The primary atr_val used downstream is computed earlier in this function
-    # (line ~124) and flows into atr_pct.
+    atr_val = _atr(last20)
 
     # Invalidation: if bullish, invalidated below recent low; vice versa
     if bias == Bias.BULLISH:

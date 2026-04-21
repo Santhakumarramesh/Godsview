@@ -3,7 +3,6 @@ GodsView v2 — Central configuration (env-driven, pydantic-settings).
 
 Every service imports from here so secrets/endpoints live in ONE place.
 """
-
 from __future__ import annotations
 
 import os
@@ -38,12 +37,22 @@ class Settings(BaseSettings):
         default="http://market-data:8001", alias="MARKET_DATA_URL"
     )
     feature_url: str = Field(default="http://feature:8002", alias="FEATURE_URL")
-    backtest_url: str = Field(default="http://backtest:8003", alias="BACKTEST_URL")
+    backtest_url: str = Field(
+        default="http://backtest:8003", alias="BACKTEST_URL"
+    )
     ml_url: str = Field(default="http://ml:8004", alias="ML_URL")
-    execution_url: str = Field(default="http://execution:8005", alias="EXECUTION_URL")
+    execution_url: str = Field(
+        default="http://execution:8005", alias="EXECUTION_URL"
+    )
     risk_url: str = Field(default="http://risk:8006", alias="RISK_URL")
     memory_url: str = Field(default="http://memory:8007", alias="MEMORY_URL")
     scheduler_url: str = Field(default="http://scheduler:8008", alias="SCHEDULER_URL")
+    tv_bridge_url: str = Field(
+        default="http://tv-bridge:8009", alias="TV_BRIDGE_URL"
+    )
+    orderflow_url: str = Field(
+        default="http://orderflow:8010", alias="ORDERFLOW_URL"
+    )
 
     # ── Alpaca ─────────────────────────────────────────────────────────────────
     alpaca_key_id: str = Field(default="", alias="ALPACA_KEY_ID")
@@ -71,23 +80,31 @@ class Settings(BaseSettings):
     )
 
     # ── LanceDB ────────────────────────────────────────────────────────────────
-    lancedb_uri: str = Field(default="./data/lancedb", alias="LANCEDB_URI")
+    lancedb_uri: str = Field(
+        default="./data/lancedb", alias="LANCEDB_URI"
+    )
 
     # ── OpenBB ────────────────────────────────────────────────────────────────
     openbb_pat: str = Field(default="", alias="OPENBB_PAT")
 
     # ── Risk defaults ─────────────────────────────────────────────────────────
     max_daily_loss_pct: float = Field(default=2.0, alias="MAX_DAILY_LOSS_PCT")
-    max_position_size_pct: float = Field(default=5.0, alias="MAX_POSITION_SIZE_PCT")
+    max_position_size_pct: float = Field(
+        default=5.0, alias="MAX_POSITION_SIZE_PCT"
+    )
     max_open_positions: int = Field(default=10, alias="MAX_OPEN_POSITIONS")
     default_risk_per_trade_pct: float = Field(
         default=1.0, alias="DEFAULT_RISK_PER_TRADE_PCT"
     )
 
     # ── Feature flags ─────────────────────────────────────────────────────────
-    live_trading_enabled: bool = Field(default=False, alias="LIVE_TRADING_ENABLED")
+    live_trading_enabled: bool = Field(
+        default=False, alias="LIVE_TRADING_ENABLED"
+    )
     si_filter_enabled: bool = Field(default=True, alias="SI_FILTER_ENABLED")
-    auto_retrain_enabled: bool = Field(default=True, alias="AUTO_RETRAIN_ENABLED")
+    auto_retrain_enabled: bool = Field(
+        default=True, alias="AUTO_RETRAIN_ENABLED"
+    )
 
     # ── Scheduler ─────────────────────────────────────────────────────────────
     scan_interval_seconds: int = Field(default=300, alias="SCAN_INTERVAL_SECONDS")

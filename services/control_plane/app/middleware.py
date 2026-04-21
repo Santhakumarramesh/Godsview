@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import time
 import uuid
-from collections.abc import Awaitable, Callable
+from typing import Awaitable, Callable
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -22,9 +22,7 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
         self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
         incoming = request.headers.get(_CORRELATION_HEADER, "")
-        cid = (
-            incoming if incoming and _CORRELATION_RX.match(incoming) else f"cor_{uuid.uuid4().hex}"
-        )
+        cid = incoming if incoming and _CORRELATION_RX.match(incoming) else f"cor_{uuid.uuid4().hex}"
         request.state.correlation_id = cid
         response = await call_next(request)
         response.headers[_CORRELATION_HEADER] = cid

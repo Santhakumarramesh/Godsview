@@ -1,23 +1,3 @@
-// @ts-nocheck
-/**
- * system_bridge.ts — Master integration orchestrator for GodsView's 11 subsystems
- *
- * STATUS: Forward-looking integration scaffold. Imports several modules that
- * have not been built yet (`./memory_system`, `./causal_reasoning`,
- * `./calibration_tracker`, `./explain_engine`, `./autonomous_ops`,
- * `./strategy_lab`, `./backtest_enhanced`, `./market_enhanced`,
- * `./eval_framework`) and references symbol shapes that are still in flux
- * (`SuperIntelligenceV3`, `DecisionLoopPipeline`, `GovernanceEngine`).
- *
- * Wiring this file into the live runtime is tracked in
- * docs/PRODUCTION_READINESS.md (Phase 5: Auto-Promotion Pipeline). Until those
- * modules ship, this file is intentionally excluded from strict typechecking
- * via `// @ts-nocheck` so it can be evolved as a design reference without
- * gating the rest of the build. It is NOT imported by the running server
- * (verify with `grep -r "system_bridge\|SystemBridge"`).
- *
- * REMOVE the `// @ts-nocheck` directive once the dependent modules above ship.
- */
 // system_bridge.ts - Master integration orchestrator for GodsView's 11 subsystems
 // Bridges decision_loop, memory, governance, and all quant intelligence layers
 

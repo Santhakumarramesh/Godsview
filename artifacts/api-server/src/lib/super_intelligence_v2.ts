@@ -491,9 +491,9 @@ loadAllSiModelStates().then((rows) => {
     state.plattA.m1 = Number(row.platt_a);
     state.plattB.m1 = Number(row.platt_b);
     state.brier = Number(row.brier_score ?? 0.25);
-    state.version = Number(row.model_version);
+    state.version = row.model_version;
     state.regimeCalibration = row.regime_calibration ? JSON.parse(row.regime_calibration) : {};
-    state.totalPredictions = Number(row.total_outcomes ?? 0);
+    state.totalPredictions = row.total_outcomes;
   }
   if (rows.length > 0) {
     logger.info(`[SuperIntel v2] Warm-loaded model state for ${rows.length} symbol(s) from DB`);

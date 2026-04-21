@@ -4,7 +4,6 @@ GodsView v2 — Market Data Service
 FastAPI service exposing historical bars, quotes, and asset listings.
 Caches data in SQLite; refreshes from Alpaca / Yahoo on-demand.
 """
-
 from __future__ import annotations
 
 import time
@@ -14,12 +13,12 @@ from typing import Any, AsyncIterator
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
-from services.market_data_service.loaders import alpaca_loader, yahoo_loader
-from services.market_data_service.storage import BarStorage
-from services.market_data_service.validator import validate_bars
 from services.shared.config import cfg
 from services.shared.logging import configure_structlog, get_logger
 from services.shared.types import HealthResponse
+from services.market_data_service.loaders import alpaca_loader, yahoo_loader
+from services.market_data_service.storage import BarStorage
+from services.market_data_service.validator import validate_bars
 
 log = get_logger(__name__)
 
@@ -69,12 +68,12 @@ async def health() -> HealthResponse:
 
 @app.get("/bars/{symbol}")
 async def get_bars(
-    symbol: str,
-    timeframe: str = Query(default="15min"),
-    limit: int = Query(default=200, ge=1, le=5000),
-    start: str | None = Query(default=None),
-    end: str | None = Query(default=None),
-    source: str = Query(default="alpaca"),  # alpaca | yahoo | cache
+    symbol:    str,
+    timeframe: str  = Query(default="15min"),
+    limit:     int  = Query(default=200, ge=1, le=5000),
+    start:     str | None = Query(default=None),
+    end:       str | None = Query(default=None),
+    source:    str  = Query(default="alpaca"),   # alpaca | yahoo | cache
 ) -> dict[str, Any]:
     """
     Fetch OHLCV bars for a symbol.
@@ -86,20 +85,16 @@ async def get_bars(
     from datetime import datetime
 
     start_dt = datetime.fromisoformat(start) if start else None
-    end_dt = datetime.fromisoformat(end) if end else None
+    end_dt   = datetime.fromisoformat(end)   if end   else None
 
     # Try cache first if storage is available
     if _storage and source == "cache":
-        bars = await _storage.load_bars(
-            symbol, timeframe, start=start_dt, end=end_dt, limit=limit
-        )
+        bars = await _storage.load_bars(symbol, timeframe, start=start_dt, end=end_dt, limit=limit)
         if bars:
             _, report = validate_bars(bars)
             return {
-                "symbol": symbol,
-                "timeframe": timeframe,
-                "count": len(bars),
-                "source": "cache",
+                "symbol": symbol, "timeframe": timeframe,
+                "count": len(bars), "source": "cache",
                 "quality": round(report.pass_rate, 3),
                 "bars": [_bar_to_dict(b) for b in bars],
             }
@@ -127,10 +122,8 @@ async def get_bars(
         await _storage.upsert_bars(bars)
 
     return {
-        "symbol": symbol,
-        "timeframe": timeframe,
-        "count": len(bars),
-        "source": fetch_source,
+        "symbol": symbol, "timeframe": timeframe,
+        "count": len(bars), "source": fetch_source,
         "quality": round(report.pass_rate, 3),
         "bars": [_bar_to_dict(b) for b in bars],
     }
@@ -168,7 +161,6 @@ def _bar_to_dict(b: Any) -> dict[str, Any]:
 
 if __name__ == "__main__":
     import uvicorn
-
     uvicorn.run(
         "services.market_data_service.main:app",
         host="0.0.0.0",

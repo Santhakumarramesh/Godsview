@@ -63,7 +63,6 @@ function buildNeutralSnapshot(): LiveMacroSnapshot {
       openInterestChange: 0, fundingRate: 0,
       intendedDirection: "long", assetClass: "crypto",
     },
-    fredSnapshot: null,
     fetchedAt: new Date().toISOString(),
     dataQuality: "stale",
     sources: { all: "neutral bootstrap — not yet fetched" },

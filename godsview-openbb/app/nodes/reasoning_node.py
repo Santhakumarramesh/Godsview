@@ -11,9 +11,7 @@ from .base_node import NodeBase, utc_now_iso
 class ReasoningNode(NodeBase):
     name = "reasoning_node"
 
-    def run(
-        self, brain: StockBrainState, payload: dict[str, Any], store: BrainStore
-    ) -> StockBrainState:
+    def run(self, brain: StockBrainState, payload: dict[str, Any], store: BrainStore) -> StockBrainState:
         data = payload.get("data", payload)
         signal = data.get("signal", {}) if isinstance(data, dict) else {}
         scoring = data.get("scoring", {}) if isinstance(data, dict) else {}
@@ -30,9 +28,7 @@ class ReasoningNode(NodeBase):
         if blocked:
             contradictions.append(block_reason or "pipeline_blocked")
         if not gate_pass:
-            contradictions.extend(
-                [str(x) for x in hard_gates.get("failed_reasons", [])]
-            )
+            contradictions.extend([str(x) for x in hard_gates.get("failed_reasons", [])])
 
         if blocked or action == "skip":
             verdict = "no_trade"
@@ -59,9 +55,8 @@ class ReasoningNode(NodeBase):
         )
         brain.decision.confidence = confidence
         brain.decision.reasoning_summary = brain.last_reasoning.reason
-        brain.decision.direction = (
-            "long" if action == "buy" else "short" if action == "sell" else None
-        )
+        brain.decision.direction = "long" if action == "buy" else "short" if action == "sell" else None
         brain.decision.state = next_state
         self.mark_live(brain)
         return brain
+

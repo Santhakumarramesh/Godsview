@@ -1,5 +1,4 @@
 """Tests for backtest_service.broker (PaperBroker)"""
-
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -51,11 +50,8 @@ class TestPaperBrokerPnL:
         broker.open_position(entry_bar, "sig", Direction.LONG, 95.0, 110.0)
 
         # Bar that hits the target
-        target_bar = (
-            make_bar(close=112.0, high_=115.0, low_=108.0)
-            if False
-            else _bar(112.0, high=115.0, low=108.0)
-        )
+        target_bar = make_bar(close=112.0, high_=115.0, low_=108.0) \
+            if False else _bar(112.0, high=115.0, low=108.0)
         closed = broker.update(target_bar)
         assert closed is not None
         assert closed.outcome == TradeOutcome.WIN
@@ -116,7 +112,7 @@ class TestPositionSizing:
         trade = broker.open_trade
         if trade:
             risk_amount = abs(trade.entry_price - trade.stop_price) * trade.size
-            assert risk_amount <= 10_000.0 * 0.01 * 1.1  # 10% tolerance for slippage
+            assert risk_amount <= 10_000.0 * 0.01 * 1.1   # 10% tolerance for slippage
 
     def test_zero_qty_when_no_risk(self):
         broker = PaperBroker(10_000.0)

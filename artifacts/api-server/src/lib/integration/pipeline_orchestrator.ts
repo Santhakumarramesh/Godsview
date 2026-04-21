@@ -1,25 +1,10 @@
-// @ts-nocheck
 /**
- * Phase 99 — Pipeline Orchestrator (DESIGN SCAFFOLD)
+ * Phase 99 — Pipeline Orchestrator
  *
  * Wires together all GodsView subsystems into a unified live pipeline:
  * Data Engine → MCP Intelligence → Risk Management → Execution → Learning Loop
  *
- * STATUS: This file is a forward-looking integration shell. It calls methods
- * that the underlying subsystems are scheduled to expose in a later phase
- * (`getOrderBookState`, `getMacroContext`, `recordTrade`, `getDailyPnl`,
- * `closePosition`, …). Wiring it into the live runtime is tracked in
- * docs/PRODUCTION_READINESS.md (Phase 5: Auto-Promotion Pipeline).
- *
- * Until the dependency classes catch up, this file is intentionally excluded
- * from strict typechecking via `// @ts-nocheck` so it can be evolved as a
- * design reference without gating the rest of the build. It is NOT imported
- * by the running server (verify with `grep -r "PipelineOrchestrator"`).
- *
- * REMOVE the `// @ts-nocheck` directive once Phase 5 is implemented and the
- * dependent classes (`OrderBookManager`, `DataPipeline`, `PortfolioTracker`,
- * `TradeFeedbackLoop`, `StrategyReinforcementEngine`, `BrokerBridge`,
- * `ExperimentTracker`) expose the methods this file references.
+ * This is the "main()" of the trading system.
  */
 import { EventEmitter } from "events";
 

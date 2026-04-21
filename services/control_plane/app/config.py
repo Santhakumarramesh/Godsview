@@ -35,7 +35,9 @@ class Settings(BaseSettings):
     log_level: Literal["debug", "info", "warn", "error"] = Field("info", alias="LOG_LEVEL")
     kill_switch_on_boot: bool = Field(False, alias="KILL_SWITCH_ON_BOOT")
 
-    bootstrap_admin_email: str = Field("admin@godsview.local", alias="BOOTSTRAP_ADMIN_EMAIL")
+    bootstrap_admin_email: str = Field(
+        "admin@godsview.local", alias="BOOTSTRAP_ADMIN_EMAIL"
+    )
     bootstrap_admin_password: SecretStr = Field(
         SecretStr("godsview-admin-dev"), alias="BOOTSTRAP_ADMIN_PASSWORD"
     )

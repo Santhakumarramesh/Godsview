@@ -4,7 +4,6 @@ GodsView v2 — Model registry.
 Maintains an in-memory + on-disk registry of trained models.
 Supports: list, get_latest, load, promote.
 """
-
 from __future__ import annotations
 
 import json
@@ -18,25 +17,25 @@ from services.shared.logging import get_logger
 
 log = get_logger(__name__)
 
-_MODEL_DIR = Path("./data/models")
+_MODEL_DIR    = Path("./data/models")
 _REGISTRY_FILE = _MODEL_DIR / "registry.json"
 _MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
 
 @dataclass
 class ModelEntry:
-    model_id: str
-    symbol: str | None
-    timeframe: str
-    model_path: str
-    test_accuracy: float
-    roc_auc: float
-    train_rows: int
-    test_rows: int
-    trained_at: str
-    is_active: bool = False
-    mlflow_run_id: str = ""
-    notes: str = ""
+    model_id:       str
+    symbol:         str | None
+    timeframe:      str
+    model_path:     str
+    test_accuracy:  float
+    roc_auc:        float
+    train_rows:     int
+    test_rows:      int
+    trained_at:     str
+    is_active:      bool = False
+    mlflow_run_id:  str = ""
+    notes:          str = ""
 
 
 class ModelRegistry:

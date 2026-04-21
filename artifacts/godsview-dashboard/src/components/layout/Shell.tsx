@@ -9,7 +9,6 @@ import {
   normalizeMarketSymbol,
   toAlpacaSymbol,
 } from "@/lib/market/symbols";
-import { RoleSwitcher } from "@/auth/role-switcher";
 
 type FeedMode = "sse" | "poll" | "hybrid";
 
@@ -627,7 +626,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
               Crypto · 6-Layer Pipeline
             </div>
           </div>
-          <RoleSwitcher />
         </div>
       </aside>
 

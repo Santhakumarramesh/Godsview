@@ -1,14 +1,3 @@
-/**
- * DESIGN SCAFFOLD — not wired into the live runtime.
- * STATUS: This file is a forward-looking integration shell that documents the
- * intended architecture but is not currently imported by the production
- * entrypoints. Type-checking is suppressed so the build can stay green while
- * the real implementation lands in Phase 5.
- *
- * REMOVE the `// @ts-nocheck` directive once Phase 5 is implemented and the
- * file is actually mounted in `src/index.ts` / `src/routes/index.ts`.
- */
-
 // PromotionDiscipline: Strict lifecycle gates enforcing evidence-based progression
 // Core principle: GodsView earns trust by REFUSING promotion until evidence is strong
 // No shortcuts. No exceptions. Evidence required at every tier.
@@ -28,10 +17,8 @@ export type TierName =
 export interface GateRequirement {
   name: string;
   metric: string;
-  // Boolean gates (e.g. "Valid DSL") use `true` as both threshold and actual;
-  // numeric and grade-letter gates use the existing string/number types.
-  threshold: number | string | boolean;
-  actual: number | string | boolean;
+  threshold: number | string;
+  actual: number | string;
   met: boolean;
   reason: string;
 }
@@ -659,10 +646,8 @@ export class PromotionDiscipline {
     }
 
     // String comparison (e.g., grade)
-    const gradeOrder: Record<string, number> = { F: 0, C: 1, "C+": 2, "B-": 3, B: 4, "B+": 5, A: 6 };
-    const actualKey = String(actual);
-    const thresholdKey = String(requirement.threshold);
-    return (gradeOrder[actualKey] ?? 0) >= (gradeOrder[thresholdKey] ?? 0);
+    const gradeOrder = { F: 0, 'C': 1, 'C+': 2, 'B-': 3, B: 4, 'B+': 5, A: 6 };
+    return (gradeOrder[actual as string] || 0) >= (gradeOrder[requirement.threshold as string] || 0);
   }
 
   private buildEvidenceCategories(

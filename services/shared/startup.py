@@ -12,7 +12,6 @@ Features:
   • Readiness probe — /ready returns 503 until startup completes
   • Drain timer — waits for in-flight requests before exiting (grace=10s)
 """
-
 from __future__ import annotations
 
 import asyncio
@@ -53,7 +52,7 @@ def _install_signal_handlers() -> None:
 
     try:
         loop.add_signal_handler(signal.SIGTERM, lambda: _handle("SIGTERM"))
-        loop.add_signal_handler(signal.SIGINT, lambda: _handle("SIGINT"))
+        loop.add_signal_handler(signal.SIGINT,  lambda: _handle("SIGINT"))
     except NotImplementedError:
         # Windows — signals work differently; skip
         pass
@@ -65,17 +64,14 @@ async def _startup_checks(service_name: str) -> dict[str, bool]:
 
     # Check 1: required env vars present
     checks["secret_key_set"] = bool(
-        settings.secret_key
-        and settings.secret_key != "dev-secret-change-me"
+        settings.secret_key and settings.secret_key != "dev-secret-change-me"
         or settings.env == "development"
     )
 
     # Check 2: database path writeable (for SQLite services)
     if "market_data" in service_name or "backtest" in service_name:
         try:
-            import os
-            import tempfile
-
+            import tempfile, os
             tf = tempfile.NamedTemporaryFile(dir=".", delete=True)
             tf.close()
             checks["db_writable"] = True
@@ -108,7 +104,6 @@ def lifespan_factory(
         on_shutdown:   Optional coroutine called once on shutdown.
         grace_seconds: Seconds to wait for in-flight requests to drain.
     """
-
     @asynccontextmanager
     async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         global _ready, _startup_time, _service_name
@@ -163,7 +158,6 @@ def lifespan_factory(
 # ---------------------------------------------------------------------------
 # Readiness probe route (attach to each FastAPI app)
 # ---------------------------------------------------------------------------
-
 
 async def ready_endpoint(request: Request) -> Response:
     """GET /ready — returns 200 when service is up, 503 if still starting."""

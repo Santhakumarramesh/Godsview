@@ -3,7 +3,6 @@ API Gateway — /api/trades routes
 
 Proxies execution queries and trade lifecycle events.
 """
-
 from __future__ import annotations
 
 from typing import Any
@@ -20,19 +19,19 @@ log = get_logger(__name__)
 
 
 class TradeRequest(BaseModel):
-    signal_id: str
-    symbol: str
-    side: str  # buy | sell
-    qty: float
+    signal_id:   str
+    symbol:      str
+    side:        str    # buy | sell
+    qty:         float
     entry_price: float
-    stop_price: float
+    stop_price:  float
     target_price: float
-    dry_run: bool = True
+    dry_run:     bool = True
 
 
 class CloseTradeRequest(BaseModel):
     trade_id: str
-    reason: str = "manual"
+    reason:   str = "manual"
 
 
 @router.post("")
@@ -75,7 +74,7 @@ async def close_trade(trade_id: str, reason: str = "manual") -> dict[str, Any]:
 @router.get("")
 async def list_trades(
     status: str = Query(default="open"),
-    limit: int = Query(default=50),
+    limit:  int = Query(default=50),
 ) -> dict[str, Any]:
     """List open or recent trades from execution service."""
     async with service_client(cfg.execution_url) as exec_:

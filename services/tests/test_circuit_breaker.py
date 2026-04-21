@@ -1,5 +1,4 @@
 """Tests for services.shared.circuit_breaker"""
-
 from __future__ import annotations
 
 import asyncio

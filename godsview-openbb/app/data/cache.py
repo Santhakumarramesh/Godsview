@@ -33,3 +33,4 @@ def clear_cache(prefix: str | None = None) -> int:
     for key in keys:
         _CACHE.pop(key, None)
     return len(keys)
+

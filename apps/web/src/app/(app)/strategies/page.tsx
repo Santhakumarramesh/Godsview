@@ -1,4 +1,5 @@
 import { ToDoBanner } from "@/components/ToDoBanner";
+import { api } from "@/lib/api";
 
 export default function StrategiesCatalogPage() {
   return (

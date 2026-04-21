@@ -15,9 +15,7 @@ from app.data.tiingo_client import get_tiingo_ohlcv
 from app.data_fetch import fetch_price_history
 
 
-def get_market_ohlcv(
-    symbol: str, timeframe: str, lookback: int | None = None
-) -> tuple[pd.DataFrame, dict[str, Any]]:
+def get_market_ohlcv(symbol: str, timeframe: str, lookback: int | None = None) -> tuple[pd.DataFrame, dict[str, Any]]:
     lookback = int(lookback or settings.lookback)
     tiingo = get_tiingo_ohlcv(symbol, lookback=lookback)
     if bool(tiingo.get("available")):

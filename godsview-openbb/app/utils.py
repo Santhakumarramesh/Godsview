@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
+import json
 from typing import Any
 
 from app.config import ROOT_DIR
@@ -23,3 +23,4 @@ def read_json(relative_path: str) -> dict[str, Any] | None:
     if not target.exists():
         return None
     return json.loads(target.read_text(encoding="utf-8"))
+

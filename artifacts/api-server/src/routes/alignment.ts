@@ -13,7 +13,6 @@
 import { Router, Request, Response } from "express";
 import { requireOperator } from "../lib/auth_guard";
 import { logger } from "../lib/logger";
-import { paramString, paramSymbol, paramInt } from "../lib/utils/params";
 import {
   runAlignmentCheck,
   persistAlignmentSnapshot,
@@ -32,8 +31,8 @@ export const alignmentRouter = Router();
 
 alignmentRouter.get("/:strategyId/history", async (req: Request, res: Response) => {
   try {
-    const strategyId = paramString(req.params.strategyId);
-    const limit = paramInt(req.query.limit, 20, 1, 100);
+    const { strategyId } = req.params;
+    const limit = Math.min(Number(req.query.limit) || 20, 100);
     const snapshots = await getAlignmentHistory(strategyId, limit);
     res.json({ snapshots, count: snapshots.length });
   } catch (err) {
@@ -46,7 +45,7 @@ alignmentRouter.get("/:strategyId/history", async (req: Request, res: Response) 
 
 alignmentRouter.get("/:strategyId/latest", async (req: Request, res: Response) => {
   try {
-    const strategyId = paramString(req.params.strategyId);
+    const { strategyId } = req.params;
     const snapshots = await getAlignmentHistory(strategyId, 1);
     const latest = snapshots[0] ?? null;
     if (!latest) {
@@ -64,7 +63,7 @@ alignmentRouter.get("/:strategyId/latest", async (req: Request, res: Response) =
 
 alignmentRouter.post("/:strategyId/check", async (req: Request, res: Response) => {
   try {
-    const strategyId = paramString(req.params.strategyId);
+    const { strategyId } = req.params;
     const {
       backtest_metrics,
       period_days = 30,
@@ -137,7 +136,7 @@ alignmentRouter.get("/drift-events", async (req: Request, res: Response) => {
 
 alignmentRouter.post("/drift-events/:id/resolve", requireOperator, async (req: Request, res: Response) => {
   try {
-    const eventId = paramInt(req.params.id, 0);
+    const eventId = Number(req.params.id);
     const { notes } = req.body ?? {};
     const success = await resolveDriftEvent(eventId, notes);
     if (success) {
@@ -155,7 +154,7 @@ alignmentRouter.post("/drift-events/:id/resolve", requireOperator, async (req: R
 
 alignmentRouter.get("/slippage/:symbol", async (req: Request, res: Response) => {
   try {
-    const symbol = paramSymbol(req.params.symbol);
+    const { symbol } = req.params;
     const calibration = await getLatestSlippageCalibration(symbol);
     if (!calibration) {
       res.json({ calibration: null, message: "No calibration data yet" });
@@ -170,7 +169,7 @@ alignmentRouter.get("/slippage/:symbol", async (req: Request, res: Response) => 
 
 alignmentRouter.post("/slippage/:symbol/calibrate", async (req: Request, res: Response) => {
   try {
-    const symbol = paramSymbol(req.params.symbol);
+    const { symbol } = req.params;
     const {
       period_days = 30,
       assumed_slippage_bps = 5.0,

@@ -1,4 +1,15 @@
 import { ToDoBanner } from "@/components/ToDoBanner";
+import { api } from "@/lib/api";
+
+// Wire audit.demotions API
+async function getDemotions() {
+  try {
+    const data = await api.audit.getDemotions().catch(() => ({ demotions: [] }))
+    return data
+  } catch (err) {
+    return { demotions: [] }
+  }
+}
 
 export default function GovernanceDemotionsPage() {
   return (

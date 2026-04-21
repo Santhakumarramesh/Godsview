@@ -16,7 +16,7 @@
  */
 
 import { db, brainEntitiesTable, brainMemoriesTable, brainRelationsTable } from "@workspace/db";
-import { sql } from "@workspace/db";
+import { sql } from "drizzle-orm";
 import { logger } from "./logger";
 
 // ── Symbol definitions ────────────────────────────────────────────────────────

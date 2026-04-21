@@ -6,7 +6,6 @@ States:
   OPEN     → calls rejected immediately; recovery timer running
   HALF_OPEN → one trial call allowed; success → CLOSED, failure → OPEN
 """
-
 from __future__ import annotations
 
 import asyncio
@@ -21,8 +20,8 @@ T = TypeVar("T")
 
 
 class CBState(Enum):
-    CLOSED = "closed"
-    OPEN = "open"
+    CLOSED    = "closed"
+    OPEN      = "open"
     HALF_OPEN = "half_open"
 
 
@@ -92,8 +91,7 @@ class CircuitBreaker:
             if fallback is not None:
                 log.warning(
                     "circuit_breaker.fallback name=%s error=%s",
-                    self.name,
-                    str(exc),
+                    self.name, str(exc),
                 )
                 return fallback
             raise
@@ -109,16 +107,11 @@ class CircuitBreaker:
         async with self._lock:
             self._failures += 1
             self._last_failure_time = time.monotonic()
-            if (
-                self._failures >= self.failure_threshold
-                or self._state == CBState.HALF_OPEN
-            ):
+            if self._failures >= self.failure_threshold or self._state == CBState.HALF_OPEN:
                 self._state = CBState.OPEN
                 log.warning(
                     "circuit_breaker.opened name=%s failures=%d threshold=%d",
-                    self.name,
-                    self._failures,
-                    self.failure_threshold,
+                    self.name, self._failures, self.failure_threshold,
                 )
 
     def reset(self) -> None:
@@ -140,7 +133,6 @@ class CircuitBreaker:
 # ---------------------------------------------------------------------------
 # Registry — one breaker per downstream service
 # ---------------------------------------------------------------------------
-
 
 class CircuitBreakerRegistry:
     def __init__(self) -> None:

@@ -10,7 +10,6 @@ Schema:
 
 Falls back to a SQLite-based in-memory store if LanceDB is unavailable.
 """
-
 from __future__ import annotations
 
 import json
@@ -34,7 +33,6 @@ _EMB_DIM = 36
 
 # ── LanceDB store ─────────────────────────────────────────────────────────────
 
-
 class LanceRecallStore:
     """Persistent vector store using LanceDB."""
 
@@ -49,22 +47,20 @@ class LanceRecallStore:
             import pyarrow as pa  # type: ignore[import]
 
             _DB_PATH.mkdir(parents=True, exist_ok=True)
-            self._db = await lancedb.connect_async(str(_DB_PATH))
+            self._db  = await lancedb.connect_async(str(_DB_PATH))
 
-            schema = pa.schema(
-                [
-                    pa.field("id", pa.string()),
-                    pa.field("symbol", pa.string()),
-                    pa.field("setup_type", pa.string()),
-                    pa.field("timeframe", pa.string()),
-                    pa.field("timestamp", pa.string()),
-                    pa.field("outcome", pa.string()),
-                    pa.field("pnl_pct", pa.float32()),
-                    pa.field("vector", pa.list_(pa.float32(), _EMB_DIM)),
-                    pa.field("tags", pa.string()),  # JSON array
-                    pa.field("notes", pa.string()),
-                ]
-            )
+            schema = pa.schema([
+                pa.field("id",         pa.string()),
+                pa.field("symbol",     pa.string()),
+                pa.field("setup_type", pa.string()),
+                pa.field("timeframe",  pa.string()),
+                pa.field("timestamp",  pa.string()),
+                pa.field("outcome",    pa.string()),
+                pa.field("pnl_pct",    pa.float32()),
+                pa.field("vector",     pa.list_(pa.float32(), _EMB_DIM)),
+                pa.field("tags",       pa.string()),   # JSON array
+                pa.field("notes",      pa.string()),
+            ])
 
             tables = await self._db.table_names()
             if "recall" not in tables:
@@ -85,22 +81,18 @@ class LanceRecallStore:
             return
         try:
             vec = _pad_vector(entry.embedding, _EMB_DIM)
-            await self._tbl.add(
-                [
-                    {
-                        "id": entry.id,
-                        "symbol": entry.symbol,
-                        "setup_type": entry.setup_type,
-                        "timeframe": entry.timeframe,
-                        "timestamp": entry.timestamp.isoformat(),
-                        "outcome": entry.outcome,
-                        "pnl_pct": float(entry.pnl_pct),
-                        "vector": vec,
-                        "tags": json.dumps(entry.tags),
-                        "notes": entry.notes,
-                    }
-                ]
-            )
+            await self._tbl.add([{
+                "id":         entry.id,
+                "symbol":     entry.symbol,
+                "setup_type": entry.setup_type,
+                "timeframe":  entry.timeframe,
+                "timestamp":  entry.timestamp.isoformat(),
+                "outcome":    entry.outcome,
+                "pnl_pct":    float(entry.pnl_pct),
+                "vector":     vec,
+                "tags":       json.dumps(entry.tags),
+                "notes":      entry.notes,
+            }])
         except Exception as exc:
             log.error("recall_add_failed", id=entry.id, err=str(exc))
 
@@ -155,7 +147,6 @@ class LanceRecallStore:
 
 # ── In-memory fallback ────────────────────────────────────────────────────────
 
-
 class InMemoryRecallStore:
     """Simple list-based fallback when LanceDB is unavailable."""
 
@@ -198,7 +189,6 @@ class InMemoryRecallStore:
 
 # ── Utilities ─────────────────────────────────────────────────────────────────
 
-
 def _pad_vector(vec: list[float], dim: int) -> list[float]:
     if len(vec) >= dim:
         return vec[:dim]
@@ -209,34 +199,32 @@ def _cosine_sim(a: list[float], b: list[float]) -> float:
     if not a or not b:
         return 0.0
     dot = sum(x * y for x, y in zip(a, b))
-    mag_a = math.sqrt(sum(x**2 for x in a)) or 1.0
-    mag_b = math.sqrt(sum(x**2 for x in b)) or 1.0
+    mag_a = math.sqrt(sum(x ** 2 for x in a)) or 1.0
+    mag_b = math.sqrt(sum(x ** 2 for x in b)) or 1.0
     return dot / (mag_a * mag_b)
 
 
 def _entry_to_dict(e: RecallEntry) -> dict[str, Any]:
     return {
-        "id": e.id,
-        "symbol": e.symbol,
+        "id":         e.id,
+        "symbol":     e.symbol,
         "setup_type": e.setup_type,
-        "timeframe": e.timeframe,
-        "timestamp": e.timestamp.isoformat(),
-        "outcome": e.outcome,
-        "pnl_pct": e.pnl_pct,
-        "tags": e.tags,
-        "notes": e.notes,
+        "timeframe":  e.timeframe,
+        "timestamp":  e.timestamp.isoformat(),
+        "outcome":    e.outcome,
+        "pnl_pct":    e.pnl_pct,
+        "tags":       e.tags,
+        "notes":      e.notes,
     }
 
 
 def features_to_embedding(features: dict[str, float]) -> list[float]:
     """Convert a feature dict to a fixed-length embedding vector."""
     from services.feature_service.builder import FEATURE_NAMES
-
     return [float(features.get(k, 0.0)) for k in FEATURE_NAMES[:_EMB_DIM]]
 
 
 # ── Factory ───────────────────────────────────────────────────────────────────
-
 
 async def make_store() -> LanceRecallStore | InMemoryRecallStore:
     """Try LanceDB first; fall back to in-memory."""

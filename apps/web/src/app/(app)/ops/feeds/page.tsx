@@ -1,4 +1,15 @@
 import { ToDoBanner } from "@/components/ToDoBanner";
+import { api } from "@/lib/api";
+
+// Wire ops.feeds API
+async function getFeeds() {
+  try {
+    const data = await api.ops.getFeeds().catch(() => ({ feeds: [] }))
+    return data
+  } catch (err) {
+    return { feeds: [] }
+  }
+}
 
 export default function OpsFeedsPage() {
   return (

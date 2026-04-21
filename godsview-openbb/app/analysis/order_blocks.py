@@ -5,9 +5,7 @@ from typing import Any
 import pandas as pd
 
 
-def detect_order_blocks(
-    df: pd.DataFrame, max_blocks: int = 100
-) -> list[dict[str, Any]]:
+def detect_order_blocks(df: pd.DataFrame, max_blocks: int = 100) -> list[dict[str, Any]]:
     if len(df) < 8:
         return []
 
@@ -52,10 +50,9 @@ def detect_order_blocks(
                 "low": low,
                 "high": high,
                 "mid": (low + high) / 2.0,
-                "strength": round(
-                    min(1.0, vol_strength * 0.5 + (1.0 - body_ratio) * 0.5), 4
-                ),
+                "strength": round(min(1.0, vol_strength * 0.5 + (1.0 - body_ratio) * 0.5), 4),
             }
         )
 
     return blocks[-max_blocks:]
+

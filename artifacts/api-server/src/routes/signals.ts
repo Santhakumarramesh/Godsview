@@ -10,7 +10,7 @@
  */
 
 import { Router, Request, Response } from "express";
-import { and, desc, eq } from "@workspace/db";
+import { and, desc, eq } from "drizzle-orm";
 import { db, signalsTable } from "@workspace/db";
 import { CreateSignalBody, GetSignalsQueryParams } from "@workspace/api-zod";
 import { claudeVeto, isClaudeAvailable, type SetupContext } from "../lib/claude";

@@ -78,39 +78,9 @@ clean: ## Remove build artifacts and caches
 verify: typecheck test build ## Phase gate: typecheck + tests + build
 
 .PHONY: openapi
-openapi: ## Dump control_plane OpenAPI to packages/api-client/openapi.json (deterministic)
-	cd $(CONTROL_PLANE_DIR) && \
-	  DATABASE_URL="$${DATABASE_URL:-postgresql+asyncpg://x:x@localhost:5432/x}" \
-	  JWT_SIGNING_KEY="$${JWT_SIGNING_KEY:-openapi-dump-placeholder-not-used}" \
-	  $(PY) -m app.scripts.dump_openapi ../../packages/api-client/openapi.json
-
-.PHONY: lint
-lint: ## Lint TS workspaces and ruff control_plane
-	$(PNPM) -w run typecheck:v2
-	cd $(CONTROL_PLANE_DIR) && $(PY) -m ruff check app tests && $(PY) -m ruff format --check app tests
+openapi: ## Dump control_plane OpenAPI to packages/api-client
+	cd $(CONTROL_PLANE_DIR) && $(PY) -m app.scripts.dump_openapi ../../packages/api-client/openapi.json
 
 .PHONY: codegen
 codegen: openapi ## Regenerate TS api-client from OpenAPI
 	$(PNPM) --filter @gv/api-client run codegen
-
-# ── friendly aliases (used by ops/scripts + docs/blueprint) ────────────
-.PHONY: dev-up
-dev-up: up ## Alias for `make up`
-
-.PHONY: dev-down
-dev-down: down ## Alias for `make down`
-
-.PHONY: dev-logs
-dev-logs: logs ## Alias for `make logs`
-
-.PHONY: dev-reset
-dev-reset: ## DESTRUCTIVE — stop compose stack + remove all dev volumes
-	RESET_FORCE=1 ops/scripts/reset.sh
-
-.PHONY: api
-api: ## Run control plane uvicorn in the foreground
-	cd $(CONTROL_PLANE_DIR) && $(PY) -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-
-.PHONY: web
-web: ## Run the Next.js dev server
-	$(PNPM) --filter @gv/web run dev

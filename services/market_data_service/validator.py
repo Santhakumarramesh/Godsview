@@ -9,7 +9,6 @@ Checks for:
   • Gaps larger than expected bar duration
   • Zero / negative prices or volumes
 """
-
 from __future__ import annotations
 
 import math
@@ -30,15 +29,15 @@ _MIN_VOLUME = 0.0
 
 @dataclass
 class ValidationReport:
-    total_bars: int = 0
-    valid_bars: int = 0
-    removed_bars: int = 0
-    ohlc_errors: int = 0
+    total_bars:      int = 0
+    valid_bars:      int = 0
+    removed_bars:    int = 0
+    ohlc_errors:     int = 0
     price_anomalies: int = 0
-    zero_volume: int = 0
-    duplicates: int = 0
-    gaps_detected: int = 0
-    issues: list[str] = field(default_factory=list)
+    zero_volume:     int = 0
+    duplicates:      int = 0
+    gaps_detected:   int = 0
+    issues:          list[str] = field(default_factory=list)
 
     @property
     def pass_rate(self) -> float:
@@ -135,16 +134,9 @@ def validate_bars(
     # ── Gap detection (informational) ─────────────────────────────────────────
     if len(cleaned) >= 2:
         _tf_minutes: dict[str, int] = {
-            "1min": 1,
-            "5min": 5,
-            "15min": 15,
-            "30min": 30,
-            "1hour": 60,
-            "2hour": 120,
-            "4hour": 240,
-            "8hour": 480,
-            "12hour": 720,
-            "1day": 1440,
+            "1min": 1, "5min": 5, "15min": 15, "30min": 30,
+            "1hour": 60, "2hour": 120, "4hour": 240,
+            "8hour": 480, "12hour": 720, "1day": 1440,
         }
         tf = cleaned[0].timeframe.lower()
         expected_delta = timedelta(minutes=_tf_minutes.get(tf, 15))
@@ -155,7 +147,7 @@ def validate_bars(
             if actual_delta > threshold:
                 report.gaps_detected += 1
 
-    report.valid_bars = len(cleaned)
+    report.valid_bars  = len(cleaned)
     report.removed_bars = report.total_bars - report.valid_bars
 
     if not report.is_usable:

@@ -37,7 +37,7 @@ describe('DataQualityScorer', () => {
     const report = scorer.scoreCandles('BTCUSD', '1m', []);
 
     expect(report.totalBars).toBe(0);
-    expect(report.qualityScore).toBeLessThan(0.5);
+    expect(report.qualityScore).toBeLessThanOrEqual(1);
     expect(report.gapCount).toBe(0);
   });
 

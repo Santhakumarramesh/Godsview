@@ -1,18 +1,3 @@
-// @ts-nocheck
-/**
- * DESIGN SCAFFOLD — not wired into the live runtime.
- *
- * STATUS: This file is a forward-looking integration shell. It sketches the
- * final Phase-5 surface but imports/methods that don't yet exist in the live
- * runtime, or depends on aspirational modules. Typechecking is suppressed to
- * keep CI green while the shell is preserved as design documentation.
- *
- * Wiring it into the live runtime is tracked in
- * docs/PRODUCTION_READINESS.md (Phase 5: Auto-Promotion Pipeline).
- *
- * REMOVE the `// @ts-nocheck` directive once Phase 5 is implemented and all
- * referenced modules/methods exist.
- */
 /**
  * brain_orchestrator.ts — GodsView 6-Layer Brain Orchestrator
  *
@@ -397,7 +382,7 @@ async function _autoEvaluateSignal(
     }
   } catch (err: any) {
     // Never throw — this is fire-and-forget
-    logger.warn({ err: err?.message ?? err }, "[BrainOrchestrator] Auto-signal evaluation error:");
+    logger.warn("[BrainOrchestrator] Auto-signal evaluation error:", err?.message ?? err);
   }
 }
 
@@ -574,13 +559,13 @@ export function startBrainScheduler(
               schedulerState.lastBacktestAt[sym] = Date.now();
             }
           } catch (btErr) {
-            logger.error({ err: btErr }, `[BrainScheduler] Backtest error for ${sym}:`);
+            logger.error(`[BrainScheduler] Backtest error for ${sym}:`, btErr);
           }
         }
       }
     } catch (err) {
       schedulerState.errors++;
-      logger.error({ err: err }, `[BrainScheduler] Cycle ${schedulerState.cycleCount} error:`);
+      logger.error(`[BrainScheduler] Cycle ${schedulerState.cycleCount} error:`, err);
     }
 
     // Schedule next tick — subtract elapsed time to maintain rhythm

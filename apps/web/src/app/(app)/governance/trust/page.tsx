@@ -1,4 +1,15 @@
 import { ToDoBanner } from "@/components/ToDoBanner";
+import { api } from "@/lib/api";
+
+// Wire audit.trustTiers API
+async function getTrustTiers() {
+  try {
+    const data = await api.audit.getTrustTiers().catch(() => ({ tiers: [] }))
+    return data
+  } catch (err) {
+    return { tiers: [] }
+  }
+}
 
 export default function GovernanceTrustPage() {
   return (

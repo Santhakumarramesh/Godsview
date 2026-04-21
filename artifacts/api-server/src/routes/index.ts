@@ -75,9 +75,6 @@ import dataTruthRouter from "./data_truth";
 import executionValidationRouter from "./execution_validation";
 import certificationRunRouter from "./certification_run";
 import opsV2Router from "./ops_v2";
-import governanceSchedulerRouter from "./governance_scheduler";
-import calibrationSchedulerRouter from "./calibration_scheduler";
-import sloRouter from "./slo";
 
 const router: IRouter = Router();
 
@@ -157,13 +154,6 @@ router.use("/api/data-truth", dataTruthRouter);
 router.use("/api/execution-validation", executionValidationRouter);
 router.use("/api/certification-run", certificationRunRouter); // Phase 20 — One strategy certification run
 router.use("/api/ops/v2", opsV2Router); // Operator brief, kill switch, exposure, drift, startup
-
-// Phase 5: governance & calibration cron schedulers
-router.use(governanceSchedulerRouter);
-router.use(calibrationSchedulerRouter);
-
-// Phase 6: SLO definitions, budgets, and burn-rate routes
-router.use(sloRouter);
 
 // Python v2 microservices proxy — shadow routes at /v2/*
 router.use(pythonV2Router);

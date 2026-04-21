@@ -4,7 +4,6 @@ GodsView v2 — Risk Service
 Pre-trade risk checks, position limits, daily loss limits, and
 kill-switch logic.
 """
-
 from __future__ import annotations
 
 import time
@@ -24,11 +23,11 @@ log = get_logger(__name__)
 _STARTED_AT = 0.0
 
 # Runtime state
-_daily_pnl = 0.0
-_open_positions = 0
-_kill_switch = False
-_trades_today = 0
-_RESET_HOUR = 0  # reset daily at midnight UTC
+_daily_pnl         = 0.0
+_open_positions    = 0
+_kill_switch       = False
+_trades_today      = 0
+_RESET_HOUR        = 0   # reset daily at midnight UTC
 
 
 @asynccontextmanager
@@ -46,25 +45,23 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="GodsView v2 — Risk Service", version="2.0.0", lifespan=lifespan)
-app.add_middleware(
-    CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
-)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
 class TradeCheckRequest(BaseModel):
-    signal_id: str
-    symbol: str
-    side: str
-    qty: float
+    signal_id:   str
+    symbol:      str
+    side:        str
+    qty:         float
     entry_price: float
-    stop_price: float
+    stop_price:  float
     target_price: float
-    dry_run: bool = True
+    dry_run:     bool = True
 
 
 class PnlUpdate(BaseModel):
     trade_pnl_pct: float
-    closed: bool = True
+    closed:        bool = True
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -74,10 +71,10 @@ async def health() -> HealthResponse:
         status="ok" if not _kill_switch else "degraded",
         uptime_s=round(time.time() - _STARTED_AT, 1),
         checks={
-            "kill_switch": str(_kill_switch),
-            "daily_pnl_pct": f"{_daily_pnl:.2f}%",
-            "open_positions": str(_open_positions),
-            "trades_today": str(_trades_today),
+            "kill_switch":     str(_kill_switch),
+            "daily_pnl_pct":   f"{_daily_pnl:.2f}%",
+            "open_positions":  str(_open_positions),
+            "trades_today":    str(_trades_today),
         },
     )
 
@@ -110,12 +107,10 @@ async def pre_trade_check(req: TradeCheckRequest) -> dict[str, Any]:
     nominal_equity = 10_000.0
     size_pct = trade_value / nominal_equity * 100
     if size_pct > cfg.max_position_size_pct:
-        return _reject(
-            f"position_too_large ({size_pct:.1f}% > {cfg.max_position_size_pct}%)"
-        )
+        return _reject(f"position_too_large ({size_pct:.1f}% > {cfg.max_position_size_pct}%)")
 
     # ── Minimum risk:reward ───────────────────────────────────────────────────
-    risk = abs(req.entry_price - req.stop_price)
+    risk   = abs(req.entry_price - req.stop_price)
     reward = abs(req.entry_price - req.target_price)
     rr = reward / risk if risk else 0.0
     if rr < 1.5:
@@ -129,13 +124,13 @@ async def pre_trade_check(req: TradeCheckRequest) -> dict[str, Any]:
     )
     return {
         "approved": True,
-        "reason": "all_checks_passed",
+        "reason":   "all_checks_passed",
         "checks": {
             "kill_switch": False,
-            "daily_loss": f"{_daily_pnl:.2f}%",
-            "open_pos": _open_positions,
-            "size_pct": round(size_pct, 2),
-            "rr": round(rr, 2),
+            "daily_loss":  f"{_daily_pnl:.2f}%",
+            "open_pos":    _open_positions,
+            "size_pct":    round(size_pct, 2),
+            "rr":          round(rr, 2),
         },
     }
 
@@ -162,15 +157,15 @@ async def record_position_open() -> dict[str, Any]:
 @app.get("/status")
 async def risk_status() -> dict[str, Any]:
     return {
-        "kill_switch": _kill_switch,
-        "daily_pnl_pct": round(_daily_pnl, 4),
+        "kill_switch":    _kill_switch,
+        "daily_pnl_pct":  round(_daily_pnl, 4),
         "open_positions": _open_positions,
-        "trades_today": _trades_today,
+        "trades_today":   _trades_today,
         "limits": {
-            "max_daily_loss_pct": cfg.max_daily_loss_pct,
-            "max_open_positions": cfg.max_open_positions,
+            "max_daily_loss_pct":    cfg.max_daily_loss_pct,
+            "max_open_positions":    cfg.max_open_positions,
             "max_position_size_pct": cfg.max_position_size_pct,
-            "risk_per_trade_pct": cfg.default_risk_per_trade_pct,
+            "risk_per_trade_pct":    cfg.default_risk_per_trade_pct,
         },
     }
 
@@ -179,7 +174,7 @@ async def risk_status() -> dict[str, Any]:
 async def reset_kill_switch() -> dict[str, Any]:
     global _kill_switch, _daily_pnl
     _kill_switch = False
-    _daily_pnl = 0.0
+    _daily_pnl   = 0.0
     log.warning("kill_switch_reset")
     return {"kill_switch": False, "message": "Kill switch reset — trading re-enabled"}
 
@@ -191,7 +186,6 @@ def _reject(reason: str) -> dict[str, Any]:
 
 if __name__ == "__main__":
     import uvicorn
-
     uvicorn.run(
         "services.risk_service.main:app",
         host="0.0.0.0",
