@@ -68,8 +68,10 @@ router.get("/seed/status", async (_req: Request, res: Response) => {
 
     for (const table of tables) {
       try {
-        const [row] = await db.execute(sql.raw(`SELECT count(*)::int as cnt FROM ${table}`));
-        counts[table] = (row as any)?.cnt ?? 0;
+        const result = await db.execute(sql.raw(`SELECT count(*)::int as cnt FROM ${table}`));
+        const rows = (result as any)?.rows ?? result;
+        const row = Array.isArray(rows) ? rows[0] : rows;
+        counts[table] = Number(row?.cnt ?? row?.count ?? 0);
       } catch {
         counts[table] = -1;
       }
