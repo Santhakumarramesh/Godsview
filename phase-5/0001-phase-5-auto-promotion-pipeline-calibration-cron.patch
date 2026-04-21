@@ -1,0 +1,1047 @@
+From df1918030a23537e312ff6e9b46ee3f2dd96beaf Mon Sep 17 00:00:00 2001
+From: claude-bot <noreply@anthropic.com>
+Date: Sat, 18 Apr 2026 00:07:57 -0400
+Subject: [PATCH] phase-5: auto promotion pipeline + calibration cron
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Activates the two governance scaffolds previously held behind `@ts-nocheck`
+and wires them into the api-server lifecycle:
+
+  - lib/governance/promotion_engine.ts — removed @ts-nocheck header,
+    replaced `Math.max(severity as any, "medium")` (which silently widened
+    to number) with a typed `escalateSeverity()` helper that walks a rank
+    table over the literal union.
+
+  - lib/eval/calibration_tracker.ts — removed @ts-nocheck header. Imports
+    Logger from a new `lib/logging/logger.ts` shim that re-exports from
+    the canonical pino logger so legacy import paths resolve without
+    duplicating the pino config.
+
+  - lib/governance/governance_scheduler.ts (NEW) — singleton that
+    periodically pulls every non-retired strategy from the registry,
+    maps registry state → engine tier, calls evaluatePromotion() and
+    evaluateDemotion(), records the cycle in a ring buffer, and emits
+    `promotion_eligible` / `demotion_signal` SSE alerts. 5 min default
+    interval (GOVERNANCE_INTERVAL_MS).
+
+  - lib/eval/calibration_scheduler.ts (NEW) — singleton that takes an
+    hourly snapshot of the calibration tracker, emits a
+    `calibration_snapshot` SSE event for dashboard cache invalidation
+    and a `calibration_drift` SSE event whenever HIGH/CRITICAL drift
+    fires. 1 hour default interval (CALIBRATION_INTERVAL_MS).
+
+  - routes/governance_scheduler.ts (NEW) — GET status/history/current
+    + POST force (operator-gated via requireOperator).
+
+  - routes/calibration_scheduler.ts (NEW) — GET status/history/current/
+    score + POST force (operator-gated).
+
+  - index.ts — both schedulers start after server.listen() and register
+    onShutdown cleanup, gated by GOVERNANCE_AUTOSTART / CALIBRATION_AUTOSTART
+    (default true).
+
+  - routes/index.ts — both new routers mounted.
+
+Verification:
+  ./node_modules/.bin/tsc -p artifacts/api-server/tsconfig.json --noEmit  # exit 0
+  ./node_modules/.bin/tsc --build                                         # exit 0
+  cd artifacts/api-server && node ./build.mjs                             # exit 0
+
+Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+---
+ artifacts/api-server/src/index.ts             |  46 +++
+ .../src/lib/eval/calibration_scheduler.ts     | 224 ++++++++++++
+ .../src/lib/eval/calibration_tracker.ts       |  12 -
+ .../lib/governance/governance_scheduler.ts    | 328 ++++++++++++++++++
+ .../src/lib/governance/promotion_engine.ts    |  38 +-
+ .../api-server/src/lib/logging/logger.ts      |  15 +
+ .../src/routes/calibration_scheduler.ts       | 112 ++++++
+ .../src/routes/governance_scheduler.ts        |  88 +++++
+ artifacts/api-server/src/routes/index.ts      |   6 +
+ 9 files changed, 843 insertions(+), 26 deletions(-)
+ create mode 100644 artifacts/api-server/src/lib/eval/calibration_scheduler.ts
+ create mode 100644 artifacts/api-server/src/lib/governance/governance_scheduler.ts
+ create mode 100644 artifacts/api-server/src/lib/logging/logger.ts
+ create mode 100644 artifacts/api-server/src/routes/calibration_scheduler.ts
+ create mode 100644 artifacts/api-server/src/routes/governance_scheduler.ts
+
+diff --git a/artifacts/api-server/src/index.ts b/artifacts/api-server/src/index.ts
+index 2d45965..4e0282b 100644
+--- a/artifacts/api-server/src/index.ts
++++ b/artifacts/api-server/src/index.ts
+@@ -14,6 +14,8 @@ import { alpacaAccountStream, wireAccountStreamToReconciler } from "./lib/alpaca
+ import { startPaperValidationLoop, stopPaperValidationLoop } from "./lib/paper_validation_loop";
+ import { validateOrExit } from "./lib/ops/startup_validator";
+ import { initGracefulShutdown } from "./lib/ops/graceful_shutdown";
++import { GovernanceScheduler } from "./lib/governance/governance_scheduler";
++import { CalibrationScheduler } from "./lib/eval/calibration_scheduler";
+ 
+ // ── Validate environment before anything else ───────────────────
+ validateEnv();
+@@ -165,6 +167,30 @@ const server = app.listen(port, (err) => {
+       .then((result) => logger.info({ intervalMs: result.interval_ms }, "Paper validation loop started"))
+       .catch((err) => logger.error({ err }, "Paper validation loop failed to start"));
+   }
++
++  // Phase 5: governance scheduler (auto promotion + demotion gate evaluator)
++  if ((process.env.GOVERNANCE_AUTOSTART ?? "true") !== "false") {
++    try {
++      GovernanceScheduler.getInstance().start();
++      logger.info("Governance scheduler started (auto promotion + demotion evaluator)");
++    } catch (err: any) {
++      logger.error({ err: err?.message }, "Governance scheduler failed to start");
++    }
++  } else {
++    logger.info("Governance scheduler disabled (GOVERNANCE_AUTOSTART=false)");
++  }
++
++  // Phase 5: calibration scheduler (hourly snapshot + drift detection cron)
++  if ((process.env.CALIBRATION_AUTOSTART ?? "true") !== "false") {
++    try {
++      CalibrationScheduler.getInstance().start();
++      logger.info("Calibration scheduler started (hourly snapshot + drift detection)");
++    } catch (err: any) {
++      logger.error({ err: err?.message }, "Calibration scheduler failed to start");
++    }
++  } else {
++    logger.info("Calibration scheduler disabled (CALIBRATION_AUTOSTART=false)");
++  }
+ });
+ 
+ // ── Graceful shutdown with connection draining ──────────────────
+@@ -238,6 +264,26 @@ onShutdown(async () => {
+   stopPaperValidationLoop();
+ });
+ 
++// Phase 5: stop governance scheduler
++onShutdown(async () => {
++  try {
++    logger.info("Stopping governance scheduler...");
++    GovernanceScheduler.getInstance().stop();
++  } catch (err: any) {
++    logger.warn({ err: err?.message }, "Governance scheduler stop failed");
++  }
++});
++
++// Phase 5: stop calibration scheduler
++onShutdown(async () => {
++  try {
++    logger.info("Stopping calibration scheduler...");
++    CalibrationScheduler.getInstance().stop();
++  } catch (err: any) {
++    logger.warn({ err: err?.message }, "Calibration scheduler stop failed");
++  }
++});
++
+ // Register cleanup: end trading session
+ onShutdown(async () => {
+   logger.info("Ending trading session...");
+diff --git a/artifacts/api-server/src/lib/eval/calibration_scheduler.ts b/artifacts/api-server/src/lib/eval/calibration_scheduler.ts
+new file mode 100644
+index 0000000..97b2a44
+--- /dev/null
++++ b/artifacts/api-server/src/lib/eval/calibration_scheduler.ts
+@@ -0,0 +1,224 @@
++/**
++ * calibration_scheduler.ts — Hourly Calibration Snapshot Cron (Phase 5)
++ *
++ * Periodic background loop that:
++ *   1. Pulls a fresh `CalibrationReport` from the singleton CalibrationTracker.
++ *   2. Computes the rolling calibration score (0-100).
++ *   3. Detects drift alerts via `getDriftAlert()`.
++ *   4. Records every snapshot in a ring buffer.
++ *   5. Emits SSE events:
++ *        - `calibration_snapshot` for every cycle (UI cache invalidation hook).
++ *        - `calibration_drift` whenever a HIGH/CRITICAL drift alert fires.
++ *
++ * The dashboard's React Query hooks invalidate on `calibration_snapshot` so
++ * the calibration page re-syncs without a full refresh.
++ *
++ * Architecture mirrors `governance_scheduler.ts` and `scanner_scheduler.ts`:
++ *   - Singleton via `getInstance()`.
++ *   - `start()` / `stop()` are idempotent.
++ *   - `forceCycle()` runs an out-of-band evaluation.
++ *   - Env-configurable interval (`CALIBRATION_INTERVAL_MS`, default 1 hour).
++ *
++ * Env vars:
++ *   CALIBRATION_INTERVAL_MS    — eval cycle in ms (default 3_600_000 = 1 hr)
++ *   CALIBRATION_HISTORY_MAX    — ring buffer length (default 168, ~7 days hourly)
++ *   CALIBRATION_AUTOSTART      — "true" to auto-start (default "true")
++ */
++
++import {
++  CalibrationTracker,
++  type CalibrationReport,
++  type DriftAlert,
++} from "./calibration_tracker";
++import { publishAlert } from "../signal_stream";
++import { logger as _logger } from "../logger";
++
++const logger = _logger.child({ module: "calibration" });
++
++// ── Config ────────────────────────────────────────────────────────────────
++
++const DEFAULT_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
++const INTERVAL_MS = parseInt(
++  process.env.CALIBRATION_INTERVAL_MS ?? String(DEFAULT_INTERVAL_MS),
++  10,
++);
++const HISTORY_MAX = parseInt(
++  process.env.CALIBRATION_HISTORY_MAX ?? "168",
++  10,
++);
++const REPORT_WINDOW_DAYS = parseInt(
++  process.env.CALIBRATION_REPORT_WINDOW_DAYS ?? "30",
++  10,
++);
++
++// ── Types ─────────────────────────────────────────────────────────────────
++
++export interface CalibrationCycleResult {
++  id: string;
++  startedAt: string;
++  completedAt: string | null;
++  status: "running" | "completed" | "error";
++  calibrationScore: number;
++  driftAlert: DriftAlert | null;
++  report: CalibrationReport | null;
++  error: string | null;
++}
++
++// ── State ────────────────────────────────────────────────────────────────
++
++const _history: CalibrationCycleResult[] = [];
++let _currentCycle: CalibrationCycleResult | null = null;
++
++// Singleton tracker instance — wraps a `CalibrationTracker` constructed with
++// our pino child logger. Other call sites (paper_validation_loop, etc.)
++// should pull from `getCalibrationTracker()` so the same in-memory state is
++// shared. If the consumer needs its own isolated tracker for testing it can
++// still construct directly.
++let _tracker: CalibrationTracker | null = null;
++
++export function getCalibrationTracker(): CalibrationTracker {
++  if (!_tracker) {
++    _tracker = new CalibrationTracker(logger as any);
++  }
++  return _tracker;
++}
++
++function recordCycle(cycle: CalibrationCycleResult): void {
++  _history.unshift(cycle);
++  while (_history.length > HISTORY_MAX) {
++    _history.pop();
++  }
++}
++
++function makeId(prefix: string): string {
++  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
++}
++
++// ── Scheduler singleton ───────────────────────────────────────────────────
++
++export class CalibrationScheduler {
++  private static _instance: CalibrationScheduler | null = null;
++  private _timer: ReturnType<typeof setInterval> | null = null;
++  private _running = false;
++  private _cycleCount = 0;
++
++  static getInstance(): CalibrationScheduler {
++    if (!CalibrationScheduler._instance) {
++      CalibrationScheduler._instance = new CalibrationScheduler();
++    }
++    return CalibrationScheduler._instance;
++  }
++
++  isRunning(): boolean { return this._running; }
++  getCycleCount(): number { return this._cycleCount; }
++  getHistory(): CalibrationCycleResult[] { return [..._history]; }
++  getCurrentCycle(): CalibrationCycleResult | null { return _currentCycle; }
++  getIntervalMs(): number { return INTERVAL_MS; }
++
++  /** Start the periodic calibration cron. Idempotent. */
++  start(): void {
++    if (this._running) return;
++    this._running = true;
++    logger.info(
++      { intervalMs: INTERVAL_MS, windowDays: REPORT_WINDOW_DAYS },
++      "[calibration] Scheduler started — hourly snapshot + drift detection",
++    );
++
++    void this._runCycle();
++    this._timer = setInterval(() => void this._runCycle(), INTERVAL_MS);
++  }
++
++  /** Stop the scheduler. Safe to call multiple times. */
++  stop(): void {
++    if (this._timer) clearInterval(this._timer);
++    this._timer = null;
++    this._running = false;
++    logger.info("[calibration] Scheduler stopped");
++  }
++
++  /** Force an immediate cycle (operator-triggered or test). */
++  async forceCycle(): Promise<CalibrationCycleResult> {
++    return this._runCycle();
++  }
++
++  private async _runCycle(): Promise<CalibrationCycleResult> {
++    const cycle: CalibrationCycleResult = {
++      id: makeId("cal"),
++      startedAt: new Date().toISOString(),
++      completedAt: null,
++      status: "running",
++      calibrationScore: 0,
++      driftAlert: null,
++      report: null,
++      error: null,
++    };
++    _currentCycle = cycle;
++
++    try {
++      const tracker = getCalibrationTracker();
++
++      const report = tracker.getCalibrationReport(REPORT_WINDOW_DAYS);
++      const score = tracker.getCalibrationScore();
++      const driftAlert = tracker.getDriftAlert();
++
++      cycle.report = report;
++      cycle.calibrationScore = score;
++      cycle.driftAlert = driftAlert;
++      cycle.status = "completed";
++
++      // Always emit a snapshot event so the dashboard's React Query hooks
++      // can invalidate the calibration cache key on every cron tick.
++      publishAlert({
++        type: "calibration_snapshot",
++        cycleId: cycle.id,
++        score,
++        windowDays: REPORT_WINDOW_DAYS,
++        hasDriftAlert: driftAlert !== null,
++        driftSeverity: driftAlert?.severity ?? null,
++        evaluatedAt: cycle.startedAt,
++      });
++
++      if (driftAlert !== null) {
++        publishAlert({
++          type: "calibration_drift",
++          cycleId: cycle.id,
++          severity: driftAlert.severity,
++          dimension: driftAlert.dimension,
++          description: driftAlert.description,
++          expectedValue: driftAlert.expectedValue,
++          actualValue: driftAlert.actualValue,
++          divergence: driftAlert.divergence,
++          score,
++          evaluatedAt: cycle.startedAt,
++        });
++        logger.warn(
++          {
++            cycleId: cycle.id,
++            severity: driftAlert.severity,
++            score,
++          },
++          "[calibration] Drift alert raised",
++        );
++      } else {
++        logger.info(
++          { cycleId: cycle.id, score },
++          "[calibration] Snapshot recorded",
++        );
++      }
++    } catch (err: any) {
++      cycle.status = "error";
++      cycle.error = err?.message ?? String(err);
++      logger.error(
++        { err: cycle.error },
++        "[calibration] Cycle failed",
++      );
++    } finally {
++      cycle.completedAt = new Date().toISOString();
++      _currentCycle = null;
++      this._cycleCount++;
++      recordCycle(cycle);
++    }
++
++    return cycle;
++  }
++}
+diff --git a/artifacts/api-server/src/lib/eval/calibration_tracker.ts b/artifacts/api-server/src/lib/eval/calibration_tracker.ts
+index a49e59e..b4c2d49 100644
+--- a/artifacts/api-server/src/lib/eval/calibration_tracker.ts
++++ b/artifacts/api-server/src/lib/eval/calibration_tracker.ts
+@@ -1,15 +1,3 @@
+-// @ts-nocheck
+-/**
+- * DESIGN SCAFFOLD — not wired into the live runtime.
+- * STATUS: This file is a forward-looking integration shell that documents the
+- * intended architecture but is not currently imported by the production
+- * entrypoints. Type-checking is suppressed so the build can stay green while
+- * the real implementation lands in Phase 5.
+- *
+- * REMOVE the `// @ts-nocheck` directive once Phase 5 is implemented and the
+- * file is actually mounted in `src/index.ts` / `src/routes/index.ts`.
+- */
+-
+ // CalibrationTracker: Continuous backtest-to-live truth tracking
+ // Compares expected (backtest) vs actual (live) across all dimensions
+ // Single source of truth for model fidelity and drift detection
+diff --git a/artifacts/api-server/src/lib/governance/governance_scheduler.ts b/artifacts/api-server/src/lib/governance/governance_scheduler.ts
+new file mode 100644
+index 0000000..90115a9
+--- /dev/null
++++ b/artifacts/api-server/src/lib/governance/governance_scheduler.ts
+@@ -0,0 +1,328 @@
++/**
++ * governance_scheduler.ts — Auto Promotion & Demotion Cron (Phase 5)
++ *
++ * Periodic background loop that:
++ *   1. Pulls every live strategy from the strategy registry.
++ *   2. Maps registry state ("paper_approved" / "live_assisted_approved" /
++ *      "autonomous_approved") onto the promotion engine's tier names
++ *      (PAPER / ASSISTED / AUTONOMOUS / ELITE).
++ *   3. Calls promotion_engine.evaluatePromotion() and evaluateDemotion()
++ *      on each strategy's current performance metrics.
++ *   4. Records every evaluation in a ring buffer (`history`).
++ *   5. Emits SSE events:
++ *        - `promotion_eligible` when a strategy passes all required gates.
++ *        - `demotion_signal` when a degradation signal fires.
++ *      Operators see the alerts in the dashboard and approve / deny via the
++ *      existing governance routes — Phase 5 surfaces the decision, it does
++ *      not auto-mutate the registry. (Auto-mutation is Phase 6/7 once the
++ *      operator approval workflow is wired up.)
++ *
++ * Architecture mirrors `scanner_scheduler.ts`:
++ *   - Singleton via `getInstance()`.
++ *   - `start()` / `stop()` are idempotent.
++ *   - `forceCycle()` runs an out-of-band evaluation.
++ *   - Env-configurable interval (`GOVERNANCE_INTERVAL_MS`, default 5 min).
++ *
++ * Env vars:
++ *   GOVERNANCE_INTERVAL_MS    — eval cycle in ms (default 300_000 = 5 min)
++ *   GOVERNANCE_HISTORY_MAX    — ring buffer length (default 200)
++ *   GOVERNANCE_AUTOSTART      — "true" to auto-start in index.ts (default "true")
++ */
++
++import {
++  PromotionEngine,
++  type StrategyMetrics,
++  type PromotionDecision,
++  type DemotionDecision,
++} from "./promotion_engine";
++import {
++  listStrategies,
++  type StrategyEntry,
++  type StrategyState,
++} from "../strategy_registry";
++import { publishAlert } from "../signal_stream";
++import { logger as _logger } from "../logger";
++
++const logger = _logger.child({ module: "governance" });
++
++// ── Config ────────────────────────────────────────────────────────────────
++
++const DEFAULT_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
++const INTERVAL_MS = parseInt(
++  process.env.GOVERNANCE_INTERVAL_MS ?? String(DEFAULT_INTERVAL_MS),
++  10,
++);
++const HISTORY_MAX = parseInt(
++  process.env.GOVERNANCE_HISTORY_MAX ?? "200",
++  10,
++);
++
++// ── Types ─────────────────────────────────────────────────────────────────
++
++export interface GovernanceCycleResult {
++  id: string;
++  startedAt: string;
++  completedAt: string | null;
++  status: "running" | "completed" | "error";
++  strategiesEvaluated: number;
++  promotionEligible: number;
++  demotionSignals: number;
++  errors: number;
++  evaluations: GovernanceEvaluation[];
++}
++
++export interface GovernanceEvaluation {
++  strategyId: string;
++  strategyName: string;
++  registryState: StrategyState;
++  enginerTier: string; // mapped tier used by promotion_engine
++  promotion: PromotionDecision;
++  demotion: DemotionDecision;
++  evaluatedAt: string;
++}
++
++// ── Tier mapping ──────────────────────────────────────────────────────────
++// Bridges registry vocabulary (paper_approved, live_assisted_approved,
++// autonomous_approved) to engine vocabulary (PAPER, ASSISTED, AUTONOMOUS).
++//
++// Registry states like `draft`, `parsed`, `backtested` and `stress_tested`
++// map to SEED/LEARNING/PROVEN — strategies in those states aren't traded
++// live yet but the cron still runs the gates so operators see the readiness
++// trajectory.
++
++const REGISTRY_TO_ENGINE_TIER: Record<StrategyState, string> = {
++  draft: "SEED",
++  parsed: "SEED",
++  backtested: "LEARNING",
++  stress_tested: "PROVEN",
++  paper_approved: "PAPER",
++  live_assisted_approved: "ASSISTED",
++  autonomous_approved: "AUTONOMOUS",
++  retired: "RETIRED",
++};
++
++// ── State ────────────────────────────────────────────────────────────────
++
++const _history: GovernanceCycleResult[] = [];
++let _currentCycle: GovernanceCycleResult | null = null;
++
++function recordCycle(cycle: GovernanceCycleResult): void {
++  _history.unshift(cycle);
++  while (_history.length > HISTORY_MAX) {
++    _history.pop();
++  }
++}
++
++function makeId(prefix: string): string {
++  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
++}
++
++function buildMetrics(entry: StrategyEntry): StrategyMetrics {
++  const perf = entry.performance ?? {
++    sharpe: 0,
++    winRate: 0,
++    profitFactor: 0,
++    maxDrawdown: 0,
++    totalTrades: 0,
++    netPnl: 0,
++    lastUpdated: new Date(0).toISOString(),
++  };
++
++  return {
++    strategyId: entry.id,
++    name: entry.name,
++    currentTier: REGISTRY_TO_ENGINE_TIER[entry.state] ?? "SEED",
++    totalTrades: perf.totalTrades,
++    winRate: perf.winRate,
++    sharpeRatio: perf.sharpe,
++    sortinoRatio: 0,
++    calmarRatio: 0,
++    profitFactor: perf.profitFactor,
++    maxDrawdown: perf.maxDrawdown,
++    avgReturn: perf.totalTrades > 0 ? perf.netPnl / perf.totalTrades : 0,
++    consistency: 0,
++    equityCurve: [],
++    walkForwardPassed: undefined,
++    outOfSampleSharpe: undefined,
++    regimeStability: undefined,
++    parameterSensitivity: undefined,
++    monteCarloWorstCase: undefined,
++    tailRisk: undefined,
++    correlationWithPortfolio: undefined,
++    consecutiveLosses: undefined,
++    daysUnderwater: undefined,
++    lastTradedAt: perf.lastUpdated,
++  };
++}
++
++// ── Scheduler singleton ───────────────────────────────────────────────────
++
++export class GovernanceScheduler {
++  private static _instance: GovernanceScheduler | null = null;
++  private _timer: ReturnType<typeof setInterval> | null = null;
++  private _running = false;
++  private _cycleCount = 0;
++  private readonly engine = new PromotionEngine();
++
++  static getInstance(): GovernanceScheduler {
++    if (!GovernanceScheduler._instance) {
++      GovernanceScheduler._instance = new GovernanceScheduler();
++    }
++    return GovernanceScheduler._instance;
++  }
++
++  isRunning(): boolean { return this._running; }
++  getCycleCount(): number { return this._cycleCount; }
++  getHistory(): GovernanceCycleResult[] { return [..._history]; }
++  getCurrentCycle(): GovernanceCycleResult | null { return _currentCycle; }
++  getIntervalMs(): number { return INTERVAL_MS; }
++  getEngine(): PromotionEngine { return this.engine; }
++
++  /** Start the periodic governance evaluator. Idempotent. */
++  start(): void {
++    if (this._running) return;
++    this._running = true;
++    logger.info(
++      { intervalMs: INTERVAL_MS },
++      "[governance] Scheduler started — evaluating promotion + demotion gates",
++    );
++
++    // Run an immediate first cycle so the dashboard has data on boot.
++    void this._runCycle();
++    this._timer = setInterval(() => void this._runCycle(), INTERVAL_MS);
++  }
++
++  /** Stop the scheduler. Safe to call multiple times. */
++  stop(): void {
++    if (this._timer) clearInterval(this._timer);
++    this._timer = null;
++    this._running = false;
++    logger.info("[governance] Scheduler stopped");
++  }
++
++  /** Force an immediate cycle (operator-triggered or test). */
++  async forceCycle(): Promise<GovernanceCycleResult> {
++    return this._runCycle();
++  }
++
++  /** Run one evaluation cycle. */
++  private async _runCycle(): Promise<GovernanceCycleResult> {
++    const cycle: GovernanceCycleResult = {
++      id: makeId("gov"),
++      startedAt: new Date().toISOString(),
++      completedAt: null,
++      status: "running",
++      strategiesEvaluated: 0,
++      promotionEligible: 0,
++      demotionSignals: 0,
++      errors: 0,
++      evaluations: [],
++    };
++    _currentCycle = cycle;
++
++    try {
++      const strategies = listStrategies().filter(
++        (s) => s.state !== "retired",
++      );
++
++      for (const entry of strategies) {
++        try {
++          const engineTier = REGISTRY_TO_ENGINE_TIER[entry.state] ?? "SEED";
++          const metrics = buildMetrics(entry);
++
++          const promotion = this.engine.evaluatePromotion(
++            entry.id,
++            engineTier,
++            metrics,
++          );
++          const demotion = this.engine.evaluateDemotion(
++            entry.id,
++            engineTier,
++            metrics,
++          );
++
++          const evaluation: GovernanceEvaluation = {
++            strategyId: entry.id,
++            strategyName: entry.name,
++            registryState: entry.state,
++            enginerTier: engineTier,
++            promotion,
++            demotion,
++            evaluatedAt: new Date().toISOString(),
++          };
++
++          cycle.evaluations.push(evaluation);
++          cycle.strategiesEvaluated++;
++
++          if (promotion.eligible) {
++            cycle.promotionEligible++;
++            publishAlert({
++              type: "promotion_eligible",
++              strategyId: entry.id,
++              strategyName: entry.name,
++              fromTier: engineTier,
++              toTier: promotion.targetTier,
++              confidenceScore: promotion.confidenceScore,
++              passedGates: promotion.passedGates,
++              totalGates: promotion.totalGates,
++              evaluatedAt: evaluation.evaluatedAt,
++            });
++            logger.info(
++              {
++                strategyId: entry.id,
++                fromTier: engineTier,
++                toTier: promotion.targetTier,
++              },
++              "[governance] Promotion eligible — operator review required",
++            );
++          }
++
++          if (demotion.demote) {
++            cycle.demotionSignals++;
++            publishAlert({
++              type: "demotion_signal",
++              strategyId: entry.id,
++              strategyName: entry.name,
++              fromTier: engineTier,
++              toTier: demotion.targetTier,
++              severity: demotion.severity,
++              urgency: demotion.urgency,
++              signals: demotion.signals,
++              evaluatedAt: evaluation.evaluatedAt,
++            });
++            logger.warn(
++              {
++                strategyId: entry.id,
++                severity: demotion.severity,
++                signals: demotion.signals,
++              },
++              "[governance] Demotion signal raised",
++            );
++          }
++        } catch (err: any) {
++          cycle.errors++;
++          logger.warn(
++            { strategyId: entry.id, err: err?.message ?? String(err) },
++            "[governance] Strategy evaluation failed",
++          );
++        }
++      }
++
++      cycle.status = "completed";
++    } catch (err: any) {
++      cycle.status = "error";
++      cycle.errors++;
++      logger.error(
++        { err: err?.message ?? String(err) },
++        "[governance] Cycle failed",
++      );
++    } finally {
++      cycle.completedAt = new Date().toISOString();
++      _currentCycle = null;
++      this._cycleCount++;
++      recordCycle(cycle);
++    }
++
++    return cycle;
++  }
++}
+diff --git a/artifacts/api-server/src/lib/governance/promotion_engine.ts b/artifacts/api-server/src/lib/governance/promotion_engine.ts
+index f6200a5..3c29bf1 100644
+--- a/artifacts/api-server/src/lib/governance/promotion_engine.ts
++++ b/artifacts/api-server/src/lib/governance/promotion_engine.ts
+@@ -1,15 +1,3 @@
+-// @ts-nocheck
+-/**
+- * DESIGN SCAFFOLD — not wired into the live runtime.
+- * STATUS: This file is a forward-looking integration shell that documents the
+- * intended architecture but is not currently imported by the production
+- * entrypoints. Type-checking is suppressed so the build can stay green while
+- * the real implementation lands in Phase 5.
+- *
+- * REMOVE the `// @ts-nocheck` directive once Phase 5 is implemented and the
+- * file is actually mounted in `src/index.ts` / `src/routes/index.ts`.
+- */
+-
+ /**
+  * promotion_engine.ts — GodsView Strategy Promotion & Demotion Engine
+  *
+@@ -26,6 +14,28 @@
+ 
+ import { logger } from "../logger";
+ 
++// ── Severity helpers ───────────────────────────────────────────────────────
++// The demotion path escalates an in-flight severity level as more failure
++// signals are detected. We use a rank table rather than `Math.max` over strings
++// so the type stays in the union and TypeScript can exhaustively check
++// downstream consumers.
++
++type DemotionSeverity = "low" | "medium" | "high" | "critical";
++
++const SEVERITY_RANK: Record<DemotionSeverity, number> = {
++  low: 0,
++  medium: 1,
++  high: 2,
++  critical: 3,
++};
++
++function escalateSeverity(
++  current: DemotionSeverity,
++  candidate: DemotionSeverity,
++): DemotionSeverity {
++  return SEVERITY_RANK[candidate] > SEVERITY_RANK[current] ? candidate : current;
++}
++
+ // ── Types ──────────────────────────────────────────────────────────────────
+ 
+ export interface StrategyMetrics {
+@@ -496,11 +506,11 @@ export class PromotionEngine {
+     }
+     if ((metrics.sharpeRatio ?? 0) < 0.5) {
+       signals.push(`Sharpe ratio ${metrics.sharpeRatio.toFixed(2)} degraded`);
+-      severity = Math.max(severity as any, "medium");
++      severity = escalateSeverity(severity, "medium");
+     }
+     if ((metrics.maxDrawdown ?? 0) > 0.25) {
+       signals.push(`Max drawdown ${(metrics.maxDrawdown * 100).toFixed(1)}% exceeded safety limit`);
+-      severity = Math.max(severity as any, "high");
++      severity = escalateSeverity(severity, "high");
+     }
+     if ((metrics.daysUnderwater ?? 0) > 60) {
+       signals.push(`${metrics.daysUnderwater} days underwater — recovery stalled`);
+diff --git a/artifacts/api-server/src/lib/logging/logger.ts b/artifacts/api-server/src/lib/logging/logger.ts
+new file mode 100644
+index 0000000..64c8ef2
+--- /dev/null
++++ b/artifacts/api-server/src/lib/logging/logger.ts
+@@ -0,0 +1,15 @@
++/**
++ * logging/logger.ts — compat shim.
++ *
++ * Phase 5 activates governance scaffolds (promotion_engine, calibration_tracker,
++ * promotion_discipline, trust_surface, shadow_scorecard) that were originally
++ * authored against an earlier logger layout at `../logging/logger`. The canonical
++ * pino logger now lives at `../logger`; this file re-exports that singleton so
++ * the legacy import paths keep resolving without duplicating the pino config.
++ *
++ * New code should import from `../logger` directly.
++ */
++import type { Logger as PinoLogger } from "pino";
++
++export { logger } from "../logger";
++export type Logger = PinoLogger;
+diff --git a/artifacts/api-server/src/routes/calibration_scheduler.ts b/artifacts/api-server/src/routes/calibration_scheduler.ts
+new file mode 100644
+index 0000000..cadb1ab
+--- /dev/null
++++ b/artifacts/api-server/src/routes/calibration_scheduler.ts
+@@ -0,0 +1,112 @@
++/**
++ * Calibration Scheduler routes (Phase 5)
++ *
++ *   GET  /api/calibration/scheduler/status   — current state, cycle count, interval
++ *   GET  /api/calibration/scheduler/history  — ring buffer of cycle results
++ *   GET  /api/calibration/scheduler/current  — cycle in flight, if any
++ *   GET  /api/calibration/scheduler/score    — current calibration score (0-100)
++ *   POST /api/calibration/scheduler/force    — operator-gated, runs an out-of-band cycle
++ */
++
++import { Router, type Request, type Response } from "express";
++import {
++  CalibrationScheduler,
++  getCalibrationTracker,
++} from "../lib/eval/calibration_scheduler";
++import { requireOperator } from "../lib/auth_guard";
++import { logger } from "../lib/logger";
++
++const router: Router = Router();
++
++function snapshot() {
++  const sched = CalibrationScheduler.getInstance();
++  return {
++    running: sched.isRunning(),
++    cycleCount: sched.getCycleCount(),
++    intervalMs: sched.getIntervalMs(),
++    historyLength: sched.getHistory().length,
++    hasCycleInFlight: sched.getCurrentCycle() !== null,
++  };
++}
++
++router.get("/api/calibration/scheduler/status", (_req: Request, res: Response) => {
++  res.json({
++    status: "success",
++    scheduler: snapshot(),
++    timestamp: new Date().toISOString(),
++  });
++});
++
++router.get("/api/calibration/scheduler/history", (req: Request, res: Response) => {
++  const limit = Math.max(
++    1,
++    Math.min(500, parseInt((req.query.limit as string) ?? "50", 10) || 50),
++  );
++  const history = CalibrationScheduler.getInstance().getHistory().slice(0, limit);
++  res.json({
++    status: "success",
++    count: history.length,
++    cycles: history,
++    timestamp: new Date().toISOString(),
++  });
++});
++
++router.get("/api/calibration/scheduler/current", (_req: Request, res: Response) => {
++  const cycle = CalibrationScheduler.getInstance().getCurrentCycle();
++  res.json({
++    status: "success",
++    cycle,
++    timestamp: new Date().toISOString(),
++  });
++});
++
++router.get("/api/calibration/scheduler/score", (_req: Request, res: Response) => {
++  try {
++    const tracker = getCalibrationTracker();
++    const score = tracker.getCalibrationScore();
++    const driftAlert = tracker.getDriftAlert();
++    res.json({
++      status: "success",
++      score,
++      driftAlert,
++      timestamp: new Date().toISOString(),
++    });
++  } catch (err: any) {
++    logger.error(
++      { err: err?.message ?? String(err) },
++      "Calibration score lookup failed",
++    );
++    res.status(500).json({
++      error: "score_lookup_failed",
++      message: err?.message ?? "Unknown error",
++    });
++  }
++});
++
++router.post(
++  "/api/calibration/scheduler/force",
++  requireOperator,
++  async (_req: Request, res: Response) => {
++    try {
++      const result = await CalibrationScheduler.getInstance().forceCycle();
++      res.json({
++        status: "success",
++        message: "Calibration cycle executed",
++        cycle: result,
++        scheduler: snapshot(),
++        timestamp: new Date().toISOString(),
++      });
++    } catch (err: any) {
++      logger.error(
++        { err: err?.message ?? String(err) },
++        "Calibration force-cycle failed",
++      );
++      res.status(500).json({
++        error: "force_cycle_failed",
++        message: err?.message ?? "Unknown error",
++      });
++    }
++  },
++);
++
++export default router;
+diff --git a/artifacts/api-server/src/routes/governance_scheduler.ts b/artifacts/api-server/src/routes/governance_scheduler.ts
+new file mode 100644
+index 0000000..8829d32
+--- /dev/null
++++ b/artifacts/api-server/src/routes/governance_scheduler.ts
+@@ -0,0 +1,88 @@
++/**
++ * Governance Scheduler routes (Phase 5)
++ *
++ *   GET  /api/governance/scheduler/status        — current state, cycle count, interval
++ *   GET  /api/governance/scheduler/history       — ring buffer of cycle results
++ *   GET  /api/governance/scheduler/current       — cycle in flight, if any
++ *   POST /api/governance/scheduler/force         — operator-gated, runs an out-of-band cycle
++ *
++ * Read endpoints are public; the force-run is operator-gated via `requireOperator`
++ * because it triggers a full strategy sweep which can emit SSE alerts.
++ */
++
++import { Router, type Request, type Response } from "express";
++import { GovernanceScheduler } from "../lib/governance/governance_scheduler";
++import { requireOperator } from "../lib/auth_guard";
++import { logger } from "../lib/logger";
++
++const router: Router = Router();
++
++function snapshot() {
++  const sched = GovernanceScheduler.getInstance();
++  return {
++    running: sched.isRunning(),
++    cycleCount: sched.getCycleCount(),
++    intervalMs: sched.getIntervalMs(),
++    historyLength: sched.getHistory().length,
++    hasCycleInFlight: sched.getCurrentCycle() !== null,
++  };
++}
++
++router.get("/api/governance/scheduler/status", (_req: Request, res: Response) => {
++  res.json({
++    status: "success",
++    scheduler: snapshot(),
++    timestamp: new Date().toISOString(),
++  });
++});
++
++router.get("/api/governance/scheduler/history", (req: Request, res: Response) => {
++  const limit = Math.max(
++    1,
++    Math.min(500, parseInt((req.query.limit as string) ?? "50", 10) || 50),
++  );
++  const history = GovernanceScheduler.getInstance().getHistory().slice(0, limit);
++  res.json({
++    status: "success",
++    count: history.length,
++    cycles: history,
++    timestamp: new Date().toISOString(),
++  });
++});
++
++router.get("/api/governance/scheduler/current", (_req: Request, res: Response) => {
++  const cycle = GovernanceScheduler.getInstance().getCurrentCycle();
++  res.json({
++    status: "success",
++    cycle,
++    timestamp: new Date().toISOString(),
++  });
++});
++
++router.post(
++  "/api/governance/scheduler/force",
++  requireOperator,
++  async (_req: Request, res: Response) => {
++    try {
++      const result = await GovernanceScheduler.getInstance().forceCycle();
++      res.json({
++        status: "success",
++        message: "Governance cycle executed",
++        cycle: result,
++        scheduler: snapshot(),
++        timestamp: new Date().toISOString(),
++      });
++    } catch (err: any) {
++      logger.error(
++        { err: err?.message ?? String(err) },
++        "Governance force-cycle failed",
++      );
++      res.status(500).json({
++        error: "force_cycle_failed",
++        message: err?.message ?? "Unknown error",
++      });
++    }
++  },
++);
++
++export default router;
+diff --git a/artifacts/api-server/src/routes/index.ts b/artifacts/api-server/src/routes/index.ts
+index 7e98491..d181b25 100644
+--- a/artifacts/api-server/src/routes/index.ts
++++ b/artifacts/api-server/src/routes/index.ts
+@@ -75,6 +75,8 @@ import dataTruthRouter from "./data_truth";
+ import executionValidationRouter from "./execution_validation";
+ import certificationRunRouter from "./certification_run";
+ import opsV2Router from "./ops_v2";
++import governanceSchedulerRouter from "./governance_scheduler";
++import calibrationSchedulerRouter from "./calibration_scheduler";
+ 
+ const router: IRouter = Router();
+ 
+@@ -155,6 +157,10 @@ router.use("/api/execution-validation", executionValidationRouter);
+ router.use("/api/certification-run", certificationRunRouter); // Phase 20 — One strategy certification run
+ router.use("/api/ops/v2", opsV2Router); // Operator brief, kill switch, exposure, drift, startup
+ 
++// Phase 5: governance & calibration cron schedulers
++router.use(governanceSchedulerRouter);
++router.use(calibrationSchedulerRouter);
++
+ // Python v2 microservices proxy — shadow routes at /v2/*
+ router.use(pythonV2Router);
+ 
+-- 
+2.34.1
+

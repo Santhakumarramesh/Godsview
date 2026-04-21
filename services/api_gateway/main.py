@@ -18,7 +18,7 @@ from fastapi.responses import JSONResponse
 from services.shared.config import cfg
 from services.shared.logging import configure_structlog, get_logger
 from services.shared.types import HealthResponse
-from services.api_gateway.routers import health, signals, trades, market_data, backtest, ml
+from services.api_gateway.routers import health, signals, trades, market_data, backtest, ml, tradingview, orderflow, portfolio, brain
 
 log = get_logger(__name__)
 
@@ -107,6 +107,10 @@ app.include_router(trades.router,      prefix="/api/trades",  tags=["trades"])
 app.include_router(market_data.router, prefix="/api/market",  tags=["market-data"])
 app.include_router(backtest.router,    prefix="/api/backtest", tags=["backtest"])
 app.include_router(ml.router,          prefix="/api/ml",      tags=["ml"])
+app.include_router(tradingview.router, prefix="/api/tv", tags=["tradingview"])
+app.include_router(orderflow.router,   prefix="/api/flow", tags=["orderflow"])
+app.include_router(portfolio.router,   prefix="/api/portfolio", tags=["portfolio"])
+app.include_router(brain.router,       prefix="/api/brain", tags=["brain"])
 
 # ── Root ──────────────────────────────────────────────────────────────────────
 

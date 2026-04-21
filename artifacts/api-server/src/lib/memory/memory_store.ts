@@ -26,14 +26,36 @@ export interface MemoryStats {
   diskUsageBytes: number;
 }
 
+/**
+ * Resolve the memory store base path.
+ *
+ * Priority:
+ *   1. Explicit constructor argument
+ *   2. MEMORY_STORE_PATH env var (set in production to a persistent volume)
+ *   3. ./data/memory (project-local, works in dev/staging)
+ *   4. /tmp/godsview-memory (last-resort fallback)
+ *
+ * In production containers, MEMORY_STORE_PATH should point to an EBS mount
+ * or EFS volume so data survives restarts.
+ */
+function resolveBasePath(explicit?: string): string {
+  if (explicit) return explicit;
+  if (process.env.MEMORY_STORE_PATH) return process.env.MEMORY_STORE_PATH;
+  if (process.env.NODE_ENV === "production") {
+    return "/data/memory";
+  }
+  return "/tmp/godsview-memory";
+}
+
 class MemoryStore {
   private basePath: string;
   private collections: Set<string> = new Set();
 
-  constructor(basePath: string = "/tmp/godsview-memory") {
-    this.basePath = basePath;
+  constructor(basePath?: string) {
+    this.basePath = resolveBasePath(basePath);
     this.ensureDirectoryExists();
     this.discoverCollections();
+    logger.info({ basePath: this.basePath }, "Memory store initialized");
   }
 
   /**

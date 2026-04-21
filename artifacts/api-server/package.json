@@ -9,7 +9,8 @@
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "check-api-spec": "node --import tsx ../../scripts/check-api-spec.ts"
   },
   "dependencies": {
     "@alpacahq/alpaca-trade-api": "^3.1.3",

@@ -104,3 +104,4 @@ credentials.json
 
 # Nested clone
 Godsview/
+.claude/

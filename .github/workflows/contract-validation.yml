@@ -1,0 +1,165 @@
+name: v2 · contract validation
+
+# Hard gate on API contract drift between services/control_plane and
+# packages/api-client/openapi.json.
+#
+# Policy (docs/blueprint/04-api-surface.md):
+#   * Every PR that touches the control_plane OR api-client MUST regenerate
+#     the committed openapi.json.
+#   * The spec is normalized & key-sorted by app.scripts.dump_openapi so the
+#     diff is deterministic across machines.
+#   * A non-empty diff fails the job. The developer either commits the
+#     regenerated spec (non-breaking) or posts a contract RFC (breaking).
+#
+# NOTE: every deploy workflow references this job under `needs` once the
+# blueprint phase roadmap ships the deploy workflows (Phase 13). Keeping the
+# workflow name stable matters — do not rename without updating:
+#   * docs/blueprint/08-runbook.md
+#   * .github/workflows/v2-ci.yml (summary gate)
+#   * .github/workflows/ci.yml    (legacy deploy gate comment)
+
+on:
+  push:
+    branches: [main, "phase-*"]
+    paths:
+      - "services/control_plane/**"
+      - "packages/api-client/**"
+      - "packages/types/**"
+      - ".github/workflows/contract-validation.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "services/control_plane/**"
+      - "packages/api-client/**"
+      - "packages/types/**"
+      - ".github/workflows/contract-validation.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: contract-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  openapi-diff:
+    name: OpenAPI spec parity
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # Settings requires these; dump_openapi never touches the DB or JWT.
+      DATABASE_URL: "postgresql+asyncpg://placeholder:placeholder@localhost:5432/placeholder"
+      JWT_SIGNING_KEY: "contract-validation-placeholder-not-used"
+      GODSVIEW_ENV: "test"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: services/control_plane/pyproject.toml
+
+      - name: Install control_plane (runtime only)
+        working-directory: services/control_plane
+        run: |
+          python -m pip install --upgrade pip wheel
+          python -m pip install -e .
+
+      - name: Regenerate openapi.json
+        working-directory: services/control_plane
+        run: python -m app.scripts.dump_openapi ../../packages/api-client/openapi.json
+
+      - name: Diff vs committed spec
+        id: diff
+        run: |
+          set -e
+          if git diff --exit-code --stat -- packages/api-client/openapi.json; then
+            echo "parity=clean" >> "$GITHUB_OUTPUT"
+            echo "OpenAPI spec matches committed copy."
+          else
+            echo "parity=drift" >> "$GITHUB_OUTPUT"
+            echo "::group::openapi.json drift"
+            git --no-pager diff -- packages/api-client/openapi.json | head -400
+            echo "::endgroup::"
+            echo "::error::packages/api-client/openapi.json is out of sync."
+            echo "::error::Run \`make openapi\` locally, commit the diff, and re-push."
+            exit 1
+          fi
+
+      - name: Validate ErrorEnvelope canonical shape
+        # Blueprint 04-api-surface.md pins the envelope at:
+        #   { error: { code, message, correlation_id, details?, hint?, docs? } }
+        # Any 4xx/5xx response schema MUST reference this component (by ref)
+        # so clients can rely on one shape.
+        run: |
+          python - <<'PY'
+          import json, pathlib, sys
+
+          spec = json.loads(pathlib.Path("packages/api-client/openapi.json").read_text())
+          components = spec.get("components", {}).get("schemas", {})
+
+          envelope = components.get("ErrorEnvelope") or components.get("ErrorResponse")
+          if envelope is None:
+              sys.exit("::error::ErrorEnvelope component missing from OpenAPI schemas.")
+
+          # Walk to the nested 'error' object — support both
+          # top-level {error:{...}} and flattened shapes for forward compat.
+          error_obj = envelope
+          if envelope.get("type") == "object" and "error" in envelope.get("properties", {}):
+              error_obj = envelope["properties"]["error"]
+              if "$ref" in error_obj:
+                  ref_name = error_obj["$ref"].rsplit("/", 1)[-1]
+                  error_obj = components[ref_name]
+
+          required = set(error_obj.get("required", []))
+          for field in ("code", "message", "correlation_id"):
+              if field not in required:
+                  sys.exit(f"::error::ErrorEnvelope missing required field '{field}'")
+          print("ErrorEnvelope canonical shape: OK")
+          PY
+
+      - name: Validate all paths declare 401 or 403 where auth is required
+        run: |
+          python - <<'PY'
+          import json, pathlib, sys
+
+          spec = json.loads(pathlib.Path("packages/api-client/openapi.json").read_text())
+          paths = spec.get("paths", {})
+
+          # Phase 0 public surface — these are the ONLY endpoints that may
+          # ship without an auth response schema. Keep the list short and
+          # explicit; it's easier to grep than to pattern-match.
+          public_paths = {
+              "/health/live",
+              "/health/ready",
+              "/auth/login",
+              "/auth/refresh",
+          }
+          missing = []
+          for path, ops in paths.items():
+              if path in public_paths:
+                  continue
+              for method, op in ops.items():
+                  if method.lower() not in {"get", "post", "put", "patch", "delete"}:
+                      continue
+                  responses = op.get("responses", {}) or {}
+                  if not ({"401", "403"} & set(responses.keys())):
+                      missing.append(f"{method.upper()} {path}")
+          if missing:
+              print("::error::Auth-gated routes missing 401/403 response schema:")
+              for line in missing:
+                  print(f"  - {line}")
+              sys.exit(1)
+          print(f"Auth gating: OK ({len(paths)} paths checked)")
+          PY
+
+      - name: Upload regenerated spec as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-spec
+          path: packages/api-client/openapi.json
+          retention-days: 30

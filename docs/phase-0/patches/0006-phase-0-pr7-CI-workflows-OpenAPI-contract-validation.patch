@@ -1,0 +1,3266 @@
+From 839e1aa5070ffaf1064eaf974277159f11abaf48 Mon Sep 17 00:00:00 2001
+From: claude-bot <noreply@anthropic.com>
+Date: Sun, 19 Apr 2026 01:10:43 -0400
+Subject: [PATCH 6/6] phase-0(pr7): CI workflows + OpenAPI contract validation
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Adds the v2 monorepo CI surface called out in docs/blueprint/09-phase-
+roadmap.md (Phase 0 exit criterion) and locks the API contract.
+
+Workflows
+- .github/workflows/v2-ci.yml: pnpm + turbo for @gv/* (typecheck, build,
+  test) plus a control_plane matrix (py3.11/3.12) running ruff lint,
+  ruff format check, mypy strict, and pytest with coverage. Path-filtered
+  so it doesn't burn minutes on legacy-only PRs. Aggregated through a
+  v2-gate job that becomes the required check on branch protection.
+- .github/workflows/contract-validation.yml: regenerates the OpenAPI spec,
+  diffs against the committed packages/api-client/openapi.json, and fails
+  on drift; additionally enforces ErrorEnvelope canonical shape and that
+  every non-public route declares 401/403 in its response schema.
+
+Control plane
+- ErrorEnvelope/ErrorBody/ErrorDetail Pydantic models replace the inline
+  dict envelope so the schema appears in components/schemas (matches
+  blueprint 04-api-surface.md). AUTH_ERROR_RESPONSES + COMMON_ERROR_
+  RESPONSES wire 401/403/422/429 into every router.
+- main.py default_response_class is ORJSONResponse; the previous None
+  value made FastAPI assert during openapi() generation.
+- app/scripts/dump_openapi.py: deterministic, key-sorted, server-stripped
+  spec writer used by `make openapi`, contract-validation.yml, and
+  test_openapi_contract.py.
+- Ruff cleanup: per-file N815 ignore for app/routes/* (camelCase wire
+  models are intentional — they match the api-client codegen). One E501
+  reflowed in middleware.py. ruff format applied.
+
+Tests
+- tests/test_openapi_contract.py: parity, ErrorEnvelope shape, auth-gate
+  coverage, and determinism (build_spec is a pure function).
+
+Docs
+- docs/blueprint/08-runbook.md: CI surface table + contract-validation
+  failure guidance.
+- docs/blueprint/09-phase-roadmap.md: PR6 + PR7 exit criteria checked.
+
+Makefile
+- `make openapi` injects placeholder DATABASE_URL/JWT_SIGNING_KEY so it
+  works on a fresh checkout.
+- `make lint` covers TS typecheck + ruff lint + ruff format check.
+
+Spec ships with 11 paths and 15 schemas; contract gate is GREEN locally.
+---
+ .github/workflows/contract-validation.yml     |  165 ++
+ .github/workflows/v2-ci.yml                   |  161 ++
+ .gitignore                                    |    4 +-
+ Makefile                                      |   12 +-
+ docs/blueprint/08-runbook.md                  |   21 +-
+ docs/blueprint/09-phase-roadmap.md            |    4 +-
+ packages/api-client/openapi.json              | 2188 +++++++++++++++++
+ services/control_plane/app/config.py          |    4 +-
+ services/control_plane/app/errors.py          |   60 +-
+ services/control_plane/app/main.py            |    3 +-
+ services/control_plane/app/middleware.py      |    6 +-
+ services/control_plane/app/models.py          |   22 +-
+ services/control_plane/app/routes/__init__.py |   36 +-
+ services/control_plane/app/routes/auth.py     |   10 +-
+ .../control_plane/app/scripts/dump_openapi.py |   91 +
+ .../app/scripts/seed_bootstrap.py             |   12 +-
+ services/control_plane/app/security.py        |    4 +-
+ services/control_plane/pyproject.toml         |    5 +
+ .../tests/test_openapi_contract.py            |   94 +
+ 19 files changed, 2845 insertions(+), 57 deletions(-)
+ create mode 100644 .github/workflows/contract-validation.yml
+ create mode 100644 .github/workflows/v2-ci.yml
+ create mode 100644 packages/api-client/openapi.json
+ create mode 100644 services/control_plane/app/scripts/dump_openapi.py
+ create mode 100644 services/control_plane/tests/test_openapi_contract.py
+
+diff --git a/.github/workflows/contract-validation.yml b/.github/workflows/contract-validation.yml
+new file mode 100644
+index 0000000..e726a83
+--- /dev/null
++++ b/.github/workflows/contract-validation.yml
+@@ -0,0 +1,165 @@
++name: v2 · contract validation
++
++# Hard gate on API contract drift between services/control_plane and
++# packages/api-client/openapi.json.
++#
++# Policy (docs/blueprint/04-api-surface.md):
++#   * Every PR that touches the control_plane OR api-client MUST regenerate
++#     the committed openapi.json.
++#   * The spec is normalized & key-sorted by app.scripts.dump_openapi so the
++#     diff is deterministic across machines.
++#   * A non-empty diff fails the job. The developer either commits the
++#     regenerated spec (non-breaking) or posts a contract RFC (breaking).
++#
++# NOTE: every deploy workflow references this job under `needs` once the
++# blueprint phase roadmap ships the deploy workflows (Phase 13). Keeping the
++# workflow name stable matters — do not rename without updating:
++#   * docs/blueprint/08-runbook.md
++#   * .github/workflows/v2-ci.yml (summary gate)
++#   * .github/workflows/ci.yml    (legacy deploy gate comment)
++
++on:
++  push:
++    branches: [main, "phase-*"]
++    paths:
++      - "services/control_plane/**"
++      - "packages/api-client/**"
++      - "packages/types/**"
++      - ".github/workflows/contract-validation.yml"
++  pull_request:
++    branches: [main]
++    paths:
++      - "services/control_plane/**"
++      - "packages/api-client/**"
++      - "packages/types/**"
++      - ".github/workflows/contract-validation.yml"
++  workflow_dispatch:
++
++concurrency:
++  group: contract-${{ github.ref }}
++  cancel-in-progress: true
++
++permissions:
++  contents: read
++  pull-requests: write
++
++jobs:
++  openapi-diff:
++    name: OpenAPI spec parity
++    runs-on: ubuntu-latest
++    timeout-minutes: 10
++    env:
++      # Settings requires these; dump_openapi never touches the DB or JWT.
++      DATABASE_URL: "postgresql+asyncpg://placeholder:placeholder@localhost:5432/placeholder"
++      JWT_SIGNING_KEY: "contract-validation-placeholder-not-used"
++      GODSVIEW_ENV: "test"
++    steps:
++      - uses: actions/checkout@v4
++
++      - uses: actions/setup-python@v5
++        with:
++          python-version: "3.11"
++          cache: pip
++          cache-dependency-path: services/control_plane/pyproject.toml
++
++      - name: Install control_plane (runtime only)
++        working-directory: services/control_plane
++        run: |
++          python -m pip install --upgrade pip wheel
++          python -m pip install -e .
++
++      - name: Regenerate openapi.json
++        working-directory: services/control_plane
++        run: python -m app.scripts.dump_openapi ../../packages/api-client/openapi.json
++
++      - name: Diff vs committed spec
++        id: diff
++        run: |
++          set -e
++          if git diff --exit-code --stat -- packages/api-client/openapi.json; then
++            echo "parity=clean" >> "$GITHUB_OUTPUT"
++            echo "OpenAPI spec matches committed copy."
++          else
++            echo "parity=drift" >> "$GITHUB_OUTPUT"
++            echo "::group::openapi.json drift"
++            git --no-pager diff -- packages/api-client/openapi.json | head -400
++            echo "::endgroup::"
++            echo "::error::packages/api-client/openapi.json is out of sync."
++            echo "::error::Run \`make openapi\` locally, commit the diff, and re-push."
++            exit 1
++          fi
++
++      - name: Validate ErrorEnvelope canonical shape
++        # Blueprint 04-api-surface.md pins the envelope at:
++        #   { error: { code, message, correlation_id, details?, hint?, docs? } }
++        # Any 4xx/5xx response schema MUST reference this component (by ref)
++        # so clients can rely on one shape.
++        run: |
++          python - <<'PY'
++          import json, pathlib, sys
++
++          spec = json.loads(pathlib.Path("packages/api-client/openapi.json").read_text())
++          components = spec.get("components", {}).get("schemas", {})
++
++          envelope = components.get("ErrorEnvelope") or components.get("ErrorResponse")
++          if envelope is None:
++              sys.exit("::error::ErrorEnvelope component missing from OpenAPI schemas.")
++
++          # Walk to the nested 'error' object — support both
++          # top-level {error:{...}} and flattened shapes for forward compat.
++          error_obj = envelope
++          if envelope.get("type") == "object" and "error" in envelope.get("properties", {}):
++              error_obj = envelope["properties"]["error"]
++              if "$ref" in error_obj:
++                  ref_name = error_obj["$ref"].rsplit("/", 1)[-1]
++                  error_obj = components[ref_name]
++
++          required = set(error_obj.get("required", []))
++          for field in ("code", "message", "correlation_id"):
++              if field not in required:
++                  sys.exit(f"::error::ErrorEnvelope missing required field '{field}'")
++          print("ErrorEnvelope canonical shape: OK")
++          PY
++
++      - name: Validate all paths declare 401 or 403 where auth is required
++        run: |
++          python - <<'PY'
++          import json, pathlib, sys
++
++          spec = json.loads(pathlib.Path("packages/api-client/openapi.json").read_text())
++          paths = spec.get("paths", {})
++
++          # Phase 0 public surface — these are the ONLY endpoints that may
++          # ship without an auth response schema. Keep the list short and
++          # explicit; it's easier to grep than to pattern-match.
++          public_paths = {
++              "/health/live",
++              "/health/ready",
++              "/auth/login",
++              "/auth/refresh",
++          }
++          missing = []
++          for path, ops in paths.items():
++              if path in public_paths:
++                  continue
++              for method, op in ops.items():
++                  if method.lower() not in {"get", "post", "put", "patch", "delete"}:
++                      continue
++                  responses = op.get("responses", {}) or {}
++                  if not ({"401", "403"} & set(responses.keys())):
++                      missing.append(f"{method.upper()} {path}")
++          if missing:
++              print("::error::Auth-gated routes missing 401/403 response schema:")
++              for line in missing:
++                  print(f"  - {line}")
++              sys.exit(1)
++          print(f"Auth gating: OK ({len(paths)} paths checked)")
++          PY
++
++      - name: Upload regenerated spec as artifact
++        if: always()
++        uses: actions/upload-artifact@v4
++        with:
++          name: openapi-spec
++          path: packages/api-client/openapi.json
++          retention-days: 30
+diff --git a/.github/workflows/v2-ci.yml b/.github/workflows/v2-ci.yml
+new file mode 100644
+index 0000000..fe9e418
+--- /dev/null
++++ b/.github/workflows/v2-ci.yml
+@@ -0,0 +1,161 @@
++name: v2 · CI
++
++# GodsView v2 monorepo CI.
++# Blueprint: docs/blueprint/09-phase-roadmap.md (Phase 0 exit)
++#
++# Scope:
++#   * pnpm v9 workspace: @gv/web, @gv/types, @gv/config, @gv/api-client, @gv/ui
++#   * services/control_plane: FastAPI + SQLAlchemy + Alembic
++#
++# The legacy workspace pipeline (artifacts/api-server + godsview-dashboard) is
++# gated by .github/workflows/ci.yml — both run on the same triggers. We scope
++# this workflow with path filters so we don't burn minutes when only legacy
++# code is touched.
++
++on:
++  push:
++    branches: [main, "phase-*"]
++    paths:
++      - "apps/**"
++      - "packages/**"
++      - "services/control_plane/**"
++      - "pnpm-workspace.yaml"
++      - "turbo.json"
++      - "tsconfig.base.json"
++      - "pyproject.toml"
++      - ".github/workflows/v2-ci.yml"
++      - ".github/workflows/contract-validation.yml"
++  pull_request:
++    branches: [main]
++    paths:
++      - "apps/**"
++      - "packages/**"
++      - "services/control_plane/**"
++      - "pnpm-workspace.yaml"
++      - "turbo.json"
++      - "tsconfig.base.json"
++      - "pyproject.toml"
++      - ".github/workflows/v2-ci.yml"
++      - ".github/workflows/contract-validation.yml"
++  workflow_dispatch:
++
++concurrency:
++  group: v2-ci-${{ github.ref }}
++  cancel-in-progress: true
++
++permissions:
++  contents: read
++
++jobs:
++  # ── 1. Web / packages typecheck + unit ───────────────────────────
++  web-and-packages:
++    name: web + packages (pnpm / turbo)
++    runs-on: ubuntu-latest
++    timeout-minutes: 15
++    env:
++      TURBO_TELEMETRY_DISABLED: "1"
++    steps:
++      - uses: actions/checkout@v4
++
++      - name: Enable corepack (pnpm 9)
++        run: corepack enable
++
++      - uses: actions/setup-node@v4
++        with:
++          node-version: 20
++          cache: pnpm
++
++      - name: Install workspace deps
++        # --frozen-lockfile is the CI contract. If it drifts, the fix is
++        # committing an updated pnpm-lock.yaml — never loosening CI.
++        run: pnpm install --frozen-lockfile
++
++      - name: Turbo typecheck (@gv/*)
++        run: pnpm -w run typecheck:v2
++
++      - name: Turbo build (@gv/*)
++        run: pnpm -w run build:v2
++
++      - name: Turbo test (@gv/*)
++        run: pnpm -w run test:v2
++
++      - name: Upload turbo cache summary
++        if: always()
++        uses: actions/upload-artifact@v4
++        with:
++          name: v2-turbo-summary
++          if-no-files-found: ignore
++          retention-days: 3
++          path: .turbo/runs/*.json
++
++  # ── 2. control_plane python test matrix ──────────────────────────
++  control-plane:
++    name: control_plane (py${{ matrix.python }})
++    runs-on: ubuntu-latest
++    timeout-minutes: 15
++    strategy:
++      fail-fast: false
++      matrix:
++        python: ["3.11", "3.12"]
++    defaults:
++      run:
++        working-directory: services/control_plane
++    steps:
++      - uses: actions/checkout@v4
++
++      - uses: actions/setup-python@v5
++        with:
++          python-version: ${{ matrix.python }}
++          cache: pip
++          cache-dependency-path: services/control_plane/pyproject.toml
++
++      - name: Install control_plane (editable, dev extras)
++        run: |
++          python -m pip install --upgrade pip wheel
++          python -m pip install -e '.[dev]'
++
++      - name: Ruff (lint)
++        run: python -m ruff check app tests
++
++      - name: Ruff (format check)
++        run: python -m ruff format --check app tests
++
++      - name: Mypy (strict)
++        run: python -m mypy app
++
++      - name: Pytest (unit + contract)
++        env:
++          # Tests use aiosqlite + an in-process JWT secret. DATABASE_URL is
++          # required by Settings; tests swap it out via dependency override.
++          DATABASE_URL: "sqlite+aiosqlite:///./test.db"
++          JWT_SIGNING_KEY: "ci-jwt-signing-key-not-used-anywhere-real"
++          GODSVIEW_ENV: "test"
++          REDIS_URL: "redis://localhost:6379/0"
++        run: python -m pytest --cov=app --cov-report=term-missing -q
++
++      - name: Upload coverage (py3.11 only)
++        if: matrix.python == '3.11'
++        uses: actions/upload-artifact@v4
++        with:
++          name: control-plane-coverage
++          path: services/control_plane/.coverage
++          if-no-files-found: warn
++          retention-days: 7
++
++  # ── 3. Phase-0 verification summary ──────────────────────────────
++  v2-gate:
++    name: v2 phase-0 gate
++    runs-on: ubuntu-latest
++    needs: [web-and-packages, control-plane]
++    if: always()
++    steps:
++      - name: Evaluate required jobs
++        run: |
++          echo "web-and-packages: ${{ needs.web-and-packages.result }}"
++          echo "control-plane:    ${{ needs.control-plane.result }}"
++          if [[ "${{ needs.web-and-packages.result }}" != "success" || \
++                "${{ needs.control-plane.result }}"    != "success" ]]; then
++            echo "::error::Phase 0 gate failed — a required job did not succeed."
++            exit 1
++          fi
++          echo "Phase 0 gate green."
+diff --git a/.gitignore b/.gitignore
+index 19513cb..3f5b5d3 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -130,8 +130,8 @@ apps/*/dist/
+ cdk.out/
+ infra/cdk/cdk.out/
+ 
+-# OpenAPI codegen staging
+-packages/api-client/openapi.json
++# OpenAPI codegen staging — keep openapi.json in VCS (contract-validation.yml
++# diffs the generated spec against this file; breaking changes fail CI).
+ packages/api-client/src/generated/
+ 
+ # Dev env files (keep only the *.example variants in source control)
+diff --git a/Makefile b/Makefile
+index 24d9adc..a68a799 100644
+--- a/Makefile
++++ b/Makefile
+@@ -78,8 +78,16 @@ clean: ## Remove build artifacts and caches
+ verify: typecheck test build ## Phase gate: typecheck + tests + build
+ 
+ .PHONY: openapi
+-openapi: ## Dump control_plane OpenAPI to packages/api-client
+-	cd $(CONTROL_PLANE_DIR) && $(PY) -m app.scripts.dump_openapi ../../packages/api-client/openapi.json
++openapi: ## Dump control_plane OpenAPI to packages/api-client/openapi.json (deterministic)
++	cd $(CONTROL_PLANE_DIR) && \
++	  DATABASE_URL="$${DATABASE_URL:-postgresql+asyncpg://x:x@localhost:5432/x}" \
++	  JWT_SIGNING_KEY="$${JWT_SIGNING_KEY:-openapi-dump-placeholder-not-used}" \
++	  $(PY) -m app.scripts.dump_openapi ../../packages/api-client/openapi.json
++
++.PHONY: lint
++lint: ## Lint TS workspaces and ruff control_plane
++	$(PNPM) -w run typecheck:v2
++	cd $(CONTROL_PLANE_DIR) && $(PY) -m ruff check app tests && $(PY) -m ruff format --check app tests
+ 
+ .PHONY: codegen
+ codegen: openapi ## Regenerate TS api-client from OpenAPI
+diff --git a/docs/blueprint/08-runbook.md b/docs/blueprint/08-runbook.md
+index 8066bac..7cb26a0 100644
+--- a/docs/blueprint/08-runbook.md
++++ b/docs/blueprint/08-runbook.md
+@@ -19,10 +19,27 @@ Smoke: curl `http://localhost:8000/ready`. Every dep should read `ok`.
+ 
+ Handled by the CDK stack under `infra/cdk`. The relevant targets are
+ documented in `docs/AWS_DEPLOY.md` and wired through
+-`.github/workflows/ci.yml` once PR7 lands.
++`.github/workflows/ci.yml` (legacy) and `.github/workflows/v2-ci.yml`
++(v2 monorepo).
+ 
+ Never deploy a PR whose CI has `contract-validation.yml` in a non-green
+-state — the failing job gates every deploy workflow.
++state — the failing job gates every deploy workflow. Regenerate the spec
++locally with `make openapi` and commit the diff; a breaking change that
++the OpenAPI diff surfaces requires a contract RFC before merge.
++
++## CI surface (Phase 0+)
++
++| Workflow                            | Purpose                                           |
++|-------------------------------------|---------------------------------------------------|
++| `.github/workflows/ci.yml`          | Legacy workspace (artifacts/api-server, dashboard). |
++| `.github/workflows/v2-ci.yml`       | v2 monorepo: pnpm/turbo + control plane pytest.   |
++| `.github/workflows/contract-validation.yml` | OpenAPI spec parity + ErrorEnvelope + auth-gate enforcement. |
++
++The `v2-ci.yml` workflow has a terminal `v2-gate` job that aggregates the
++matrix legs; treat it as the required check on the branch protection rule
++once the repo migrates fully to v2. `contract-validation.yml` is a
++separate required check so a missing codegen commit blocks merge even
++when the rest of CI passes.
+ 
+ ## Incident: `/ready` returns `degraded`
+ 
+diff --git a/docs/blueprint/09-phase-roadmap.md b/docs/blueprint/09-phase-roadmap.md
+index 48e7660..2297592 100644
+--- a/docs/blueprint/09-phase-roadmap.md
++++ b/docs/blueprint/09-phase-roadmap.md
+@@ -40,6 +40,6 @@ affected surface has been updated.
+ - [x] PR3: control plane boots against compose postgres; `/ready` green.
+ - [x] PR4: auth + users + flags + audit routes covered by tests (folded into PR3).
+ - [x] PR5: web app renders all 66 sidebar routes (6 functional, 60 stubs).
+-- [ ] PR6: `make dev-up` stands up postgres + redis + minio + localstack + mailhog; docs/blueprint committed.
+-- [ ] PR7: CI workflows (lint + typecheck + test + contract validation).
++- [x] PR6: `make dev-up` stands up postgres + redis + minio + localstack + mailhog; docs/blueprint committed.
++- [x] PR7: CI workflows (lint + typecheck + test + contract validation).
+ - [ ] PR8: HANDOFF.md + patch file + `git tag v2.0.0`.
+diff --git a/packages/api-client/openapi.json b/packages/api-client/openapi.json
+new file mode 100644
+index 0000000..ab9c40a
+--- /dev/null
++++ b/packages/api-client/openapi.json
+@@ -0,0 +1,2188 @@
++{
++  "components": {
++    "schemas": {
++      "AuditEventOut": {
++        "properties": {
++          "action": {
++            "title": "Action",
++            "type": "string"
++          },
++          "actorEmail": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Actoremail"
++          },
++          "actorUserId": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Actoruserid"
++          },
++          "correlationId": {
++            "title": "Correlationid",
++            "type": "string"
++          },
++          "details": {
++            "additionalProperties": true,
++            "title": "Details",
++            "type": "object"
++          },
++          "id": {
++            "title": "Id",
++            "type": "string"
++          },
++          "occurredAt": {
++            "format": "date-time",
++            "title": "Occurredat",
++            "type": "string"
++          },
++          "outcome": {
++            "title": "Outcome",
++            "type": "string"
++          },
++          "resourceId": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Resourceid"
++          },
++          "resourceType": {
++            "title": "Resourcetype",
++            "type": "string"
++          },
++          "sourceIp": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Sourceip"
++          },
++          "userAgent": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Useragent"
++          }
++        },
++        "required": [
++          "id",
++          "occurredAt",
++          "actorUserId",
++          "actorEmail",
++          "sourceIp",
++          "userAgent",
++          "action",
++          "resourceType",
++          "resourceId",
++          "outcome",
++          "correlationId",
++          "details"
++        ],
++        "title": "AuditEventOut",
++        "type": "object"
++      },
++      "AuditListOut": {
++        "properties": {
++          "events": {
++            "items": {
++              "$ref": "#/components/schemas/AuditEventOut"
++            },
++            "title": "Events",
++            "type": "array"
++          },
++          "total": {
++            "title": "Total",
++            "type": "integer"
++          }
++        },
++        "required": [
++          "events",
++          "total"
++        ],
++        "title": "AuditListOut",
++        "type": "object"
++      },
++      "ErrorBody": {
++        "description": "Inner ``error`` object \u2014 see blueprint 04-api-surface.md.",
++        "properties": {
++          "code": {
++            "description": "Stable machine-readable error code.",
++            "title": "Code",
++            "type": "string"
++          },
++          "correlation_id": {
++            "description": "X-Correlation-ID echoed back so logs can be joined.",
++            "title": "Correlation Id",
++            "type": "string"
++          },
++          "details": {
++            "anyOf": [
++              {
++                "items": {
++                  "$ref": "#/components/schemas/ErrorDetail"
++                },
++                "type": "array"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "description": "Per-field detail, present for validation_error and friends.",
++            "title": "Details"
++          },
++          "docs": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "description": "Link to runbook / docs.",
++            "title": "Docs"
++          },
++          "hint": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "description": "Recovery hint for the caller.",
++            "title": "Hint"
++          },
++          "message": {
++            "description": "Human-readable error description.",
++            "title": "Message",
++            "type": "string"
++          }
++        },
++        "required": [
++          "code",
++          "message",
++          "correlation_id"
++        ],
++        "title": "ErrorBody",
++        "type": "object"
++      },
++      "ErrorDetail": {
++        "description": "Structured detail for multi-error responses (e.g. validation failures).",
++        "properties": {
++          "issue": {
++            "description": "Human-readable problem statement.",
++            "title": "Issue",
++            "type": "string"
++          },
++          "path": {
++            "description": "Dotted path to the offending field.",
++            "title": "Path",
++            "type": "string"
++          }
++        },
++        "required": [
++          "path",
++          "issue"
++        ],
++        "title": "ErrorDetail",
++        "type": "object"
++      },
++      "ErrorEnvelope": {
++        "description": "Outer envelope \u2014 every 4xx / 5xx response body conforms to this model.",
++        "properties": {
++          "error": {
++            "$ref": "#/components/schemas/ErrorBody"
++          }
++        },
++        "required": [
++          "error"
++        ],
++        "title": "ErrorEnvelope",
++        "type": "object"
++      },
++      "FlagListOut": {
++        "properties": {
++          "flags": {
++            "items": {
++              "$ref": "#/components/schemas/FlagOut"
++            },
++            "title": "Flags",
++            "type": "array"
++          }
++        },
++        "required": [
++          "flags"
++        ],
++        "title": "FlagListOut",
++        "type": "object"
++      },
++      "FlagOut": {
++        "properties": {
++          "description": {
++            "title": "Description",
++            "type": "string"
++          },
++          "enabled": {
++            "title": "Enabled",
++            "type": "boolean"
++          },
++          "key": {
++            "title": "Key",
++            "type": "string"
++          },
++          "scope": {
++            "title": "Scope",
++            "type": "string"
++          },
++          "scope_ref": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Scope Ref"
++          },
++          "updatedAt": {
++            "format": "date-time",
++            "title": "Updatedat",
++            "type": "string"
++          },
++          "updatedBy": {
++            "title": "Updatedby",
++            "type": "string"
++          }
++        },
++        "required": [
++          "key",
++          "enabled",
++          "description",
++          "scope",
++          "updatedAt",
++          "updatedBy"
++        ],
++        "title": "FlagOut",
++        "type": "object"
++      },
++      "FlagPatch": {
++        "properties": {
++          "description": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Description"
++          },
++          "enabled": {
++            "anyOf": [
++              {
++                "type": "boolean"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Enabled"
++          }
++        },
++        "title": "FlagPatch",
++        "type": "object"
++      },
++      "LoginRequest": {
++        "properties": {
++          "email": {
++            "format": "email",
++            "title": "Email",
++            "type": "string"
++          },
++          "mfaCode": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Mfacode"
++          },
++          "password": {
++            "minLength": 8,
++            "title": "Password",
++            "type": "string"
++          }
++        },
++        "required": [
++          "email",
++          "password"
++        ],
++        "title": "LoginRequest",
++        "type": "object"
++      },
++      "RefreshRequest": {
++        "properties": {
++          "refreshToken": {
++            "title": "Refreshtoken",
++            "type": "string"
++          }
++        },
++        "required": [
++          "refreshToken"
++        ],
++        "title": "RefreshRequest",
++        "type": "object"
++      },
++      "SystemConfigListOut": {
++        "properties": {
++          "entries": {
++            "items": {
++              "$ref": "#/components/schemas/SystemConfigOut"
++            },
++            "title": "Entries",
++            "type": "array"
++          }
++        },
++        "required": [
++          "entries"
++        ],
++        "title": "SystemConfigListOut",
++        "type": "object"
++      },
++      "SystemConfigOut": {
++        "properties": {
++          "description": {
++            "title": "Description",
++            "type": "string"
++          },
++          "key": {
++            "title": "Key",
++            "type": "string"
++          },
++          "updatedAt": {
++            "format": "date-time",
++            "title": "Updatedat",
++            "type": "string"
++          },
++          "updatedBy": {
++            "title": "Updatedby",
++            "type": "string"
++          },
++          "value": {
++            "title": "Value"
++          }
++        },
++        "required": [
++          "key",
++          "value",
++          "description",
++          "updatedAt",
++          "updatedBy"
++        ],
++        "title": "SystemConfigOut",
++        "type": "object"
++      },
++      "SystemConfigUpsert": {
++        "properties": {
++          "description": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Description"
++          },
++          "value": {
++            "title": "Value"
++          }
++        },
++        "required": [
++          "value"
++        ],
++        "title": "SystemConfigUpsert",
++        "type": "object"
++      },
++      "TokenPair": {
++        "properties": {
++          "accessExpiresAt": {
++            "format": "date-time",
++            "title": "Accessexpiresat",
++            "type": "string"
++          },
++          "accessToken": {
++            "title": "Accesstoken",
++            "type": "string"
++          },
++          "refreshExpiresAt": {
++            "format": "date-time",
++            "title": "Refreshexpiresat",
++            "type": "string"
++          },
++          "refreshToken": {
++            "title": "Refreshtoken",
++            "type": "string"
++          }
++        },
++        "required": [
++          "accessToken",
++          "refreshToken",
++          "accessExpiresAt",
++          "refreshExpiresAt"
++        ],
++        "title": "TokenPair",
++        "type": "object"
++      },
++      "UserOut": {
++        "properties": {
++          "createdAt": {
++            "format": "date-time",
++            "title": "Createdat",
++            "type": "string"
++          },
++          "displayName": {
++            "title": "Displayname",
++            "type": "string"
++          },
++          "email": {
++            "format": "email",
++            "title": "Email",
++            "type": "string"
++          },
++          "id": {
++            "title": "Id",
++            "type": "string"
++          },
++          "lastLoginAt": {
++            "anyOf": [
++              {
++                "format": "date-time",
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Lastloginat"
++          },
++          "mfaEnabled": {
++            "title": "Mfaenabled",
++            "type": "boolean"
++          },
++          "roles": {
++            "items": {
++              "type": "string"
++            },
++            "title": "Roles",
++            "type": "array"
++          }
++        },
++        "required": [
++          "id",
++          "email",
++          "displayName",
++          "roles",
++          "mfaEnabled",
++          "createdAt",
++          "lastLoginAt"
++        ],
++        "title": "UserOut",
++        "type": "object"
++      }
++    }
++  },
++  "info": {
++    "title": "GodsView control_plane",
++    "version": "0.1.0"
++  },
++  "openapi": "3.1.0",
++  "paths": {
++    "/admin/audit": {
++      "get": {
++        "operationId": "list_audit_admin_audit_get",
++        "parameters": [
++          {
++            "in": "query",
++            "name": "limit",
++            "required": false,
++            "schema": {
++              "default": 100,
++              "maximum": 500,
++              "minimum": 1,
++              "title": "Limit",
++              "type": "integer"
++            }
++          },
++          {
++            "in": "query",
++            "name": "action",
++            "required": false,
++            "schema": {
++              "anyOf": [
++                {
++                  "type": "string"
++                },
++                {
++                  "type": "null"
++                }
++              ],
++              "title": "Action"
++            }
++          },
++          {
++            "in": "header",
++            "name": "authorization",
++            "required": false,
++            "schema": {
++              "anyOf": [
++                {
++                  "type": "string"
++                },
++                {
++                  "type": "null"
++                }
++              ],
++              "title": "Authorization"
++            }
++          }
++        ],
++        "responses": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/AuditListOut"
++                }
++              }
++            },
++            "description": "Successful Response"
++          },
++          "400": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Malformed request."
++          },
++          "401": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Missing or invalid credentials."
++          },
++          "403": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Insufficient role for this operation."
++          },
++          "404": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Resource not found."
++          },
++          "409": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "State conflict."
++          },
++          "422": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Request validation failed."
++          },
++          "429": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Rate limit exceeded."
++          },
++          "500": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Internal server error."
++          }
++        },
++        "summary": "List Audit",
++        "tags": [
++          "audit"
++        ]
++      }
++    },
++    "/admin/flags": {
++      "get": {
++        "operationId": "list_flags_admin_flags_get",
++        "parameters": [
++          {
++            "in": "header",
++            "name": "authorization",
++            "required": false,
++            "schema": {
++              "anyOf": [
++                {
++                  "type": "string"
++                },
++                {
++                  "type": "null"
++                }
++              ],
++              "title": "Authorization"
++            }
++          }
++        ],
++        "responses": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/FlagListOut"
++                }
++              }
++            },
++            "description": "Successful Response"
++          },
++          "400": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Malformed request."
++          },
++          "401": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Missing or invalid credentials."
++          },
++          "403": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Insufficient role for this operation."
++          },
++          "404": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Resource not found."
++          },
++          "409": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "State conflict."
++          },
++          "422": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Request validation failed."
++          },
++          "429": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Rate limit exceeded."
++          },
++          "500": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Internal server error."
++          }
++        },
++        "summary": "List Flags",
++        "tags": [
++          "flags"
++        ]
++      }
++    },
++    "/admin/flags/{key}": {
++      "get": {
++        "operationId": "get_flag_admin_flags__key__get",
++        "parameters": [
++          {
++            "in": "path",
++            "name": "key",
++            "required": true,
++            "schema": {
++              "title": "Key",
++              "type": "string"
++            }
++          },
++          {
++            "in": "header",
++            "name": "authorization",
++            "required": false,
++            "schema": {
++              "anyOf": [
++                {
++                  "type": "string"
++                },
++                {
++                  "type": "null"
++                }
++              ],
++              "title": "Authorization"
++            }
++          }
++        ],
++        "responses": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/FlagOut"
++                }
++              }
++            },
++            "description": "Successful Response"
++          },
++          "400": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Malformed request."
++          },
++          "401": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Missing or invalid credentials."
++          },
++          "403": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Insufficient role for this operation."
++          },
++          "404": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Resource not found."
++          },
++          "409": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "State conflict."
++          },
++          "422": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Request validation failed."
++          },
++          "429": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Rate limit exceeded."
++          },
++          "500": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Internal server error."
++          }
++        },
++        "summary": "Get Flag",
++        "tags": [
++          "flags"
++        ]
++      },
++      "patch": {
++        "operationId": "update_flag_admin_flags__key__patch",
++        "parameters": [
++          {
++            "in": "path",
++            "name": "key",
++            "required": true,
++            "schema": {
++              "title": "Key",
++              "type": "string"
++            }
++          },
++          {
++            "in": "header",
++            "name": "authorization",
++            "required": false,
++            "schema": {
++              "anyOf": [
++                {
++                  "type": "string"
++                },
++                {
++                  "type": "null"
++                }
++              ],
++              "title": "Authorization"
++            }
++          }
++        ],
++        "requestBody": {
++          "content": {
++            "application/json": {
++              "schema": {
++                "$ref": "#/components/schemas/FlagPatch"
++              }
++            }
++          },
++          "required": true
++        },
++        "responses": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/FlagOut"
++                }
++              }
++            },
++            "description": "Successful Response"
++          },
++          "400": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Malformed request."
++          },
++          "401": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Missing or invalid credentials."
++          },
++          "403": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Insufficient role for this operation."
++          },
++          "404": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Resource not found."
++          },
++          "409": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "State conflict."
++          },
++          "422": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Request validation failed."
++          },
++          "429": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Rate limit exceeded."
++          },
++          "500": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Internal server error."
++          }
++        },
++        "summary": "Update Flag",
++        "tags": [
++          "flags"
++        ]
++      }
++    },
++    "/admin/system/config": {
++      "get": {
++        "operationId": "list_config_admin_system_config_get",
++        "parameters": [
++          {
++            "in": "header",
++            "name": "authorization",
++            "required": false,
++            "schema": {
++              "anyOf": [
++                {
++                  "type": "string"
++                },
++                {
++                  "type": "null"
++                }
++              ],
++              "title": "Authorization"
++            }
++          }
++        ],
++        "responses": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/SystemConfigListOut"
++                }
++              }
++            },
++            "description": "Successful Response"
++          },
++          "400": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Malformed request."
++          },
++          "401": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Missing or invalid credentials."
++          },
++          "403": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Insufficient role for this operation."
++          },
++          "404": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Resource not found."
++          },
++          "409": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "State conflict."
++          },
++          "422": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Request validation failed."
++          },
++          "429": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Rate limit exceeded."
++          },
++          "500": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Internal server error."
++          }
++        },
++        "summary": "List Config",
++        "tags": [
++          "system-config"
++        ]
++      }
++    },
++    "/admin/system/config/{key}": {
++      "delete": {
++        "operationId": "delete_config_admin_system_config__key__delete",
++        "parameters": [
++          {
++            "in": "path",
++            "name": "key",
++            "required": true,
++            "schema": {
++              "title": "Key",
++              "type": "string"
++            }
++          },
++          {
++            "in": "header",
++            "name": "authorization",
++            "required": false,
++            "schema": {
++              "anyOf": [
++                {
++                  "type": "string"
++                },
++                {
++                  "type": "null"
++                }
++              ],
++              "title": "Authorization"
++            }
++          }
++        ],
++        "responses": {
++          "204": {
++            "description": "Successful Response"
++          },
++          "400": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Malformed request."
++          },
++          "401": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Missing or invalid credentials."
++          },
++          "403": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Insufficient role for this operation."
++          },
++          "404": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Resource not found."
++          },
++          "409": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "State conflict."
++          },
++          "422": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Request validation failed."
++          },
++          "429": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Rate limit exceeded."
++          },
++          "500": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Internal server error."
++          }
++        },
++        "summary": "Delete Config",
++        "tags": [
++          "system-config"
++        ]
++      },
++      "get": {
++        "operationId": "get_config_admin_system_config__key__get",
++        "parameters": [
++          {
++            "in": "path",
++            "name": "key",
++            "required": true,
++            "schema": {
++              "title": "Key",
++              "type": "string"
++            }
++          },
++          {
++            "in": "header",
++            "name": "authorization",
++            "required": false,
++            "schema": {
++              "anyOf": [
++                {
++                  "type": "string"
++                },
++                {
++                  "type": "null"
++                }
++              ],
++              "title": "Authorization"
++            }
++          }
++        ],
++        "responses": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/SystemConfigOut"
++                }
++              }
++            },
++            "description": "Successful Response"
++          },
++          "400": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Malformed request."
++          },
++          "401": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Missing or invalid credentials."
++          },
++          "403": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Insufficient role for this operation."
++          },
++          "404": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Resource not found."
++          },
++          "409": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "State conflict."
++          },
++          "422": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Request validation failed."
++          },
++          "429": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Rate limit exceeded."
++          },
++          "500": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Internal server error."
++          }
++        },
++        "summary": "Get Config",
++        "tags": [
++          "system-config"
++        ]
++      },
++      "put": {
++        "operationId": "upsert_config_admin_system_config__key__put",
++        "parameters": [
++          {
++            "in": "path",
++            "name": "key",
++            "required": true,
++            "schema": {
++              "title": "Key",
++              "type": "string"
++            }
++          },
++          {
++            "in": "header",
++            "name": "authorization",
++            "required": false,
++            "schema": {
++              "anyOf": [
++                {
++                  "type": "string"
++                },
++                {
++                  "type": "null"
++                }
++              ],
++              "title": "Authorization"
++            }
++          }
++        ],
++        "requestBody": {
++          "content": {
++            "application/json": {
++              "schema": {
++                "$ref": "#/components/schemas/SystemConfigUpsert"
++              }
++            }
++          },
++          "required": true
++        },
++        "responses": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/SystemConfigOut"
++                }
++              }
++            },
++            "description": "Successful Response"
++          },
++          "400": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Malformed request."
++          },
++          "401": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Missing or invalid credentials."
++          },
++          "403": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Insufficient role for this operation."
++          },
++          "404": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Resource not found."
++          },
++          "409": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "State conflict."
++          },
++          "422": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Request validation failed."
++          },
++          "429": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Rate limit exceeded."
++          },
++          "500": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Internal server error."
++          }
++        },
++        "summary": "Upsert Config",
++        "tags": [
++          "system-config"
++        ]
++      }
++    },
++    "/auth/login": {
++      "post": {
++        "operationId": "login_auth_login_post",
++        "requestBody": {
++          "content": {
++            "application/json": {
++              "schema": {
++                "$ref": "#/components/schemas/LoginRequest"
++              }
++            }
++          },
++          "required": true
++        },
++        "responses": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/TokenPair"
++                }
++              }
++            },
++            "description": "Successful Response"
++          },
++          "400": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Malformed request."
++          },
++          "401": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Missing or invalid credentials."
++          },
++          "403": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Insufficient role for this operation."
++          },
++          "404": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Resource not found."
++          },
++          "409": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "State conflict."
++          },
++          "422": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Request validation failed."
++          },
++          "429": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Rate limit exceeded."
++          },
++          "500": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Internal server error."
++          }
++        },
++        "summary": "Login",
++        "tags": [
++          "auth"
++        ]
++      }
++    },
++    "/auth/logout": {
++      "post": {
++        "operationId": "logout_auth_logout_post",
++        "parameters": [
++          {
++            "in": "header",
++            "name": "authorization",
++            "required": false,
++            "schema": {
++              "anyOf": [
++                {
++                  "type": "string"
++                },
++                {
++                  "type": "null"
++                }
++              ],
++              "title": "Authorization"
++            }
++          }
++        ],
++        "responses": {
++          "204": {
++            "description": "Successful Response"
++          },
++          "400": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Malformed request."
++          },
++          "401": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Missing or invalid credentials."
++          },
++          "403": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Insufficient role for this operation."
++          },
++          "404": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Resource not found."
++          },
++          "409": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "State conflict."
++          },
++          "422": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Request validation failed."
++          },
++          "429": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Rate limit exceeded."
++          },
++          "500": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Internal server error."
++          }
++        },
++        "summary": "Logout",
++        "tags": [
++          "auth"
++        ]
++      }
++    },
++    "/auth/me": {
++      "get": {
++        "operationId": "me_auth_me_get",
++        "parameters": [
++          {
++            "in": "header",
++            "name": "authorization",
++            "required": false,
++            "schema": {
++              "anyOf": [
++                {
++                  "type": "string"
++                },
++                {
++                  "type": "null"
++                }
++              ],
++              "title": "Authorization"
++            }
++          }
++        ],
++        "responses": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/UserOut"
++                }
++              }
++            },
++            "description": "Successful Response"
++          },
++          "400": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Malformed request."
++          },
++          "401": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Missing or invalid credentials."
++          },
++          "403": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Insufficient role for this operation."
++          },
++          "404": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Resource not found."
++          },
++          "409": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "State conflict."
++          },
++          "422": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Request validation failed."
++          },
++          "429": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Rate limit exceeded."
++          },
++          "500": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Internal server error."
++          }
++        },
++        "summary": "Me",
++        "tags": [
++          "auth"
++        ]
++      }
++    },
++    "/auth/refresh": {
++      "post": {
++        "operationId": "refresh_auth_refresh_post",
++        "requestBody": {
++          "content": {
++            "application/json": {
++              "schema": {
++                "$ref": "#/components/schemas/RefreshRequest"
++              }
++            }
++          },
++          "required": true
++        },
++        "responses": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/TokenPair"
++                }
++              }
++            },
++            "description": "Successful Response"
++          },
++          "400": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Malformed request."
++          },
++          "401": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Missing or invalid credentials."
++          },
++          "403": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Insufficient role for this operation."
++          },
++          "404": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Resource not found."
++          },
++          "409": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "State conflict."
++          },
++          "422": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Request validation failed."
++          },
++          "429": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Rate limit exceeded."
++          },
++          "500": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Internal server error."
++          }
++        },
++        "summary": "Refresh",
++        "tags": [
++          "auth"
++        ]
++      }
++    },
++    "/health/live": {
++      "get": {
++        "operationId": "live_health_live_get",
++        "responses": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "additionalProperties": {
++                    "type": "string"
++                  },
++                  "title": "Response Live Health Live Get",
++                  "type": "object"
++                }
++              }
++            },
++            "description": "Successful Response"
++          },
++          "400": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Malformed request."
++          },
++          "404": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Resource not found."
++          },
++          "409": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "State conflict."
++          },
++          "422": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Request validation failed."
++          },
++          "429": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Rate limit exceeded."
++          },
++          "500": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Internal server error."
++          }
++        },
++        "summary": "Liveness probe",
++        "tags": [
++          "health"
++        ]
++      }
++    },
++    "/health/ready": {
++      "get": {
++        "operationId": "ready_health_ready_get",
++        "responses": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "additionalProperties": true,
++                  "title": "Response Ready Health Ready Get",
++                  "type": "object"
++                }
++              }
++            },
++            "description": "Successful Response"
++          },
++          "400": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Malformed request."
++          },
++          "404": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Resource not found."
++          },
++          "409": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "State conflict."
++          },
++          "422": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Request validation failed."
++          },
++          "429": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Rate limit exceeded."
++          },
++          "500": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Internal server error."
++          }
++        },
++        "summary": "Readiness probe",
++        "tags": [
++          "health"
++        ]
++      }
++    }
++  }
++}
+diff --git a/services/control_plane/app/config.py b/services/control_plane/app/config.py
+index 6323f25..6147833 100644
+--- a/services/control_plane/app/config.py
++++ b/services/control_plane/app/config.py
+@@ -35,9 +35,7 @@ class Settings(BaseSettings):
+     log_level: Literal["debug", "info", "warn", "error"] = Field("info", alias="LOG_LEVEL")
+     kill_switch_on_boot: bool = Field(False, alias="KILL_SWITCH_ON_BOOT")
+ 
+-    bootstrap_admin_email: str = Field(
+-        "admin@godsview.local", alias="BOOTSTRAP_ADMIN_EMAIL"
+-    )
++    bootstrap_admin_email: str = Field("admin@godsview.local", alias="BOOTSTRAP_ADMIN_EMAIL")
+     bootstrap_admin_password: SecretStr = Field(
+         SecretStr("godsview-admin-dev"), alias="BOOTSTRAP_ADMIN_PASSWORD"
+     )
+diff --git a/services/control_plane/app/errors.py b/services/control_plane/app/errors.py
+index fec0f7b..b4daaea 100644
+--- a/services/control_plane/app/errors.py
++++ b/services/control_plane/app/errors.py
+@@ -1,4 +1,9 @@
+-"""Canonical error envelope matching docs/blueprint/reference/API_SURFACE.md."""
++"""Canonical error envelope matching docs/blueprint/04-api-surface.md.
++
++The envelope is BOTH a runtime contract (every exception handler emits it)
++and a schema contract (every non-2xx response in the OpenAPI spec references
++``ErrorEnvelope`` below). ``contract-validation.yml`` enforces the latter.
++"""
+ 
+ from __future__ import annotations
+ 
+@@ -7,9 +12,58 @@ from typing import Any
+ from fastapi import Request, status
+ from fastapi.exceptions import RequestValidationError
+ from fastapi.responses import JSONResponse
++from pydantic import BaseModel, Field
+ from starlette.exceptions import HTTPException as StarletteHTTPException
+ 
+ 
++class ErrorDetail(BaseModel):
++    """Structured detail for multi-error responses (e.g. validation failures)."""
++
++    path: str = Field(..., description="Dotted path to the offending field.")
++    issue: str = Field(..., description="Human-readable problem statement.")
++
++
++class ErrorBody(BaseModel):
++    """Inner ``error`` object — see blueprint 04-api-surface.md."""
++
++    code: str = Field(..., description="Stable machine-readable error code.")
++    message: str = Field(..., description="Human-readable error description.")
++    correlation_id: str = Field(
++        ...,
++        description="X-Correlation-ID echoed back so logs can be joined.",
++    )
++    details: list[ErrorDetail] | None = Field(
++        default=None,
++        description="Per-field detail, present for validation_error and friends.",
++    )
++    hint: str | None = Field(default=None, description="Recovery hint for the caller.")
++    docs: str | None = Field(default=None, description="Link to runbook / docs.")
++
++
++class ErrorEnvelope(BaseModel):
++    """Outer envelope — every 4xx / 5xx response body conforms to this model."""
++
++    error: ErrorBody
++
++
++# Responses map consumed by ``app.include_router`` / endpoint decorators. We
++# attach these to the canonical auth-gated endpoints so the OpenAPI spec
++# advertises 401/403 consistently.
++AUTH_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
++    401: {"model": ErrorEnvelope, "description": "Missing or invalid credentials."},
++    403: {"model": ErrorEnvelope, "description": "Insufficient role for this operation."},
++}
++
++COMMON_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
++    400: {"model": ErrorEnvelope, "description": "Malformed request."},
++    404: {"model": ErrorEnvelope, "description": "Resource not found."},
++    409: {"model": ErrorEnvelope, "description": "State conflict."},
++    422: {"model": ErrorEnvelope, "description": "Request validation failed."},
++    429: {"model": ErrorEnvelope, "description": "Rate limit exceeded."},
++    500: {"model": ErrorEnvelope, "description": "Internal server error."},
++}
++
++
+ class ApiError(Exception):
+     """Raise to short-circuit a handler with a canonical envelope."""
+ 
+@@ -94,9 +148,7 @@ def install_exception_handlers(app: Any) -> None:
+         )
+ 
+     @app.exception_handler(RequestValidationError)
+-    async def _handle_validation(
+-        request: Request, exc: RequestValidationError
+-    ) -> JSONResponse:
++    async def _handle_validation(request: Request, exc: RequestValidationError) -> JSONResponse:
+         cid = getattr(request.state, "correlation_id", "unknown")
+         details = [
+             {"path": ".".join(str(p) for p in err["loc"]), "issue": err["msg"]}
+diff --git a/services/control_plane/app/main.py b/services/control_plane/app/main.py
+index 223e73f..6bec870 100644
+--- a/services/control_plane/app/main.py
++++ b/services/control_plane/app/main.py
+@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
+ 
+ from fastapi import FastAPI
+ from fastapi.middleware.cors import CORSMiddleware
++from fastapi.responses import ORJSONResponse
+ 
+ from app import __version__
+ from app.config import get_settings
+@@ -44,7 +45,7 @@ def _create_app() -> FastAPI:
+     app = FastAPI(
+         title="GodsView control_plane",
+         version=__version__,
+-        default_response_class=None,  # default JSONResponse is fine; orjson wired later.
++        default_response_class=ORJSONResponse,
+         openapi_url="/openapi.json",
+         docs_url="/docs",
+         redoc_url=None,
+diff --git a/services/control_plane/app/middleware.py b/services/control_plane/app/middleware.py
+index b75bdda..aeb64d5 100644
+--- a/services/control_plane/app/middleware.py
++++ b/services/control_plane/app/middleware.py
+@@ -5,7 +5,7 @@ from __future__ import annotations
+ import re
+ import time
+ import uuid
+-from typing import Awaitable, Callable
++from collections.abc import Awaitable, Callable
+ 
+ from starlette.middleware.base import BaseHTTPMiddleware
+ from starlette.requests import Request
+@@ -22,7 +22,9 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
+         self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
+     ) -> Response:
+         incoming = request.headers.get(_CORRELATION_HEADER, "")
+-        cid = incoming if incoming and _CORRELATION_RX.match(incoming) else f"cor_{uuid.uuid4().hex}"
++        cid = (
++            incoming if incoming and _CORRELATION_RX.match(incoming) else f"cor_{uuid.uuid4().hex}"
++        )
+         request.state.correlation_id = cid
+         response = await call_next(request)
+         response.headers[_CORRELATION_HEADER] = cid
+diff --git a/services/control_plane/app/models.py b/services/control_plane/app/models.py
+index b155bc5..4ba00d3 100644
+--- a/services/control_plane/app/models.py
++++ b/services/control_plane/app/models.py
+@@ -3,7 +3,7 @@
+ from __future__ import annotations
+ 
+ import uuid
+-from datetime import datetime, timezone
++from datetime import UTC, datetime
+ from typing import Any
+ 
+ from sqlalchemy import (
+@@ -24,7 +24,7 @@ from app.db import Base
+ 
+ 
+ def _utcnow() -> datetime:
+-    return datetime.now(timezone.utc)
++    return datetime.now(UTC)
+ 
+ 
+ def _ulid_str() -> str:
+@@ -45,11 +45,9 @@ class User(Base):
+     mfa_secret: Mapped[str | None] = mapped_column(String(64), nullable=True)
+     disabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+-    last_login_at: Mapped[datetime | None] = mapped_column(
+-        DateTime(timezone=True), nullable=True
+-    )
++    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+ 
+-    refresh_tokens: Mapped[list["RefreshToken"]] = relationship(back_populates="user")
++    refresh_tokens: Mapped[list[RefreshToken]] = relationship(back_populates="user")
+ 
+ 
+ class RefreshToken(Base):
+@@ -62,9 +60,7 @@ class RefreshToken(Base):
+     token_hash: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+     issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+-    revoked_at: Mapped[datetime | None] = mapped_column(
+-        DateTime(timezone=True), nullable=True
+-    )
++    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+     user_agent: Mapped[str | None] = mapped_column(String(255), nullable=True)
+     source_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+ 
+@@ -138,12 +134,8 @@ class ApiKey(Base):
+         ARRAY(String(64)), nullable=False, default=list, server_default="{}"
+     )
+     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+-    last_used_at: Mapped[datetime | None] = mapped_column(
+-        DateTime(timezone=True), nullable=True
+-    )
+-    revoked_at: Mapped[datetime | None] = mapped_column(
+-        DateTime(timezone=True), nullable=True
+-    )
++    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
++    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+ 
+     __table_args__ = (UniqueConstraint("owner_user_id", "name", name="uq_api_key_owner_name"),)
+ 
+diff --git a/services/control_plane/app/routes/__init__.py b/services/control_plane/app/routes/__init__.py
+index 83469b3..8905efc 100644
+--- a/services/control_plane/app/routes/__init__.py
++++ b/services/control_plane/app/routes/__init__.py
+@@ -1,16 +1,38 @@
+-"""Aggregated API router for the control_plane."""
++"""Aggregated API router for the control_plane.
++
++Responses wiring:
++  * Every auth-gated router advertises 401/403 via ``AUTH_ERROR_RESPONSES``
++    so the OpenAPI spec matches the runtime contract enforced by
++    ``contract-validation.yml``.
++  * ``/health/*`` and ``/auth/{login,refresh}`` are public — they advertise
++    only the generic 4xx responses.
++"""
+ 
+ from fastapi import APIRouter
+ 
++from app.errors import AUTH_ERROR_RESPONSES, COMMON_ERROR_RESPONSES
++from app.routes.audit import router as audit_router
+ from app.routes.auth import router as auth_router
+ from app.routes.flags import router as flags_router
+ from app.routes.health import router as health_router
+ from app.routes.system_config import router as system_config_router
+-from app.routes.audit import router as audit_router
+ 
+ api_router = APIRouter()
+-api_router.include_router(health_router)
+-api_router.include_router(auth_router)
+-api_router.include_router(flags_router)
+-api_router.include_router(system_config_router)
+-api_router.include_router(audit_router)
++
++api_router.include_router(health_router, responses=COMMON_ERROR_RESPONSES)
++api_router.include_router(
++    auth_router,
++    responses={**COMMON_ERROR_RESPONSES, **AUTH_ERROR_RESPONSES},
++)
++api_router.include_router(
++    flags_router,
++    responses={**COMMON_ERROR_RESPONSES, **AUTH_ERROR_RESPONSES},
++)
++api_router.include_router(
++    system_config_router,
++    responses={**COMMON_ERROR_RESPONSES, **AUTH_ERROR_RESPONSES},
++)
++api_router.include_router(
++    audit_router,
++    responses={**COMMON_ERROR_RESPONSES, **AUTH_ERROR_RESPONSES},
++)
+diff --git a/services/control_plane/app/routes/auth.py b/services/control_plane/app/routes/auth.py
+index eabad35..1188a7d 100644
+--- a/services/control_plane/app/routes/auth.py
++++ b/services/control_plane/app/routes/auth.py
+@@ -3,7 +3,7 @@
+ from __future__ import annotations
+ 
+ import uuid
+-from datetime import datetime, timezone
++from datetime import UTC, datetime
+ from typing import Annotated
+ 
+ from fastapi import APIRouter, Depends, Request, status
+@@ -115,9 +115,7 @@ async def login(
+         source_ip=(request.client.host if request.client else None),
+     )
+     db.add(stored)
+-    await db.execute(
+-        update(User).where(User.id == user.id).values(last_login_at=datetime.now(timezone.utc))
+-    )
++    await db.execute(update(User).where(User.id == user.id).values(last_login_at=datetime.now(UTC)))
+     await log_event(
+         db,
+         request=request,
+@@ -175,7 +173,7 @@ async def refresh(
+         )
+ 
+     # rotate: revoke old, issue new
+-    stored.revoked_at = datetime.now(timezone.utc)
++    stored.revoked_at = datetime.now(UTC)
+     access_token, access_exp = issue_token(
+         settings=settings,
+         user_id=user.id,
+@@ -218,7 +216,7 @@ async def logout(
+     await db.execute(
+         update(RefreshToken)
+         .where(RefreshToken.user_id == user.id, RefreshToken.revoked_at.is_(None))
+-        .values(revoked_at=datetime.now(timezone.utc))
++        .values(revoked_at=datetime.now(UTC))
+     )
+     await log_event(
+         db,
+diff --git a/services/control_plane/app/scripts/dump_openapi.py b/services/control_plane/app/scripts/dump_openapi.py
+new file mode 100644
+index 0000000..81a3471
+--- /dev/null
++++ b/services/control_plane/app/scripts/dump_openapi.py
+@@ -0,0 +1,91 @@
++"""Dump the control plane OpenAPI spec to disk.
++
++Used by:
++  * Developers: ``make openapi`` → stages packages/api-client/openapi.json
++  * CI:         .github/workflows/contract-validation.yml diff against committed
++                copy; a breaking change fails the job.
++
++Deterministic:
++  * JSON keys sorted recursively so the output byte-matches across runs and
++    across Pydantic/FastAPI minor upgrades that only reorder keys.
++  * The ``servers`` list is normalized so env-specific URLs never leak in.
++  * Trailing newline appended so ``git diff`` stays clean.
++
++Usage
++-----
++
++    python -m app.scripts.dump_openapi [output_path]
++
++``output_path`` defaults to ``packages/api-client/openapi.json`` resolved from
++the monorepo root (two directories above this file).
++
++The script is intentionally dependency-free at runtime — it only imports the
++FastAPI app and the standard library ``json`` module — so CI can invoke it
++without spinning up Postgres / Redis.
++"""
++
++from __future__ import annotations
++
++import json
++import sys
++from pathlib import Path
++from typing import Any
++
++# Import here rather than at module load so that the file is importable from
++# anywhere (the CI job runs ``python -m app.scripts.dump_openapi`` with the
++# ``services/control_plane`` directory on PYTHONPATH).
++from app.main import app
++
++_REPO_ROOT = Path(__file__).resolve().parents[4]
++_DEFAULT_OUTPUT = _REPO_ROOT / "packages" / "api-client" / "openapi.json"
++
++
++def _sorted(value: Any) -> Any:
++    """Recursively sort dict keys so output is deterministic."""
++    if isinstance(value, dict):
++        return {k: _sorted(value[k]) for k in sorted(value.keys())}
++    if isinstance(value, list):
++        return [_sorted(item) for item in value]
++    return value
++
++
++def _normalize(spec: dict[str, Any]) -> dict[str, Any]:
++    """Strip env-specific data so staging/prod/dev all produce the same spec."""
++    spec = dict(spec)
++    # Drop ``servers`` entirely — downstream consumers inject their own base URL.
++    spec.pop("servers", None)
++    info = dict(spec.get("info", {}))
++    # Leave version alone so a package bump shows up as a contract change; that
++    # is the whole point of the audit trail.
++    spec["info"] = info
++    return spec
++
++
++def build_spec() -> dict[str, Any]:
++    spec = app.openapi()
++    return _sorted(_normalize(spec))
++
++
++def write_spec(output: Path) -> Path:
++    output.parent.mkdir(parents=True, exist_ok=True)
++    serialized = json.dumps(build_spec(), indent=2, sort_keys=True) + "\n"
++    output.write_text(serialized, encoding="utf-8")
++    return output
++
++
++def _resolve_output(argv: list[str]) -> Path:
++    if len(argv) > 1:
++        return Path(argv[1]).expanduser().resolve()
++    return _DEFAULT_OUTPUT
++
++
++def main(argv: list[str] | None = None) -> int:
++    argv = list(argv if argv is not None else sys.argv)
++    output = _resolve_output(argv)
++    written = write_spec(output)
++    print(f"wrote openapi spec: {written}")
++    return 0
++
++
++if __name__ == "__main__":  # pragma: no cover
++    raise SystemExit(main())
+diff --git a/services/control_plane/app/scripts/seed_bootstrap.py b/services/control_plane/app/scripts/seed_bootstrap.py
+index b87e87a..cc290a5 100644
+--- a/services/control_plane/app/scripts/seed_bootstrap.py
++++ b/services/control_plane/app/scripts/seed_bootstrap.py
+@@ -105,9 +105,7 @@ async def _ensure_admin() -> str:
+             id=f"usr_{uuid.uuid4().hex}",
+             email=settings.bootstrap_admin_email.lower(),
+             display_name="Bootstrap Admin",
+-            password_hash=hash_password(
+-                settings.bootstrap_admin_password.get_secret_value()
+-            ),
++            password_hash=hash_password(settings.bootstrap_admin_password.get_secret_value()),
+             roles=["admin"],
+             mfa_enabled=False,
+             disabled=False,
+@@ -122,9 +120,7 @@ async def _ensure_flags() -> int:
+     created = 0
+     async with session_scope() as db:
+         for seed in DEFAULT_FLAGS:
+-            existing = await db.scalar(
+-                select(FeatureFlag).where(FeatureFlag.key == seed.key)
+-            )
++            existing = await db.scalar(select(FeatureFlag).where(FeatureFlag.key == seed.key))
+             if existing is not None:
+                 continue
+             db.add(
+@@ -147,9 +143,7 @@ async def _ensure_config() -> int:
+     created = 0
+     async with session_scope() as db:
+         for seed in DEFAULT_CONFIG:
+-            existing = await db.scalar(
+-                select(SystemConfig).where(SystemConfig.key == seed.key)
+-            )
++            existing = await db.scalar(select(SystemConfig).where(SystemConfig.key == seed.key))
+             if existing is not None:
+                 continue
+             db.add(
+diff --git a/services/control_plane/app/security.py b/services/control_plane/app/security.py
+index 928f273..364f701 100644
+--- a/services/control_plane/app/security.py
++++ b/services/control_plane/app/security.py
+@@ -5,7 +5,7 @@ from __future__ import annotations
+ import base64
+ import hashlib
+ import uuid
+-from datetime import datetime, timedelta, timezone
++from datetime import UTC, datetime, timedelta
+ from typing import Any, Literal
+ 
+ from argon2 import PasswordHasher
+@@ -43,7 +43,7 @@ def issue_token(
+     roles: list[str],
+     token_type: TokenType,
+ ) -> tuple[str, datetime]:
+-    now = datetime.now(timezone.utc)
++    now = datetime.now(UTC)
+     ttl = (
+         settings.jwt_access_ttl_seconds
+         if token_type == "access"
+diff --git a/services/control_plane/pyproject.toml b/services/control_plane/pyproject.toml
+index 7d37dc1..d4d2371 100644
+--- a/services/control_plane/pyproject.toml
++++ b/services/control_plane/pyproject.toml
+@@ -78,3 +78,8 @@ ignore = ["B008"]
+ [tool.ruff.lint.per-file-ignores]
+ "alembic/*" = ["E402", "F401"]
+ "tests/*" = ["B"]
++# Route schemas face the TypeScript client and must stay camelCase so the
++# OpenAPI spec (packages/api-client/openapi.json) matches what the web app
++# consumes. N815 would force snake_case attribute names that fight Pydantic
++# model_config={"populate_by_name": True}.
++"app/routes/*.py" = ["N815"]
+diff --git a/services/control_plane/tests/test_openapi_contract.py b/services/control_plane/tests/test_openapi_contract.py
+new file mode 100644
+index 0000000..e761d8e
+--- /dev/null
++++ b/services/control_plane/tests/test_openapi_contract.py
+@@ -0,0 +1,94 @@
++"""Contract tests that guard ``packages/api-client/openapi.json``.
++
++These run in-process so developers catch drift before pushing a PR that the
++``contract-validation.yml`` workflow would otherwise reject. The committed
++spec is the source of truth for client codegen.
++"""
++
++from __future__ import annotations
++
++import json
++from pathlib import Path
++
++import pytest
++
++from app.scripts.dump_openapi import build_spec
++
++REPO_ROOT = Path(__file__).resolve().parents[3]
++COMMITTED_SPEC = REPO_ROOT / "packages" / "api-client" / "openapi.json"
++
++# Phase 0 public surface (keep in sync with contract-validation.yml).
++PUBLIC_PATHS = frozenset(
++    {
++        "/health/live",
++        "/health/ready",
++        "/auth/login",
++        "/auth/refresh",
++    }
++)
++
++
++@pytest.fixture(scope="module")
++def generated_spec() -> dict:
++    return build_spec()
++
++
++@pytest.fixture(scope="module")
++def committed_spec() -> dict:
++    if not COMMITTED_SPEC.exists():
++        pytest.skip(
++            "packages/api-client/openapi.json missing — run `make openapi` "
++            "before committing."
++        )
++    return json.loads(COMMITTED_SPEC.read_text())
++
++
++def test_committed_spec_matches_generated(
++    generated_spec: dict, committed_spec: dict
++) -> None:
++    """The committed spec MUST equal what the live app produces.
++
++    When this fails, run ``make openapi`` and commit the diff.
++    """
++    # Compare by serialized form to surface the exact delta if any.
++    gen = json.dumps(generated_spec, indent=2, sort_keys=True)
++    com = json.dumps(committed_spec, indent=2, sort_keys=True)
++    assert gen == com, (
++        "OpenAPI spec drift detected.\n"
++        "Regenerate with: make openapi\n"
++        "Or: python -m app.scripts.dump_openapi\n"
++    )
++
++
++def test_error_envelope_shape(generated_spec: dict) -> None:
++    schemas = generated_spec["components"]["schemas"]
++    assert "ErrorEnvelope" in schemas, "ErrorEnvelope missing from components/schemas"
++    assert "ErrorBody" in schemas, "ErrorBody missing from components/schemas"
++
++    body = schemas["ErrorBody"]
++    for field in ("code", "message", "correlation_id"):
++        assert field in body.get("required", []), (
++            f"ErrorBody missing required field '{field}'"
++        )
++
++
++def test_every_auth_gated_route_declares_401_or_403(generated_spec: dict) -> None:
++    paths = generated_spec["paths"]
++    missing: list[str] = []
++    for path, ops in paths.items():
++        if path in PUBLIC_PATHS:
++            continue
++        for method, op in ops.items():
++            if method.lower() not in {"get", "post", "put", "patch", "delete"}:
++                continue
++            responses = op.get("responses", {}) or {}
++            if not ({"401", "403"} & set(responses.keys())):
++                missing.append(f"{method.upper()} {path}")
++    assert not missing, f"Auth-gated routes missing 401/403: {missing}"
++
++
++def test_spec_is_deterministic() -> None:
++    """build_spec must be a pure function for contract diffing to work."""
++    first = json.dumps(build_spec(), sort_keys=True)
++    second = json.dumps(build_spec(), sort_keys=True)
++    assert first == second, "build_spec() is non-deterministic — contract CI will flap."
+-- 
+2.34.1
+

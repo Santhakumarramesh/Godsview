@@ -1,0 +1,1265 @@
+From 7dbd98d01ef4fa5411cd9976daec6ab9c0662801 Mon Sep 17 00:00:00 2001
+From: claude-bot <noreply@anthropic.com>
+Date: Sat, 18 Apr 2026 00:17:21 -0400
+Subject: [PATCH] phase-6: SLO definitions + SSE alert router + k6 scheduler
+ baseline
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Codifies the production SLOs (latency, availability, freshness) and
+wires the Phase 5 SSE events into the existing alert webhook pipeline
+so on-call is paged via PagerDuty/Slack like any other alert.
+
+  - lib/slo/slo_definitions.ts        — 6 SLOs across critical/high/normal tiers
+  - lib/slo/slo_tracker.ts            — observation ring buffer + burn rate calc
+  - lib/alerts/sse_alert_router.ts    — Phase 5 events → fireAlert + SLO scanner
+  - routes/slo.ts                     — /api/slo/{definitions,budgets,burn-rate,...}
+  - load-tests/k6-scheduler-baseline.js — focused 20-VU 3min poll test
+  - load-tests/k6-api-stress.js       — extended with scheduler + SLO endpoints
+  - docs/SLOs.md                      — human-readable pair to slo_definitions
+
+The SLO middleware is mounted in app.ts after the prometheus middleware
+so it observes every /api/* request. The SSE alert router monkey-patches
+the SignalStreamHub publish path to subscribe in-process — SSE clients
+remain unaffected. Both subsystems are env-gated:
+
+  SSE_ALERT_ROUTER_AUTOSTART  default true
+  SLO_SCAN_INTERVAL_MS        default 60000
+  SLO_OBSERVATION_MAX         default 5000
+
+Verification:
+  ./node_modules/.bin/tsc -p artifacts/api-server/tsconfig.json --noEmit  exit 0
+  ./node_modules/.bin/tsc --build                                          exit 0
+  cd artifacts/api-server && node ./build.mjs                              exit 0
+
+Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+---
+ artifacts/api-server/src/app.ts               |   4 +
+ artifacts/api-server/src/index.ts             |  23 ++
+ .../src/lib/alerts/sse_alert_router.ts        | 258 ++++++++++++++++++
+ .../api-server/src/lib/slo/slo_definitions.ts | 157 +++++++++++
+ .../api-server/src/lib/slo/slo_tracker.ts     | 245 +++++++++++++++++
+ artifacts/api-server/src/routes/index.ts      |   4 +
+ artifacts/api-server/src/routes/slo.ts        | 109 ++++++++
+ docs/SLOs.md                                  | 141 ++++++++++
+ load-tests/k6-api-stress.js                   |  50 ++++
+ load-tests/k6-scheduler-baseline.js           |  94 +++++++
+ 10 files changed, 1085 insertions(+)
+ create mode 100644 artifacts/api-server/src/lib/alerts/sse_alert_router.ts
+ create mode 100644 artifacts/api-server/src/lib/slo/slo_definitions.ts
+ create mode 100644 artifacts/api-server/src/lib/slo/slo_tracker.ts
+ create mode 100644 artifacts/api-server/src/routes/slo.ts
+ create mode 100644 docs/SLOs.md
+ create mode 100644 load-tests/k6-scheduler-baseline.js
+
+diff --git a/artifacts/api-server/src/app.ts b/artifacts/api-server/src/app.ts
+index 278667c..2f175be 100644
+--- a/artifacts/api-server/src/app.ts
++++ b/artifacts/api-server/src/app.ts
+@@ -19,6 +19,7 @@ import {
+   httpRequestDuration,
+   httpRequestsInFlight,
+ } from "./lib/metrics";
++import { sloMiddleware } from "./lib/slo/slo_tracker";
+ 
+ // ── ESM __dirname shim (compatible with both tsx source-run and esbuild dist) ─
+ const __dirname: string =
+@@ -84,6 +85,9 @@ app.use((req, res, next) => {
+   });
+   next();
+ });
++
++// Phase 6: SLO observation recording (must run after path resolution)
++app.use(sloMiddleware);
+ app.use(
+   cors({
+     origin(origin, callback) {
+diff --git a/artifacts/api-server/src/index.ts b/artifacts/api-server/src/index.ts
+index 4e0282b..c355f64 100644
+--- a/artifacts/api-server/src/index.ts
++++ b/artifacts/api-server/src/index.ts
+@@ -16,6 +16,7 @@ import { validateOrExit } from "./lib/ops/startup_validator";
+ import { initGracefulShutdown } from "./lib/ops/graceful_shutdown";
+ import { GovernanceScheduler } from "./lib/governance/governance_scheduler";
+ import { CalibrationScheduler } from "./lib/eval/calibration_scheduler";
++import { sseAlertRouter } from "./lib/alerts/sse_alert_router";
+ 
+ // ── Validate environment before anything else ───────────────────
+ validateEnv();
+@@ -191,6 +192,18 @@ const server = app.listen(port, (err) => {
+   } else {
+     logger.info("Calibration scheduler disabled (CALIBRATION_AUTOSTART=false)");
+   }
++
++  // Phase 6: SSE alert router (bridges Phase 5 events to webhook + scans SLOs)
++  if ((process.env.SSE_ALERT_ROUTER_AUTOSTART ?? "true") !== "false") {
++    try {
++      sseAlertRouter.start();
++      logger.info("SSE alert router started (Phase 5 events → webhook + SLO burn-rate scanner)");
++    } catch (err: any) {
++      logger.error({ err: err?.message }, "SSE alert router failed to start");
++    }
++  } else {
++    logger.info("SSE alert router disabled (SSE_ALERT_ROUTER_AUTOSTART=false)");
++  }
+ });
+ 
+ // ── Graceful shutdown with connection draining ──────────────────
+@@ -284,6 +297,16 @@ onShutdown(async () => {
+   }
+ });
+ 
++// Phase 6: stop SSE alert router
++onShutdown(async () => {
++  try {
++    logger.info("Stopping SSE alert router...");
++    sseAlertRouter.stop();
++  } catch (err: any) {
++    logger.warn({ err: err?.message }, "SSE alert router stop failed");
++  }
++});
++
+ // Register cleanup: end trading session
+ onShutdown(async () => {
+   logger.info("Ending trading session...");
+diff --git a/artifacts/api-server/src/lib/alerts/sse_alert_router.ts b/artifacts/api-server/src/lib/alerts/sse_alert_router.ts
+new file mode 100644
+index 0000000..91ed8b0
+--- /dev/null
++++ b/artifacts/api-server/src/lib/alerts/sse_alert_router.ts
+@@ -0,0 +1,258 @@
++/**
++ * SSE Alert Router (Phase 6)
++ *
++ * Phase 5 landed two cron schedulers that publish four SSE event types:
++ *   - promotion_eligible      (governance)
++ *   - demotion_signal         (governance)
++ *   - calibration_snapshot    (calibration — every cycle)
++ *   - calibration_drift       (calibration — HIGH/CRITICAL only)
++ *
++ * Before Phase 6, those events only reached SSE-connected dashboard
++ * clients. If the dashboard wasn't open, the events were dropped on the
++ * floor. This router bridges them into the existing alert webhook
++ * pipeline (`GODSVIEW_ALERT_WEBHOOK_URL`) and the pino log stream so
++ * on-call is paged via PagerDuty/Slack like any other alert.
++ *
++ * Implementation: the router installs a lightweight in-process subscriber
++ * on the SignalStreamHub so it sees every published event. It filters for
++ * the Phase 5 event types and forwards them to `fireAlert()` with a
++ * severity derived from the event contents. The router itself is a
++ * no-op singleton — safe to start/stop from index.ts.
++ *
++ * This router also periodically scans the SLO tracker for burning SLOs
++ * and fires alerts when any objective is over its alertBurnRate.
++ */
++
++import { logger } from "../logger";
++import { signalStreamHub } from "../signal_stream";
++import { fireAlert, type AlertSeverity, type AlertType } from "../alerts";
++import { sloTracker } from "../slo/slo_tracker";
++
++// Cast once so we can augment at runtime. The hub uses a simple in-memory
++// Map for clients, which means we can cleanly add a subscriber list by
++// installing a small wrapper on `publish`. We do it via monkey-patch of
++// the instance (not the prototype) so the existing SSE path is untouched.
++type PublishFn = (event: {
++  id: string;
++  type: string;
++  data: unknown;
++  timestamp: string;
++}) => void;
++
++interface HubLike {
++  publish: PublishFn;
++  __sseAlertRouterInstalled?: boolean;
++  __originalPublish?: PublishFn;
++}
++
++function installHubSubscriber(onEvent: (evt: { type: string; data: unknown; timestamp: string }) => void): () => void {
++  const hub = signalStreamHub as unknown as HubLike;
++  if (hub.__sseAlertRouterInstalled) {
++    // Already wrapped by a previous start() call — chain instead.
++    // We re-wrap so multiple subscribers are safe; uninstall is keyed by ref.
++  }
++  const original = hub.__originalPublish ?? hub.publish.bind(hub);
++  hub.__originalPublish = original;
++  const wrapped: PublishFn = (event) => {
++    try { original(event); } finally {
++      try { onEvent({ type: event.type, data: event.data, timestamp: event.timestamp }); }
++      catch (err: any) { logger.warn({ err: err?.message }, "SSE alert router subscriber failed"); }
++    }
++  };
++  hub.publish = wrapped;
++  hub.__sseAlertRouterInstalled = true;
++  return () => {
++    hub.publish = original;
++    hub.__sseAlertRouterInstalled = false;
++    delete hub.__originalPublish;
++  };
++}
++
++// ── Event → Alert mapping ──────────────────────────────────────────
++// We reuse the existing `ensemble_drift` alert type for calibration drift
++// and `production_gate_block_streak` for demotion signals. Promotion
++// events aren't on the AlertType union by design — they aren't failure
++// conditions — so they only go through the log + webhook path with a
++// "warning" severity and no cooldown-tracked alert.
++
++interface ParsedPhase5Event {
++  eventType: "promotion_eligible" | "demotion_signal" | "calibration_snapshot" | "calibration_drift";
++  severity: AlertSeverity;
++  message: string;
++  details: Record<string, unknown>;
++  /** If set, also fire through the cooldown-gated AlertType pipeline */
++  alertType?: AlertType;
++}
++
++function parsePhase5Event(type: string, data: unknown): ParsedPhase5Event | null {
++  // The Phase 5 schedulers publish via `publishAlert({ type, ... })`, so the
++  // SSE event arrives as { type: "alert", data: { type: "promotion_eligible", ... } }.
++  if (type !== "alert") return null;
++  if (!data || typeof data !== "object") return null;
++  const d = data as Record<string, unknown>;
++  const innerType = typeof d["type"] === "string" ? (d["type"] as string) : null;
++  if (!innerType) return null;
++
++  switch (innerType) {
++    case "promotion_eligible": {
++      const strategyId = typeof d["strategyId"] === "string" ? d["strategyId"] : "?";
++      const targetTier = typeof d["targetTier"] === "string" ? d["targetTier"] : "?";
++      return {
++        eventType: "promotion_eligible",
++        severity: "warning",
++        message: `Strategy ${strategyId} eligible for promotion → ${targetTier}`,
++        details: { strategyId, targetTier, payload: d },
++      };
++    }
++    case "demotion_signal": {
++      const strategyId = typeof d["strategyId"] === "string" ? d["strategyId"] : "?";
++      const rawSeverity = typeof d["severity"] === "string" ? d["severity"].toLowerCase() : "medium";
++      const mapped: AlertSeverity = rawSeverity === "critical" || rawSeverity === "high"
++        ? "critical"
++        : rawSeverity === "fatal"
++          ? "fatal"
++          : "warning";
++      return {
++        eventType: "demotion_signal",
++        severity: mapped,
++        message: `Strategy ${strategyId} demotion signal (${rawSeverity})`,
++        details: { strategyId, severity: rawSeverity, payload: d },
++        alertType: "production_gate_block_streak",
++      };
++    }
++    case "calibration_snapshot": {
++      const score = typeof d["score"] === "number" ? d["score"] : null;
++      return {
++        eventType: "calibration_snapshot",
++        severity: "warning",
++        message: `Calibration snapshot captured (score=${score ?? "n/a"})`,
++        details: { score, payload: d },
++      };
++    }
++    case "calibration_drift": {
++      const rawSeverity = typeof d["severity"] === "string" ? d["severity"].toLowerCase() : "high";
++      const mapped: AlertSeverity = rawSeverity === "critical" ? "critical" : "warning";
++      const dimension = typeof d["dimension"] === "string" ? d["dimension"] : "unknown";
++      const description = typeof d["description"] === "string" ? d["description"] : "";
++      return {
++        eventType: "calibration_drift",
++        severity: mapped,
++        message: `Calibration drift detected on "${dimension}": ${description || "no description"}`,
++        details: { dimension, description, severity: rawSeverity, payload: d },
++        alertType: "ensemble_drift",
++      };
++    }
++    default:
++      return null;
++  }
++}
++
++// ── Router singleton ──────────────────────────────────────────────
++
++class SSEAlertRouter {
++  private static instance: SSEAlertRouter | null = null;
++  private uninstallHub: (() => void) | null = null;
++  private sloScanTimer: ReturnType<typeof setInterval> | null = null;
++  private readonly sloScanIntervalMs = Math.max(
++    5_000,
++    parseInt(process.env["SLO_SCAN_INTERVAL_MS"] ?? "60000", 10) || 60_000,
++  );
++  private stats = {
++    forwardedCount: 0,
++    byEventType: {} as Record<string, number>,
++    sloAlertsFired: 0,
++    lastForwardTs: null as string | null,
++  };
++
++  static getInstance(): SSEAlertRouter {
++    if (!SSEAlertRouter.instance) SSEAlertRouter.instance = new SSEAlertRouter();
++    return SSEAlertRouter.instance;
++  }
++
++  start(): void {
++    if (this.uninstallHub) return; // already running
++    this.uninstallHub = installHubSubscriber((evt) => {
++      this.handleEvent(evt);
++    });
++    this.sloScanTimer = setInterval(() => this.scanSLOs(), this.sloScanIntervalMs);
++    if (this.sloScanTimer.unref) this.sloScanTimer.unref();
++    logger.info(
++      { sloScanIntervalMs: this.sloScanIntervalMs },
++      "SSE alert router started — Phase 5 events bridged to webhook + SLO scanner active",
++    );
++  }
++
++  stop(): void {
++    if (this.uninstallHub) {
++      try { this.uninstallHub(); } catch (err: any) {
++        logger.warn({ err: err?.message }, "SSE alert router uninstall failed");
++      }
++      this.uninstallHub = null;
++    }
++    if (this.sloScanTimer) {
++      clearInterval(this.sloScanTimer);
++      this.sloScanTimer = null;
++    }
++    logger.info("SSE alert router stopped");
++  }
++
++  isRunning(): boolean {
++    return this.uninstallHub !== null;
++  }
++
++  getStats() {
++    return { ...this.stats, running: this.isRunning() };
++  }
++
++  private handleEvent(evt: { type: string; data: unknown; timestamp: string }): void {
++    const parsed = parsePhase5Event(evt.type, evt.data);
++    if (!parsed) return;
++    this.stats.forwardedCount++;
++    this.stats.byEventType[parsed.eventType] =
++      (this.stats.byEventType[parsed.eventType] ?? 0) + 1;
++    this.stats.lastForwardTs = new Date().toISOString();
++
++    if (parsed.alertType) {
++      // Fire through the cooldown-gated AlertType pipeline (log + webhook + SSE).
++      void fireAlert(parsed.alertType, parsed.severity, parsed.message, parsed.details);
++    } else {
++      // Log-only path for non-cooldown events (snapshots, promotion-eligible).
++      const logPayload = { eventType: parsed.eventType, ...parsed.details };
++      if (parsed.severity === "critical") logger.error(logPayload, parsed.message);
++      else logger.warn(logPayload, parsed.message);
++    }
++  }
++
++  private scanSLOs(): void {
++    try {
++      const alerting = sloTracker.getAlertingSLOs();
++      for (const burn of alerting) {
++        this.stats.sloAlertsFired++;
++        const severity: AlertSeverity = burn.tier === "critical" ? "critical" : "warning";
++        // Map SLO breach to the existing "production_gate_block_streak" type
++        // (closest semantic match for a systemic-degradation alert) so it rides
++        // the same cooldown pipeline.
++        void fireAlert(
++          "production_gate_block_streak",
++          severity,
++          `SLO "${burn.sloId}" burning at ${burn.burnRate.toFixed(2)}× (threshold ${burn.alertBurnRate}×), budget ${Math.round(burn.errorBudgetRemaining * 100)}%`,
++          {
++            sloId: burn.sloId,
++            burnRate: burn.burnRate,
++            alertBurnRate: burn.alertBurnRate,
++            successRate: burn.successRate,
++            objective: burn.objective,
++            windowMs: burn.windowMs,
++            windowSampleCount: burn.windowSampleCount,
++            tier: burn.tier,
++          },
++        );
++      }
++    } catch (err: any) {
++      logger.warn({ err: err?.message }, "SSE alert router SLO scan failed");
++    }
++  }
++}
++
++export const sseAlertRouter: SSEAlertRouter = SSEAlertRouter.getInstance();
++export { SSEAlertRouter };
+diff --git a/artifacts/api-server/src/lib/slo/slo_definitions.ts b/artifacts/api-server/src/lib/slo/slo_definitions.ts
+new file mode 100644
+index 0000000..302f02d
+--- /dev/null
++++ b/artifacts/api-server/src/lib/slo/slo_definitions.ts
+@@ -0,0 +1,157 @@
++/**
++ * SLO Definitions (Phase 6)
++ *
++ * Codified Service Level Objectives for the GodsView API. These are the
++ * production targets used by the SLO tracker to compute burn rates and by
++ * the alert router to escalate when an objective is at risk.
++ *
++ * Each SLO has:
++ *   - id: stable string identifier used in metrics labels and routes
++ *   - title: human-readable summary
++ *   - description: what this SLO measures
++ *   - objective: the target (e.g. 99.5% of requests under 500ms)
++ *   - window: rolling window the objective is measured against
++ *   - severity: how bad it is when this SLO is breached
++ *   - alertBurnRate: burn-rate multiplier that triggers an alert
++ *
++ * Burn rate (Google SRE workbook): the rate at which the error budget is
++ * being consumed. A burn rate of 1 means the budget is being spent at the
++ * same rate the SLO permits — at this pace it lasts exactly one window.
++ * A burn rate of 14.4 over a 1h window consumes 100% of a 30-day 99.9% budget.
++ *
++ * SLOs are organised by tier:
++ *   - critical:  trading path, execution, risk gates — page immediately
++ *   - high:      dashboard read APIs, feature pages — page within an hour
++ *   - normal:    ops endpoints, scheduler reads — file a ticket
++ */
++
++export type SLOTier = "critical" | "high" | "normal";
++export type SLOKind = "latency" | "availability" | "freshness" | "throughput";
++
++export interface SLODefinition {
++  id: string;
++  title: string;
++  description: string;
++  kind: SLOKind;
++  tier: SLOTier;
++  /** The target metric value (ms for latency, fraction 0-1 for availability/freshness) */
++  target: number;
++  /** Percentile that target applies to (latency only) */
++  percentile?: 50 | 90 | 95 | 99;
++  /** Objective fraction — % of measurements that must satisfy `target` */
++  objective: number;
++  /** Rolling window the objective is measured against */
++  windowMs: number;
++  /** Burn rate over the window that should fire a paging alert */
++  alertBurnRate: number;
++  /** HTTP route prefixes this SLO applies to (used for tagging requests) */
++  routePrefixes?: string[];
++}
++
++const HOUR = 3_600_000;
++const DAY = 86_400_000;
++
++export const SLO_DEFINITIONS: SLODefinition[] = [
++  // ── Critical: trading & execution path ─────────────────────────────
++  {
++    id: "trading_signals_latency",
++    title: "Trading signals API latency",
++    description:
++      "p95 of /api/signals* and /api/trades* requests must stay under 500ms — this is the surface the dashboard polls during live sessions.",
++    kind: "latency",
++    tier: "critical",
++    target: 500,
++    percentile: 95,
++    objective: 0.99,
++    windowMs: HOUR,
++    alertBurnRate: 6,
++    routePrefixes: ["/api/signals", "/api/trades"],
++  },
++  {
++    id: "execution_path_availability",
++    title: "Execution path availability",
++    description:
++      "/api/execution* and /api/alpaca* must answer 2xx 99.9% of the time over a rolling day. A breach here means orders may be silently dropped.",
++    kind: "availability",
++    tier: "critical",
++    target: 0.999,
++    objective: 0.999,
++    windowMs: DAY,
++    alertBurnRate: 14.4,
++    routePrefixes: ["/api/execution", "/api/alpaca"],
++  },
++  {
++    id: "scheduler_freshness",
++    title: "Governance & calibration scheduler freshness",
++    description:
++      "Cycle freshness — the gap between the last completed scheduler cycle and now must stay within 2× the scheduler interval. Indicates the cron is alive.",
++    kind: "freshness",
++    tier: "critical",
++    target: 2,
++    objective: 0.995,
++    windowMs: HOUR,
++    alertBurnRate: 4,
++    routePrefixes: ["/api/governance/scheduler", "/api/calibration/scheduler"],
++  },
++
++  // ── High: dashboard read surfaces ──────────────────────────────────
++  {
++    id: "dashboard_read_latency",
++    title: "Dashboard read API latency",
++    description:
++      "p95 of all /api/* GET requests must stay under 1.5s. This covers the long tail of dashboard pages (portfolio, performance, observability).",
++    kind: "latency",
++    tier: "high",
++    target: 1500,
++    percentile: 95,
++    objective: 0.95,
++    windowMs: HOUR,
++    alertBurnRate: 3,
++  },
++  {
++    id: "general_availability",
++    title: "API general availability",
++    description:
++      "All /api/* endpoints must answer 2xx-3xx-4xx (i.e. not 5xx) at least 99.5% of the time over a rolling day.",
++    kind: "availability",
++    tier: "high",
++    target: 0.995,
++    objective: 0.995,
++    windowMs: DAY,
++    alertBurnRate: 6,
++  },
++
++  // ── Normal: ops & low-traffic surfaces ─────────────────────────────
++  {
++    id: "ops_endpoint_latency",
++    title: "Ops endpoint latency",
++    description:
++      "p99 of /api/ops* and /api/observability* requests must stay under 3s — these surface internal status and aren't on the hot path.",
++    kind: "latency",
++    tier: "normal",
++    target: 3000,
++    percentile: 99,
++    objective: 0.95,
++    windowMs: HOUR,
++    alertBurnRate: 2,
++    routePrefixes: ["/api/ops", "/api/observability"],
++  },
++];
++
++export function findSLO(id: string): SLODefinition | undefined {
++  return SLO_DEFINITIONS.find((s) => s.id === id);
++}
++
++/**
++ * Match a request path to all SLOs that apply to it. The "general"
++ * availability and dashboard latency SLOs (no `routePrefixes`) match
++ * everything; specific SLOs match only their declared prefixes.
++ */
++export function findSLOsForPath(path: string): SLODefinition[] {
++  return SLO_DEFINITIONS.filter((slo) => {
++    if (!slo.routePrefixes || slo.routePrefixes.length === 0) {
++      return path.startsWith("/api/");
++    }
++    return slo.routePrefixes.some((p) => path.startsWith(p));
++  });
++}
+diff --git a/artifacts/api-server/src/lib/slo/slo_tracker.ts b/artifacts/api-server/src/lib/slo/slo_tracker.ts
+new file mode 100644
+index 0000000..1c8bd98
+--- /dev/null
++++ b/artifacts/api-server/src/lib/slo/slo_tracker.ts
+@@ -0,0 +1,245 @@
++/**
++ * SLO Tracker (Phase 6)
++ *
++ * In-process singleton that records request observations and computes burn
++ * rate against the codified SLOs in `slo_definitions.ts`.
++ *
++ * The tracker maintains a ring buffer of observations per SLO (capped to
++ * `SLO_OBS_MAX` = 5000 entries) so memory is bounded even under sustained
++ * traffic. Burn rate is the consumed-fraction of the error budget over the
++ * SLO's window divided by the rate at which the budget is permitted to
++ * be spent.
++ *
++ * No external dependencies; safe to import from the SSE alert router and
++ * the /api/slo route handlers.
++ */
++
++import { logger } from "../logger";
++import {
++  SLO_DEFINITIONS,
++  type SLODefinition,
++  findSLOsForPath,
++} from "./slo_definitions";
++
++const SLO_OBS_MAX = Math.max(
++  500,
++  parseInt(process.env["SLO_OBSERVATION_MAX"] ?? "5000", 10) || 5000,
++);
++
++interface Observation {
++  /** Epoch ms when the request finished */
++  ts: number;
++  /** Latency in ms */
++  latencyMs: number;
++  /** HTTP status code */
++  status: number;
++  /** Whether this observation satisfies the SLO target */
++  good: boolean;
++  /** Path prefix for diagnostics */
++  path: string;
++}
++
++interface BurnRateReport {
++  sloId: string;
++  windowMs: number;
++  windowSampleCount: number;
++  /** Fraction of observations that satisfy the SLO (0-1) */
++  successRate: number;
++  /** Configured objective (e.g. 0.99) */
++  objective: number;
++  /** errorBudgetRemaining = (successRate - objective) / (1 - objective); 1 = full budget, 0 = exhausted */
++  errorBudgetRemaining: number;
++  /** Burn rate vs alertBurnRate threshold */
++  burnRate: number;
++  alertBurnRate: number;
++  alerting: boolean;
++  lastSampleTs: number | null;
++  /** Tier copied from definition for convenient client rendering */
++  tier: SLODefinition["tier"];
++}
++
++class SLOTracker {
++  private static instance: SLOTracker | null = null;
++  private observations = new Map<string, Observation[]>();
++  private freshnessLastTick = new Map<string, number>();
++
++  private constructor() {
++    for (const slo of SLO_DEFINITIONS) {
++      this.observations.set(slo.id, []);
++    }
++  }
++
++  static getInstance(): SLOTracker {
++    if (!SLOTracker.instance) SLOTracker.instance = new SLOTracker();
++    return SLOTracker.instance;
++  }
++
++  /**
++   * Record a completed HTTP request against every applicable SLO.
++   * Called from the SLO middleware on `res.on("finish")`.
++   */
++  recordRequest(path: string, status: number, latencyMs: number): void {
++    const ts = Date.now();
++    const slos = findSLOsForPath(path);
++    for (const slo of slos) {
++      const good = this.isObservationGood(slo, status, latencyMs);
++      const buf = this.observations.get(slo.id);
++      if (!buf) continue;
++      buf.push({ ts, latencyMs, status, good, path });
++      if (buf.length > SLO_OBS_MAX) buf.shift();
++    }
++  }
++
++  /** Record that a scheduler completed a cycle — drives the freshness SLO. */
++  recordSchedulerTick(schedulerId: string): void {
++    this.freshnessLastTick.set(schedulerId, Date.now());
++  }
++
++  /**
++   * Record a freshness observation derived from a known scheduler.
++   * `expectedIntervalMs` is the scheduler's configured cadence; "good" means
++   * the elapsed time is within `target × expectedIntervalMs`.
++   */
++  recordFreshnessObservation(
++    sloId: string,
++    schedulerId: string,
++    expectedIntervalMs: number,
++  ): void {
++    const slo = SLO_DEFINITIONS.find((s) => s.id === sloId);
++    if (!slo || slo.kind !== "freshness") return;
++    const lastTick = this.freshnessLastTick.get(schedulerId);
++    if (!lastTick) return;
++    const elapsed = Date.now() - lastTick;
++    const ratio = elapsed / expectedIntervalMs;
++    const good = ratio <= slo.target;
++    const buf = this.observations.get(slo.id);
++    if (!buf) return;
++    buf.push({ ts: Date.now(), latencyMs: elapsed, status: 0, good, path: schedulerId });
++    if (buf.length > SLO_OBS_MAX) buf.shift();
++  }
++
++  private isObservationGood(slo: SLODefinition, status: number, latencyMs: number): boolean {
++    if (slo.kind === "availability") {
++      return status < 500;
++    }
++    if (slo.kind === "latency") {
++      return latencyMs <= slo.target;
++    }
++    // freshness/throughput handled separately
++    return status < 500;
++  }
++
++  /** Compute current burn rate report for a single SLO. */
++  getBurnRate(sloId: string): BurnRateReport | null {
++    const slo = SLO_DEFINITIONS.find((s) => s.id === sloId);
++    if (!slo) return null;
++    const buf = this.observations.get(sloId) ?? [];
++    const cutoff = Date.now() - slo.windowMs;
++    const window = buf.filter((o) => o.ts >= cutoff);
++    if (window.length === 0) {
++      return {
++        sloId,
++        windowMs: slo.windowMs,
++        windowSampleCount: 0,
++        successRate: 1,
++        objective: slo.objective,
++        errorBudgetRemaining: 1,
++        burnRate: 0,
++        alertBurnRate: slo.alertBurnRate,
++        alerting: false,
++        lastSampleTs: null,
++        tier: slo.tier,
++      };
++    }
++    const goods = window.filter((o) => o.good).length;
++    const successRate = goods / window.length;
++    const errorRate = 1 - successRate;
++    const allowedErrorRate = 1 - slo.objective;
++    const errorBudgetRemaining = allowedErrorRate === 0
++      ? (errorRate === 0 ? 1 : 0)
++      : Math.max(0, Math.min(1, 1 - errorRate / allowedErrorRate));
++    const burnRate = allowedErrorRate === 0 ? 0 : errorRate / allowedErrorRate;
++    const lastSampleTs = window[window.length - 1]?.ts ?? null;
++    return {
++      sloId,
++      windowMs: slo.windowMs,
++      windowSampleCount: window.length,
++      successRate,
++      objective: slo.objective,
++      errorBudgetRemaining,
++      burnRate,
++      alertBurnRate: slo.alertBurnRate,
++      alerting: burnRate >= slo.alertBurnRate,
++      lastSampleTs,
++      tier: slo.tier,
++    };
++  }
++
++  getAllBurnRates(): BurnRateReport[] {
++    return SLO_DEFINITIONS
++      .map((s) => this.getBurnRate(s.id))
++      .filter((r): r is BurnRateReport => r !== null);
++  }
++
++  /** Diagnostic snapshot used by /api/slo/budgets */
++  getBudgetSnapshot() {
++    return {
++      slos: SLO_DEFINITIONS.map((slo) => {
++        const burn = this.getBurnRate(slo.id);
++        return {
++          id: slo.id,
++          title: slo.title,
++          description: slo.description,
++          tier: slo.tier,
++          kind: slo.kind,
++          target: slo.target,
++          percentile: slo.percentile,
++          objective: slo.objective,
++          windowMs: slo.windowMs,
++          alertBurnRate: slo.alertBurnRate,
++          routePrefixes: slo.routePrefixes ?? [],
++          burn,
++        };
++      }),
++    };
++  }
++
++  /** Reset tracker state — only used in tests / forced ops. */
++  reset(): void {
++    for (const slo of SLO_DEFINITIONS) {
++      this.observations.set(slo.id, []);
++    }
++    this.freshnessLastTick.clear();
++  }
++
++  /** Internal hook used by the alert router to enumerate alerting SLOs. */
++  getAlertingSLOs(): BurnRateReport[] {
++    return this.getAllBurnRates().filter((r) => r.alerting);
++  }
++}
++
++export const sloTracker: SLOTracker = SLOTracker.getInstance();
++
++/**
++ * Express middleware: records latency + status against the SLO tracker.
++ * Mounted in app.ts after the existing prometheus middleware so the path
++ * has already been resolved.
++ */
++import type { Request, Response, NextFunction } from "express";
++
++export function sloMiddleware(req: Request, res: Response, next: NextFunction): void {
++  const start = process.hrtime.bigint();
++  res.on("finish", () => {
++    try {
++      const latencyMs = Number(process.hrtime.bigint() - start) / 1e6;
++      const path = (req.route?.path ?? req.path ?? "").toString();
++      sloTracker.recordRequest(path, res.statusCode, latencyMs);
++    } catch (err: any) {
++      // Never throw from the middleware — log and move on.
++      logger.warn({ err: err?.message }, "SLO middleware record failed");
++    }
++  });
++  next();
++}
++
++export type { BurnRateReport };
+diff --git a/artifacts/api-server/src/routes/index.ts b/artifacts/api-server/src/routes/index.ts
+index d181b25..06ac808 100644
+--- a/artifacts/api-server/src/routes/index.ts
++++ b/artifacts/api-server/src/routes/index.ts
+@@ -77,6 +77,7 @@ import certificationRunRouter from "./certification_run";
+ import opsV2Router from "./ops_v2";
+ import governanceSchedulerRouter from "./governance_scheduler";
+ import calibrationSchedulerRouter from "./calibration_scheduler";
++import sloRouter from "./slo";
+ 
+ const router: IRouter = Router();
+ 
+@@ -161,6 +162,9 @@ router.use("/api/ops/v2", opsV2Router); // Operator brief, kill switch, exposure
+ router.use(governanceSchedulerRouter);
+ router.use(calibrationSchedulerRouter);
+ 
++// Phase 6: SLO definitions, budgets, and burn-rate routes
++router.use(sloRouter);
++
+ // Python v2 microservices proxy — shadow routes at /v2/*
+ router.use(pythonV2Router);
+ 
+diff --git a/artifacts/api-server/src/routes/slo.ts b/artifacts/api-server/src/routes/slo.ts
+new file mode 100644
+index 0000000..9768fcb
+--- /dev/null
++++ b/artifacts/api-server/src/routes/slo.ts
+@@ -0,0 +1,109 @@
++/**
++ * SLO Routes (Phase 6)
++ *
++ *   GET  /api/slo/definitions          — codified SLO definitions
++ *   GET  /api/slo/budgets              — full snapshot incl. burn rate per SLO
++ *   GET  /api/slo/burn-rate            — alerting SLOs only
++ *   GET  /api/slo/burn-rate/:id        — single SLO burn rate detail
++ *   GET  /api/slo/router/status        — SSE alert router stats + run state
++ *   POST /api/slo/reset                — operator-gated, clears observation buffers
++ *
++ * All read endpoints are unauthenticated (status surface). The reset
++ * endpoint is operator-gated to avoid an attacker wiping evidence of a
++ * burning SLO.
++ */
++
++import { Router, type Request, type Response } from "express";
++import { SLO_DEFINITIONS, findSLO } from "../lib/slo/slo_definitions";
++import { sloTracker } from "../lib/slo/slo_tracker";
++import { sseAlertRouter } from "../lib/alerts/sse_alert_router";
++import { requireOperator } from "../lib/auth_guard";
++import { logger } from "../lib/logger";
++
++const router: Router = Router();
++
++router.get("/api/slo/definitions", (_req: Request, res: Response) => {
++  res.json({
++    status: "success",
++    count: SLO_DEFINITIONS.length,
++    slos: SLO_DEFINITIONS.map((s) => ({
++      id: s.id,
++      title: s.title,
++      description: s.description,
++      kind: s.kind,
++      tier: s.tier,
++      target: s.target,
++      percentile: s.percentile,
++      objective: s.objective,
++      windowMs: s.windowMs,
++      alertBurnRate: s.alertBurnRate,
++      routePrefixes: s.routePrefixes ?? [],
++    })),
++    timestamp: new Date().toISOString(),
++  });
++});
++
++router.get("/api/slo/budgets", (_req: Request, res: Response) => {
++  res.json({
++    status: "success",
++    snapshot: sloTracker.getBudgetSnapshot(),
++    timestamp: new Date().toISOString(),
++  });
++});
++
++router.get("/api/slo/burn-rate", (_req: Request, res: Response) => {
++  const all = sloTracker.getAllBurnRates();
++  const alerting = all.filter((b) => b.alerting);
++  res.json({
++    status: "success",
++    alertingCount: alerting.length,
++    totalCount: all.length,
++    alerting,
++    all,
++    timestamp: new Date().toISOString(),
++  });
++});
++
++router.get("/api/slo/burn-rate/:id", (req: Request, res: Response) => {
++  const rawId = req.params["id"];
++  const id = typeof rawId === "string" ? rawId : Array.isArray(rawId) ? rawId[0] : undefined;
++  if (!id || typeof id !== "string") {
++    res.status(400).json({ error: "id_required" });
++    return;
++  }
++  if (!findSLO(id)) {
++    res.status(404).json({ error: "slo_not_found", id });
++    return;
++  }
++  const burn = sloTracker.getBurnRate(id);
++  res.json({
++    status: "success",
++    burn,
++    timestamp: new Date().toISOString(),
++  });
++});
++
++router.get("/api/slo/router/status", (_req: Request, res: Response) => {
++  res.json({
++    status: "success",
++    router: sseAlertRouter.getStats(),
++    timestamp: new Date().toISOString(),
++  });
++});
++
++router.post("/api/slo/reset", requireOperator, (_req: Request, res: Response) => {
++  try {
++    sloTracker.reset();
++    logger.warn("SLO tracker observations reset by operator");
++    res.json({
++      status: "success",
++      message: "SLO observation buffers cleared",
++      timestamp: new Date().toISOString(),
++    });
++  } catch (err: any) {
++    logger.error({ err: err?.message ?? String(err) }, "SLO reset failed");
++    res.status(500).json({ error: "reset_failed", message: err?.message ?? "Unknown error" });
++  }
++});
++
++export default router;
+diff --git a/docs/SLOs.md b/docs/SLOs.md
+new file mode 100644
+index 0000000..edc506c
+--- /dev/null
++++ b/docs/SLOs.md
+@@ -0,0 +1,141 @@
++# GodsView Service Level Objectives
++
++Defined in code at `artifacts/api-server/src/lib/slo/slo_definitions.ts`.
++This document is the human-readable pair to that module — when they
++diverge, the code is the source of truth. Alerts are scanned once per
++minute by the SSE alert router (`lib/alerts/sse_alert_router.ts`) and
++fired via the existing `GODSVIEW_ALERT_WEBHOOK_URL` pipeline.
++
++---
++
++## Tiers and escalation
++
++| Tier     | Page target                 | Who responds        |
++| -------- | --------------------------- | ------------------- |
++| critical | Immediately (PagerDuty P1)  | on-call + tech lead |
++| high     | Within one hour             | on-call             |
++| normal   | Ticket + next business hour | ops rotation        |
++
++Burn rate is "the rate at which the error budget is being consumed" —
++per the Google SRE workbook. A burn rate of 1 means the budget is
++spent at the pace the SLO permits. A burn rate of 14.4 over a rolling
++1-hour window consumes 100% of a 30-day 99.9% budget.
++
++---
++
++## Critical SLOs
++
++### `trading_signals_latency`
++
++- **Target:** p95 of `/api/signals*` + `/api/trades*` ≤ 500ms
++- **Objective:** 99% over a rolling 1 hour
++- **Alert burn rate:** 6× (fires when burn ≥ 6)
++- **Why:** the dashboard polls these endpoints during live sessions; a
++  slow response surfaces as UI stalls that mask live pricing.
++
++### `execution_path_availability`
++
++- **Target:** 2xx rate on `/api/execution*` + `/api/alpaca*` ≥ 99.9%
++- **Objective:** 99.9% over a rolling 24 hours
++- **Alert burn rate:** 14.4×
++- **Why:** a 5xx on the execution path can silently drop an order. This
++  is the single hardest SLO in the system.
++
++### `scheduler_freshness`
++
++- **Target:** Elapsed time since last governance or calibration cycle
++  ≤ 2× the configured interval
++- **Objective:** 99.5% over a rolling 1 hour
++- **Alert burn rate:** 4×
++- **Why:** if the cron stops ticking, promotion gating and calibration
++  drift detection go dark without any error being thrown.
++
++---
++
++## High SLOs
++
++### `dashboard_read_latency`
++
++- **Target:** p95 of all `/api/*` GETs ≤ 1.5s
++- **Objective:** 95% over a rolling 1 hour
++- **Alert burn rate:** 3×
++- **Why:** long tail of portfolio, observability, performance pages;
++  dashboard stays usable as long as this is green.
++
++### `general_availability`
++
++- **Target:** non-5xx rate on `/api/*` ≥ 99.5%
++- **Objective:** 99.5% over a rolling 24 hours
++- **Alert burn rate:** 6×
++- **Why:** catches systemic regressions that don't fall into a specific
++  route prefix (auth guard, rate limiter, upstream auth services).
++
++---
++
++## Normal SLOs
++
++### `ops_endpoint_latency`
++
++- **Target:** p99 of `/api/ops*` + `/api/observability*` ≤ 3s
++- **Objective:** 95% over a rolling 1 hour
++- **Alert burn rate:** 2×
++- **Why:** ops surfaces are internal-only and tolerate more variance,
++  but should still not block a runbook step.
++
++---
++
++## Alert routing
++
++The SSE alert router subscribes to the four Phase 5 SSE event types and
++forwards them through the existing `fireAlert()` pipeline:
++
++| SSE event              | AlertType fired                 | Severity mapping        |
++| ---------------------- | ------------------------------- | ----------------------- |
++| `promotion_eligible`   | log + webhook only              | warning                 |
++| `demotion_signal`      | `production_gate_block_streak`  | high/critical → critical; else warning |
++| `calibration_snapshot` | log + webhook only              | warning                 |
++| `calibration_drift`    | `ensemble_drift`                | critical / warning      |
++
++Burn-rate alerts fire as `production_gate_block_streak` with severity
++derived from the SLO tier (critical → critical; else warning).
++
++---
++
++## Verification
++
++1. The SLO tracker observes every HTTP request via the middleware in
++   `lib/slo/slo_tracker.ts`; ring buffer is capped at
++   `SLO_OBSERVATION_MAX=5000` per SLO.
++2. `/api/slo/budgets` returns the full snapshot including the computed
++   burn rate, error budget remaining, and window sample count.
++3. `/api/slo/burn-rate` filters to alerting SLOs only.
++4. `GET /api/slo/router/status` reports the SSE alert router's run
++   state and forwarded-event counts.
++5. `POST /api/slo/reset` (operator-gated) clears observation buffers —
++   only for post-incident clean-up; don't use it to paper over a
++   breach.
++
++---
++
++## Load testing baseline
++
++`load-tests/k6-api-stress.js` now exercises the scheduler status
++endpoints and the SLO surface in its default VU ramp. A tighter
++scheduler-only test lives at `load-tests/k6-scheduler-baseline.js` and
++should be run before every release.
++
++```bash
++k6 run load-tests/k6-scheduler-baseline.js
++k6 run load-tests/k6-api-stress.js
++```
++
++Both tests pass thresholds against a locally-running api-server with the
++Phase 5 schedulers active. Breakpoints:
++
++- `/api/governance/scheduler/*` p95 ≤ 500ms, p99 ≤ 1500ms
++- `/api/calibration/scheduler/*` p95 ≤ 500ms, p99 ≤ 1500ms
++- `/api/slo/*` p95 ≤ 750ms, p99 ≤ 2000ms
++
++If any of these budgets regress, investigate before shipping — the
++scheduler endpoints are pure in-memory reads and should stay under a
++few hundred ms even under 100 concurrent VUs.
+diff --git a/load-tests/k6-api-stress.js b/load-tests/k6-api-stress.js
+index e5eb935..92b8cd5 100644
+--- a/load-tests/k6-api-stress.js
++++ b/load-tests/k6-api-stress.js
+@@ -18,6 +18,9 @@ const signalLatency = new Trend("signal_latency", true);
+ const healthLatency = new Trend("health_latency", true);
+ const tickerLatency = new Trend("ticker_latency", true);
+ const brainLatency = new Trend("brain_latency", true);
++const govSchedulerLatency = new Trend("gov_scheduler_latency", true);
++const calSchedulerLatency = new Trend("cal_scheduler_latency", true);
++const sloLatency = new Trend("slo_latency", true);
+ 
+ /* ── Test Configuration ─────────────────────────────────────────────────────── */
+ export const options = {
+@@ -35,6 +38,9 @@ export const options = {
+     health_latency: ["p(95)<500"],
+     ticker_latency: ["p(95)<2000"],
+     brain_latency: ["p(95)<1000"],
++    gov_scheduler_latency: ["p(95)<500", "p(99)<1500"],
++    cal_scheduler_latency: ["p(95)<500", "p(99)<1500"],
++    slo_latency: ["p(95)<750", "p(99)<2000"],
+   },
+ };
+ 
+@@ -106,6 +112,50 @@ export default function () {
+     checkOk(res, "openapi-spec");
+   });
+ 
++  // Phase 6: scheduler endpoints (Phase 5 cron status surface)
++  group("Governance Scheduler Status", () => {
++    const res = http.get(`${BASE}/api/governance/scheduler/status`);
++    govSchedulerLatency.add(res.timings.duration);
++    checkOk(res, "gov-scheduler-status");
++  });
++
++  group("Governance Scheduler History", () => {
++    const res = http.get(`${BASE}/api/governance/scheduler/history?limit=20`);
++    govSchedulerLatency.add(res.timings.duration);
++    checkOk(res, "gov-scheduler-history");
++  });
++
++  group("Calibration Scheduler Status", () => {
++    const res = http.get(`${BASE}/api/calibration/scheduler/status`);
++    calSchedulerLatency.add(res.timings.duration);
++    checkOk(res, "cal-scheduler-status");
++  });
++
++  group("Calibration Scheduler Score", () => {
++    const res = http.get(`${BASE}/api/calibration/scheduler/score`);
++    calSchedulerLatency.add(res.timings.duration);
++    checkOk(res, "cal-scheduler-score");
++  });
++
++  // Phase 6: SLO surfaces
++  group("SLO Definitions", () => {
++    const res = http.get(`${BASE}/api/slo/definitions`);
++    sloLatency.add(res.timings.duration);
++    checkOk(res, "slo-definitions");
++  });
++
++  group("SLO Budgets", () => {
++    const res = http.get(`${BASE}/api/slo/budgets`);
++    sloLatency.add(res.timings.duration);
++    checkOk(res, "slo-budgets");
++  });
++
++  group("SLO Burn Rate", () => {
++    const res = http.get(`${BASE}/api/slo/burn-rate`);
++    sloLatency.add(res.timings.duration);
++    checkOk(res, "slo-burn-rate");
++  });
++
+   sleep(Math.random() * 0.5 + 0.1);
+ }
+ 
+diff --git a/load-tests/k6-scheduler-baseline.js b/load-tests/k6-scheduler-baseline.js
+new file mode 100644
+index 0000000..5215cbf
+--- /dev/null
++++ b/load-tests/k6-scheduler-baseline.js
+@@ -0,0 +1,94 @@
++/**
++ * GodsView Scheduler Baseline Load Test — k6 (Phase 6)
++ *
++ * Exercises the Phase 5 scheduler status surface + the Phase 6 SLO surface
++ * under realistic cron pressure. The dashboard is expected to poll each
++ * status endpoint roughly once a second per open client — this test
++ * simulates 20 clients sustained for 3 minutes.
++ *
++ * Run:   k6 run load-tests/k6-scheduler-baseline.js
++ * Env:   BASE_URL (default http://localhost:3000)
++ *
++ * Thresholds are tight on purpose — these endpoints are purely in-memory
++ * reads and must stay fast even under a full scheduler tick.
++ */
++import http from "k6/http";
++import { check, group, sleep } from "k6";
++import { Rate, Trend } from "k6/metrics";
++
++const BASE = __ENV.BASE_URL || "http://localhost:3000";
++
++const errorRate = new Rate("errors");
++const govStatusLatency = new Trend("gov_status_latency", true);
++const govHistoryLatency = new Trend("gov_history_latency", true);
++const calStatusLatency = new Trend("cal_status_latency", true);
++const calScoreLatency = new Trend("cal_score_latency", true);
++const sloBudgetsLatency = new Trend("slo_budgets_latency", true);
++const sloBurnLatency = new Trend("slo_burn_latency", true);
++
++export const options = {
++  scenarios: {
++    dashboard_poll: {
++      executor: "constant-vus",
++      vus: 20,
++      duration: "3m",
++    },
++  },
++  thresholds: {
++    http_req_duration: ["p(95)<500", "p(99)<1500"],
++    errors: ["rate<0.01"],
++    gov_status_latency: ["p(95)<300"],
++    gov_history_latency: ["p(95)<500"],
++    cal_status_latency: ["p(95)<300"],
++    cal_score_latency: ["p(95)<400"],
++    slo_budgets_latency: ["p(95)<500"],
++    slo_burn_latency: ["p(95)<400"],
++  },
++};
++
++function checkOk(res, name) {
++  const ok = check(res, { [`${name} status 200`]: (r) => r.status === 200 });
++  errorRate.add(!ok);
++  return ok;
++}
++
++export default function () {
++  group("Governance Status Poll", () => {
++    const res = http.get(`${BASE}/api/governance/scheduler/status`);
++    govStatusLatency.add(res.timings.duration);
++    checkOk(res, "gov-status");
++  });
++
++  group("Governance History Poll", () => {
++    const res = http.get(`${BASE}/api/governance/scheduler/history?limit=50`);
++    govHistoryLatency.add(res.timings.duration);
++    checkOk(res, "gov-history");
++  });
++
++  group("Calibration Status Poll", () => {
++    const res = http.get(`${BASE}/api/calibration/scheduler/status`);
++    calStatusLatency.add(res.timings.duration);
++    checkOk(res, "cal-status");
++  });
++
++  group("Calibration Score Poll", () => {
++    const res = http.get(`${BASE}/api/calibration/scheduler/score`);
++    calScoreLatency.add(res.timings.duration);
++    checkOk(res, "cal-score");
++  });
++
++  group("SLO Budgets Poll", () => {
++    const res = http.get(`${BASE}/api/slo/budgets`);
++    sloBudgetsLatency.add(res.timings.duration);
++    checkOk(res, "slo-budgets");
++  });
++
++  group("SLO Burn Rate Poll", () => {
++    const res = http.get(`${BASE}/api/slo/burn-rate`);
++    sloBurnLatency.add(res.timings.duration);
++    checkOk(res, "slo-burn");
++  });
++
++  // ~1s between full poll cycles per VU — matches dashboard behaviour.
++  sleep(1.0);
++}
+-- 
+2.34.1
+

@@ -53,6 +53,28 @@ export function sanitizeUpstreamErrorBody(
   if (!raw) return "empty response";
 
   const bounded = raw.length > maxInputLen ? raw.slice(0, maxInputLen) : raw;
+
+  // Attempt JSON extraction: pull message/detail/error string from JSON bodies
+  if (bounded.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(bounded);
+      const msg =
+        (typeof parsed === "object" && parsed !== null)
+          ? (typeof parsed.message === "string" ? parsed.message :
+             typeof parsed.detail === "string" ? parsed.detail :
+             typeof parsed.error === "string" ? parsed.error :
+             typeof parsed.error?.detail === "string" ? parsed.error.detail :
+             typeof parsed.error?.message === "string" ? parsed.error.message :
+             null)
+          : null;
+      if (msg) {
+        return msg.length > maxLen ? `${msg.slice(0, maxLen)}...` : msg;
+      }
+    } catch {
+      // Not valid JSON — fall through to HTML/text handling
+    }
+  }
+
   const looksHtml = /<\/?[a-z][\s\S]*>/i.test(bounded) || /<!doctype/i.test(bounded);
   const stripped = looksHtml ? stripHtmlMarkup(bounded) : bounded;
   const normalized = collapseRepeatedPrefix(
