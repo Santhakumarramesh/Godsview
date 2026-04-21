@@ -53,7 +53,7 @@ function initializeDemoGraph(): { nodes: GraphNode[]; edges: GraphEdge[] } {
       vy: 0,
       confidence: 0.92,
       active: true,
-      metrics: { price: "$234.50", 52wHigh: "$245.00", volume: "52.4M" },
+      metrics: { price: "$234.50", "52wHigh": "$245.00", volume: "52.4M" },
     },
     {
       id: "NVDA",
@@ -65,7 +65,7 @@ function initializeDemoGraph(): { nodes: GraphNode[]; edges: GraphEdge[] } {
       vy: 0,
       confidence: 0.88,
       active: true,
-      metrics: { price: "$945.20", 52wHigh: "$980.00", volume: "28.1M" },
+      metrics: { price: "$945.20", "52wHigh": "$980.00", volume: "28.1M" },
     },
     {
       id: "TSLA",
@@ -77,7 +77,7 @@ function initializeDemoGraph(): { nodes: GraphNode[]; edges: GraphEdge[] } {
       vy: 0,
       confidence: 0.75,
       active: false,
-      metrics: { price: "$198.35", 52wHigh: "$210.00", volume: "91.2M" },
+      metrics: { price: "$198.35", "52wHigh": "$210.00", volume: "91.2M" },
     },
     {
       id: "MSFT",
@@ -89,7 +89,7 @@ function initializeDemoGraph(): { nodes: GraphNode[]; edges: GraphEdge[] } {
       vy: 0,
       confidence: 0.91,
       active: true,
-      metrics: { price: "$427.80", 52wHigh: "$450.00", volume: "18.5M" },
+      metrics: { price: "$427.80", "52wHigh": "$450.00", volume: "18.5M" },
     },
     {
       id: "AMZN",
@@ -101,7 +101,7 @@ function initializeDemoGraph(): { nodes: GraphNode[]; edges: GraphEdge[] } {
       vy: 0,
       confidence: 0.82,
       active: false,
-      metrics: { price: "$198.40", 52wHigh: "$205.00", volume: "42.3M" },
+      metrics: { price: "$198.40", "52wHigh": "$205.00", volume: "42.3M" },
     },
     {
       id: "BTC",
@@ -113,7 +113,7 @@ function initializeDemoGraph(): { nodes: GraphNode[]; edges: GraphEdge[] } {
       vy: 0,
       confidence: 0.86,
       active: true,
-      metrics: { price: "$68,420", 52wHigh: "$70,000", volume: "28.4B" },
+      metrics: { price: "$68,420", "52wHigh": "$70,000", volume: "28.4B" },
     },
     {
       id: "ES",

@@ -171,7 +171,7 @@ export default function AutonomousPage() {
                     style={{ width: `${Math.min(((metrics?.profitFactor || 0) / 2.5) * 100, 100)}%` }}
                   />
                 </div>
-                <p className="text-xs text-gray-400 mt-1">Required: > 1.5x</p>
+                <p className="text-xs text-gray-400 mt-1">Required: {'>'} 1.5x</p>
               </div>
 
               <div>
@@ -187,7 +187,7 @@ export default function AutonomousPage() {
                     style={{ width: `${Math.min((metrics?.winRate || 0) * 100, 100)}%` }}
                   />
                 </div>
-                <p className="text-xs text-gray-400 mt-1">Required: > 55%</p>
+                <p className="text-xs text-gray-400 mt-1">Required: {'>'} 55%</p>
               </div>
 
               <div>
@@ -203,7 +203,7 @@ export default function AutonomousPage() {
                     style={{ width: `${Math.min((metrics?.maxDrawdown || 0) * 100, 100)}%` }}
                   />
                 </div>
-                <p className="text-xs text-gray-400 mt-1">Required: < 10%</p>
+                <p className="text-xs text-gray-400 mt-1">Required: {'<'} 10%</p>
               </div>
             </div>
           </div>

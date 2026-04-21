@@ -9,9 +9,15 @@ const nextConfig = {
   async rewrites() {
     const apiBase = process.env.GODSVIEW_CONTROL_PLANE_ORIGIN || "http://localhost:8000";
     return [
+      // Proxy /api/* to FastAPI gateway (primary route used by all pages)
       {
-        source: "/api/v1/:path*",
-        destination: `${apiBase}/:path*`,
+        source: "/api/:path*",
+        destination: `${apiBase}/api/:path*`,
+      },
+      // Proxy /health/* to gateway health endpoints
+      {
+        source: "/health/:path*",
+        destination: `${apiBase}/health/:path*`,
       },
     ];
   },

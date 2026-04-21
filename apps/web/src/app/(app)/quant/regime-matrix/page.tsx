@@ -139,19 +139,19 @@ export default function RegimeMatrixPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8">
           <div className="border border-emerald-600 bg-emerald-900/40 rounded-lg p-4">
             <div className="text-emerald-400 font-semibold text-sm">Excellent</div>
-            <div className="text-gray-400 text-xs mt-1">PF > 1.5</div>
+            <div className="text-gray-400 text-xs mt-1">PF {'>'} 1.5</div>
           </div>
           <div className="border border-emerald-500 bg-emerald-900/20 rounded-lg p-4">
             <div className="text-emerald-400 font-semibold text-sm">Good</div>
-            <div className="text-gray-400 text-xs mt-1">PF > 1.0</div>
+            <div className="text-gray-400 text-xs mt-1">PF {'>'} 1.0</div>
           </div>
           <div className="border border-yellow-600 bg-yellow-900/20 rounded-lg p-4">
             <div className="text-yellow-400 font-semibold text-sm">Neutral</div>
-            <div className="text-gray-400 text-xs mt-1">PF > 0.8</div>
+            <div className="text-gray-400 text-xs mt-1">PF {'>'} 0.8</div>
           </div>
           <div className="border border-red-600 bg-red-900/20 rounded-lg p-4">
             <div className="text-red-400 font-semibold text-sm">Poor</div>
-            <div className="text-gray-400 text-xs mt-1">PF < 0.8</div>
+            <div className="text-gray-400 text-xs mt-1">PF {'<'} 0.8</div>
           </div>
         </div>
       </div>
