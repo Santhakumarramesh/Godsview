@@ -40,7 +40,8 @@ export default function ExperimentsPage() {
   };
 
   const sortedExperiments = [...experiments].sort((a, b) => {
-    if (sortBy === "status") return { running: 0, completed: 1, failed: 2 }[a.status as any] - { running: 0, completed: 1, failed: 2 }[b.status as any];
+    const statusOrder = { running: 0, completed: 1, failed: 2 } as const;
+    if (sortBy === "status") return (statusOrder[a.status] ?? 3) - (statusOrder[b.status] ?? 3);
     if (sortBy === "performance") return b.bestResult - a.bestResult;
     return new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime();
   });

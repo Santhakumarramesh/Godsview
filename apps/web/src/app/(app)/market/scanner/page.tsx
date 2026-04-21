@@ -303,8 +303,8 @@ export default function MarketScannerPage() {
 
     // Sort
     data.sort((a, b) => {
-      const aVal = a[sortColumn];
-      const bVal = b[sortColumn];
+      const aVal = a[sortColumn] as string | number;
+      const bVal = b[sortColumn] as string | number;
 
       let comparison = 0;
       if (typeof aVal === "number" && typeof bVal === "number") {

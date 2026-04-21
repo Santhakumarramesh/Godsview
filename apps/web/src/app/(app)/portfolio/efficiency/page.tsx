@@ -139,8 +139,8 @@ export default function EfficiencyPage() {
               {Object.entries(byStrategy).length === 0 ? (
                 <p className="text-gray-400">No strategy allocations</p>
               ) : (
-                Object.entries(byStrategy).map(([strategy, value]) => {
-                  const pct = totalEquity > 0 ? (value / totalEquity) * 100 : 0
+                Object.entries(byStrategy).map(([strategy, value]: [string, unknown]) => {
+                  const pct = totalEquity > 0 ? ((value as number) / totalEquity) * 100 : 0
                   return (
                     <div key={strategy}>
                       <div className="flex justify-between items-center mb-2">

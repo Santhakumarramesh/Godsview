@@ -448,7 +448,7 @@ function Card({
 }: {
   title: string;
   subtitle?: string;
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }) {
   return (
     <div className="rounded-lg border border-border bg-surface p-4 md:p-6">

@@ -129,7 +129,7 @@ export default function CorrelationPage() {
                 <div key={cluster.name} className="bg-slate-800/30 border border-slate-700 rounded-lg p-4 hover:border-slate-600 transition-all">
                   <div className="flex items-start justify-between mb-3">
                     <h3 className="font-semibold text-white">{cluster.name}</h3>
-                    <span className={`px-2 py-1 rounded text-xs font-bold border ${riskColors[cluster.risk as any]}`}>{cluster.risk.toUpperCase()} RISK</span>
+                    <span className={`px-2 py-1 rounded text-xs font-bold border ${riskColors[cluster.risk as keyof typeof riskColors]}`}>{cluster.risk.toUpperCase()} RISK</span>
                   </div>
 
                   <div className="flex flex-wrap gap-2 mb-3">
