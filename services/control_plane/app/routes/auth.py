@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request, status
@@ -115,7 +115,9 @@ async def login(
         source_ip=(request.client.host if request.client else None),
     )
     db.add(stored)
-    await db.execute(update(User).where(User.id == user.id).values(last_login_at=datetime.now(UTC)))
+    await db.execute(
+        update(User).where(User.id == user.id).values(last_login_at=datetime.now(timezone.utc))
+    )
     await log_event(
         db,
         request=request,
@@ -173,7 +175,7 @@ async def refresh(
         )
 
     # rotate: revoke old, issue new
-    stored.revoked_at = datetime.now(UTC)
+    stored.revoked_at = datetime.now(timezone.utc)
     access_token, access_exp = issue_token(
         settings=settings,
         user_id=user.id,
@@ -216,7 +218,7 @@ async def logout(
     await db.execute(
         update(RefreshToken)
         .where(RefreshToken.user_id == user.id, RefreshToken.revoked_at.is_(None))
-        .values(revoked_at=datetime.now(UTC))
+        .values(revoked_at=datetime.now(timezone.utc))
     )
     await log_event(
         db,

@@ -105,7 +105,9 @@ async def _ensure_admin() -> str:
             id=f"usr_{uuid.uuid4().hex}",
             email=settings.bootstrap_admin_email.lower(),
             display_name="Bootstrap Admin",
-            password_hash=hash_password(settings.bootstrap_admin_password.get_secret_value()),
+            password_hash=hash_password(
+                settings.bootstrap_admin_password.get_secret_value()
+            ),
             roles=["admin"],
             mfa_enabled=False,
             disabled=False,
@@ -120,7 +122,9 @@ async def _ensure_flags() -> int:
     created = 0
     async with session_scope() as db:
         for seed in DEFAULT_FLAGS:
-            existing = await db.scalar(select(FeatureFlag).where(FeatureFlag.key == seed.key))
+            existing = await db.scalar(
+                select(FeatureFlag).where(FeatureFlag.key == seed.key)
+            )
             if existing is not None:
                 continue
             db.add(
@@ -143,7 +147,9 @@ async def _ensure_config() -> int:
     created = 0
     async with session_scope() as db:
         for seed in DEFAULT_CONFIG:
-            existing = await db.scalar(select(SystemConfig).where(SystemConfig.key == seed.key))
+            existing = await db.scalar(
+                select(SystemConfig).where(SystemConfig.key == seed.key)
+            )
             if existing is not None:
                 continue
             db.add(

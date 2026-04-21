@@ -78,8 +78,3 @@ ignore = ["B008"]
 [tool.ruff.lint.per-file-ignores]
 "alembic/*" = ["E402", "F401"]
 "tests/*" = ["B"]
-# Route schemas face the TypeScript client and must stay camelCase so the
-# OpenAPI spec (packages/api-client/openapi.json) matches what the web app
-# consumes. N815 would force snake_case attribute names that fight Pydantic
-# model_config={"populate_by_name": True}.
-"app/routes/*.py" = ["N815"]
