@@ -101,11 +101,11 @@ export type NoTradeReason =
   | "conflicting_flow"
   | "bad_session"
   | "news_lockout"
-  | "macro_bias_block"
-  | "sentiment_crowding_block"
   | "sk_zone_miss"
   | "sk_bias_conflict"
   | "cvd_not_ready"
+  | "macro_bias_block"
+  | "sentiment_crowding_block"
   | "none";
 
 export type SetupCooldowns = Record<string, number>;
@@ -631,9 +631,9 @@ export type NoTradeFilterOptions = {
   replayMode?: boolean;
   sessionAllowed?: boolean;
   newsLockoutActive?: boolean;
-  /** Layer 0: macro bias from macro_bias_engine — blocks high-conviction counter-direction trades */
+  /** Optional macro-bias context — enables macro_bias_block gate */
   macroBias?: MacroBiasResult;
-  /** Layer 0.5: retail sentiment from sentiment_engine — blocks trades aligned with extreme crowd */
+  /** Optional sentiment context — enables sentiment_crowding_block gate */
   sentiment?: SentimentResult;
 };
 
@@ -648,14 +648,37 @@ export function applyNoTradeFilters(
   let replayMode = false;
   let sessionAllowed = true;
   let newsLockoutActive = false;
-  if ("replayMode" in optionsOrCooldowns || "cooldowns" in optionsOrCooldowns) {
+  let macroBias: MacroBiasResult | undefined;
+  let sentiment: SentimentResult | undefined;
+  if ("replayMode" in optionsOrCooldowns || "cooldowns" in optionsOrCooldowns
+      || "macroBias" in optionsOrCooldowns || "sentiment" in optionsOrCooldowns) {
     const opts = optionsOrCooldowns as NoTradeFilterOptions;
     cooldowns = opts.cooldowns ?? {};
     replayMode = opts.replayMode ?? false;
     sessionAllowed = opts.sessionAllowed ?? true;
     newsLockoutActive = opts.newsLockoutActive ?? false;
+    macroBias = opts.macroBias;
+    sentiment = opts.sentiment;
   } else {
     cooldowns = optionsOrCooldowns as SetupCooldowns;
+  }
+
+  // Macro bias gate: only in live mode — block when high-conviction bias opposes direction
+  if (!replayMode && macroBias?.conviction === "high") {
+    const setupDir: "long" | "short" = recall.trend_slope_5m >= 0 ? "long" : "short";
+    if (macroBias.blockedDirections.includes(setupDir)) {
+      return { blocked: true, reason: "macro_bias_block" };
+    }
+  }
+
+  // Sentiment crowding gate: only in live mode — block when crowd is extreme and setup is crowd-aligned
+  if (!replayMode && sentiment?.crowdingLevel === "extreme") {
+    const setupDir: "long" | "short" = recall.trend_slope_5m >= 0 ? "long" : "short";
+    const edgeFadesLong  = sentiment.institutionalEdge === "fade_long"  && setupDir === "long";
+    const edgeFadesShort = sentiment.institutionalEdge === "fade_short" && setupDir === "short";
+    if (edgeFadesLong || edgeFadesShort) {
+      return { blocked: true, reason: "sentiment_crowding_block" };
+    }
   }
 
   // Chop gate: always active — no edge in either mode
@@ -669,35 +692,6 @@ export function applyNoTradeFilters(
 
   if (!replayMode && !sessionAllowed) return { blocked: true, reason: "bad_session" };
   if (!replayMode && newsLockoutActive) return { blocked: true, reason: "news_lockout" };
-
-  // Layer 0: Macro Bias Gate (YoungTraderWealth Layer 1 — macro tailwind/headwind)
-  // Only fires in live mode with high conviction. Blocks trades against macro direction.
-  if (!replayMode && "macroBias" in optionsOrCooldowns) {
-    const opts = optionsOrCooldowns as NoTradeFilterOptions;
-    const macroBias = opts.macroBias;
-    if (macroBias && macroBias.conviction === "high") {
-      const setupDir: "long" | "short" = recall.trend_slope_5m >= 0 ? "long" : "short";
-      if (macroBias.blockedDirections.includes(setupDir)) {
-        return { blocked: true, reason: "macro_bias_block" };
-      }
-    }
-  }
-
-  // Layer 0.5: Retail Sentiment Gate (YoungTraderWealth Layer 2 — fade the retail crowd)
-  // Only fires in live mode at extreme crowding when trading WITH the crowd.
-  if (!replayMode && "sentiment" in optionsOrCooldowns) {
-    const opts = optionsOrCooldowns as NoTradeFilterOptions;
-    const sentiment = opts.sentiment;
-    if (sentiment && sentiment.crowdingLevel === "extreme") {
-      const setupDir: "long" | "short" = recall.trend_slope_5m >= 0 ? "long" : "short";
-      const tradingWithCrowd =
-        (sentiment.institutionalEdge === "fade_long"  && setupDir === "long") ||
-        (sentiment.institutionalEdge === "fade_short" && setupDir === "short");
-      if (tradingWithCrowd) {
-        return { blocked: true, reason: "sentiment_crowding_block" };
-      }
-    }
-  }
 
   // Setup cooldown — only in live mode (replay has unlimited concurrent/daily)
   if (!replayMode) {
@@ -719,7 +713,12 @@ export function applyNoTradeFilters(
   // SK zone filter: relaxed in replay mode (0.55 instead of 0.35)
   // Equivalent to the SK zone miss being less strict during historical scan
   const skZoneCap = replayMode ? 0.55 : 0.35;
-  const setupDef = SETUP_CATALOG[setup];
+  const setupDef = SETUP_CATALOG[setup as SetupType] ?? {
+    requiresSkZone: false,
+    requiresBiasAlignment: false,
+    requiresCvdDivergence: false,
+    minFinalQuality: 0,
+  };
   if (setupDef.requiresSkZone && recall.sk.zone_distance_pct > skZoneCap) {
     return { blocked: true, reason: "sk_zone_miss" };
   }

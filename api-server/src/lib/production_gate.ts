@@ -28,6 +28,8 @@ import {
   isSessionAllowed,
   getCurrentTradingSession,
 } from "./risk_engine";
+import { emitSIDecision } from "./signal_stream";
+import { getStrategyAllocationForSignal, getStrategyAllocatorSnapshot } from "./strategy_allocator";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -49,6 +51,10 @@ export interface ProductionDecision {
     kelly_pct: string;
     regime: string;
     confluence: number;
+    strategy_multiplier: number;
+    strategy_allocation_level: string;
+    strategy_id: string | null;
+    strategy_score: number;
     risk_snapshot: Record<string, unknown>;
     timestamp: string;
   };
@@ -157,21 +163,34 @@ export async function evaluateForProduction(
     blockReasons.push(`Edge score ${signal.edge_score.toFixed(3)} below production minimum ${PROD_MIN_EDGE}`);
   }
 
+  // 11. Strategy-level allocator multiplier (walk-forward + validation aware)
+  const allocation = getStrategyAllocationForSignal({
+    setup_type: input.setup_type,
+    regime: input.regime,
+    symbol: input.symbol,
+  });
+  if (allocation.multiplier <= 0) {
+    blockReasons.push("Strategy allocator multiplier is zero");
+  }
+
   // Calculate position details
   const risk = Math.abs(input.entry_price - input.stop_loss);
-  const dollarRisk = signal.suggested_qty * risk;
-  const quantity = signal.suggested_qty;
+  const quantity = Math.max(0, Math.round(signal.suggested_qty * allocation.multiplier));
+  const dollarRisk = quantity * risk;
+  if (signal.suggested_qty > 0 && quantity <= 0) {
+    blockReasons.push(`Strategy allocation reduced quantity to zero (${allocation.match_level})`);
+  }
 
   // If any block reasons, reject
   if (blockReasons.length > 0) {
-    return buildDecision("BLOCKED_BY_SI", signal, 0, 0, blockReasons, input);
+    return buildDecision("BLOCKED_BY_SI", signal, 0, 0, blockReasons, input, allocation);
   }
 
   // ✅ APPROVED — record trade and return execution decision
   dailyTradeCount++;
   recentTrades.set(input.symbol, now);
 
-  return buildDecision("EXECUTE", signal, quantity, dollarRisk, [], input);
+  return buildDecision("EXECUTE", signal, quantity, dollarRisk, [], input, allocation);
 }
 
 function buildDecision(
@@ -181,9 +200,15 @@ function buildDecision(
   dollarRisk: number,
   blockReasons: string[],
   input: SuperIntelligenceInput & { symbol: string },
+  allocation?: {
+    multiplier: number;
+    match_level: string;
+    strategy_id: string | null;
+    score: number;
+  },
 ): ProductionDecision {
   const riskSnap = getRiskEngineSnapshot();
-  return {
+  const decision: ProductionDecision = {
     action,
     signal,
     quantity,
@@ -195,15 +220,43 @@ function buildDecision(
       kelly_pct: `${(signal.kelly_fraction * 100).toFixed(2)}%`,
       regime: input.regime,
       confluence: signal.confluence_score,
+      strategy_multiplier: allocation?.multiplier ?? 1,
+      strategy_allocation_level: allocation?.match_level ?? "NONE",
+      strategy_id: allocation?.strategy_id ?? null,
+      strategy_score: allocation?.score ?? 0.5,
       risk_snapshot: riskSnap as unknown as Record<string, unknown>,
       timestamp: new Date().toISOString(),
     },
   };
+
+  // Broadcast every production decision to the SI live feed (SSE)
+  emitSIDecision({
+    symbol: input.symbol,
+    action,
+    direction: input.direction,
+    setup_type: input.setup_type,
+    regime: input.regime,
+    win_probability: signal.win_probability,
+    edge_score: signal.edge_score,
+    kelly_pct: decision.meta.kelly_pct,
+    confluence: signal.confluence_score,
+    aligned_timeframes: signal.aligned_timeframes,
+    enhanced_quality: signal.enhanced_quality,
+    approved: signal.approved,
+    rejection_reason: signal.rejection_reason,
+    block_reasons: blockReasons,
+    kelly_fraction: signal.kelly_fraction,
+    suggested_qty: quantity,
+    timestamp: decision.meta.timestamp,
+  });
+
+  return decision;
 }
 
 /** Get production gate stats for dashboard */
 export function getProductionGateStats() {
   resetDailyIfNeeded();
+  const allocator = getStrategyAllocatorSnapshot();
   return {
     daily_trades: dailyTradeCount,
     max_daily_trades: PROD_MAX_DAILY_TRADES,
@@ -211,6 +264,9 @@ export function getProductionGateStats() {
     min_win_prob: PROD_MIN_WIN_PROB,
     min_edge: PROD_MIN_EDGE,
     max_spread_pct: PROD_MAX_SPREAD_PCT,
+    strategy_allocator_running: allocator.running,
+    strategy_allocator_allocations: allocator.allocation_count,
+    strategy_allocator_last_status: allocator.last_validation_status,
     active_cooldowns: Array.from(recentTrades.entries()).map(([sym, ts]) => ({
       symbol: sym,
       expires_in_ms: Math.max(0, PROD_COOLDOWN_MS - (Date.now() - ts)),

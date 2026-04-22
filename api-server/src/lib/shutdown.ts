@@ -14,6 +14,9 @@ type ShutdownCallback = () => Promise<void>;
 
 const callbacks: ShutdownCallback[] = [];
 let shuttingDown = false;
+let handlersRegistered = false;
+let activeServer: Server | null = null;
+let forceExitTimer: ReturnType<typeof setTimeout> | null = null;
 
 /** Register a cleanup function to run during shutdown (LIFO order). */
 export function onShutdown(cb: ShutdownCallback): void {
@@ -22,6 +25,12 @@ export function onShutdown(cb: ShutdownCallback): void {
 
 /** Wire up SIGTERM / SIGINT + uncaught handlers on the given server. */
 export function setupGracefulShutdown(server: Server): void {
+  activeServer = server;
+  if (handlersRegistered) {
+    logger.debug("Graceful shutdown handlers already registered; updated active server reference");
+    return;
+  }
+
   const timeout = runtimeConfig.shutdownTimeoutMs ?? 15_000;
   const perCallbackTimeout = 5_000;
 
@@ -32,7 +41,7 @@ export function setupGracefulShutdown(server: Server): void {
     logger.info({ signal }, "Graceful shutdown initiated");
 
     // Stop accepting new connections
-    server.close(() => {
+    activeServer?.close(() => {
       logger.info("HTTP server closed — no more connections");
     });
 
@@ -56,7 +65,8 @@ export function setupGracefulShutdown(server: Server): void {
 
   // Force exit after total timeout
   const forceExit = (): void => {
-    setTimeout(() => {
+    if (forceExitTimer) return;
+    forceExitTimer = setTimeout(() => {
       logger.fatal("Force exit — shutdown timeout exceeded");
       process.exit(1);
     }, timeout).unref();
@@ -74,4 +84,6 @@ export function setupGracefulShutdown(server: Server): void {
     logger.fatal({ reason }, "Unhandled rejection");
     drainAndExit("unhandledRejection");
   });
+
+  handlersRegistered = true;
 }

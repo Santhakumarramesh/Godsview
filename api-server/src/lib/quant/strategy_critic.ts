@@ -764,3 +764,5 @@ export class StrategyCritic {
 }
 
 export default StrategyCritic;
+
+export const strategyCritic = new StrategyCritic();

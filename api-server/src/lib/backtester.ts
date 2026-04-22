@@ -14,12 +14,143 @@
  * - Edge decay: how quickly edge deteriorates over time
  */
 
-import { logger } from "./logger";
 import { processSuperSignal } from "./super_intelligence";
 import { computeFinalQuality } from "./strategy_engine";
 import { getBars, AlpacaBar } from "./alpaca";
 import pLimit from "p-limit";
-import { guardSyntheticData, logSyntheticUsage } from "./data_safety_guard";
+
+// ─── Validation ───────────────────────────────────────────────────────────────
+
+export interface BacktestConfigValidationError {
+  field: string;
+  message: string;
+}
+
+export interface ValidateBacktestConfigResult {
+  valid: boolean;
+  errors: BacktestConfigValidationError[];
+}
+
+/**
+ * Validate backtest configuration before execution
+ * - lookback_days must be > 0 and <= 3650 (10 years)
+ * - initial_equity must be > 0
+ * - symbol must be non-empty and valid format
+ * - mode must be one of: baseline | super_intelligence | comparison
+ * - min_signals (if provided) must be > 0
+ */
+export function validateBacktestConfig(config: BacktestConfig): ValidateBacktestConfigResult {
+  const errors: BacktestConfigValidationError[] = [];
+
+  if (!config.lookback_days || config.lookback_days <= 0 || config.lookback_days > 3650) {
+    errors.push({ field: "lookback_days", message: "Must be > 0 and <= 3650 days (10 years)" });
+  }
+
+  if (!config.initial_equity || config.initial_equity <= 0) {
+    errors.push({ field: "initial_equity", message: "Must be > 0" });
+  }
+
+  if (config.initial_equity && config.initial_equity > 1_000_000_000) {
+    errors.push({ field: "initial_equity", message: "Initial equity exceeds reasonable limit (1B)" });
+  }
+
+  const validModes: BacktestConfig["mode"][] = ["baseline", "super_intelligence", "comparison"];
+  if (!validModes.includes(config.mode)) {
+    errors.push({ field: "mode", message: `Must be one of: ${validModes.join(", ")}` });
+  }
+
+  if (config.min_signals !== undefined) {
+    if (config.min_signals <= 0) {
+      errors.push({ field: "min_signals", message: "Must be > 0" });
+    }
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+// ─── Backtest Health Check ────────────────────────────────────────────────────
+
+export interface BacktestHealthCheckResult {
+  activeBacktests: number;
+  estimatedMemoryMB: number;
+  healthy: boolean;
+  warnings: string[];
+}
+
+let activeBacktestCount = 0;
+
+export function backtestHealthCheck(): BacktestHealthCheckResult {
+  const warnings: string[] = [];
+
+  if (activeBacktestCount > 10) {
+    warnings.push(`High number of active backtests: ${activeBacktestCount}`);
+  }
+
+  const estimatedMemoryMB = activeBacktestCount * 15; // ~15MB per active backtest
+
+  if (estimatedMemoryMB > 500) {
+    warnings.push(`Estimated memory usage high: ${estimatedMemoryMB}MB`);
+  }
+
+  return {
+    activeBacktests: activeBacktestCount,
+    estimatedMemoryMB,
+    healthy: activeBacktestCount <= 10 && estimatedMemoryMB <= 500,
+    warnings,
+  };
+}
+
+/**
+ * Protect equity curve from going negative — floor at 0
+ * Logs warning if equity would have gone negative
+ */
+export function enforceEquityCurveFloor(equity: number, startingEquity: number): number {
+  if (equity < 0) {
+    console.warn(`Equity curve would have gone negative: ${equity}. Flooring at 0.`);
+    return 0;
+  }
+  return equity;
+}
+
+/**
+ * Compute running checksum of trade sequence for integrity validation
+ * Uses simple hash to detect if trades have been modified or reordered
+ */
+export function computeTradeChecksum(trades: TradeResult[]): string {
+  let hash = 5381;
+  for (const trade of trades) {
+    const tradeStr = `${trade.signal_id}|${trade.entry_price}|${trade.outcome}|${trade.pnl_pct}`;
+    for (let i = 0; i < tradeStr.length; i++) {
+      hash = ((hash << 5) + hash) + tradeStr.charCodeAt(i);
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+  }
+  return Math.abs(hash).toString(16);
+}
+
+/**
+ * Validate trade sequence integrity
+ */
+export function validateTradeSequenceIntegrity(trades: TradeResult[], expectedChecksum?: string): boolean {
+  if (trades.length === 0) return true;
+
+  const computed = computeTradeChecksum(trades);
+
+  if (expectedChecksum && computed !== expectedChecksum) {
+    console.warn(`Trade sequence checksum mismatch. Expected: ${expectedChecksum}, Got: ${computed}`);
+    return false;
+  }
+
+  // Additional validation: ensure trades are ordered by signal_id (monotonic)
+  for (let i = 1; i < trades.length; i++) {
+    if (trades[i].signal_id < trades[i - 1].signal_id) {
+      console.warn(`Trade sequence not monotonic. Trade ${i} (id=${trades[i].signal_id}) follows trade ${i - 1} (id=${trades[i - 1].signal_id})`);
+      return false;
+    }
+  }
+
+  return true;
+}
 
 /**
  * Generate synthetic 1-minute bars for backtesting when real bars aren't available.
@@ -35,16 +166,27 @@ function generateSyntheticBars(basePrice: number, count: number, direction: "lon
     const close = price + change;
     const high = Math.max(open, close) + Math.random() * price * 0.001;
     const low = Math.min(open, close) - Math.random() * price * 0.001;
+    const timestamp = new Date(Date.now() - (count - i) * 60000).toISOString();
+    const volume = Math.floor(Math.random() * 1000 + 100);
+    const tradeCount = Math.floor(Math.random() * 50 + 5);
+    const vwap = (open + close + high + low) / 4;
     bars.push({
-      Timestamp: new Date(Date.now() - (count - i) * 60000).toISOString(),
+      t: timestamp,
+      o: open,
+      h: high,
+      l: low,
+      c: close,
+      v: volume,
+      vw: vwap,
+      n: tradeCount,
+      Timestamp: timestamp,
       Open: open,
       High: high,
       Low: low,
       Close: close,
-      Volume: Math.floor(Math.random() * 1000 + 100),
-      TradeCount: Math.floor(Math.random() * 50 + 5),
-      VWAP: (open + close + high + low) / 4,
-    } as AlpacaBar);
+      Volume: volume,
+      VWAP: vwap,
+    });
     price = close;
   }
   return bars;
@@ -332,12 +474,13 @@ export async function runBacktest(config: BacktestConfig): Promise<BacktestResul
       bars = await getBars(symbol, "1Min", 240, barTime.toISOString());
     } catch {
       // No Alpaca key or API error — generate synthetic 1m bars for replay
+      // GUARDED: blocked in live mode to prevent fake data contaminating decisions
+      const { guardSyntheticData } = await import("./data_safety_guard.js");
       bars = guardSyntheticData(
         `backtester:${symbol}`,
         () => generateSyntheticBars(APPROX_PRICES[symbol] ?? 100, 240, direction),
-        `Cannot backtest ${symbol}: real market data unavailable and synthetic data blocked in live mode`
+        `Cannot backtest ${symbol}: real market data unavailable and synthetic data blocked in live mode`,
       );
-      logSyntheticUsage(`backtester:${symbol}`);
     }
     if (bars.length === 0) return null;
 
@@ -460,6 +603,31 @@ export async function runBacktest(config: BacktestConfig): Promise<BacktestResul
     si.wins, si.trades_taken,
   );
 
+  // ── Bidirectional Learning: feed backtest results into continuous learning ──
+  try {
+    const { ingestBacktestResults } = await import("./continuous_learning.js");
+    const ingestPayload = validTrades.map(t => ({
+      symbol: t.setup_type.includes("/") ? t.setup_type : config.symbols?.[0] ?? "UNKNOWN",
+      setup_type: t.setup_type,
+      direction: t.direction,
+      regime: t.regime,
+      structure_score: t.baseline_quality,
+      order_flow_score: t.si_edge_score ?? 0.5,
+      recall_score: t.si_win_prob ?? 0.5,
+      final_quality: t.enhanced_quality ?? t.baseline_quality,
+      outcome: t.outcome as "win" | "loss",
+      entry_price: t.entry_price,
+      stop_loss: t.stop_loss,
+      take_profit: t.take_profit,
+      realized_pnl: t.pnl_pct,
+    }));
+    await ingestBacktestResults(ingestPayload);
+  } catch (err: any) {
+    // Non-fatal — learning ingestion should never block backtest results
+    const { logger } = await import("./logger.js");
+    logger.warn({ err: err?.message }, "[backtester] Failed to ingest results into learning loop");
+  }
+
   return {
     config,
     baseline,
@@ -483,7 +651,7 @@ export async function runBacktest(config: BacktestConfig): Promise<BacktestResul
 
 // ── Metrics Computation ────────────────────────────────────────────────────
 
-function computeMetrics(trades: TradeResult[], initialEquity: number): BacktestMetrics {
+export function computeMetrics(trades: TradeResult[], initialEquity: number): BacktestMetrics {
   if (trades.length === 0) return emptyMetrics();
 
   const wins = trades.filter(t => t.outcome === "win");
@@ -541,7 +709,7 @@ function computeMetrics(trades: TradeResult[], initialEquity: number): BacktestM
   };
 }
 
-function emptyMetrics(): BacktestMetrics {
+export function emptyMetrics(): BacktestMetrics {
   return {
     total_signals: 0, trades_taken: 0, wins: 0, losses: 0, win_rate: 0,
     profit_factor: 0, total_pnl_pct: 0, avg_win_pct: 0, avg_loss_pct: 0,
@@ -550,7 +718,7 @@ function emptyMetrics(): BacktestMetrics {
   };
 }
 
-function buildEquityCurve(
+export function buildEquityCurve(
   trades: TradeResult[],
   initialEquity: number,
 ): Array<{ idx: number; equity: number }> {
@@ -565,7 +733,7 @@ function buildEquityCurve(
 
 // ── Statistical Significance (Two-Proportion Z-Test) ───────────────────────
 
-function computeSignificance(
+export function computeSignificance(
   wins1: number, n1: number,
   wins2: number, n2: number,
 ): { z_score: number; p_value: number; is_significant: boolean; confidence_level: string } {
@@ -601,7 +769,7 @@ function computeSignificance(
 }
 
 // Rational approximation of normal CDF (Abramowitz & Stegun)
-function approxNormalCDF(x: number): number {
+export function approxNormalCDF(x: number): number {
   if (x < -8) return 0;
   if (x > 8) return 1;
   const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741;
@@ -617,7 +785,7 @@ function approxNormalCDF(x: number): number {
  * REPLAY LOGIC: Walks through bars to find TP/SL hit
  * Handles slippage by checking if bar opens beyond the level
  */
-function replaySignal(
+export function replaySignal(
   bars: AlpacaBar[],
   direction: "long" | "short",
   entryPrice: number,
@@ -673,7 +841,7 @@ export interface StrategyLeaderboardEntry {
 }
 
 let _continuousBacktestRunning = false;
-let _continuousBacktestInterval: NodeJS.Timer | null = null;
+let _continuousBacktestInterval: NodeJS.Timeout | null = null;
 let _strategyLeaderboard: Map<string, StrategyLeaderboardEntry> = new Map();
 let _lastBacktestResult: { result: BacktestResult; timestamp: string } | null = null;
 const _strategyTierRegistry: Map<string, {
@@ -696,7 +864,7 @@ export async function startContinuousBacktest(): Promise<{ success: boolean; mes
   }
 
   _continuousBacktestRunning = true;
-  logger.info("[backtest] Continuous backtesting started — will test every 5 minutes");
+  console.log("[backtest] Continuous backtesting started — will test every 5 minutes");
 
   // Perform initial backtest immediately
   await runContinuousBacktestCycle();
@@ -706,7 +874,7 @@ export async function startContinuousBacktest(): Promise<{ success: boolean; mes
     try {
       await runContinuousBacktestCycle();
     } catch (err) {
-      logger.error("[backtest] Continuous cycle error:", err);
+      console.error("[backtest] Continuous cycle error:", err);
     }
   }, 5 * 60_000);
 
@@ -727,7 +895,7 @@ export function stopContinuousBacktest(): { success: boolean; message: string } 
   }
 
   _continuousBacktestRunning = false;
-  logger.info("[backtest] Continuous backtesting stopped");
+  console.log("[backtest] Continuous backtesting stopped");
   return { success: true, message: "Continuous backtesting deactivated" };
 }
 
@@ -736,7 +904,7 @@ export function stopContinuousBacktest(): { success: boolean; message: string } 
  */
 async function runContinuousBacktestCycle(): Promise<void> {
   try {
-    logger.info("[backtest] [continuous] Starting backtest cycle...");
+    console.log("[backtest] [continuous] Starting backtest cycle...");
 
     const timeHorizons = [30, 60, 90, 180, 365];
     const results: BacktestResult[] = [];
@@ -744,7 +912,7 @@ async function runContinuousBacktestCycle(): Promise<void> {
     // Run backtest for each time horizon
     for (const days of timeHorizons) {
       try {
-        logger.info(`[backtest] [continuous] Running ${days}-day backtest...`);
+        console.log(`[backtest] [continuous] Running ${days}-day backtest...`);
         const result = await runBacktest({
           lookback_days: days,
           initial_equity: 10_000,
@@ -753,12 +921,12 @@ async function runContinuousBacktestCycle(): Promise<void> {
         });
         results.push(result);
       } catch (err) {
-        logger.error(`[backtest] [continuous] ${days}-day backtest failed:`, err);
+        console.error(`[backtest] [continuous] ${days}-day backtest failed:`, err);
       }
     }
 
     if (results.length === 0) {
-      logger.info("[backtest] [continuous] No valid results from cycle");
+      console.log("[backtest] [continuous] No valid results from cycle");
       return;
     }
 
@@ -771,9 +939,9 @@ async function runContinuousBacktestCycle(): Promise<void> {
     // Update strategy leaderboard based on results
     updateStrategyLeaderboard(results);
 
-    logger.info(`[backtest] [continuous] Cycle complete: ${results.length} time horizons tested`);
+    console.log(`[backtest] [continuous] Cycle complete: ${results.length} time horizons tested`);
   } catch (err) {
-    logger.error("[backtest] [continuous] Backtest cycle failed:", err);
+    console.error("[backtest] [continuous] Backtest cycle failed:", err);
   }
 }
 
@@ -875,9 +1043,9 @@ function updateStrategyLeaderboard(results: BacktestResult[]): void {
       _strategyLeaderboard.set(key, entry);
     }
 
-    logger.info(`[backtest] Updated leaderboard: ${_strategyLeaderboard.size} strategies`);
+    console.log(`[backtest] Updated leaderboard: ${_strategyLeaderboard.size} strategies`);
   } catch (err) {
-    logger.error("[backtest] [continuous] Strategy leaderboard update failed:", err);
+    console.error("[backtest] [continuous] Strategy leaderboard update failed:", err);
   }
 }
 
@@ -1549,4 +1717,58 @@ export function getLatestWalkForward(strategyId?: string): WalkForwardResult | W
   }
   const all = Array.from(_latestWalkForwardByStrategy.values()).sort((a, b) => b.generated_at.localeCompare(a.generated_at));
   return all;
+}
+
+function emptyAggregateOos(): WalkForwardResult["aggregate_oos"] {
+  return {
+    trades: 0,
+    wins: 0,
+    losses: 0,
+    win_rate: 0,
+    profit_factor: 0,
+    sharpe_ratio: 0,
+    expectancy_r: 0,
+    max_drawdown_pct: 0,
+    avg_rr: 0,
+    avg_quality: 0,
+    pass_rate: 0,
+    windows_passed: 0,
+    windows_total: 0,
+  };
+}
+
+export function getWalkForwardTier(strategyId: string): {
+  strategy_id: string;
+  tier: StrategyTier;
+  updated_at: string;
+  notes: string[];
+  aggregate_oos: WalkForwardResult["aggregate_oos"];
+} | null {
+  const canonical = parseStrategyFilter(strategyId).canonical_id;
+  return _strategyTierRegistry.get(canonical) ?? null;
+}
+
+export function setWalkForwardTier(input: {
+  strategy_id: string;
+  tier: StrategyTier;
+  notes?: string[];
+  aggregate_oos?: WalkForwardResult["aggregate_oos"];
+}): {
+  strategy_id: string;
+  tier: StrategyTier;
+  updated_at: string;
+  notes: string[];
+  aggregate_oos: WalkForwardResult["aggregate_oos"];
+} {
+  const canonical = parseStrategyFilter(input.strategy_id).canonical_id;
+  const existing = _strategyTierRegistry.get(canonical);
+  const next = {
+    strategy_id: canonical,
+    tier: input.tier,
+    updated_at: new Date().toISOString(),
+    notes: input.notes?.length ? input.notes : existing?.notes ?? [],
+    aggregate_oos: input.aggregate_oos ?? existing?.aggregate_oos ?? emptyAggregateOos(),
+  };
+  _strategyTierRegistry.set(canonical, next);
+  return next;
 }

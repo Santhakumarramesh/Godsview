@@ -206,7 +206,17 @@ function detectFakeEntry(
 
 signalsRouter.get("/signals", async (req: Request, res: Response) => {
   try {
-    const query = GetSignalsQueryParams.parse(req.query);
+    const parsedQuery = GetSignalsQueryParams.safeParse(req.query);
+    if (!parsedQuery.success) {
+      const issues = parsedQuery.error.issues.slice(0, 8).map((issue) => ({
+        path: issue.path.join("."),
+        message: issue.message,
+      }));
+      logger.warn({ issues }, "[signals] GET / invalid query");
+      res.status(400).json({ error: "Invalid query parameters", issues });
+      return;
+    }
+    const query = parsedQuery.data;
 
     const conditions = [];
     if (query.setup_type) conditions.push(eq(signalsTable.setup_type, query.setup_type));
@@ -231,7 +241,17 @@ signalsRouter.get("/signals", async (req: Request, res: Response) => {
 
 signalsRouter.post("/signals", async (req: Request, res: Response) => {
   try {
-    const body = CreateSignalBody.parse(req.body) as any;
+    const parsedBody = CreateSignalBody.safeParse(req.body);
+    if (!parsedBody.success) {
+      const issues = parsedBody.error.issues.slice(0, 8).map((issue) => ({
+        path: issue.path.join("."),
+        message: issue.message,
+      }));
+      logger.warn({ issues }, "[signals] POST / invalid payload");
+      res.status(400).json({ error: "Invalid signal payload", issues });
+      return;
+    }
+    const body = parsedBody.data as any;
 
     const structure  = Number(body.structure_score   ?? 0);
     const orderFlow  = Number(body.order_flow_score  ?? 0);

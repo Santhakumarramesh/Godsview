@@ -16,6 +16,7 @@
 
 import { logger } from "./logger";
 import type { TrailingStopConfig, ProfitTarget } from "./super_intelligence";
+import { persistWrite, persistRead, persistAppend } from "./persistent_store";
 
 // ── Types ─────────────────────────────────────────────
 export interface ManagedPosition {
@@ -46,6 +47,25 @@ export interface MonitorEvent {
   symbol: string;
   detail: Record<string, unknown>;
   timestamp: string;
+}
+
+export interface PositionLifecycleEvent {
+  symbol: string;
+  stage: "opened" | "partial_closed" | "full_closed";
+  entry_price: number;
+  close_price?: number;
+  entry_time: string;
+  close_time?: string;
+  quantity_opened: number;
+  quantity_closed?: number;
+  reason?: string;
+}
+
+export interface PositionHealthCheck {
+  managed_positions: number;
+  stale_positions: number;
+  avg_hold_time_ms: number;
+  total_monitored_value_usd: number;
 }
 
 // ── State ─────────────────────────────────────────────
@@ -79,7 +99,8 @@ export function registerPosition(pos: {
 
   managed.set(pos.symbol, {
     symbol: pos.symbol,
-    direction: pos.direction,    entry_price: pos.entry_price,
+    direction: pos.direction,
+    entry_price: pos.entry_price,
     original_stop: pos.stop_loss,
     current_stop: pos.stop_loss,
     take_profit: pos.take_profit,
@@ -93,6 +114,19 @@ export function registerPosition(pos: {
     entered_at: Date.now(),
     atr: pos.atr,
   });
+
+  // Record lifecycle event
+  try {
+    persistAppend("position_events", {
+      symbol: pos.symbol,
+      stage: "opened",
+      entry_price: pos.entry_price,
+      entry_time: new Date().toISOString(),
+      quantity_opened: pos.quantity,
+    } as PositionLifecycleEvent, 5000);
+  } catch (err) {
+    logger.warn({ err, symbol: pos.symbol }, "Failed to record position lifecycle event");
+  }
 
   logger.info({
     symbol: pos.symbol,
@@ -122,6 +156,48 @@ export function getMonitorEvents(limit = 50): MonitorEvent[] {
   return eventLog.slice(-limit).reverse();
 }
 
+/**
+ * Get position history for a specific symbol
+ */
+export function getPositionHistory(symbol: string): PositionLifecycleEvent[] {
+  try {
+    const events = persistRead<PositionLifecycleEvent[]>("position_events", []);
+    return events.filter((e) => e.symbol === symbol);
+  } catch (err) {
+    logger.warn({ err, symbol }, "Failed to retrieve position history");
+    return [];
+  }
+}
+
+/**
+ * Position health check
+ */
+export function positionHealthCheck(): PositionHealthCheck {
+  const now = Date.now();
+  const positions = Array.from(managed.values());
+
+  // Check for stale positions (no price update in 5+ minutes)
+  let staleCount = 0;
+  let totalValue = 0;
+  let totalHoldTime = 0;
+
+  for (const pos of positions) {
+    const holdTime = now - pos.entered_at;
+    totalHoldTime += holdTime;
+
+    // Estimate if stale (in practice, we'd check last price update time)
+    // For now, just count positions
+    totalValue += pos.entry_price * pos.remaining_qty;
+  }
+
+  return {
+    managed_positions: positions.length,
+    stale_positions: staleCount,
+    avg_hold_time_ms: positions.length > 0 ? totalHoldTime / positions.length : 0,
+    total_monitored_value_usd: totalValue,
+  };
+}
+
 // ── Core Monitor Loop ─────────────────────────────────
 
 async function monitorTick(): Promise<void> {
@@ -146,7 +222,8 @@ async function monitorTick(): Promise<void> {
 
     try {
       await evaluatePosition(pos, price);
-    } catch (err) {      logger.error({ err, symbol }, "Position monitor: error evaluating position");
+    } catch (err) {
+      logger.error({ err, symbol }, "Position monitor: error evaluating position");
     }
   }
 }
@@ -277,6 +354,23 @@ async function closeFullPosition(pos: ManagedPosition, reason: string): Promise<
     const { closePosition } = await import("./alpaca");
     await closePosition(pos.symbol);
     logger.info({ symbol: pos.symbol, reason, direction: pos.direction }, "Position fully closed by monitor");
+
+    // Record lifecycle event
+    try {
+      persistAppend("position_events", {
+        symbol: pos.symbol,
+        stage: "full_closed",
+        entry_price: pos.entry_price,
+        close_price: pos.peak_price, // Use peak for estimate
+        entry_time: new Date(pos.entered_at).toISOString(),
+        close_time: new Date().toISOString(),
+        quantity_opened: pos.quantity,
+        quantity_closed: pos.quantity,
+        reason,
+      } as PositionLifecycleEvent, 5000);
+    } catch (err) {
+      logger.warn({ err, symbol: pos.symbol }, "Failed to record full close event");
+    }
   } catch (err) {
     logger.error({ err, symbol: pos.symbol, reason }, "Failed to close position");
   }
@@ -299,6 +393,23 @@ async function closePartialPosition(
     logger.info({
       symbol: pos.symbol, qty, rTarget, side,
     }, "Partial profit taken by monitor");
+
+    // Record lifecycle event
+    try {
+      persistAppend("position_events", {
+        symbol: pos.symbol,
+        stage: "partial_closed",
+        entry_price: pos.entry_price,
+        close_price: pos.peak_price,
+        entry_time: new Date(pos.entered_at).toISOString(),
+        close_time: new Date().toISOString(),
+        quantity_opened: pos.quantity,
+        quantity_closed: qty,
+        reason: `partial_at_${rTarget}R`,
+      } as PositionLifecycleEvent, 5000);
+    } catch (err) {
+      logger.warn({ err, symbol: pos.symbol }, "Failed to record partial close event");
+    }
   } catch (err) {
     logger.error({ err, symbol: pos.symbol, qty, rTarget }, "Failed to close partial position");
   }

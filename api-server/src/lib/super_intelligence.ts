@@ -14,7 +14,6 @@
 
 import { predictWinProbability, getModelStatus } from "./ml_model";
 import { reasonTradeDecision } from "./reasoning_engine";
-import { logger } from "./logger";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -739,8 +738,8 @@ let _ensembleMeta: {
 
 // ── Feature engineering (same as ml_model.ts for consistency) ──
 
-const SETUP_TYPES = ["absorption_reversal", "sweep_reclaim", "continuation_pullback", "cvd_divergence", "breakout_failure"] as const;
-const REGIMES = ["trending_bull", "trending_bear", "ranging", "volatile", "chop"] as const;
+export const SETUP_TYPES = ["absorption_reversal", "sweep_reclaim", "continuation_pullback", "cvd_divergence", "breakout_failure"] as const;
+export const REGIMES = ["trending_bull", "trending_bear", "ranging", "volatile", "chop"] as const;
 
 function featurize(row: {
   structure_score: number; order_flow_score: number; recall_score: number;
@@ -767,7 +766,7 @@ function featurize(row: {
  */
 export async function trainEnsemble(): Promise<void> {
   try {
-    logger.info("[super] Training gradient-boosted ensemble...");
+    console.log("[super] Training gradient-boosted ensemble...");
 
     // Dynamic import to avoid circular deps
     const { db, accuracyResultsTable } = await import("@workspace/db");
@@ -795,7 +794,7 @@ export async function trainEnsemble(): Promise<void> {
       .limit(200_000);
 
     if (rows.length < 50) {
-      logger.info(`[super] Only ${rows.length} samples — need ≥50 for ensemble.`);
+      console.log(`[super] Only ${rows.length} samples — need ≥50 for ensemble.`);
       _ensembleStatus = "untrained";
       return;
     }
@@ -854,11 +853,11 @@ export async function trainEnsemble(): Promise<void> {
       trained_at: new Date().toISOString(),
     };
 
-    logger.info(`[super] Ensemble trained successfully:`);
-    logger.info(`[super]   GBM accuracy: ${(gbm.accuracy * 100).toFixed(1)}%`);
-    logger.info(`[super]   LR accuracy:  ${(lrAccuracy * 100).toFixed(1)}%`);
-    logger.info(`[super]   Ensemble:     ${(_ensembleMeta.ensemble_accuracy * 100).toFixed(1)}%`);
-    logger.info(`[super]   Samples:      ${X.length}`);
+    console.log(`[super] Ensemble trained successfully:`);
+    console.log(`[super]   GBM accuracy: ${(gbm.accuracy * 100).toFixed(1)}%`);
+    console.log(`[super]   LR accuracy:  ${(lrAccuracy * 100).toFixed(1)}%`);
+    console.log(`[super]   Ensemble:     ${(_ensembleMeta.ensemble_accuracy * 100).toFixed(1)}%`);
+    console.log(`[super]   Samples:      ${X.length}`);
   } catch (err) {
     console.error("[super] Ensemble training failed:", err);
     _ensembleStatus = "error";
@@ -1073,7 +1072,7 @@ export interface StrategyRating {
 }
 
 let _autonomousMode = false;
-let _autonomousLoopInterval: NodeJS.Timer | null = null;
+let _autonomousLoopInterval: NodeJS.Timeout | null = null;
 let _strategyRatings: Map<string, StrategyRating> = new Map();
 
 /**
@@ -1086,7 +1085,7 @@ export async function startAutonomousMode(): Promise<{ success: boolean; message
   }
 
   _autonomousMode = true;
-  logger.info("[super] Autonomous mode started — will scan every 60 seconds");
+  console.log("[super] Autonomous mode started — will scan every 60 seconds");
 
   // Initial scan immediately
   await autonomousScan();
@@ -1117,7 +1116,7 @@ export function stopAutonomousMode(): { success: boolean; message: string } {
   }
 
   _autonomousMode = false;
-  logger.info("[super] Autonomous mode stopped");
+  console.log("[super] Autonomous mode stopped");
   return { success: true, message: "Autonomous mode deactivated" };
 }
 
@@ -1126,9 +1125,9 @@ export function stopAutonomousMode(): { success: boolean; message: string } {
  */
 async function autonomousScan(): Promise<void> {
   try {
-    logger.info("[super] [autonomy] Starting scan cycle...");
+    console.log("[super] [autonomy] Starting scan cycle...");
     const { db, accuracyResultsTable } = await import("@workspace/db");
-    const { eq, isNotNull } = await import("drizzle-orm");
+    const { and, gte, isNotNull } = await import("drizzle-orm");
 
     // Fetch recent signals (last 24 hours) grouped by symbol/setup/regime
     const now = new Date();
@@ -1146,17 +1145,20 @@ async function autonomousScan(): Promise<void> {
         recall_score: accuracyResultsTable.recall_score,
         final_quality: accuracyResultsTable.final_quality,
         outcome: accuracyResultsTable.outcome,
-        entry_price: accuracyResultsTable.entry_price,
-        stop_loss: accuracyResultsTable.stop_loss,
-        take_profit: accuracyResultsTable.take_profit,
-        atr: accuracyResultsTable.atr,
+        tp_ticks: accuracyResultsTable.tp_ticks,
+        sl_ticks: accuracyResultsTable.sl_ticks,
         created_at: accuracyResultsTable.created_at,
       })
       .from(accuracyResultsTable)
-      .where(isNotNull(accuracyResultsTable.structure_score))
+      .where(
+        and(
+          isNotNull(accuracyResultsTable.structure_score),
+          gte(accuracyResultsTable.created_at, last24h),
+        ),
+      )
       .limit(200);
 
-    logger.info(`[super] [autonomy] Scanned ${recentSignals.length} recent signals`);
+    console.log(`[super] [autonomy] Scanned ${recentSignals.length} recent signals`);
 
     // Process each signal through SI pipeline
     let siApprovedCount = 0;
@@ -1166,30 +1168,43 @@ async function autonomousScan(): Promise<void> {
       const orderFlow = parseFloat(String(r.order_flow_score ?? "0"));
       const recall = parseFloat(String(r.recall_score ?? "0"));
 
+      const direction = (r.direction === "short" ? "short" : "long") as "long" | "short";
+      const entryPrice = 100;
+      const slTicks = Math.max(1, parseFloat(String(r.sl_ticks ?? "10")) || 10);
+      const tpTicks = Math.max(1, parseFloat(String(r.tp_ticks ?? "20")) || 20);
+      const tickValue = 0.1;
+      const stopLoss = direction === "long"
+        ? entryPrice - slTicks * tickValue
+        : entryPrice + slTicks * tickValue;
+      const takeProfit = direction === "long"
+        ? entryPrice + tpTicks * tickValue
+        : entryPrice - tpTicks * tickValue;
+      const atr = Math.max(0.2, (slTicks * tickValue) / 2);
+
       const result = await processSuperSignal(r.id ?? 0, r.symbol ?? "UNKNOWN", {
         structure_score: structure,
         order_flow_score: orderFlow,
         recall_score: recall,
         setup_type: r.setup_type ?? "absorption_reversal",
         regime: r.regime ?? "ranging",
-        direction: (r.direction ?? "long") as "long" | "short",
-        entry_price: r.entry_price ?? 100,
-        stop_loss: r.stop_loss ?? 99,
-        take_profit: r.take_profit ?? 105,
-        atr: r.atr ?? 1.0,
+        direction,
+        entry_price: entryPrice,
+        stop_loss: stopLoss,
+        take_profit: takeProfit,
+        atr,
         equity: 10_000,
       });
 
       if (result.approved) {
         siApprovedCount++;
-        logger.info(`[super] [autonomy] Signal ${r.id} approved: ${r.setup_type}/${r.regime}, WP=${(result.win_probability * 100).toFixed(0)}%`);
+        console.log(`[super] [autonomy] Signal ${r.id} approved: ${r.setup_type}/${r.regime}, WP=${(result.win_probability * 100).toFixed(0)}%`);
       }
     }
 
     // Update strategy ratings
     await updateStrategyRatings(recentSignals);
 
-    logger.info(`[super] [autonomy] Cycle complete: ${siApprovedCount}/${recentSignals.length} approved`);
+    console.log(`[super] [autonomy] Cycle complete: ${siApprovedCount}/${recentSignals.length} approved`);
   } catch (err) {
     console.error("[super] [autonomy] Scan cycle failed:", err);
   }
@@ -1219,7 +1234,6 @@ async function updateStrategyRatings(signals: any[]): Promise<void> {
       const history = await db
         .select({
           outcome: accuracyResultsTable.outcome,
-          edge_score: accuracyResultsTable.edge_score,
         })
         .from(accuracyResultsTable)
         .where(
@@ -1233,7 +1247,7 @@ async function updateStrategyRatings(signals: any[]): Promise<void> {
 
       if (history.length === 0) continue;
 
-      const wins = history.filter(h => h.outcome === "win").length;
+      const wins = history.filter((h: { outcome: string | null }) => h.outcome === "win").length;
       const total = history.length;
       const winRate = total > 0 ? wins / total : 0;
 
@@ -1264,7 +1278,7 @@ async function updateStrategyRatings(signals: any[]): Promise<void> {
       };
 
       _strategyRatings.set(key, rating);
-      logger.info(`[super] Updated rating for ${key}: ${stars}★ WR=${(winRate * 100).toFixed(0)}%`);
+      console.log(`[super] Updated rating for ${key}: ${stars}★ WR=${(winRate * 100).toFixed(0)}%`);
     }
   } catch (err) {
     console.error("[super] [autonomy] Strategy rating update failed:", err);

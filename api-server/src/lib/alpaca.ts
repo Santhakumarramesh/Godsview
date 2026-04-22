@@ -4,6 +4,7 @@
 // Broker keys (CK prefix) do NOT have market data access
 
 import { normalizeMarketSymbol, toAlpacaSlash } from "./market/symbols";
+import { sanitizeUpstreamErrorBody } from "./error_body_sanitizer";
 const KEY_ID = process.env.ALPACA_API_KEY ?? "";
 const SECRET_KEY = process.env.ALPACA_SECRET_KEY ?? "";
 
@@ -16,8 +17,137 @@ const LIVE_BASE = "https://api.alpaca.markets";
 const DATA_BASE = "https://data.alpaca.markets";
 const CRYPTO_BASE = "https://data.alpaca.markets/v1beta3/crypto/us";
 const MAX_RETRIES_429 = 3;
+const DEFAULT_AUTH_FAILURE_COOLDOWN_MS = 60_000;
+const parsedAuthCooldownMs = Number.parseInt(
+  process.env.ALPACA_AUTH_FAILURE_COOLDOWN_MS ?? String(DEFAULT_AUTH_FAILURE_COOLDOWN_MS),
+  10,
+);
+const AUTH_FAILURE_COOLDOWN_MS =
+  Number.isFinite(parsedAuthCooldownMs) && parsedAuthCooldownMs > 0
+    ? parsedAuthCooldownMs
+    : DEFAULT_AUTH_FAILURE_COOLDOWN_MS;
 const inflightFetches = new Map<string, Promise<unknown>>();
 let globalRateLimitUntilMs = 0;
+let authFailureState: {
+  untilMs: number;
+  status: number | null;
+  message: string | null;
+  occurredAt: string | null;
+  count: number;
+} = {
+  untilMs: 0,
+  status: null,
+  message: null,
+  occurredAt: null,
+  count: 0,
+};
+
+export type AlpacaCredentialKind = "missing" | "paper" | "live" | "broker" | "unknown";
+
+export type AlpacaCredentialStatus = {
+  keyConfigured: boolean;
+  secretConfigured: boolean;
+  keyPrefix: string | null;
+  keyKind: AlpacaCredentialKind;
+  hasValidTradingKey: boolean;
+};
+
+export function getAlpacaCredentialStatus(): AlpacaCredentialStatus {
+  const keyConfigured = KEY_ID.trim().length > 0;
+  const secretConfigured = SECRET_KEY.trim().length > 0;
+  const prefix = keyConfigured ? KEY_ID.slice(0, 2).toUpperCase() : null;
+
+  let keyKind: AlpacaCredentialKind = "missing";
+  if (prefix === "PK") keyKind = "paper";
+  else if (prefix === "AK") keyKind = "live";
+  else if (prefix === "CK") keyKind = "broker";
+  else if (prefix) keyKind = "unknown";
+
+  return {
+    keyConfigured,
+    secretConfigured,
+    keyPrefix: prefix,
+    keyKind,
+    hasValidTradingKey: prefix === "PK" || prefix === "AK",
+  };
+}
+
+function compactBodySnippet(body: string, maxLen = 220): string {
+  return sanitizeUpstreamErrorBody(body, { maxLen });
+}
+
+export class AlpacaApiError extends Error {
+  readonly status: number;
+  readonly bodySnippet: string;
+  readonly retryable: boolean;
+  readonly authFailure: boolean;
+
+  constructor(
+    status: number,
+    body: string,
+    options?: { retryable?: boolean; authFailure?: boolean; prefix?: string }
+  ) {
+    const bodySnippet = compactBodySnippet(body);
+    const prefix =
+      options?.prefix ??
+      (status > 0 ? `Alpaca API ${status}` : "Alpaca API network error");
+    super(`${prefix}: ${bodySnippet}`);
+    this.name = "AlpacaApiError";
+    this.status = status;
+    this.bodySnippet = bodySnippet;
+    this.retryable = Boolean(options?.retryable);
+    this.authFailure = Boolean(options?.authFailure);
+  }
+}
+
+export function isAlpacaAuthFailureError(err: unknown): boolean {
+  return err instanceof AlpacaApiError && err.authFailure;
+}
+
+function markAuthFailure(status: number, body: string): void {
+  authFailureState = {
+    untilMs: Date.now() + AUTH_FAILURE_COOLDOWN_MS,
+    status,
+    message: compactBodySnippet(body),
+    occurredAt: new Date().toISOString(),
+    count: authFailureState.count + 1,
+  };
+}
+
+function clearAuthFailure(): void {
+  authFailureState = {
+    untilMs: 0,
+    status: null,
+    message: null,
+    occurredAt: null,
+    count: 0,
+  };
+}
+
+export function getAlpacaAuthFailureState(): {
+  active: boolean;
+  remainingMs: number;
+  cooldownMs: number;
+  status: number | null;
+  message: string | null;
+  occurredAt: string | null;
+  count: number;
+} {
+  const remainingMs = Math.max(0, authFailureState.untilMs - Date.now());
+  return {
+    active: remainingMs > 0,
+    remainingMs,
+    cooldownMs: AUTH_FAILURE_COOLDOWN_MS,
+    status: authFailureState.status,
+    message: authFailureState.message,
+    occurredAt: authFailureState.occurredAt,
+    count: authFailureState.count,
+  };
+}
+
+export function _resetAlpacaAuthFailureStateForTests(): void {
+  clearAuthFailure();
+}
 
 function isCryptoSymbol(symbol: string) {
   const normalized = normalizeMarketSymbol(symbol, "");
@@ -40,6 +170,19 @@ async function alpacaFetch(url: string, withAuth = true): Promise<unknown> {
   if (existing) return existing;
 
   const requestPromise = (async () => {
+    if (withAuth) {
+      const cooldownRemainingMs = authFailureState.untilMs - Date.now();
+      if (cooldownRemainingMs > 0) {
+        const status = authFailureState.status ?? 401;
+        const detail = authFailureState.message ?? "authorization failed";
+        throw new AlpacaApiError(
+          status,
+          `${detail} (cooldown ${cooldownRemainingMs}ms remaining)`,
+          { authFailure: true, retryable: false, prefix: `Alpaca API ${status}` },
+        );
+      }
+    }
+
     const headers: Record<string, string> = { Accept: "application/json" };
     if (withAuth && KEY_ID) Object.assign(headers, tradingHeaders());
 
@@ -49,8 +192,18 @@ async function alpacaFetch(url: string, withAuth = true): Promise<unknown> {
         await sleep(globalRateLimitUntilMs - now);
       }
 
-      const resp = await fetch(url, { headers });
-      if (resp.ok) return resp.json();
+      let resp: Response;
+      try {
+        resp = await fetch(url, { headers });
+      } catch (err: any) {
+        throw new AlpacaApiError(0, err?.message ?? String(err), {
+          retryable: true,
+        });
+      }
+      if (resp.ok) {
+        if (withAuth) clearAuthFailure();
+        return resp.json();
+      }
 
       const body = await resp.text();
       if (resp.status === 429 && attempt < MAX_RETRIES_429) {
@@ -60,7 +213,17 @@ async function alpacaFetch(url: string, withAuth = true): Promise<unknown> {
         continue;
       }
 
-      throw new Error(`Alpaca API ${resp.status}: ${body}`);
+      const authFailure = withAuth && (resp.status === 401 || resp.status === 403);
+      if (authFailure) {
+        markAuthFailure(resp.status, body);
+      } else if (withAuth && resp.status < 500) {
+        clearAuthFailure();
+      }
+
+      throw new AlpacaApiError(resp.status, body, {
+        retryable: resp.status >= 500,
+        authFailure,
+      });
     }
 
     throw new Error("Alpaca rate limit retries exhausted");

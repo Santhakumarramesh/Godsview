@@ -18,16 +18,167 @@ import https from "https";
 import type { OrderBookSnapshot, OrderBookListener, PriceLevel } from "./types";
 import { normalizeMarketSymbol, toAlpacaSlash } from "./symbols";
 import { orderBookRecorder } from "./orderbook_recorder";
+import { logger as _logger } from "../logger";
+import { sanitizeUpstreamErrorBody } from "../error_body_sanitizer";
 
 const ALPACA_DATA_URL = "data.alpaca.markets";
 const KEY_ID          = process.env.ALPACA_API_KEY    ?? "";
 const SECRET_KEY      = process.env.ALPACA_SECRET_KEY ?? "";
+const logger = _logger.child({ module: "orderbook" });
+const DEFAULT_AUTH_FAILURE_COOLDOWN_MS = 60_000;
+const parsedAuthCooldownMs = Number.parseInt(
+  process.env.ORDERBOOK_AUTH_FAILURE_COOLDOWN_MS
+    ?? process.env.ALPACA_AUTH_FAILURE_COOLDOWN_MS
+    ?? String(DEFAULT_AUTH_FAILURE_COOLDOWN_MS),
+  10,
+);
+const AUTH_FAILURE_COOLDOWN_MS =
+  Number.isFinite(parsedAuthCooldownMs) && parsedAuthCooldownMs > 0
+    ? parsedAuthCooldownMs
+    : DEFAULT_AUTH_FAILURE_COOLDOWN_MS;
+const AUTH_WARN_COOLDOWN_MS = 30_000;
+
+let authFailureState: {
+  untilMs: number;
+  status: number | null;
+  message: string | null;
+  occurredAt: string | null;
+  count: number;
+} = {
+  untilMs: 0,
+  status: null,
+  message: null,
+  occurredAt: null,
+  count: 0,
+};
+let _lastAuthWarnMs = 0;
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 /** Parse Alpaca's raw level array [{p, s}] → PriceLevel[] */
 function parseLevels(raw: Array<{ p: number; s: number }>): PriceLevel[] {
   return raw.map((r) => ({ price: r.p, size: r.s }));
+}
+
+function compactBodySnippet(body: string, maxLen = 180): string {
+  return sanitizeUpstreamErrorBody(body, { maxLen });
+}
+
+export class OrderbookApiError extends Error {
+  readonly status: number;
+  readonly bodySnippet: string;
+  readonly authFailure: boolean;
+  readonly retryable: boolean;
+
+  constructor(
+    status: number,
+    body: string,
+    options?: { authFailure?: boolean; retryable?: boolean; prefix?: string },
+  ) {
+    const bodySnippet = compactBodySnippet(body);
+    const prefix =
+      options?.prefix ??
+      (status > 0 ? `Orderbook API ${status}` : "Orderbook API network error");
+    super(`${prefix}: ${bodySnippet}`);
+    this.name = "OrderbookApiError";
+    this.status = status;
+    this.bodySnippet = bodySnippet;
+    this.authFailure = Boolean(options?.authFailure);
+    this.retryable = Boolean(options?.retryable);
+  }
+}
+
+export function isOrderbookAuthFailureError(err: unknown): boolean {
+  return err instanceof OrderbookApiError && err.authFailure;
+}
+
+function markAuthFailure(status: number, body: string): void {
+  authFailureState = {
+    untilMs: Date.now() + AUTH_FAILURE_COOLDOWN_MS,
+    status,
+    message: compactBodySnippet(body),
+    occurredAt: new Date().toISOString(),
+    count: authFailureState.count + 1,
+  };
+}
+
+function clearAuthFailure(): void {
+  authFailureState = {
+    untilMs: 0,
+    status: null,
+    message: null,
+    occurredAt: null,
+    count: 0,
+  };
+}
+
+function logAuthDegraded(context: string, symbol: string, err: Error): void {
+  const now = Date.now();
+  if (now - _lastAuthWarnMs >= AUTH_WARN_COOLDOWN_MS) {
+    _lastAuthWarnMs = now;
+    logger.warn({ symbol, err: err.message }, `[orderbook] auth unavailable during ${context}`);
+    return;
+  }
+  logger.debug({ symbol, err: err.message }, `[orderbook] auth unavailable during ${context}`);
+}
+
+export function getOrderbookAuthFailureState(): {
+  active: boolean;
+  remainingMs: number;
+  cooldownMs: number;
+  status: number | null;
+  message: string | null;
+  occurredAt: string | null;
+  count: number;
+} {
+  const remainingMs = Math.max(0, authFailureState.untilMs - Date.now());
+  return {
+    active: remainingMs > 0,
+    remainingMs,
+    cooldownMs: AUTH_FAILURE_COOLDOWN_MS,
+    status: authFailureState.status,
+    message: authFailureState.message,
+    occurredAt: authFailureState.occurredAt,
+    count: authFailureState.count,
+  };
+}
+
+export function _resetOrderbookAuthFailureStateForTests(): void {
+  clearAuthFailure();
+  _lastAuthWarnMs = 0;
+}
+
+export function parseOrderbookRestResponse(symbol: string, statusCode: number, body: string): OrderBookSnapshot {
+  if (statusCode < 200 || statusCode >= 300) {
+    const authFailure = statusCode === 401 || statusCode === 403;
+    throw new OrderbookApiError(statusCode, body, {
+      authFailure,
+      retryable: statusCode >= 500,
+      prefix: `Orderbook API ${statusCode}`,
+    });
+  }
+
+  let json: any;
+  try {
+    json = JSON.parse(body);
+  } catch {
+    throw new Error(`Orderbook API invalid JSON for ${symbol}: ${compactBodySnippet(body)}`);
+  }
+
+  const alpacaSym = toAlpacaSlash(symbol);
+  const book = json?.orderbooks?.[alpacaSym];
+  if (!book) {
+    throw new Error(`No orderbook data for ${symbol}`);
+  }
+
+  return {
+    symbol,
+    asks: parseLevels(book.a ?? []).sort((a, b) => a.price - b.price),
+    bids: parseLevels(book.b ?? []).sort((a, b) => b.price - a.price),
+    timestamp: book.t ?? new Date().toISOString(),
+    receivedAt: Date.now(),
+    source: "rest",
+  };
 }
 
 // ── Manager class ──────────────────────────────────────────────────────────
@@ -132,14 +283,26 @@ class OrderBookManager {
     // Immediate first fetch
     this.restFetch(symbol).then((snap) => {
       this.ingestSnapshot(symbol, snap, true);
-    }).catch((e) => console.error(`[orderbook] initial fetch error ${symbol}:`, e));
+    }).catch((err) => {
+      const normalizedErr = err instanceof Error ? err : new Error(String(err));
+      if (isOrderbookAuthFailureError(err)) {
+        logAuthDegraded("initial_fetch", symbol, normalizedErr);
+        return;
+      }
+      logger.warn({ symbol, err: normalizedErr.message }, "[orderbook] initial fetch failed");
+    });
 
     const timer = setInterval(async () => {
       try {
         const snap = await this.restFetch(symbol);
         this.ingestSnapshot(symbol, snap, true);
-      } catch (e) {
-        console.error(`[orderbook] poll error ${symbol}:`, e);
+      } catch (err) {
+        const normalizedErr = err instanceof Error ? err : new Error(String(err));
+        if (isOrderbookAuthFailureError(err)) {
+          logAuthDegraded("poll", symbol, normalizedErr);
+          return;
+        }
+        logger.warn({ symbol, err: normalizedErr.message }, "[orderbook] poll fetch failed");
       }
     }, this.POLL_MS);
 
@@ -162,6 +325,20 @@ class OrderBookManager {
 
   private restFetch(symbol: string): Promise<OrderBookSnapshot> {
     return new Promise((resolve, reject) => {
+      const cooldownRemainingMs = authFailureState.untilMs - Date.now();
+      if (cooldownRemainingMs > 0) {
+        const status = authFailureState.status ?? 401;
+        const detail = authFailureState.message ?? "authorization failed";
+        reject(
+          new OrderbookApiError(status, `${detail} (cooldown ${cooldownRemainingMs}ms remaining)`, {
+            authFailure: true,
+            retryable: false,
+            prefix: `Orderbook API ${status}`,
+          }),
+        );
+        return;
+      }
+
       const alpacaSym = encodeURIComponent(toAlpacaSlash(symbol));
       const path = `/v1beta3/crypto/us/latest/orderbooks?symbols=${alpacaSym}`;
 
@@ -169,29 +346,30 @@ class OrderBookManager {
         { hostname: ALPACA_DATA_URL, path, headers: { "APCA-API-KEY-ID": KEY_ID, "APCA-API-SECRET-KEY": SECRET_KEY } },
         (res) => {
           let body = "";
+          const statusCode = Number(res.statusCode ?? 0);
           res.on("data", (chunk) => { body += chunk; });
           res.on("end", () => {
             try {
-              const json = JSON.parse(body);
-              const alpacaSym2 = toAlpacaSlash(symbol);
-              const book = json.orderbooks?.[alpacaSym2];
-              if (!book) { reject(new Error(`No orderbook data for ${symbol}`)); return; }
-
-              const snap: OrderBookSnapshot = {
-                symbol,
-                asks:       parseLevels(book.a ?? []).sort((a, b) => a.price - b.price),
-                bids:       parseLevels(book.b ?? []).sort((a, b) => b.price - a.price),
-                timestamp:  book.t ?? new Date().toISOString(),
-                receivedAt: Date.now(),
-                source:     "rest",
-              };
-              resolve(snap);
-            } catch (e) { reject(e); }
+              const snapshot = parseOrderbookRestResponse(symbol, statusCode, body);
+              clearAuthFailure();
+              resolve(snapshot);
+            } catch (err) {
+              if (isOrderbookAuthFailureError(err)) {
+                const authErr = err as OrderbookApiError;
+                markAuthFailure(authErr.status, authErr.bodySnippet);
+              }
+              reject(err);
+            }
           });
         }
       );
-      req.on("error", reject);
-      req.setTimeout(8_000, () => { req.destroy(); reject(new Error("Orderbook request timeout")); });
+      req.on("error", (err) => {
+        reject(new OrderbookApiError(0, err?.message ?? String(err), { retryable: true }));
+      });
+      req.setTimeout(8_000, () => {
+        req.destroy();
+        reject(new OrderbookApiError(0, "Orderbook request timeout", { retryable: true }));
+      });
     });
   }
 }

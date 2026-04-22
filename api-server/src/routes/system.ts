@@ -9,6 +9,7 @@ import { getModelDiagnostics, getModelStatus, retrainModel } from "../lib/ml_mod
 import { resolveSystemMode, canWriteOrders, isLiveMode } from "@workspace/strategy-core";
 import { getCurrentTradingSession, getRiskEngineSnapshot, isKillSwitchActive, isSessionAllowed, resetRiskEngineRuntime, setKillSwitchActive, updateRiskConfig } from "../lib/risk_engine";
 import { runBrainCycle } from "../lib/brain_bridge";
+import { requireOperator } from "../lib/auth_guard";
 
 const router: IRouter = Router();
 const LEGACY_LIVE_TRADING_ENABLED = String(process.env.GODSVIEW_ENABLE_LIVE_TRADING ?? "").toLowerCase() === "true";
@@ -498,7 +499,7 @@ router.get("/system/status", async (req, res) => {
 });
 
 // ─── POST /api/system/recall/refresh — run replay cycle to refresh context ──
-router.post("/system/recall/refresh", async (req, res) => {
+router.post("/system/recall/refresh", requireOperator, async (req, res) => {
   try {
     const requestedSymbol = String(req.body?.symbol ?? "").trim().toUpperCase();
     const symbol = requestedSymbol.length > 0 ? requestedSymbol : "AAPL";
@@ -551,12 +552,45 @@ router.post("/system/recall/refresh", async (req, res) => {
 });
 
 // ─── POST /api/system/retrain — retrain ML model on demand ──────────────────
-router.post("/system/retrain", async (req, res) => {
+router.post("/system/retrain", requireOperator, async (req, res) => {
   try {
     const result = await retrainModel();
     res.json(result);
   } catch (err) {
     res.status(500).json({ success: false, message: String(err) });
+  }
+});
+
+// ─── GET /api/system/learning — continuous learning loop state ───────────────
+router.get("/system/learning", async (_req, res) => {
+  try {
+    const { getLearningState } = await import("../lib/continuous_learning");
+    res.json(getLearningState());
+  } catch (err) {
+    res.status(500).json({ error: "learning_state_failed", message: String(err) });
+  }
+});
+
+// ─── POST /api/system/learning/retrain — force learning retrain ─────────────
+router.post("/system/learning/retrain", requireOperator, async (req, res) => {
+  try {
+    const { forceRetrain } = await import("../lib/continuous_learning");
+    const reason = (req.body as any)?.reason ?? "manual";
+    const result = await forceRetrain(reason);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: "learning_retrain_failed", message: String(err) });
+  }
+});
+
+// ─── GET /api/system/learning/promotions — strategy promotion candidates ────
+router.get("/system/learning/promotions", async (_req, res) => {
+  try {
+    const { evaluatePromotions } = await import("../lib/continuous_learning");
+    const candidates = await evaluatePromotions();
+    res.json({ candidates, evaluated_at: new Date().toISOString() });
+  } catch (err) {
+    res.status(500).json({ error: "promotions_failed", message: String(err) });
   }
 });
 
@@ -756,7 +790,7 @@ router.get("/system/risk", (_req, res) => {
 });
 
 // ─── PUT /api/system/risk — update runtime risk controls ────────────────────
-router.put("/system/risk", (req, res) => {
+router.put("/system/risk", requireOperator, (req, res) => {
   try {
     const body = (typeof req.body === "object" && req.body !== null ? req.body : {}) as Record<string, unknown>;
     const updated = updateRiskConfig({
@@ -784,7 +818,7 @@ router.put("/system/risk", (req, res) => {
 });
 
 // ─── POST /api/system/risk/reset — reset runtime risk state ─────────────────
-router.post("/system/risk/reset", (_req, res) => {
+router.post("/system/risk/reset", requireOperator, (_req, res) => {
   const state = resetRiskEngineRuntime();
   res.json({
     ...state,
@@ -793,7 +827,7 @@ router.post("/system/risk/reset", (_req, res) => {
 });
 
 // ─── POST /api/system/kill-switch — toggle runtime kill switch ──────────────
-router.post("/system/kill-switch", (req, res) => {
+router.post("/system/kill-switch", requireOperator, (req, res) => {
   const body = (typeof req.body === "object" && req.body !== null ? req.body : {}) as Record<string, unknown>;
   const active = Boolean(body.active);
   const state = setKillSwitchActive(active);
@@ -1535,7 +1569,7 @@ router.get("/market-readiness", async (req, res) => {
       );
 
     if (!approvedTrades.length) {
-      return res.json({
+      res.json({
         status: "CAUTION",
         color: "yellow",
         regime: "no_data",
@@ -1559,6 +1593,7 @@ router.get("/market-readiness", async (req, res) => {
         reasoning: "Insufficient trade history. Run backtest or live trades to establish metrics.",
         timestamp: new Date().toISOString(),
       });
+      return;
     }
 
     let wins = 0;
@@ -1603,8 +1638,8 @@ router.get("/market-readiness", async (req, res) => {
 
     const { positions } = await getCachedAlpacaData();
     const activePositions = positions.length;
-    dailyTrades = approvedTrades.filter((t) => {
-      const tradeDate = new Date(t.created_at);
+    dailyTrades = approvedTrades.filter((t: { created_at: Date | string | null }) => {
+      const tradeDate = new Date(t.created_at ?? 0);
       const today = new Date();
       return (
         tradeDate.getFullYear() === today.getFullYear() &&
@@ -1695,10 +1730,63 @@ router.get("/market-readiness", async (req, res) => {
       reasoning,
       timestamp: new Date().toISOString(),
     });
+    return;
   } catch (err) {
     req.log.error({ err }, "Failed to calculate market readiness");
     res.status(500).json({ error: "market_readiness_failed", message: "Failed to calculate market readiness assessment" });
+    return;
   }
+});
+
+// ─── System Manifest (Phase 62) ───────────────────────────────────────────────
+// Single endpoint that enumerates every registered engine/subsystem with status.
+
+const ENGINE_REGISTRY = [
+  { name: "risk_engine", module: "../lib/risk_engine" },
+  { name: "circuit_breaker", module: "../lib/circuit_breaker" },
+  { name: "context_fusion", module: "../engines/context_fusion_engine" },
+  { name: "adaptive_learning", module: "../engines/adaptive_learning_engine" },
+  { name: "execution_intelligence", module: "../engines/execution_intelligence" },
+  { name: "strategy_registry", module: "../engines/strategy_registry" },
+  { name: "godsview_lab", module: "../engines/godsview_lab" },
+  { name: "walk_forward_stress", module: "../engines/walk_forward_stress" },
+  { name: "live_intelligence_monitor", module: "../engines/live_intelligence_monitor" },
+  { name: "position_sizing", module: "../engines/position_sizing_oracle" },
+  { name: "trade_journal", module: "../lib/trade_journal" },
+  { name: "system_orchestrator", module: "../engines/system_orchestrator" },
+  { name: "api_gateway", module: "../engines/api_gateway" },
+  { name: "equity_engine", module: "../lib/equity_engine" },
+  { name: "attribution_engine", module: "../lib/attribution_engine" },
+] as const;
+
+router.get("/api/system/manifest", async (_req, res) => {
+  const engines: Array<{ name: string; loaded: boolean; error?: string }> = [];
+
+  for (const entry of ENGINE_REGISTRY) {
+    try {
+      await import(entry.module);
+      engines.push({ name: entry.name, loaded: true });
+    } catch (err: any) {
+      engines.push({ name: entry.name, loaded: false, error: err.message });
+    }
+  }
+
+  const totalRoutes = 57;
+  const loadedEngines = engines.filter((e) => e.loaded).length;
+
+  res.json({
+    version: "62.0.0",
+    phase: 62,
+    codename: "GodsView Production",
+    totalRoutes,
+    engines,
+    engineSummary: { total: engines.length, loaded: loadedEngines, failed: engines.length - loadedEngines },
+    systemMode: SYSTEM_MODE,
+    uptime: process.uptime(),
+    nodeVersion: process.version,
+    memoryMB: Math.round(process.memoryUsage.rss() / 1024 / 1024),
+    generatedAt: new Date().toISOString(),
+  });
 });
 
 export default router;

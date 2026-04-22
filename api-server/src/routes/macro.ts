@@ -1,16 +1,21 @@
 /**
  * macro.ts — Macro/News Intelligence Routes
  *
- * Legacy news lockout endpoints: /macro/context, /macro/events, /macro/lockout/:symbol
- * Phase 16 YoungTraderWealth endpoints:
- *   POST /macro/bias            — compute macro directional bias (Layer 0)
- *   GET  /macro/bias/neutral    — neutral bias placeholder
- *   POST /macro/sentiment       — compute retail sentiment + institutional edge (Layer 0.5)
- *   GET  /macro/sentiment/neutral — neutral sentiment placeholder
- * Phase 17 Live Feed endpoints:
- *   GET  /macro/live            — current cached MacroContext (bias + sentiment + snapshot)
- *   POST /macro/live/refresh    — force an immediate re-fetch from Alpaca
- *   GET  /macro/live/status     — service status (started, last refresh, quality)
+ * Mounts at /api/macro (see routes/index.ts).
+ *
+ * Endpoints:
+ *   GET  /context          — macro context (news/events)
+ *   POST /events           — ingest macro event
+ *   GET  /lockout/:symbol  — news lockout check
+ *   GET  /events           — all stored events
+ *   GET  /stats            — cache stats
+ *   DELETE /clear          — clear events
+ *   POST /bias             — compute MacroBiasResult from provided inputs
+ *   POST /sentiment        — compute SentimentResult from provided inputs
+ *   GET  /live             — fetch live macro snapshot (from market data)
+ *   POST /live/refresh     — force-refresh live macro snapshot
+ *   GET  /fred             — fetch FRED macro snapshot (CPI, rates, GDP, etc.)
+ *   POST /fred/refresh     — force-refresh FRED data
  */
 
 import { Router, Request, Response } from "express";
@@ -22,14 +27,12 @@ import {
   clearMacroEvents,
   getMacroCacheStats,
   type MacroEvent,
-} from "../lib/macro_engine";
-import { computeMacroBias, neutralMacroBias, type MacroBiasInput } from "../lib/macro_bias_engine";
-import { computeSentiment, neutralSentiment, type SentimentInput } from "../lib/sentiment_engine";
-import {
-  MacroContextService,
-  getCurrentMacroContext,
-  refreshMacroContext,
-} from "../lib/macro_context_service";
+} from "../lib/macro_engine";import { computeMacroBias } from "../lib/macro_bias_engine";
+import type { MacroBiasInput } from "../lib/macro_bias_engine";
+import { computeSentiment } from "../lib/sentiment_engine";
+import type { SentimentInput } from "../lib/sentiment_engine";
+import { fetchLiveMacroSnapshot } from "../lib/macro_feed";
+import { fetchFredMacroSnapshot, clearFredCache } from "../lib/providers/fred_client.js";
 
 const router = Router();
 
@@ -53,8 +56,7 @@ router.get("/context", (req: Request, res: Response) => {
 
 /**
  * POST /macro/events
- * Ingest a single macro event
- */
+ * Ingest a single macro event */
 router.post("/events", (req: Request, res: Response): void => {
   try {
     const event = req.body as MacroEvent;
@@ -82,8 +84,7 @@ router.get("/lockout/:symbol", (req: Request, res: Response) => {
     const symbol = String(req.params.symbol ?? "");
     const result = checkNewsLockout(symbol);
     logger.info(`Checked news lockout for ${symbol}: locked=${result.locked}`);
-    res.json(result);
-  } catch (error) {
+    res.json(result);  } catch (error) {
     logger.error(`Error checking news lockout: ${String(error)}`);
     res.status(500).json({ error: "Failed to check news lockout" });
   }
@@ -112,8 +113,7 @@ router.get("/stats", (req: Request, res: Response) => {
   try {
     const stats = getMacroCacheStats();
     res.json(stats);
-  } catch (error) {
-    logger.error(`Error fetching macro stats: ${String(error)}`);
+  } catch (error) {    logger.error(`Error fetching macro stats: ${String(error)}`);
     res.status(500).json({ error: "Failed to fetch macro stats" });
   }
 });
@@ -133,135 +133,118 @@ router.delete("/clear", (req: Request, res: Response) => {
   }
 });
 
-// ─── Phase 16: YoungTraderWealth Institutional Intelligence endpoints ──────────
-
 /**
  * POST /macro/bias
- * Compute macro directional bias for a trade (Layer 0 gate).
- * Body: MacroBiasInput
+ * Accepts MacroBiasInput, returns { bias: MacroBiasResult }
  */
 router.post("/bias", (req: Request, res: Response) => {
   try {
     const input = req.body as MacroBiasInput;
-    if (
-      typeof input.dxySlope !== "number" ||
-      typeof input.rateDifferentialBps !== "number" ||
-      typeof input.cpiMomentum !== "number" ||
-      typeof input.vixLevel !== "number" ||
-      typeof input.macroRiskScore !== "number" ||
-      !input.assetClass ||
-      !input.intendedDirection
-    ) {
-      res.status(400).json({ error: "Invalid MacroBiasInput — all fields required" });
-      return;
-    }
-    const result = computeMacroBias(input);
-    res.json({ bias: result });
+    if (!input.assetClass || !input.intendedDirection) {
+      res.status(400).json({ error: "assetClass and intendedDirection are required" });
+      return;    }
+    const bias = computeMacroBias(input);
+    res.json({ bias });
   } catch (error) {
-    logger.error(`[macro/bias] POST error: ${String(error)}`);
+    logger.error(`[macro] /bias error: ${String(error)}`);
     res.status(500).json({ error: "Failed to compute macro bias" });
   }
 });
 
 /**
- * GET /macro/bias/neutral
- * Returns a neutral macro bias result (for replay mode or missing data).
- */
-router.get("/bias/neutral", (_req: Request, res: Response) => {
-  res.json({ bias: neutralMacroBias() });
-});
-
-/**
  * POST /macro/sentiment
- * Compute retail sentiment & institutional edge (Layer 0.5 gate).
- * Body: SentimentInput
+ * Accepts SentimentInput, returns { sentiment: SentimentResult }
  */
 router.post("/sentiment", (req: Request, res: Response) => {
   try {
     const input = req.body as SentimentInput;
-    if (
-      typeof input.retailLongRatio !== "number" ||
-      typeof input.priceTrendSlope !== "number" ||
-      typeof input.cvdNet !== "number" ||
-      typeof input.openInterestChange !== "number" ||
-      typeof input.fundingRate !== "number" ||
-      !input.intendedDirection ||
-      !input.assetClass
-    ) {
-      res.status(400).json({ error: "Invalid SentimentInput — all fields required" });
+    if (input.retailLongRatio === undefined) {
+      res.status(400).json({ error: "retailLongRatio is required" });
       return;
     }
-    const result = computeSentiment(input);
-    res.json({ sentiment: result });
+    const sentiment = computeSentiment(input);
+    res.json({ sentiment });
   } catch (error) {
-    logger.error(`[macro/sentiment] POST error: ${String(error)}`);
+    logger.error(`[macro] /sentiment error: ${String(error)}`);
     res.status(500).json({ error: "Failed to compute sentiment" });
   }
 });
 
-/**
- * GET /macro/sentiment/neutral
- * Returns a neutral sentiment result (for replay mode or missing data).
- */
-router.get("/sentiment/neutral", (_req: Request, res: Response) => {
-  res.json({ sentiment: neutralSentiment() });
-});
+// Simple in-memory cache for the live snapshot (refreshed on demand or every 5 min)
+let _liveSnapshotCache: { snapshot: Awaited<ReturnType<typeof fetchLiveMacroSnapshot>>; cachedAt: number } | null = null;const LIVE_CACHE_TTL_MS = 5 * 60 * 1000;
 
-// ─── Phase 17: Live Macro Intelligence Feed ───────────────────────────────────
+async function getOrRefreshLiveSnapshot(force = false) {
+  const now = Date.now();
+  if (!force && _liveSnapshotCache && now - _liveSnapshotCache.cachedAt < LIVE_CACHE_TTL_MS) {
+    return _liveSnapshotCache.snapshot;
+  }
+  const snapshot = await fetchLiveMacroSnapshot();
+  _liveSnapshotCache = { snapshot, cachedAt: now };
+  return snapshot;
+}
 
 /**
  * GET /macro/live
- * Returns the current cached MacroContext — bias + sentiment + raw snapshot inputs.
- * The service auto-refreshes every 5 minutes in the background.
+ * Returns the latest live macro snapshot (VIX, DXY, CVD, funding, etc.)
+ * Cached for 5 minutes; serves stale on fetch failure.
  */
-router.get("/live", (_req: Request, res: Response) => {
+router.get("/live", async (_req: Request, res: Response) => {
   try {
-    const ctx = getCurrentMacroContext();
-    res.json({ context: ctx });
+    const snapshot = await getOrRefreshLiveSnapshot();
+    res.json({ context: snapshot });
   } catch (error) {
-    logger.error(`[macro/live] GET error: ${String(error)}`);
-    res.status(500).json({ error: "Failed to get live macro context" });
-  }
+    logger.error(`[macro] /live error: ${String(error)}`);
+    // Return stale cache if available
+    if (_liveSnapshotCache) {
+      logger.warn("[macro] /live serving stale cached snapshot due to fetch error");
+      res.json({ context: _liveSnapshotCache.snapshot, stale: true });
+    } else {
+      res.status(503).json({ error: "Live macro snapshot unavailable — no cached data" });
+    }  }
 });
 
 /**
  * POST /macro/live/refresh
- * Forces an immediate re-fetch from Alpaca and recomputes bias + sentiment.
- * Optionally accepts { intendedDirection, assetClass } body params.
+ * Force-refreshes the live macro snapshot (bypasses cache TTL).
  */
-router.post("/live/refresh", async (req: Request, res: Response): Promise<void> => {
+router.post("/live/refresh", async (_req: Request, res: Response) => {
   try {
-    const direction  = (req.body?.intendedDirection as "long" | "short" | undefined) ?? "long";
-    const assetClass = (req.body?.assetClass as MacroBiasInput["assetClass"] | undefined) ?? "crypto";
-
-    const ctx = await refreshMacroContext(direction, assetClass);
-    res.json({ context: ctx, refreshed: true });
+    const snapshot = await getOrRefreshLiveSnapshot(true);
+    logger.info("[macro] Live macro snapshot force-refreshed");
+    res.json({ context: snapshot });
   } catch (error) {
-    logger.error(`[macro/live/refresh] POST error: ${String(error)}`);
-    res.status(500).json({ error: "Failed to refresh macro context" });
+    logger.error(`[macro] /live/refresh error: ${String(error)}`);
+    res.status(503).json({ error: "Failed to refresh live macro snapshot" });
   }
 });
 
 /**
- * GET /macro/live/status
- * Returns service health — started state, refresh count, data quality.
+ * GET /macro/fred
+ * Returns the full FRED macro snapshot (CPI, Fed Funds, unemployment, treasuries, GDP, etc.)
+ * Cached for 6 hours since data updates daily/monthly.
  */
-router.get("/live/status", (_req: Request, res: Response) => {
+router.get("/fred", async (_req: Request, res: Response) => {
   try {
-    const svc = MacroContextService.getInstance();
-    const ctx = svc.getContext();
-    res.json({
-      started:         svc.isStarted(),
-      refreshCount:    ctx.refreshCount,
-      lastRefreshedAt: ctx.lastRefreshedAt,
-      nextRefreshAt:   ctx.nextRefreshAt,
-      dataQuality:     ctx.snapshot.dataQuality,
-      isLive:          ctx.isLive,
-      sources:         ctx.snapshot.sources,
-    });
+    const snapshot = await fetchFredMacroSnapshot();
+    res.json({ fred: snapshot });
   } catch (error) {
-    logger.error(`[macro/live/status] GET error: ${String(error)}`);
-    res.status(500).json({ error: "Failed to get macro service status" });
+    logger.error(`[macro] /fred error: ${String(error)}`);
+    res.status(503).json({ error: "Failed to fetch FRED macro data" });  }
+});
+
+/**
+ * POST /macro/fred/refresh
+ * Force-refresh FRED data by clearing cache first.
+ */
+router.post("/fred/refresh", async (_req: Request, res: Response) => {
+  try {
+    clearFredCache();
+    const snapshot = await fetchFredMacroSnapshot();
+    logger.info("[macro] FRED snapshot force-refreshed");
+    res.json({ fred: snapshot });
+  } catch (error) {
+    logger.error(`[macro] /fred/refresh error: ${String(error)}`);
+    res.status(503).json({ error: "Failed to refresh FRED data" });
   }
 });
 

@@ -1,19 +1,17 @@
 /**
- * claude.ts — Claude Reasoning Veto Layer (v3 — Super Intelligence Upgrade)
+ * claude.ts — Claude Reasoning Veto Layer (v2 — Accuracy Upgrade)
  *
- * Uses Anthropic Claude to evaluate trading setups and issue
+ * Uses Anthropic Claude Sonnet to evaluate trading setups and issue
  * APPROVED / VETOED verdicts with structured reasoning.
  *
- * v3 Changes (Super Intelligence Integration):
- * - Model upgraded to claude-sonnet-4-6 (latest, deepest reasoning)
- * - V3 Super Intelligence context injected: tier, anti-fragility, edge score
- * - Cross-asset correlation signals included in reasoning prompt
- * - Multi-horizon confidence (5/20/50 bar) added to context
- * - Enhanced market microstructure analysis in system prompt
- * - Regime-adaptive veto thresholds (stricter in volatile/chop)
+ * v2 Changes:
+ * - Upgraded model: claude-haiku-4-5 → claude-sonnet-4-5-20241022 (deeper reasoning)
+ * - Enhanced system prompt with explicit veto checklist and scoring rubric
+ * - Added pre-call heuristic checks that can hard-veto without API call
+ * - Stricter conflict detection (SK bias, CVD divergence, regime mismatch)
+ * - Added indicator alignment context to the prompt
+ * - Configurable model via CLAUDE_VETO_MODEL env var
  */
-
-import { logger } from "./logger";
 
 export type ClaudeVerdict = "APPROVED" | "VETOED" | "CAUTION";
 
@@ -60,19 +58,6 @@ export interface SetupContext {
   atr_pct: number;
   consec_bullish: number;
   consec_bearish: number;
-  // V3 Super Intelligence context (optional — enriches reasoning when present)
-  si_win_probability?: number;
-  si_confidence?: number;
-  si_tier?: string;
-  si_edge_score?: number;
-  si_antifragility?: number;
-  si_regime_boost?: number;
-  si_correlation_boost?: number;
-  si_horizon_h5?: number;
-  si_horizon_h20?: number;
-  si_horizon_h50?: number;
-  si_reasoning?: string[];
-  correlated_symbols?: string;
 }
 
 const SYSTEM_PROMPT = `You are the Claude Reasoning Veto Layer in a professional trading system (Godsview — SK System).
@@ -112,16 +97,6 @@ You receive structured market analysis and must issue one of three verdicts:
 - 0.55-0.69: Borderline — proceed with reduced size only
 - 0.30-0.54: Significant conflicts — should not trade
 - 0.00-0.29: Clear counter-signal — strong veto
-
-## SUPER INTELLIGENCE CONTEXT (when provided):
-If SI data is present, incorporate it into your analysis:
-- SI Win Probability: ML ensemble prediction (5 sub-models). Trust it for base direction.
-- SI Tier: ELITE (full size), STRONG (normal), MARGINAL (half), WEAK (skip)
-- Anti-Fragility: 0-1 resilience score — low values mean fragile in adverse conditions
-- Multi-Horizon: h5 (5-bar), h20 (20-bar), h50 (50-bar) confidence decay
-- Cross-Asset: if correlated symbols confirm/contradict, note it
-- If SI says WEAK tier → VETO unless extreme edge in other factors
-- If SI anti-fragility < 0.3 AND regime is adverse → VETO
 
 Rules:
 - Be concise and decisive. No hedging.
@@ -335,7 +310,7 @@ export async function claudeVeto(ctx: SetupContext): Promise<ClaudeVetoResult> {
   // Step 1: Pre-call hard veto checks (free, zero latency)
   const hardVetoResult = preCallHardVeto(ctx);
   if (hardVetoResult) {
-    logger.info(`[claude] Hard veto: ${hardVetoResult.reasoning.slice(0, 80)}`);
+    console.log(`[claude] Hard veto: ${hardVetoResult.reasoning.slice(0, 80)}`);
     return hardVetoResult;
   }
 
@@ -429,20 +404,11 @@ MOMENTUM & VOLATILITY:
 - Consec Bull: ${ctx.consec_bullish} | Consec Bear: ${ctx.consec_bearish}
 - Wick Ratio: ${(ctx.wick_ratio * 100).toFixed(0)}%
 
-SUPER INTELLIGENCE (V3 Ensemble):${ctx.si_win_probability != null ? `
-- Win Probability: ${(ctx.si_win_probability * 100).toFixed(1)}% | Confidence: ${((ctx.si_confidence ?? 0) * 100).toFixed(0)}%
-- Signal Tier: ${ctx.si_tier ?? "N/A"} | Edge Score: ${((ctx.si_edge_score ?? 0) * 100).toFixed(0)}%
-- Anti-Fragility: ${((ctx.si_antifragility ?? 0.5) * 100).toFixed(0)}%
-- Regime Boost: ${((ctx.si_regime_boost ?? 0) * 100).toFixed(1)}% | Correlation Boost: ${((ctx.si_correlation_boost ?? 0) * 100).toFixed(1)}%
-- Horizon: h5=${((ctx.si_horizon_h5 ?? 0) * 100).toFixed(0)}% → h20=${((ctx.si_horizon_h20 ?? 0) * 100).toFixed(0)}% → h50=${((ctx.si_horizon_h50 ?? 0) * 100).toFixed(0)}%` : `
-- Not available (pre-SI pipeline)`}${ctx.correlated_symbols ? `
-- Cross-Asset: ${ctx.correlated_symbols}` : ""}
-
 Run through your veto checklist. Issue your verdict.`.trim();
 
   // Step 4: Call Claude API
   try {
-    const model = process.env.CLAUDE_VETO_MODEL ?? "claude-sonnet-4-6";
+    const model = process.env.CLAUDE_VETO_MODEL ?? "claude-sonnet-4-5-20241022";
     let parseFailReason = "";
     for (let attempt = 0; attempt <= CLAUDE_MAX_RETRIES; attempt++) {
       const attemptPrompt = attempt === 0
@@ -487,7 +453,7 @@ Run through your veto checklist. Issue your verdict.`.trim();
       validation_status: "schema_invalid_fallback",
     };
   } catch (err) {
-    logger.error("[claude] veto error:", err);
+    console.error("[claude] veto error:", err);
     markClaudeFailure();
     return {
       verdict: "CAUTION",

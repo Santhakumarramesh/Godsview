@@ -665,3 +665,5 @@ export class HypothesisEngine {
 }
 
 export default HypothesisEngine;
+
+export const hypothesisEngine = new HypothesisEngine();

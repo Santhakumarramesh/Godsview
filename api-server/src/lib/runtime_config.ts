@@ -92,6 +92,15 @@ function validateRuntimeConfig(config: RuntimeConfig): void {
       "ALPACA_API_KEY and ALPACA_SECRET_KEY are required when GODSVIEW_SYSTEM_MODE=live_enabled.",
     );
   }
+
+  if (config.systemMode === "live_enabled") {
+    const keyPrefix = requiredTrimmed("ALPACA_API_KEY").slice(0, 2).toUpperCase();
+    if (keyPrefix !== "PK" && keyPrefix !== "AK") {
+      throw new Error(
+        "ALPACA_API_KEY must be a Trading API key (PK... for paper or AK... for live) when GODSVIEW_SYSTEM_MODE=live_enabled.",
+      );
+    }
+  }
 }
 
 export interface RuntimeConfig {

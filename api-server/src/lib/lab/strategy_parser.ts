@@ -638,3 +638,5 @@ export class NaturalLanguageStrategyParser {
 }
 
 export default NaturalLanguageStrategyParser;
+
+export const StrategyParser = NaturalLanguageStrategyParser;

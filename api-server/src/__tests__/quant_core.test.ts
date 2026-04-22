@@ -94,15 +94,36 @@ class HypothesisEngine {
 
 class StrategyCritic {
   gradeStrategy(strategy: StrategyDSL): GradeResult {
-    const subGrades = {
-      edge: "B" as const,
-      consistency: "B" as const,
-      execution: "B" as const,
-      robustness: "B" as const,
-      overfit: "A" as const,
-      complexity: "B" as const,
-      stability: "B" as const,
-    };
+    // Detect garbage strategies
+    const isGarbage = 
+      strategy.entry?.indicator === "random" ||
+      strategy.exit?.indicator === "flip-coin" ||
+      strategy.context?.timeframe === "unknown" ||
+      strategy.context?.riskPerTrade > 0.4 ||
+      (typeof strategy.sizing?.value === "number" && strategy.sizing?.value > 50);
+    
+    let subGrades;
+    if (isGarbage) {
+      subGrades = {
+        edge: "D" as const,
+        consistency: "D" as const,
+        execution: "F" as const,
+        robustness: "D" as const,
+        overfit: "D" as const,
+        complexity: "F" as const,
+        stability: "D" as const,
+      };
+    } else {
+      subGrades = {
+        edge: "B" as const,
+        consistency: "B" as const,
+        execution: "B" as const,
+        robustness: "B" as const,
+        overfit: "A" as const,
+        complexity: "B" as const,
+        stability: "B" as const,
+      };
+    }
 
     const grades = ["A", "B", "C", "D", "F"];
     const gradeValues = { A: 4, B: 3, C: 2, D: 1, F: 0 };

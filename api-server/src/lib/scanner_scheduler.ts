@@ -34,7 +34,13 @@ import {
   classifyMarketRegime,
   isCategoryAllowedInRegime,
 } from "@workspace/strategy-core";
-import { getBars } from "./alpaca";
+import {
+  getBars,
+  placeOrder,
+  getAccount,
+  isAlpacaAuthFailureError,
+  getAlpacaAuthFailureState,
+} from "./alpaca";
 import { publishAlert } from "./signal_stream";
 import { listEnabledSymbols, touchScanned } from "./watchlist";
 import { recordDecision } from "./trade_journal";
@@ -48,8 +54,8 @@ import { getRiskEngineSnapshot, getCurrentTradingSession, isSessionAllowed, isKi
 import { checkCircuitBreaker } from "./circuit_breaker";
 import { checkAutoTradeGate, recordAutoTradeAttempt } from "./auto_trade_config";
 import { computePositionSize } from "./position_sizer";
-import { placeOrder, getAccount } from "./alpaca";
 import { logger as _logger } from "./logger";
+import { getStrategyAllocationForSignal } from "./strategy_allocator";
 
 const logger = _logger.child({ module: "scanner" });
 
@@ -60,6 +66,30 @@ const ALERT_COOLDOWN_MS    = parseInt(process.env.SCANNER_ALERT_COOLDOWN_MS ?? "
 const MAX_CONCURRENT       = parseInt(process.env.SCANNER_MAX_CONCURRENT    ?? "3",       10);
 const HISTORY_MAX          = 100;
 const QUALITY_FLOOR        = 0.55; // minimum quality score to emit an alert
+const AUTH_WARN_COOLDOWN_MS = 30_000;
+let _lastAuthWarnMs = 0;
+let _lastAuthCycleSkipWarnMs = 0;
+
+function logAuthDegraded(symbol: string, err: Error): void {
+  const now = Date.now();
+  if (now - _lastAuthWarnMs >= AUTH_WARN_COOLDOWN_MS) {
+    _lastAuthWarnMs = now;
+    logger.warn({ symbol, err: err.message }, "[scanner] Alpaca auth unavailable — scan degraded");
+    return;
+  }
+  logger.debug({ symbol, err: err.message }, "[scanner] Alpaca auth unavailable — scan degraded");
+}
+
+function logAuthCycleSkipped(remainingMs: number, status: number | null): void {
+  const now = Date.now();
+  const payload = { remainingMs, status };
+  if (now - _lastAuthCycleSkipWarnMs >= AUTH_WARN_COOLDOWN_MS) {
+    _lastAuthCycleSkipWarnMs = now;
+    logger.warn(payload, "[scanner] Alpaca auth cooldown active — skipping symbol fetches for this cycle");
+    return;
+  }
+  logger.debug(payload, "[scanner] Alpaca auth cooldown active — skipping symbol fetches for this cycle");
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -329,11 +359,20 @@ async function scanSymbol(
               method:        "fixed_fractional",
             });
 
-            if (sizing.qty <= 0) throw new Error(`zero_qty (${sizing.capReason})`);
+            const allocation = getStrategyAllocationForSignal({
+              setup_type: setup,
+              regime,
+              symbol,
+            });
+
+            const qty = Math.max(0, Math.floor(sizing.qty * allocation.multiplier));
+            if (qty <= 0) {
+              throw new Error(`strategy_allocation_zero_qty (${allocation.match_level})`);
+            }
 
             const order = await placeOrder({
               symbol,
-              qty:               sizing.qty,
+              qty,
               side:              direction === "long" ? "buy" : "sell",
               type:              "market",
               time_in_force:     "gtc",
@@ -343,9 +382,28 @@ async function scanSymbol(
 
             orderId  = order.id;
             accepted = true;
-            logger.info({ symbol, direction, orderId, qty: sizing.qty }, "[auto_trade] Order placed");
+            logger.info(
+              {
+                symbol,
+                direction,
+                orderId,
+                qty,
+                allocationMultiplier: allocation.multiplier,
+                allocationStrategy: allocation.strategy_id,
+              },
+              "[auto_trade] Order placed",
+            );
 
-            publishAlert({ type: "auto_trade_executed", symbol, direction, orderId, quality: finalQuality, qty: sizing.qty });
+            publishAlert({
+              type: "auto_trade_executed",
+              symbol,
+              direction,
+              orderId,
+              quality: finalQuality,
+              qty,
+              allocation_multiplier: allocation.multiplier,
+              allocation_strategy: allocation.strategy_id,
+            });
           } catch (err: any) {
             rejectReason = err?.message ?? String(err);
             logger.warn({ symbol, err: rejectReason }, "[auto_trade] Execution failed");
@@ -362,9 +420,17 @@ async function scanSymbol(
     }
 
     touchScanned(symbol, run.signalsFound > 0);
-    run.symbolsScanned++;
   } catch (err) {
+    if (isAlpacaAuthFailureError(err)) {
+      const normalizedErr = err instanceof Error ? err : new Error(String(err));
+      logAuthDegraded(symbol, normalizedErr);
+      touchScanned(symbol, false);
+      return;
+    }
+    touchScanned(symbol, false);
     logger.warn({ symbol, err }, "[scanner] Symbol scan failed");
+  } finally {
+    run.symbolsScanned++;
   }
 }
 
@@ -464,6 +530,24 @@ export class ScannerScheduler {
       }
 
       logger.info({ count: symbols.length, runId: run.id }, "[scanner] Scan cycle started");
+
+      const authFailure = getAlpacaAuthFailureState();
+      if (authFailure.active) {
+        logAuthCycleSkipped(authFailure.remainingMs, authFailure.status);
+        for (const entry of symbols) {
+          touchScanned(entry.symbol, false);
+        }
+        run.symbolsScanned += symbols.length;
+        _finaliseRun(run);
+        logger.info({
+          runId: run.id,
+          symbolsScanned: run.symbolsScanned,
+          signalsFound: run.signalsFound,
+          alertsEmitted: run.alertsEmitted,
+          durationMs: run.durationMs,
+        }, "[scanner] Scan cycle completed (auth cooldown skip)");
+        return run;
+      }
 
       await runConcurrent(
         symbols,

@@ -10,6 +10,7 @@ import { getManagedPositions } from "./position_monitor";
 import { isKillSwitchActive, getRiskEngineSnapshot } from "./risk_engine";
 import { getProductionGateStats } from "./production_gate";
 import { getAlertHistory } from "./alerts";
+import { logger } from "./logger";
 
 /**
  * Collect execution-specific metrics and append to core metrics.
@@ -87,7 +88,7 @@ export function collectAllMetrics(): string {
         `godsview_position_trail_active{symbol="${p.symbol}"} ${p.trail_active ? 1 : 0}`,
       );
     }
-  } catch { /* monitor not initialized */ }
+  } catch (err) { logger.warn({ err }, "[metrics] position_monitor not yet initialized — skipping managed_positions metric"); }
 
   try {
     lines.push(
@@ -96,7 +97,7 @@ export function collectAllMetrics(): string {
       "# TYPE godsview_kill_switch gauge",
       `godsview_kill_switch ${isKillSwitchActive() ? 1 : 0}`,
     );
-  } catch {}
+  } catch (err) { logger.warn({ err }, "[metrics] risk_engine not yet initialized — skipping kill_switch metric"); }
 
   try {
     const gate = getProductionGateStats();
@@ -106,7 +107,7 @@ export function collectAllMetrics(): string {
       "# TYPE godsview_gate_daily_trades counter",
       `godsview_gate_daily_trades ${gate.daily_trades}`,
     );
-  } catch {}
+  } catch (err) { logger.warn({ err }, "[metrics] production_gate not yet initialized — skipping gate metric"); }
 
   try {
     const alerts = getAlertHistory(50);
@@ -117,7 +118,7 @@ export function collectAllMetrics(): string {
       "# TYPE godsview_active_alerts gauge",
       `godsview_active_alerts ${unacked}`,
     );
-  } catch {}
+  } catch (err) { logger.warn({ err }, "[metrics] alerts not yet initialized — skipping active_alerts metric"); }
 
   return lines.join("\n") + "\n";
 }

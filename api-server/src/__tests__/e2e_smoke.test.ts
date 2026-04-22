@@ -6,17 +6,85 @@
  * real Express routes without needing the full app bootstrap.
  */
 
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import express from "express";
+import { describe, it, expect, beforeAll } from "vitest";
+import express, { type Express } from "express";
 import http from "http";
+import net from "net";
 
 // ─── Minimal test server ───────────────────────────────────────────────────
 
-let baseUrl: string;
-let server: http.Server;
+let app: Express;
+
+async function apiFetch(
+  url: string,
+  init: {
+    method?: "GET" | "POST" | "PUT" | "DELETE";
+    headers?: Record<string, string>;
+    body?: string;
+  } = {},
+): Promise<{
+  status: number;
+  headers: Headers;
+  json: () => Promise<any>;
+  text: () => Promise<string>;
+}> {
+  return new Promise((resolve, reject) => {
+    const method = init.method ?? "GET";
+    const parsed = new URL(url, "http://localhost");
+    const path = `${parsed.pathname}${parsed.search}`;
+    const socket = new net.Socket({ readable: true, writable: true });
+    const req = new http.IncomingMessage(socket);
+    const rawBody = init.body;
+
+    const normalizedHeaders: Record<string, string> = Object.fromEntries(
+      Object.entries({
+        "content-type": "application/json",
+        ...(init.headers ?? {}),
+      }).map(([key, value]) => [key.toLowerCase(), String(value)]),
+    );
+    if (rawBody) {
+      normalizedHeaders["content-length"] = Buffer.byteLength(rawBody).toString();
+    }
+
+    req.method = method;
+    req.url = path;
+    req.headers = normalizedHeaders;
+    if (rawBody) req.push(rawBody);
+    req.push(null);
+
+    const res = new http.ServerResponse(req);
+    let raw = "";
+    const origWrite = res.write.bind(res);
+    const origEnd = res.end.bind(res);
+    res.write = ((chunk: unknown, encoding?: BufferEncoding | ((err?: Error) => void), cb?: (err?: Error) => void) => {
+      if (chunk) raw += Buffer.isBuffer(chunk) ? chunk.toString() : String(chunk);
+      return origWrite(chunk as any, encoding as any, cb as any);
+    }) as typeof res.write;
+    res.end = ((chunk?: unknown, encoding?: BufferEncoding | (() => void), cb?: () => void) => {
+      if (chunk) raw += Buffer.isBuffer(chunk) ? chunk.toString() : String(chunk);
+      origEnd(chunk as any, encoding as any, cb as any);
+      const headers = new Headers();
+      for (const [key, value] of Object.entries(res.getHeaders())) {
+        if (Array.isArray(value)) {
+          headers.set(key, value.join(", "));
+        } else if (value != null) {
+          headers.set(key, String(value));
+        }
+      }
+      resolve({
+        status: res.statusCode ?? 0,
+        headers,
+        json: async () => JSON.parse(raw),
+        text: async () => raw,
+      });
+    }) as typeof res.end;
+
+    app.handle(req, res, reject);
+  });
+}
 
 beforeAll(async () => {
-  const app = express();
+  app = express();
   app.use(express.json());
 
   // Health endpoint
@@ -111,25 +179,13 @@ beforeAll(async () => {
 
   // 404 handler
   app.use((_req, res) => { res.status(404).json({ error: "Not found" }); });
-
-  await new Promise<void>((resolve) => {
-    server = app.listen(0, "127.0.0.1", () => {
-      const addr = server.address() as { port: number };
-      baseUrl = `http://127.0.0.1:${addr.port}`;
-      resolve();
-    });
-  });
-});
-
-afterAll(async () => {
-  await new Promise<void>((resolve) => server.close(() => resolve()));
 });
 
 // ─── Health & System ───────────────────────────────────────────────────────
 
 describe("Health & System Endpoints", () => {
   it("GET /healthz returns 200 with ok status", async () => {
-    const res = await fetch(`${baseUrl}/healthz`);
+    const res = await apiFetch(`/healthz`);
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.status).toBe("ok");
@@ -137,7 +193,7 @@ describe("Health & System Endpoints", () => {
   });
 
   it("GET /api/system/status returns operational status", async () => {
-    const res = await fetch(`${baseUrl}/api/system/status`);
+    const res = await apiFetch(`/api/system/status`);
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.status).toBe("operational");
@@ -151,7 +207,7 @@ describe("Health & System Endpoints", () => {
 
 describe("Signals Endpoints", () => {
   it("GET /api/signals returns array", async () => {
-    const res = await fetch(`${baseUrl}/api/signals`);
+    const res = await apiFetch(`/api/signals`);
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(Array.isArray(body)).toBe(true);
@@ -163,7 +219,7 @@ describe("Signals Endpoints", () => {
   });
 
   it("POST /api/signals/evaluate returns verdict", async () => {
-    const res = await fetch(`${baseUrl}/api/signals/evaluate`, {
+    const res = await apiFetch(`/api/signals/evaluate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ symbol: "BTCUSD", direction: "long" }),
@@ -180,7 +236,7 @@ describe("Signals Endpoints", () => {
   });
 
   it("POST /api/signals/evaluate rejects missing fields", async () => {
-    const res = await fetch(`${baseUrl}/api/signals/evaluate`, {
+    const res = await apiFetch(`/api/signals/evaluate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),
@@ -195,14 +251,14 @@ describe("Signals Endpoints", () => {
 
 describe("Trades & Performance Endpoints", () => {
   it("GET /api/trades returns array", async () => {
-    const res = await fetch(`${baseUrl}/api/trades`);
+    const res = await apiFetch(`/api/trades`);
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(Array.isArray(body)).toBe(true);
   });
 
   it("GET /api/performance returns metrics", async () => {
-    const res = await fetch(`${baseUrl}/api/performance`);
+    const res = await apiFetch(`/api/performance`);
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toHaveProperty("winRate");
@@ -217,7 +273,7 @@ describe("Trades & Performance Endpoints", () => {
 
 describe("Checklist & War Room Endpoints", () => {
   it("GET /api/checklist/:symbol returns 8 items", async () => {
-    const res = await fetch(`${baseUrl}/api/checklist/BTCUSD`);
+    const res = await apiFetch(`/api/checklist/BTCUSD`);
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.symbol).toBe("BTCUSD");
@@ -228,7 +284,7 @@ describe("Checklist & War Room Endpoints", () => {
   });
 
   it("GET /api/war-room/:symbol returns consensus", async () => {
-    const res = await fetch(`${baseUrl}/api/war-room/BTCUSD`);
+    const res = await apiFetch(`/api/war-room/BTCUSD`);
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.symbol).toBe("BTCUSD");
@@ -248,7 +304,7 @@ describe("Checklist & War Room Endpoints", () => {
 
 describe("Stream Status Endpoint", () => {
   it("GET /api/stream/status returns hub stats", async () => {
-    const res = await fetch(`${baseUrl}/api/stream/status`);
+    const res = await apiFetch(`/api/stream/status`);
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toHaveProperty("clientCount");
@@ -262,14 +318,14 @@ describe("Stream Status Endpoint", () => {
 
 describe("Error Handling", () => {
   it("returns 404 for unknown routes", async () => {
-    const res = await fetch(`${baseUrl}/api/nonexistent`);
+    const res = await apiFetch(`/api/nonexistent`);
     expect(res.status).toBe(404);
     const body = await res.json();
     expect(body).toHaveProperty("error");
   });
 
   it("returns JSON content type for all responses", async () => {
-    const res = await fetch(`${baseUrl}/healthz`);
+    const res = await apiFetch(`/healthz`);
     expect(res.headers.get("content-type")).toContain("application/json");
   });
 });
