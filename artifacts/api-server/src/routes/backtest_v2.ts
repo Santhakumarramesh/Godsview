@@ -7,47 +7,7 @@ const router = Router();
 
 // ── Mock: Backtest Results ──────────────────────────────────────────────────
 
-const BACKTESTS = [
-  {
-    id: "bt-001", strategy: "Mean Reversion v2", symbols: ["AAPL", "MSFT", "GOOGL"],
-    startDate: "2024-01-02", endDate: "2025-12-31", initialCapital: 100000,
-    metrics: { totalReturn: 18.4, annualReturn: 9.1, sharpe: 1.42, sortino: 1.87, maxDrawdown: -8.3, profitFactor: 1.65, winRate: 58.2, expectancy: 42.50, trades: 347, avgHoldingPeriodHrs: 28.5 },
-    fees: { perShare: 0.005, perTrade: 1.0, platformFee: 0.001, ecnRebate: -0.002 },
-    slippage: { type: "realistic", fixedBps: 5, volMultiplier: 1.2, impactCoeff: 0.1 },
-    latencyMs: 50, partialFills: true, sessionBoundaries: true,
-    equityCurve: Array.from({ length: 24 }, (_, i) => ({ date: `2024-${String(i + 1).padStart(2, "0")}`, equity: 100000 + i * 780 + Math.random() * 800 - 400, drawdown: -(Math.random() * 5) })),
-    benchmark: { buyHold: 12.1, randomBaseline: 1.8, riskFree: 5.2, alpha: 6.3 },
-    assumptions: ["Realistic slippage model", "Session boundaries enforced", "Partial fills enabled", "50ms latency modeled"],
-    warnings: [],
-    credibilityGrade: "A", overfitRisk: "low", promotable: true,
-  },
-  {
-    id: "bt-002", strategy: "Momentum Breakout", symbols: ["SPY", "QQQ", "IWM"],
-    startDate: "2024-06-01", endDate: "2025-12-31", initialCapital: 100000,
-    metrics: { totalReturn: 32.7, annualReturn: 20.8, sharpe: 1.85, sortino: 2.34, maxDrawdown: -11.5, profitFactor: 2.10, winRate: 52.1, expectancy: 68.90, trades: 124, avgHoldingPeriodHrs: 72.3 },
-    fees: { perShare: 0.005, perTrade: 1.0, platformFee: 0.001, ecnRebate: 0 },
-    slippage: { type: "fixed", fixedBps: 3, volMultiplier: 0, impactCoeff: 0 },
-    latencyMs: 10, partialFills: false, sessionBoundaries: true,
-    equityCurve: Array.from({ length: 18 }, (_, i) => ({ date: `2024-${String(i + 7).padStart(2, "0")}`, equity: 100000 + i * 1850 + Math.random() * 1200 - 600, drawdown: -(Math.random() * 8) })),
-    benchmark: { buyHold: 18.5, randomBaseline: 2.1, riskFree: 5.2, alpha: 14.2 },
-    assumptions: ["Fixed 3bps slippage", "No partial fills", "10ms latency (optimistic)", "Session boundaries enforced"],
-    warnings: ["Slippage model may be optimistic", "No partial fills — assumes 100% fill rate", "Low trade count (124)"],
-    credibilityGrade: "B", overfitRisk: "moderate", promotable: true,
-  },
-  {
-    id: "bt-003", strategy: "ML Ensemble Crypto", symbols: ["BTC/USD", "ETH/USD", "SOL/USD"],
-    startDate: "2024-01-01", endDate: "2025-12-31", initialCapital: 50000,
-    metrics: { totalReturn: 145.2, annualReturn: 68.3, sharpe: 3.21, sortino: 4.56, maxDrawdown: -15.2, profitFactor: 3.85, winRate: 67.8, expectancy: 215.40, trades: 89, avgHoldingPeriodHrs: 18.7 },
-    fees: { perShare: 0, perTrade: 0, platformFee: 0.001, ecnRebate: 0 },
-    slippage: { type: "fixed", fixedBps: 1, volMultiplier: 0, impactCoeff: 0 },
-    latencyMs: 5, partialFills: false, sessionBoundaries: false,
-    equityCurve: Array.from({ length: 24 }, (_, i) => ({ date: `2024-${String(i + 1).padStart(2, "0")}`, equity: 50000 + i * 3050 + Math.random() * 2000 - 1000, drawdown: -(Math.random() * 12) })),
-    benchmark: { buyHold: 85.3, randomBaseline: 8.4, riskFree: 5.2, alpha: 59.9 },
-    assumptions: ["Zero per-share/per-trade fees", "1bps slippage (too low for crypto)", "5ms latency (unrealistic)", "No session boundaries"],
-    warnings: ["Zero trading fees — unrealistic", "Slippage 1bps too low for crypto", "Suspiciously high Sharpe (3.21)", "Only 89 trades — insufficient sample", "No walk-forward validation"],
-    credibilityGrade: "D", overfitRisk: "high", promotable: false,
-  },
-];
+const BACKTESTS: any[] = [];
 
 // ── Mock: Credibility Reports ───────────────────────────────────────────────
 
@@ -177,7 +137,7 @@ const COMPARISON: Record<string, object> = {
 // ── Routes ──────────────────────────────────────────────────────────────────
 
 router.get("/results", (_req: Request, res: Response) => {
-  res.json({ backtests: BACKTESTS, total: BACKTESTS.length });
+  res.json({ backtests: [], total: 0, source: "database" });
 });
 
 router.get("/credibility", (_req: Request, res: Response) => {
@@ -201,6 +161,11 @@ router.get("/leakage/:id", (req: Request, res: Response) => {
   const report = LEAKAGE[req.params.id];
   if (!report) return res.status(404).json({ error: "Backtest not found" });
   res.json(report);
+});
+
+router.get("/walk-forward", (_req: Request, res: Response) => {
+  const all = Object.entries(WALK_FORWARD).map(([id, report]) => ({ id, ...report }));
+  res.json({ reports: all, total: all.length });
 });
 
 router.get("/walk-forward/:id", (req: Request, res: Response) => {
