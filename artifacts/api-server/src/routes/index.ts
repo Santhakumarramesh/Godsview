@@ -303,4 +303,15 @@ router.use("/api", newsMonitorFeedRouter);
 import strategyPromptRouter from "./strategy_prompt";
 router.use("/api/strategy-prompt", strategyPromptRouter);
 
+
+// ── Phase 5: Calibration & Governance Schedulers ──────────────────────
+import calibrationSchedulerRouter from "./calibration_scheduler";
+import governanceSchedulerRouter from "./governance_scheduler";
+router.use(calibrationSchedulerRouter);
+router.use(governanceSchedulerRouter);
+
+// ── Phase 6: SLO Tracking ────────────────────────────────────────────
+import sloRouter from "./slo";
+router.use(sloRouter);
+
 export default router;
