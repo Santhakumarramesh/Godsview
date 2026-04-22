@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GodsView Architecture</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #0a0e1a 0%, #0f1425 100%);
+            color: #e0e6ff;
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100%;
+            padding: 40px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            z-index: 10;
+        }
+
+        .header h1 {
+            font-size: 42px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #00d4ff 0%, #a855f7 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+            text-shadow: 0 0 30px rgba(0, 212, 255, 0.3);
+        }
+
+        .header p {
+            font-size: 14px;
+            color: #7d8fb0;
+            letter-spacing: 1px;
+        }
+
+        .canvas-wrapper {
+            flex: 1;
+            position: relative;
+            background: radial-gradient(circle at 20% 50%, rgba(0, 212, 255, 0.05) 0%, transparent 50%),
+                        radial-gradient(circle at 80% 80%, rgba(168, 85, 247, 0.05) 0%, transparent 50%);
+            border-radius: 12px;
+            border: 1px solid rgba(0, 212, 255, 0.1);
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+
+        svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .footer {
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px solid rgba(0, 212, 255, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            color: #7d8fb0;
+        }
+
+        .stats {
+            display: flex;
+            gap: 30px;
+        }
+
+        .stat {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .stat-value {
+            color: #00d4ff;
+            font-weight: 600;
+        }
+
+        .deployment-badge {
+            background: rgba(34, 197, 94, 0.15);
+            border: 1px solid #22c55e;
+            color: #22c55e;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+
+        /* SVG Text Styles */
+        .layer-label {
+            font-size: 16px;
+            font-weight: 700;
+            fill: #00d4ff;
+        }
+
+        .component-title {
+            font-size: 13px;
+            font-weight: 600;
+            fill: #e0e6ff;
+        }
+
+        .component-detail {
+            font-size: 11px;
+            fill: #a0afc9;
+        }
+
+        .metric-text {
+            font-size: 12px;
+            fill: #7d8fb0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>GodsView Architecture</h1>
+            <p>AI-Driven Trading Platform • AWS Deployed</p>
+        </div>
+
+        <div class="canvas-wrapper">
+            <svg viewBox="0 0 1400 900" preserveAspectRatio="xMidYMid meet">
+                <defs>
+                    <!-- Gradients -->
+                    <linearGradient id="cyanGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" style="stop-color:#00d4ff;stop-opacity:0.8" />
+                        <stop offset="100%" style="stop-color:#0099cc;stop-opacity:0.6" />
+                    </linearGradient>
+                    <linearGradient id="purpleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" style="stop-color:#a855f7;stop-opacity:0.8" />
+                        <stop offset="100%" style="stop-color:#7c3aed;stop-opacity:0.6" />
+                    </linearGradient>
+                    <linearGradient id="greenGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" style="stop-color:#22c55e;stop-opacity:0.8" />
+                        <stop offset="100%" style="stop-color:#16a34a;stop-opacity:0.6" />
+                    </linearGradient>
+                    <filter id="glow">
+                        <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+                        <feMerge>
+                            <feMergeNode in="coloredBlur"/>
+                            <feMergeNode in="SourceGraphic"/>
+                        </feMerge>
+                    </filter>
+                </defs>
+
+                <!-- Layer 1: PRESENTATION LAYER -->
+                <g id="layer-1">
+                    <!-- Background -->
+                    <rect x="50" y="30" width="1300" height="130" fill="none" stroke="url(#cyanGrad)" stroke-width="2" rx="8" filter="url(#glow)"/>
+
+                    <!-- Layer Label -->
+                    <text x="70" y="58" class="layer-label">1. PRESENTATION LAYER</text>
+
+                    <!-- React/Next.js Box -->
+                    <rect x="70" y="70" width="220" height="75" fill="rgba(0, 212, 255, 0.1)" stroke="#00d4ff" stroke-width="1.5" rx="6"/>
+                    <text x="85" y="95" class="component-title">React 19 + Next.js 15</text>
+                    <text x="85" y="112" class="component-detail">• 75 Functional Pages</text>
+                    <text x="85" y="128" class="component-detail">• Real-time SSE Updates</text>
+
+                    <!-- Three.js Box -->
+                    <rect x="320" y="70" width="220" height="75" fill="rgba(0, 212, 255, 0.1)" stroke="#00d4ff" stroke-width="1.5" rx="6"/>
+                    <text x="335" y="95" class="component-title">Three.js Visualization</text>
+                    <text x="335" y="112" class="component-detail">• 3D Brain Hologram</text>
+                    <text x="335" y="128" class="component-detail">• Real-time Rendering</text>
+
+                    <!-- Nginx Box -->
+                    <rect x="570" y="70" width="220" height="75" fill="rgba(0, 212, 255, 0.1)" stroke="#00d4ff" stroke-width="1.5" rx="6"/>
+                    <text x="585" y="95" class="component-title">Nginx Reverse Proxy</text>
+                    <text x="585" y="112" class="component-detail">• Port 80</text>
+                    <text x="585" y="128" class="component-detail">• Load Balancing</text>
+
+                    <!-- Performance Stats -->
+                    <rect x="820" y="70" width="500" height="75" fill="rgba(0, 212, 255, 0.05)" stroke="rgba(0, 212, 255, 0.3)" stroke-width="1" rx="6"/>
+                    <text x="835" y="95" class="component-title" style="fill: #22c55e;">Client Performance</text>
+                    <text x="835" y="112" class="component-detail">⚡ Sub-100ms DOM Updates | 🧠 Streaming 3D Brain</text>
+                    <text x="835" y="128" class="component-detail">📊 Live WebSocket + SSE Feed | 🎨 GPU-Accelerated Renders</text>
+                </g>
+
+                <!-- Layer 2: API LAYER -->
+                <g id="layer-2">
+                    <!-- Background -->
+                    <rect x="50" y="190" width="1300" height="110" fill="none" stroke="url(#purpleGrad)" stroke-width="2" rx="8" filter="url(#glow)"/>
+
+                    <!-- Layer Label -->
+                    <text x="70" y="218" class="layer-label" style="fill: #a855f7;">2. API LAYER</text>
+
+                    <!-- Express Box -->
+                    <rect x="70" y="230" width="220" height="60" fill="rgba(168, 85, 247, 0.1)" stroke="#a855f7" stroke-width="1.5" rx="6"/>
+                    <text x="85" y="252" class="component-title">Express 5 + TypeScript</text>
+                    <text x="85" y="268" class="component-detail">• 72 API Routes | 136 Lib Modules</text>
+
+                    <!-- OpenAPI & Security Box -->
+                    <rect x="320" y="230" width="220" height="60" fill="rgba(168, 85, 247, 0.1)" stroke="#a855f7" stroke-width="1.5" rx="6"/>
+                    <text x="335" y="252" class="component-title">OpenAPI + Security</text>
+                    <text x="335" y="268" class="component-detail">• Rate Limiting | RBAC</text>
+
+                    <!-- Port 3001 Box -->
+                    <rect x="570" y="230" width="220" height="60" fill="rgba(168, 85, 247, 0.1)" stroke="#a855f7" stroke-width="1.5" rx="6"/>
+                    <text x="585" y="252" class="component-title">Server Port 3001</text>
+                    <text x="585" y="268" class="component-detail">• RESTful + WebSocket</text>
+
+                    <!-- API Endpoints Stats -->
+                    <rect x="820" y="230" width="500" height="60" fill="rgba(168, 85, 247, 0.05)" stroke="rgba(168, 85, 247, 0.3)" stroke-width="1" rx="6"/>
+                    <text x="835" y="252" class="component-title" style="fill: #c084fc;">Request Pipeline</text>
+                    <text x="835" y="268" class="component-detail">🔐 Auth → Rate Limit → RBAC → Handler → 📝 Audit Log</text>
+                </g>
+
+                <!-- Intelligence Engines Section -->
+                <g id="intelligence">
+                    <!-- Section Label -->
+                    <text x="70" y="358" class="layer-label" style="fill: #a855f7; font-size: 14px;">3. INTELLIGENCE ENGINES</text>
+
+                    <!-- Market Structure -->
+                    <rect x="50" y="370" width="260" height="110" fill="rgba(0, 212, 255, 0.08)" stroke="#00d4ff" stroke-width="1.5" rx="6"/>
+                    <text x="65" y="392" class="component-title">Market Structure</text>
+                    <text x="65" y="410" class="component-detail">• Smart Money Concepts</text>
+                    <text x="65" y="425" class="component-detail">• Order Blocks (OB)</text>
+                    <text x="65" y="440" class="component-detail">• BOS/CHOCH Patterns</text>
+                    <text x="65" y="455" class="component-detail">• Liquidity Sweeps</text>
+
+                    <!-- Order Flow -->
+                    <rect x="340" y="370" width="260" height="110" fill="rgba(0, 212, 255, 0.08)" stroke="#00d4ff" stroke-width="1.5" rx="6"/>
+                    <text x="355" y="392" class="component-title">Order Flow Analysis</text>
+                    <text x="355" y="410" class="component-detail">• Heatmap Visualization</text>
+                    <text x="355" y="425" class="component-detail">• DOM + Footprint</text>
+                    <text x="355" y="440" class="component-detail">• Absorption Detection</text>
+                    <text x="355" y="455" class="component-detail">• Volume Profile</text>
+
+                    <!-- ML Pipeline -->
+                    <rect x="630" y="370" width="260" height="110" fill="rgba(0, 212, 255, 0.08)" stroke="#00d4ff" stroke-width="1.5" rx="6"/>
+                    <text x="645" y="392" class="component-title">ML Pipeline</text>
+                    <text x="645" y="410" class="component-detail">• L2 Logistic Regression</text>
+                    <text x="645" y="425" class="component-detail">• 18-Dimensional Features</text>
+                    <text x="645" y="440" class="component-detail">• Drift Detection</text>
+                    <text x="645" y="455" class="component-detail">• Model Versioning</text>
+
+                    <!-- Backtesting -->
+                    <rect x="920" y="370" width="200" height="110" fill="rgba(0, 212, 255, 0.08)" stroke="#00d4ff" stroke-width="1.5" rx="6"/>
+                    <text x="935" y="392" class="component-title">Backtesting</text>
+                    <text x="935" y="410" class="component-detail">• Walk-Forward Analysis</text>
+                    <text x="935" y="425" class="component-detail">• Regime-Aware</text>
+                    <text x="935" y="440" class="component-detail">• Promotion Pipeline</text>
+
+                    <!-- Memory/Recall -->
+                    <rect x="1150" y="370" width="200" height="110" fill="rgba(168, 85, 247, 0.08)" stroke="#a855f7" stroke-width="1.5" rx="6"/>
+                    <text x="1165" y="392" class="component-title" style="fill: #a855f7;">Memory/Recall</text>
+                    <text x="1165" y="410" class="component-detail">• Vector DB Search</text>
+                    <text x="1165" y="425" class="component-detail">• Case Library</text>
+                    <text x="1165" y="440" class="component-detail">• Similarity Matching</text>
+                </g>
+
+                <!-- Layer 3: EXECUTION & RISK -->
+                <g id="layer-3">
+                    <!-- Background -->
+                    <rect x="50" y="520" width="1300" height="140" fill="none" stroke="url(#greenGrad)" stroke-width="2" rx="8" filter="url(#glow)"/>
+
+                    <!-- Layer Label -->
+                    <text x="70" y="548" class="layer-label" style="fill: #22c55e;">4. EXECUTION & RISK MANAGEMENT</text>
+
+                    <!-- Order State Machine -->
+                    <rect x="70" y="560" width="240" height="85" fill="rgba(34, 197, 94, 0.1)" stroke="#22c55e" stroke-width="1.5" rx="6"/>
+                    <text x="85" y="582" class="component-title" style="fill: #22c55e;">Order State Machine</text>
+                    <text x="85" y="598" class="component-detail">• Idempotent Operations</text>
+                    <text x="85" y="613" class="component-detail">• Retry with Backoff</text>
+                    <text x="85" y="628" class="component-detail">• Order Tracking</text>
+
+                    <!-- Trading Modes -->
+                    <rect x="350" y="560" width="240" height="85" fill="rgba(34, 197, 94, 0.1)" stroke="#22c55e" stroke-width="1.5" rx="6"/>
+                    <text x="365" y="582" class="component-title" style="fill: #22c55e;">Trading Modes</text>
+                    <text x="365" y="598" class="component-detail">📄 Paper → 🤝 Assisted</text>
+                    <text x="365" y="613" class="component-detail">🤖 Semi-Auto → ⚡ Autonomous</text>
+                    <text x="365" y="628" class="component-detail">Mode Transition Logic</text>
+
+                    <!-- Safety Stack -->
+                    <rect x="630" y="560" width="280" height="85" fill="rgba(34, 197, 94, 0.1)" stroke="#22c55e" stroke-width="1.5" rx="6"/>
+                    <text x="645" y="582" class="component-title" style="fill: #22c55e;">5-Layer Safety Stack</text>
+                    <text x="645" y="598" class="component-detail">🛑 Kill Switch | 📉 Daily Loss Limits</text>
+                    <text x="645" y="613" class="component-detail">💰 Exposure Caps | ⚙️ Circuit Breaker</text>
+                    <text x="645" y="628" class="component-detail">Real-time Risk Enforcement</text>
+
+                    <!-- Broker Integration -->
+                    <rect x="950" y="560" width="350" height="85" fill="rgba(34, 197, 94, 0.1)" stroke="#22c55e" stroke-width="1.5" rx="6"/>
+                    <text x="965" y="582" class="component-title" style="fill: #22c55e;">Alpaca Broker Integration</text>
+                    <text x="965" y="598" class="component-detail">🔗 Live Crypto Streaming | 📊 Account Sync</text>
+                    <text x="965" y="613" class="component-detail">Position Management | WebSocket Feed</text>
+                    <text x="965" y="628" class="component-detail">Autonomous Brain</text>
+                </g>
+
+                <!-- Layer 4: DATA LAYER -->
+                <g id="layer-4">
+                    <!-- Background -->
+                    <rect x="50" y="700" width="1300" height="100" fill="none" stroke="rgba(0, 212, 255, 0.5)" stroke-width="2" rx="8" filter="url(#glow)" stroke-dasharray="5,5"/>
+
+                    <!-- Layer Label -->
+                    <text x="70" y="728" class="layer-label">5. DATA LAYER</text>
+
+                    <!-- PostgreSQL -->
+                    <rect x="70" y="740" width="280" height="50" fill="rgba(0, 212, 255, 0.08)" stroke="#00d4ff" stroke-width="1.5" rx="6"/>
+                    <text x="85" y="760" class="component-title">PostgreSQL Database</text>
+                    <text x="85" y="775" class="component-detail">Positions • Signals • Audit Trail • Analytics</text>
+
+                    <!-- Redis -->
+                    <rect x="390" y="740" width="280" height="50" fill="rgba(0, 212, 255, 0.08)" stroke="#00d4ff" stroke-width="1.5" rx="6"/>
+                    <text x="405" y="760" class="component-title">Redis Cache + State</text>
+                    <text x="405" y="775" class="component-detail">Real-time State • Session Cache • Pub/Sub</text>
+
+                    <!-- S3 Storage -->
+                    <rect x="710" y="740" width="280" height="50" fill="rgba(0, 212, 255, 0.08)" stroke="#00d4ff" stroke-width="1.5" rx="6"/>
+                    <text x="725" y="760" class="component-title">AWS S3 Storage</text>
+                    <text x="725" y="775" class="component-detail">Artifacts • Screenshots • Model Checkpoints</text>
+
+                    <!-- Data Pipeline -->
+                    <rect x="1030" y="740" width="300" height="50" fill="rgba(0, 212, 255, 0.08)" stroke="#00d4ff" stroke-width="1.5" rx="6"/>
+                    <text x="1045" y="760" class="component-title">ETL Pipeline</text>
+                    <text x="1045" y="775" class="component-detail">Data Ingestion • Validation • Enrichment</text>
+                </g>
+
+                <!-- Layer 5: INFRASTRUCTURE -->
+                <g id="layer-5">
+                    <!-- Background -->
+                    <rect x="50" y="840" width="1300" height="40" fill="none" stroke="rgba(168, 85, 247, 0.5)" stroke-width="2" rx="8" stroke-dasharray="5,5"/>
+
+                    <!-- Infrastructure -->
+                    <rect x="70" y="850" width="1260" height="20" fill="rgba(168, 85, 247, 0.1)" stroke="#a855f7" stroke-width="1" rx="4"/>
+                    <text x="85" y="863" class="component-detail" style="fill: #c084fc;">AWS EC2 • Docker Compose (3 Containers: API, PostgreSQL, Nginx) • CloudWatch Monitoring • GitHub CI/CD</text>
+                </g>
+
+                <!-- Connection Arrows -->
+                <defs>
+                    <marker id="arrowCyan" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+                        <path d="M0,0 L0,6 L9,3 z" fill="#00d4ff" opacity="0.6" />
+                    </marker>
+                </defs>
+
+                <!-- Presentation to API -->
+                <path d="M 700,160 L 700,190" stroke="#00d4ff" stroke-width="2" fill="none" marker-end="url(#arrowCyan)" opacity="0.4"/>
+
+                <!-- API to Intelligence -->
+                <path d="M 700,340 L 700,370" stroke="#a855f7" stroke-width="2" fill="none" marker-end="url(#arrowCyan)" opacity="0.4"/>
+
+                <!-- Intelligence to Execution -->
+                <path d="M 700,480 L 700,520" stroke="#22c55e" stroke-width="2" fill="none" marker-end="url(#arrowCyan)" opacity="0.4"/>
+
+                <!-- Execution to Data -->
+                <path d="M 700,660 L 700,700" stroke="#00d4ff" stroke-width="2" fill="none" marker-end="url(#arrowCyan)" opacity="0.4"/>
+
+                <!-- Data to Infrastructure -->
+                <path d="M 700,800 L 700,840" stroke="#a855f7" stroke-width="2" fill="none" marker-end="url(#arrowCyan)" opacity="0.4"/>
+            </svg>
+        </div>
+
+        <div class="footer">
+            <div class="stats">
+                <div class="stat">
+                    <span>📊</span>
+                    <span><span class="stat-value">82,252</span> Lines of TypeScript</span>
+                </div>
+                <div class="stat">
+                    <span>📈</span>
+                    <span><span class="stat-value">487</span> Git Commits</span>
+                </div>
+                <div class="stat">
+                    <span>✅</span>
+                    <span><span class="stat-value">1,420</span> Test Cases</span>
+                </div>
+                <div class="stat">
+                    <span>⏱️</span>
+                    <span><span class="stat-value">24</span> Days Development</span>
+                </div>
+            </div>
+            <div class="deployment-badge">✓ Live on AWS EC2</div>
+        </div>
+    </div>
+</body>
+</html>
