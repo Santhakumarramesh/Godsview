@@ -152,8 +152,8 @@ router.use("/api/certification", certificationRouter);
 router.use("/api/deployment", deploymentTruthRouter);
 router.use("/api/data-truth", dataTruthRouter);
 router.use("/api/execution-validation", executionValidationRouter);
-router.use("/api/certification-run", certificationRunRouter); // Phase 20 — One strategy certification run
-router.use("/api/ops/v2", opsV2Router); // Operator brief, kill switch, exposure, drift, startup
+router.use("/api/certification-run", certificationRunRouter);
+router.use("/api/ops/v2", opsV2Router);
 
 // Python v2 microservices proxy — shadow routes at /v2/*
 router.use(pythonV2Router);
@@ -162,10 +162,135 @@ router.use(pythonV2Router);
 import finnhubAltRouter from "./finnhub_alt";
 router.use("/api/finnhub", finnhubAltRouter);
 
+import seedRouter from "./seed";
+router.use("/api", seedRouter);
+
 import s3StorageRouter from "./s3_storage";
 router.use("/api/storage", s3StorageRouter);
 
-import seedRouter from "./seed";
-router.use("/api", seedRouter);
+// ── Phase 77-85: Quant Super-Intelligence Subsystems ─────────────────────
+import labRouter from "./lab";
+import quantRouter from "./quant";
+import memoryRouter from "./memory";
+import uxRouter from "./ux";
+import explainRouter from "./explain";
+import backtestEnhancedRouter from "./backtest_enhanced";
+import marketRouter from "./market";
+
+router.use("/api/lab", labRouter);
+router.use("/api/quant", quantRouter);
+router.use("/api/memory", memoryRouter);
+router.use("/api/ux", uxRouter);
+router.use("/api/explain", explainRouter);
+router.use("/api/backtest", backtestEnhancedRouter);
+router.use("/api/market", marketRouter);
+
+// ── Phase 87: Quant Decision Loop ────────────────────────────────────────
+import decisionLoopRouter from "./decision_loop";
+router.use("/api/decision-loop", decisionLoopRouter);
+
+// ── Phase 88: Evaluation & Proof Layer ───────────────────────────────────
+import evalRouter from "./eval";
+import trustRouter from "./trust";
+router.use("/api/eval", evalRouter);
+router.use("/api/trust", trustRouter);
+
+// ── Phase 91: System Integration & Operations ────────────────────────────
+import systemBridgeRouter from "./system_bridge";
+import opsQuantRouter from "./ops_quant";
+router.use("/api/bridge", systemBridgeRouter);
+router.use("/api/ops-quant", opsQuantRouter);
+
+// ── Phase 97-98: TradingView MCP Integration ────────────────────────────
+import tradingviewMcpRouter from "./tradingview_mcp";
+import mcpBacktestRouter from "./mcp_backtest";
+router.use("/api/tradingview", tradingviewMcpRouter);
+router.use("/api", mcpBacktestRouter);
+
+// ── Phase 99: Pipeline Orchestrator ─────────────────────────────────────
+import pipelineStatusRouter from "./pipeline_status";
+router.use("/api", pipelineStatusRouter);
+
+// ── MCP Streaming Events ────────────────────────────────────────────────
+import mcpStreamRouter from "./mcp_stream";
+router.use("/api", mcpStreamRouter);
+
+// ── Phase 101: Regime-Adaptive Intelligence ─────────────────────────────
+import intelligenceRouter from "./intelligence";
+router.use("/api/intelligence", intelligenceRouter);
+
+// ── Phase 102: Correlation & Portfolio Heat Map ─────────────────────────
+import correlationRouter from "./correlation";
+router.use("/api/correlation", correlationRouter);
+
+// ── Phase 103: Execution Control ────────────────────────────────────────
+import executionControlRouter from "./execution_control";
+router.use("/api/execution-control", executionControlRouter);
+
+// ── Phase 104: Sentiment & News Intelligence ────────────────────────────
+import sentimentRouter from "./sentiment";
+router.use("/api/sentiment", sentimentRouter);
+
+// ── Phase 105: Performance Analytics ────────────────────────────────────
+import perfAnalyticsRouter from "./perf_analytics";
+router.use("/api/perf", perfAnalyticsRouter);
+
+// ── Phase 106: Alert Engine & Anomaly Detection ─────────────────────────
+import alertCenterRouter from "./alert_center";
+router.use("/api/alert-center", alertCenterRouter);
+
+// ── Phase 108: Truth Phase — System Integrity Audit ─────────────────────
+import truthAuditRouter from "./truth_audit";
+router.use("/api/truth-audit", truthAuditRouter);
+
+// ── Phase 109: Market Data Integrity Layer ──────────────────────────────
+import dataIntegrityRouter from "./data_integrity";
+router.use("/api/data-integrity", dataIntegrityRouter);
+
+// ── Phase 110: Backtest Credibility Upgrade ─────────────────────────────
+import backtestV2Router from "./backtest_v2";
+router.use("/api/backtest-v2", backtestV2Router);
+
+// ── Phase 111: Execution Reliability Layer ──────────────────────────────
+import execReliabilityRouter from "./exec_reliability";
+router.use("/api/exec-reliability", execReliabilityRouter);
+
+// ── Phase 112: Risk Engine v2 — Capital Protection ──────────────────────
+import riskV2Router from "./risk_v2";
+router.use("/api/risk-v2", riskV2Router);
+
+// ── Phase 113: Model Governance & Learning Discipline ───────────────────
+import modelGovRouter from "./model_gov";
+router.use("/api/model-gov", modelGovRouter);
+
+// ── Phase 114: Decision Explainability & Replay ─────────────────────────
+import explainabilityRouter from "./explainability";
+router.use("/api/explainability", explainabilityRouter);
+
+// ── Phase 115: Ops, Security & Failure Testing ──────────────────────────
+import opsSecurityRouter from "./ops_security";
+router.use("/api", opsSecurityRouter);
+
+// ── Phase 116: Paper Program Validation & Certification ─────────────────
+import paperProgramRouter from "./paper_trading_program";
+router.use("/api/paper-program", paperProgramRouter);
+
+// ── Phase 117: Capital Gating & Controlled Launch ───────────────────────
+import capitalGatingRouter from "./capital_gating";
+router.use("/api/capital-gating", capitalGatingRouter);
+
+// ── Phase 120: Python v2 Service Bridge ─────────────────────────────────
+import pyBridgeRouter from "./py_bridge";
+router.use("/api/v2", pyBridgeRouter);
+
+// ── Phase 123: OpenAPI Documentation ────────────────────────────────────
+import openapiRouter from "./openapi";
+router.use("/api/docs", openapiRouter);
+
+// ── Strategy Params & Brain Health ──────────────────────────────────────
+import strategyParamsRouter from "./strategy_params";
+import brainHealthRouter from "./brain_health";
+router.use(strategyParamsRouter);
+router.use(brainHealthRouter);
 
 export default router;
