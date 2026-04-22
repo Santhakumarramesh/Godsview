@@ -27,8 +27,7 @@ import engineHealthRouter from "./engine_health";
 import executionRouter from "./execution";
 import sessionsRouter from "./sessions";
 import streamingRouter from "./streaming";
-import deploymentReadinessRouter from "./deployment_readiness";
-import autonomyDebuggerRouter from "./autonomy_debugger";
+import deploymentReadinessRouter from "./deployment_readiness";import autonomyDebuggerRouter from "./autonomy_debugger";
 import autonomyDebugSchedulerRouter from "./autonomy_debug_scheduler";
 import autonomySupervisorRouter from "./autonomy_supervisor";
 import strategyGovernorRouter from "./strategy_governor";
@@ -57,8 +56,7 @@ import systemOrchestratorRouter from "./system_orchestrator";
 import apiGatewayRouter from "./api_gateway";
 import dailyReviewRouter from "./daily_review";
 import sideBySideRouter from "./side_by_side";
-import marketStructureRouter from "./market_structure";
-import persistenceRouter from "./persistence";
+import marketStructureRouter from "./market_structure";import persistenceRouter from "./persistence";
 import siSupervisorRouter from "./si_supervisor";
 import observabilityRouter from "./observability";
 import governanceRouter from "./governance";
@@ -87,8 +85,7 @@ router.use(systemRouter);
 router.use(alpacaRouter);
 router.use(orderbookRouter);
 router.use(strictSetupRouter);
-router.use(researchRouter);
-router.use(brainRouter);
+router.use(researchRouter);router.use(brainRouter);
 router.use(superIntelligenceRouter);
 router.use(backtestRouter);
 router.use(paperValidationRouter);
@@ -117,8 +114,7 @@ router.use(strategyAllocatorRouter);
 router.use(strategyEvolutionRouter);
 router.use(productionWatchdogRouter);
 router.use(executionSafetySupervisorRouter);
-router.use(brainNodesRouter);
-router.use(portfolioAllocatorRouter);
+router.use(brainNodesRouter);router.use(portfolioAllocatorRouter);
 router.use(decisionReplayRouter);
 router.use(microstructureRouter);
 router.use(contextFusionRouter);
@@ -148,12 +144,11 @@ router.use("/api/alignment", alignmentRouter);
 router.use("/api/ml-ops", mlOperationsRouter);
 router.use("/api/production-health", productionHealthRouter);
 router.use("/api/certification", certificationRouter);
-
 router.use("/api/deployment", deploymentTruthRouter);
 router.use("/api/data-truth", dataTruthRouter);
 router.use("/api/execution-validation", executionValidationRouter);
-router.use("/api/certification-run", certificationRunRouter);
-router.use("/api/ops/v2", opsV2Router);
+router.use("/api/certification-run", certificationRunRouter); // Phase 20 — One strategy certification run
+router.use("/api/ops/v2", opsV2Router); // Operator brief, kill switch, exposure, drift, startup
 
 // Python v2 microservices proxy — shadow routes at /v2/*
 router.use(pythonV2Router);
@@ -178,8 +173,7 @@ import backtestEnhancedRouter from "./backtest_enhanced";
 import marketRouter from "./market";
 
 router.use("/api/lab", labRouter);
-router.use("/api/quant", quantRouter);
-router.use("/api/memory", memoryRouter);
+router.use("/api/quant", quantRouter);router.use("/api/memory", memoryRouter);
 router.use("/api/ux", uxRouter);
 router.use("/api/explain", explainRouter);
 router.use("/api/backtest", backtestEnhancedRouter);
@@ -208,8 +202,7 @@ router.use("/api/tradingview", tradingviewMcpRouter);
 router.use("/api", mcpBacktestRouter);
 
 // ── Phase 99: Pipeline Orchestrator ─────────────────────────────────────
-import pipelineStatusRouter from "./pipeline_status";
-router.use("/api", pipelineStatusRouter);
+import pipelineStatusRouter from "./pipeline_status";router.use("/api", pipelineStatusRouter);
 
 // ── MCP Streaming Events ────────────────────────────────────────────────
 import mcpStreamRouter from "./mcp_stream";
@@ -238,7 +231,6 @@ router.use("/api/perf", perfAnalyticsRouter);
 // ── Phase 106: Alert Engine & Anomaly Detection ─────────────────────────
 import alertCenterRouter from "./alert_center";
 router.use("/api/alert-center", alertCenterRouter);
-
 // ── Phase 108: Truth Phase — System Integrity Audit ─────────────────────
 import truthAuditRouter from "./truth_audit";
 router.use("/api/truth-audit", truthAuditRouter);
@@ -268,8 +260,7 @@ import explainabilityRouter from "./explainability";
 router.use("/api/explainability", explainabilityRouter);
 
 // ── Phase 115: Ops, Security & Failure Testing ──────────────────────────
-import opsSecurityRouter from "./ops_security";
-router.use("/api", opsSecurityRouter);
+import opsSecurityRouter from "./ops_security";router.use("/api", opsSecurityRouter);
 
 // ── Phase 116: Paper Program Validation & Certification ─────────────────
 import paperProgramRouter from "./paper_trading_program";
@@ -292,5 +283,36 @@ import strategyParamsRouter from "./strategy_params";
 import brainHealthRouter from "./brain_health";
 router.use(strategyParamsRouter);
 router.use(brainHealthRouter);
+
+// ── Phase 147: Autonomous Brain Engine ─────────────────────────────────
+import autonomousBrainRouter from "./autonomous_brain";
+router.use("/api/autonomous", autonomousBrainRouter);
+
+// ── Bloomberg-style Market Data ────────────────────────────────────────
+import bloombergDataRouter from "./bloomberg_data";router.use("/api/bloomberg", bloombergDataRouter);
+
+// ── Phase 142: Brain Nodes WebSocket & REST ────────────────────────────
+import brainNodesWsRouter from "./brain_nodes_ws";
+router.use("/api", brainNodesWsRouter);
+
+// ── Phase 5: Calibration Scheduler ─────────────────────────────────────
+import calibrationSchedulerRouter from "./calibration_scheduler";
+router.use(calibrationSchedulerRouter);
+
+// ── Phase 5: Governance Scheduler ──────────────────────────────────────
+import governanceSchedulerRouter from "./governance_scheduler";
+router.use(governanceSchedulerRouter);
+
+// ── Phase 140: News Monitor Feed ───────────────────────────────────────
+import newsMonitorFeedRouter from "./news_monitor_feed";
+router.use("/api", newsMonitorFeedRouter);
+
+// ── Phase 6: SLO Tracking ──────────────────────────────────────────────
+import sloRouter from "./slo";
+router.use(sloRouter);
+
+// ── Phase 149: Strategy Prompt Engine ──────────────────────────────────
+import strategyPromptRouter from "./strategy_prompt";
+router.use("/api/strategy-prompt", strategyPromptRouter);
 
 export default router;
