@@ -180,6 +180,11 @@ router.get("/results", (_req: Request, res: Response) => {
   res.json({ backtests: BACKTESTS, total: BACKTESTS.length });
 });
 
+router.get("/credibility", (_req: Request, res: Response) => {
+  const all = Object.entries(CREDIBILITY).map(([id, report]) => ({ id, ...report }));
+  res.json({ reports: all, total: all.length });
+});
+
 router.get("/credibility/:id", (req: Request, res: Response) => {
   const report = CREDIBILITY[req.params.id];
   if (!report) return res.status(404).json({ error: "Backtest not found" });

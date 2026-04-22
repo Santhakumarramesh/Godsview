@@ -23,7 +23,7 @@ const router: IRouter = Router();
 
 // ─── Signal Explanation ────────────────────────────────────────────────────────
 
-router.get("/explain/signal/:id", async (req, res) => {
+router.get("/signal/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -62,7 +62,7 @@ router.get("/explain/signal/:id", async (req, res) => {
 
 // ─── Trade Explanation ────────────────────────────────────────────────────────
 
-router.get("/explain/trade/:id", async (req, res) => {
+router.get("/trade/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -108,7 +108,7 @@ router.get("/explain/trade/:id", async (req, res) => {
 
 // ─── Strategy Explanation ─────────────────────────────────────────────────────
 
-router.get("/explain/strategy/:id", async (req, res) => {
+router.get("/strategy/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -152,7 +152,7 @@ router.get("/explain/strategy/:id", async (req, res) => {
 
 // ─── No Trade Explanation ────────────────────────────────────────────────────
 
-router.get("/explain/no-trade/:symbol", async (req, res) => {
+router.get("/no-trade/:symbol", async (req, res) => {
   try {
     const { symbol } = req.params;
 
@@ -183,7 +183,7 @@ router.get("/explain/no-trade/:symbol", async (req, res) => {
 
 // ─── Attribution Analysis ────────────────────────────────────────────────────
 
-router.get("/explain/attribution/:strategyId", async (req, res) => {
+router.get("/attribution/:strategyId", async (req, res) => {
   try {
     const { strategyId } = req.params;
 
@@ -210,7 +210,7 @@ router.get("/explain/attribution/:strategyId", async (req, res) => {
 
 // ─── Fragility Analysis ──────────────────────────────────────────────────────
 
-router.get("/explain/fragility/:strategyId", async (req, res) => {
+router.get("/fragility/:strategyId", async (req, res) => {
   try {
     const { strategyId } = req.params;
 
@@ -250,7 +250,7 @@ router.get("/explain/fragility/:strategyId", async (req, res) => {
 
 // ─── Comprehensive Strategy Report ───────────────────────────────────────────
 
-router.get("/explain/report/:strategyId", async (req, res) => {
+router.get("/report/:strategyId", async (req, res) => {
   try {
     const { strategyId } = req.params;
 
@@ -296,7 +296,7 @@ router.get("/explain/report/:strategyId", async (req, res) => {
 
 // ─── Daily Report ────────────────────────────────────────────────────────────
 
-router.get("/explain/daily", async (req, res) => {
+router.get("/daily", async (req, res) => {
   try {
     const date = new Date().toISOString().split("T")[0];
 
@@ -317,7 +317,7 @@ router.get("/explain/daily", async (req, res) => {
 
 // ─── Performance Review ──────────────────────────────────────────────────────
 
-router.get("/explain/performance", async (req, res) => {
+router.get("/performance", async (req, res) => {
   try {
     const period = req.query.period as string || "Q1 2025";
 
@@ -332,7 +332,7 @@ router.get("/explain/performance", async (req, res) => {
 
 // ─── Executive Summary ───────────────────────────────────────────────────────
 
-router.get("/explain/executive", async (req, res) => {
+router.get("/executive", async (req, res) => {
   try {
     const explanation = await explainabilitySystem.generateExecutiveSummary();
 
@@ -345,7 +345,7 @@ router.get("/explain/executive", async (req, res) => {
 
 // ─── Skill vs Luck Decomposition ────────────────────────────────────────────
 
-router.get("/explain/skill-luck", async (req, res) => {
+router.get("/skill-luck", async (req, res) => {
   try {
     const trades = [
       { symbol: "SPY", pnl: 2.5, direction: "long", outcome: "win" },
@@ -369,7 +369,7 @@ router.get("/explain/skill-luck", async (req, res) => {
 
 // ─── Regime Attribution ──────────────────────────────────────────────────────
 
-router.get("/explain/regime-attribution", async (req, res) => {
+router.get("/regime-attribution", async (req, res) => {
   try {
     const trades = [
       { symbol: "SPY", pnl: 2.5, regime: "trending", setupType: "Breakout", outcome: "win" },
@@ -390,7 +390,7 @@ router.get("/explain/regime-attribution", async (req, res) => {
 
 // ─── Temporal Patterns ───────────────────────────────────────────────────────
 
-router.get("/explain/temporal-patterns", async (req, res) => {
+router.get("/temporal-patterns", async (req, res) => {
   try {
     const trades = [
       { symbol: "SPY", pnl: 2.5, enteredAt: new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString(), outcome: "win" },
@@ -410,7 +410,7 @@ router.get("/explain/temporal-patterns", async (req, res) => {
 
 // ─── Entry/Exit Quality ─────────────────────────────────────────────────────
 
-router.get("/explain/entry-exit-quality", async (req, res) => {
+router.get("/entry-exit-quality", async (req, res) => {
   try {
     const trades = [
       { symbol: "SPY", pnl: 2.5, entryType: "BreakoutAbove", exitType: "ProfitTarget", entryQualityScore: 0.8, exitQualityScore: 0.75, barsToProfit: 5, percentOfMoveCapured: 0.85 },
@@ -429,7 +429,7 @@ router.get("/explain/entry-exit-quality", async (req, res) => {
 
 // ─── Factor Analysis ────────────────────────────────────────────────────────
 
-router.get("/explain/factor-analysis", async (req, res) => {
+router.get("/factor-analysis", async (req, res) => {
   try {
     const trades = [
       { symbol: "SPY", pnl: 2.5, volatility: 0.18, trend: 1.5, momentum: 0.85 },
