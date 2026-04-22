@@ -9,7 +9,7 @@
  *   Intraday bars (IEX feed):  GET /iex/{ticker}  (resampleFreq: 5min/15min/1hour)
  *   Crypto bars:               GET /tiingo/crypto/prices
  *
- * Fallback chain: Tiingo → Alpha Vantage → Finnhub → Yahoo Finance → synthetic
+ * Fallback chain: Tiingo → Alpha Vantage → Finnhub → synthetic
  */
 
 import { logger } from "./logger";
@@ -316,45 +316,6 @@ async function fetchYahooFinance(
   return bars;
 }
 
-// ── Synthetic Fallback ─────────────────────────────────────────────────────
-
-export function generateSyntheticBars(
-  symbol: string,
-  tf: DataTimeframe,
-  count: number
-): OHLCVBar[] {
-  const basePrice = symbol.startsWith("BTC") ? 65_000
-    : symbol.startsWith("ETH") ? 3_200
-    : symbol.startsWith("SOL") ? 180
-    : symbol.startsWith("EUR") ? 1.08
-    : symbol.startsWith("GBP") ? 1.26
-    : 175;
-
-  const volatility = basePrice * 0.008;
-  const bars: OHLCVBar[] = [];
-  let price = basePrice;
-
-  const minsPerBar: Record<DataTimeframe, number> = {
-    "5min": 5, "15min": 15, "30min": 30,
-    "1hour": 60, "4hour": 240, "1day": 1440,
-  };
-  const msPerBar = minsPerBar[tf] * 60_000;
-  const now = Date.now();
-
-  for (let i = 0; i < count; i++) {
-    const change = (Math.random() - 0.495) * volatility;
-    const open   = price;
-    const close  = Math.max(price + change, price * 0.95);
-    const high   = Math.max(open, close) + Math.random() * volatility * 0.5;
-    const low    = Math.min(open, close) - Math.random() * volatility * 0.5;
-    const ts     = new Date(now - (count - i) * msPerBar).toISOString();
-    const vol    = Math.floor(Math.random() * 5_000 + 500);
-    bars.push({ timestamp: ts, open, high, low, close, volume: vol, source: "synthetic" });
-    price = close;
-  }
-  return bars;
-}
-
 // ── Aggregate bars (e.g., 1h → 4h) ───────────────────────────────────────
 
 export function aggregateBars(bars: OHLCVBar[], groupSize: number): OHLCVBar[] {
@@ -379,7 +340,7 @@ export function aggregateBars(bars: OHLCVBar[], groupSize: number): OHLCVBar[] {
 
 /**
  * Fetch up to `lookback_days` of OHLCV bars for the given symbol + timeframe.
- * Tries Tiingo first, falls back to Alpha Vantage, Finnhub, Yahoo Finance, then synthetic.
+ * Tries Tiingo first, falls back to Alpha Vantage, Finnhub, then synthetic.
  */
 export async function getHistoricalBars(
   symbol: string,
@@ -453,25 +414,31 @@ export async function getHistoricalBars(
       return { bars: yfBars, source: "yahoo", has_real_data: true };
     }
   } catch (err) {
-    logger.warn({ err, symbol, tf }, "[yahoo-finance] Fetch failed, falling back to synthetic");
+    logger.warn({ err, symbol, tf }, "[yahoo-finance] Fetch failed");
   }
 
-  // ── 5. Synthetic fallback ──────────────────────────────────────────────
-  const minsPerBar: Record<DataTimeframe, number> = {
-    "5min": 5, "15min": 15, "30min": 30,
-    "1hour": 60, "4hour": 240, "1day": 1440,
-  };
-  const count = Math.min(Math.floor((lookback_days * 24 * 60) / minsPerBar[tf]), 10_000);
-  // GUARDED: block synthetic fallback in live mode
-  const { guardSyntheticData } = await import("./data_safety_guard.js");
-  return guardSyntheticData(
-    `tiingo:${symbol}:${tf}`,
-    () => {
-      logger.warn({ symbol, tf, count }, "[tiingo-client] All APIs failed — using synthetic data");
-      return { bars: generateSyntheticBars(symbol, tf, count), source: "synthetic" as const, has_real_data: false };
-    },
-    `All market data APIs failed for ${symbol}/${tf}. Synthetic data blocked in live mode.`,
-  );
+  // ── 5. Alpaca free crypto fallback (no API key needed) ────────────────
+  if (isCrypto(symbol)) {
+    try {
+      const { getBars } = await import("./alpaca.js");
+      const tfMap: Record<string, string> = { "1day": "1Day", "1hour": "1Hour", "5min": "5Min", "15min": "15Min", "30min": "30Min", "4hour": "4Hour" };
+      const alpacaBars = await getBars(symbol, (tfMap[tf] ?? "1Day") as any, 200);
+      if (alpacaBars.length > 0) {
+        const converted = alpacaBars.map((b: any) => ({
+          Timestamp: b.Timestamp ?? b.t, Open: b.Open ?? b.o, High: b.High ?? b.h,
+          Low: b.Low ?? b.l, Close: b.Close ?? b.c, Volume: b.Volume ?? b.v,
+        }));
+        logger.info({ symbol, tf, count: converted.length }, "[alpaca-crypto] Free fallback bars fetched");
+        return { bars: converted, source: "alpaca" as const, has_real_data: true };
+      }
+    } catch (err) {
+      logger.warn({ err, symbol }, "[alpaca-crypto] Free fallback failed");
+    }
+  }
+
+  // ── NO SYNTHETIC DATA — return empty result ───────────────────────────
+  logger.error({ symbol, tf }, "[tiingo-client] All real data APIs exhausted — returning empty (no synthetic data)");
+  return { bars: [], source: "none" as const, has_real_data: false };
 }
 
 // ── Batch fetch: multiple symbols ─────────────────────────────────────────
@@ -489,15 +456,9 @@ export async function getBarsForSymbols(
       results.set(symbol, result);
       await new Promise(r => setTimeout(r, 300));
     } catch (err) {
-      logger.error({ err, symbol }, "[tiingo-client] Failed to fetch bars");
-      // GUARDED: block synthetic fallback in live mode
-      const { guardSyntheticData } = await import("./data_safety_guard.js");
-      const fallback = guardSyntheticData(
-        `tiingo_batch:${symbol}:${tf}`,
-        () => ({ bars: generateSyntheticBars(symbol, tf, 500), source: "synthetic" as const, has_real_data: false }),
-        `Batch fetch failed for ${symbol}/${tf}. Synthetic data blocked in live mode.`,
-      );
-      results.set(symbol, fallback);
+      logger.error({ err, symbol }, "[tiingo-client] Failed to fetch bars — no synthetic fallback");
+      // NO SYNTHETIC DATA — return empty result for this symbol
+      results.set(symbol, { bars: [], source: "none", has_real_data: false });
     }
   }
 
