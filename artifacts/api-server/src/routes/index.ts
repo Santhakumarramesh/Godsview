@@ -295,21 +295,9 @@ import bloombergDataRouter from "./bloomberg_data";router.use("/api/bloomberg", 
 import brainNodesWsRouter from "./brain_nodes_ws";
 router.use("/api", brainNodesWsRouter);
 
-// ── Phase 5: Calibration Scheduler ─────────────────────────────────────
-import calibrationSchedulerRouter from "./calibration_scheduler";
-router.use(calibrationSchedulerRouter);
-
-// ── Phase 5: Governance Scheduler ──────────────────────────────────────
-import governanceSchedulerRouter from "./governance_scheduler";
-router.use(governanceSchedulerRouter);
-
 // ── Phase 140: News Monitor Feed ───────────────────────────────────────
 import newsMonitorFeedRouter from "./news_monitor_feed";
 router.use("/api", newsMonitorFeedRouter);
-
-// ── Phase 6: SLO Tracking ──────────────────────────────────────────────
-import sloRouter from "./slo";
-router.use(sloRouter);
 
 // ── Phase 149: Strategy Prompt Engine ──────────────────────────────────
 import strategyPromptRouter from "./strategy_prompt";
