@@ -314,4 +314,10 @@ router.use(governanceSchedulerRouter);
 import sloRouter from "./slo";
 router.use(sloRouter);
 
+// ── Phase 1-SI: Unified Decision Engine + Feedback Loop ─────────────
+import unifiedDecisionRouter from "./unified_decision";
+import decisionFeedbackRouter from "./decision_feedback";
+router.use("/api/ude", unifiedDecisionRouter);
+router.use("/api/ude/feedback", decisionFeedbackRouter);
+
 export default router;
