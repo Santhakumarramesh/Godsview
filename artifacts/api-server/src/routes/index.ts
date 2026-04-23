@@ -324,4 +324,8 @@ router.use("/api/ude/feedback", decisionFeedbackRouter);
 import intelligenceGraphRouter from "./intelligence_graph";
 router.use("/api/graph", intelligenceGraphRouter);
 
+// ── Phase 4: Quant Lab Engine — prompt → strategy → backtest → results ──
+import quantLabRouter from "./quant_lab";
+router.use("/api/quant-lab", quantLabRouter);
+
 export default router;
