@@ -332,4 +332,8 @@ router.use("/api/quant-lab", quantLabRouter);
 import orderflowIntelRouter from "./orderflow_intel";
 router.use("/api/orderflow", orderflowIntelRouter);
 
+// ── Phase 6: Self-Evolving Learning System + News/Sentiment Engine ──────
+import learningSentimentRouter from "./learning_sentiment";
+router.use("/api/learning", learningSentimentRouter);
+
 export default router;
