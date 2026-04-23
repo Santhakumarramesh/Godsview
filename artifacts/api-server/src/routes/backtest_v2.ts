@@ -1,194 +1,218 @@
-// ── Phase 110: Backtest Credibility Upgrade API ──────────────────────────────
-// 7 endpoints for event-driven backtest results, credibility, overfit, leakage, walk-forward
+/**
+ * routes/backtest_v2.ts — Phase 2: Backtest Credibility API (Real Computation)
+ *
+ * Replaces hardcoded mock data with real credibility scoring engine.
+ *
+ * Routes:
+ *   POST /api/backtest-v2/analyze        — Run full analysis on a backtest result
+ *   GET  /api/backtest-v2/results        — List all registered backtests
+ *   GET  /api/backtest-v2/credibility    — All credibility reports
+ *   GET  /api/backtest-v2/credibility/:id — Single credibility report
+ *   GET  /api/backtest-v2/overfit/:id    — Overfitting analysis
+ *   GET  /api/backtest-v2/leakage/:id    — Data leakage detection
+ *   GET  /api/backtest-v2/promotion/:id  — Promotion decision
+ *   GET  /api/backtest-v2/promotions     — Promotion history
+ *   GET  /api/backtest-v2/summary        — Aggregate summary
+ *   GET  /api/backtest-v2/health         — Health check
+ */
 
 import { Router, type Request, type Response } from "express";
+import {
+  runFullAnalysis,
+  computeCredibility,
+  computeOverfitRisk,
+  detectLeakage,
+  evaluatePromotion,
+  registerBacktestResult,
+  getBacktestResult,
+  getCredibilityReport,
+  getOverfitReport,
+  getLeakageReport,
+  getAllCredibilityReports,
+  getPromotionHistory,
+  getBacktestSummary,
+  type BacktestResult,
+} from "../lib/backtest_credibility_engine";
 
 const router = Router();
 
-// ── Mock: Backtest Results ──────────────────────────────────────────────────
+/**
+ * POST /api/backtest-v2/analyze
+ * Run full credibility + overfit + leakage + promotion analysis
+ */
+router.post("/analyze", (req: Request, res: Response) => {
+  try {
+    const body = req.body as Partial<BacktestResult>;
 
-const BACKTESTS: any[] = [];
+    const required = ["id", "strategy", "totalTrades", "winRate", "sharpeRatio", "maxDrawdown", "profitFactor"];
+    const missing = required.filter((f) => !(f in body));
+    if (missing.length > 0) {
+      return res.status(400).json({ error: `Missing: ${missing.join(", ")}` });
+    }
 
-// ── Mock: Credibility Reports ───────────────────────────────────────────────
+    const bt: BacktestResult = {
+      id: body.id!,
+      strategy: body.strategy!,
+      symbol: body.symbol ?? "MULTI",
+      timeframe: body.timeframe ?? "5m",
+      startDate: body.startDate ?? new Date(Date.now() - 90 * 86400000).toISOString(),
+      endDate: body.endDate ?? new Date().toISOString(),
+      totalTrades: body.totalTrades!,
+      winRate: body.winRate!,
+      profitFactor: body.profitFactor!,
+      sharpeRatio: body.sharpeRatio!,
+      maxDrawdown: body.maxDrawdown!,
+      avgHoldMinutes: body.avgHoldMinutes ?? 45,
+      expectancy: body.expectancy ?? (body.winRate! * (body.profitFactor! - 1) - (1 - body.winRate!)),
+      inSampleSharpe: body.inSampleSharpe ?? body.sharpeRatio!,
+      outOfSampleSharpe: body.outOfSampleSharpe ?? body.sharpeRatio! * 0.7,
+      walkForwardWindows: body.walkForwardWindows ?? [],
+      parameterCount: body.parameterCount ?? 5,
+      regimePerformance: body.regimePerformance ?? {},
+      feeModel: body.feeModel ?? "per_share",
+      feePerShare: body.feePerShare ?? 0.005,
+      slippageModel: body.slippageModel ?? "fixed_bps",
+      slippageBps: body.slippageBps ?? 5,
+      fillModel: body.fillModel ?? "next_bar",
+      latencyMs: body.latencyMs ?? 50,
+    };
 
-const CREDIBILITY: Record<string, object> = {
-  "bt-001": {
-    backtestId: "bt-001", strategy: "Mean Reversion v2", credibilityScore: 92, grade: "A", promotable: true, gatingIssues: [],
-    assumptions: [
-      { id: "a01", category: "fees", name: "Per-share fees", value: "$0.005/share", isRealistic: true, impactEstimate: "negligible", description: "Matches Interactive Brokers tiered" },
-      { id: "a02", category: "slippage", name: "Slippage model", value: "Realistic (vol-scaled + impact)", isRealistic: true, impactEstimate: "minor", description: "Combines volatility and volume impact" },
-      { id: "a03", category: "latency", name: "Order latency", value: "50ms", isRealistic: true, impactEstimate: "negligible", description: "Conservative for co-lo" },
-      { id: "a04", category: "execution", name: "Partial fills", value: "Enabled", isRealistic: true, impactEstimate: "minor", description: "Volume-based fill simulation" },
-      { id: "a05", category: "execution", name: "Session boundaries", value: "Enforced", isRealistic: true, impactEstimate: "negligible", description: "No out-of-hours trading" },
-      { id: "a06", category: "data", name: "Survivorship bias", value: "Controlled", isRealistic: true, impactEstimate: "negligible", description: "Historical constituents used" },
-      { id: "a07", category: "market_structure", name: "Walk-forward", value: "5 windows, 70/30 split", isRealistic: true, impactEstimate: "negligible", description: "Rolling OOS validation" },
-      { id: "a08", category: "data", name: "Look-ahead check", value: "Passed", isRealistic: true, impactEstimate: "negligible", description: "No future data detected" },
-      { id: "a09", category: "fees", name: "Commission structure", value: "IB tiered", isRealistic: true, impactEstimate: "negligible", description: "Matches actual broker" },
-      { id: "a10", category: "liquidity", name: "Market impact", value: "Volume-scaled", isRealistic: true, impactEstimate: "minor", description: "0.1 impact coefficient" },
-    ],
-    warnings: [],
-  },
-  "bt-003": {
-    backtestId: "bt-003", strategy: "ML Ensemble Crypto", credibilityScore: 28, grade: "D", promotable: false,
-    gatingIssues: ["Zero trading fees", "Slippage unrealistically low", "Insufficient trade count", "No walk-forward validation", "Sharpe ratio suspiciously high"],
-    assumptions: [
-      { id: "a01", category: "fees", name: "Per-share fees", value: "$0.00", isRealistic: false, impactEstimate: "severe", description: "Zero fees is unrealistic" },
-      { id: "a02", category: "slippage", name: "Slippage model", value: "Fixed 1bps", isRealistic: false, impactEstimate: "severe", description: "Crypto typically 5-20bps" },
-      { id: "a03", category: "latency", name: "Order latency", value: "5ms", isRealistic: false, impactEstimate: "moderate", description: "Crypto API typically 50-200ms" },
-      { id: "a04", category: "execution", name: "Partial fills", value: "Disabled", isRealistic: false, impactEstimate: "moderate", description: "Assumes 100% fill — unrealistic" },
-      { id: "a05", category: "execution", name: "Session boundaries", value: "None", isRealistic: true, impactEstimate: "negligible", description: "Crypto trades 24/7" },
-      { id: "a06", category: "data", name: "Walk-forward", value: "Not performed", isRealistic: false, impactEstimate: "severe", description: "No OOS validation" },
-      { id: "a07", category: "data", name: "Sample size", value: "89 trades", isRealistic: false, impactEstimate: "moderate", description: "Need >100 for significance" },
-    ],
-    warnings: ["CRITICAL: 5 severe assumption violations", "Strategy NOT promotable", "Re-run with realistic parameters before any capital allocation"],
-  },
-};
+    const analysis = runFullAnalysis(bt);
+    res.json({ success: true, analysis, timestamp: new Date().toISOString() });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
-// ── Mock: Overfit Reports ───────────────────────────────────────────────────
-
-const OVERFIT: Record<string, object> = {
-  "bt-001": {
-    backtestId: "bt-001", strategy: "Mean Reversion v2", overfitScore: 15, riskLevel: "low",
-    tests: [
-      { name: "IS/OOS Divergence", passed: true, score: 12, detail: "IS Sharpe 1.58, OOS Sharpe 1.32 — 1.2x ratio", threshold: 2.0 },
-      { name: "Parameter Sensitivity", passed: true, score: 8, detail: "±10% param change yields ±4% return change", threshold: 20 },
-      { name: "Regime Stability", passed: true, score: 18, detail: "Profitable in 3/4 regimes", threshold: 50 },
-      { name: "Trade Count", passed: true, score: 5, detail: "347 trades — sufficient", threshold: 30 },
-      { name: "Curve Fitting", passed: true, score: 10, detail: "3 params / 347 trades = 0.009", threshold: 0.1 },
-      { name: "Time Stability", passed: true, score: 15, detail: "H1 Sharpe 1.38, H2 Sharpe 1.45", threshold: 50 },
-      { name: "Monte Carlo", passed: true, score: 22, detail: "p=0.003 — strategy beats 99.7% of random", threshold: 5 },
-      { name: "Drawdown Realism", passed: true, score: 20, detail: "Max DD 8.3% vs theoretical 12.1%", threshold: 50 },
-    ],
-    recommendation: "Low overfit risk. Strategy shows robust out-of-sample performance.",
-  },
-  "bt-003": {
-    backtestId: "bt-003", strategy: "ML Ensemble Crypto", overfitScore: 78, riskLevel: "high",
-    tests: [
-      { name: "IS/OOS Divergence", passed: false, score: 85, detail: "No OOS data available — walk-forward not performed", threshold: 2.0 },
-      { name: "Parameter Sensitivity", passed: false, score: 72, detail: "±10% param change yields ±35% return change", threshold: 20 },
-      { name: "Regime Stability", passed: false, score: 68, detail: "Profitable in 1/4 regimes only (bull)", threshold: 50 },
-      { name: "Trade Count", passed: false, score: 75, detail: "89 trades — insufficient for ML strategy", threshold: 30 },
-      { name: "Curve Fitting", passed: false, score: 90, detail: "15 params / 89 trades = 0.169 — too many params", threshold: 0.1 },
-      { name: "Time Stability", passed: false, score: 82, detail: "H1 return 120%, H2 return 25% — significant decay", threshold: 50 },
-      { name: "Monte Carlo", passed: true, score: 35, detail: "p=0.02 — marginally significant", threshold: 5 },
-      { name: "Drawdown Realism", passed: false, score: 65, detail: "Max DD 15.2% vs theoretical 42.8% — suspiciously low", threshold: 50 },
-    ],
-    recommendation: "HIGH overfit risk. Strategy likely curve-fitted to bull market. Do NOT promote. Re-run with walk-forward validation and realistic assumptions.",
-  },
-};
-
-// ── Mock: Leakage ───────────────────────────────────────────────────────────
-
-const LEAKAGE: Record<string, object> = {
-  "bt-001": {
-    backtestId: "bt-001", hasLeakage: false, severity: "none",
-    features: [
-      { feature: "SMA_20", type: "look_ahead", detected: false, description: "Uses trailing 20-bar average — clean" },
-      { feature: "RSI_14", type: "look_ahead", detected: false, description: "Standard RSI — no future data" },
-      { feature: "volume_ratio", type: "target_leak", detected: false, description: "Volume relative to 20-bar avg — clean" },
-      { feature: "regime_label", type: "temporal_leak", detected: false, description: "Regime calculated from past data only" },
-    ],
-  },
-  "bt-003": {
-    backtestId: "bt-003", hasLeakage: true, severity: "major",
-    features: [
-      { feature: "future_vol_5d", type: "look_ahead", detected: true, description: "Uses 5-day forward volatility — LOOK-AHEAD BIAS" },
-      { feature: "ml_target_normalized", type: "target_leak", detected: true, description: "Feature derived from target variable" },
-      { feature: "cross_val_score", type: "temporal_leak", detected: true, description: "Train/test data overlap detected" },
-      { feature: "momentum_12m", type: "survivorship", detected: false, description: "Clean — uses historical universe" },
-    ],
-  },
-};
-
-// ── Mock: Walk-Forward ──────────────────────────────────────────────────────
-
-const WALK_FORWARD: Record<string, object> = {
-  "bt-001": {
-    backtestId: "bt-001", windows: 5, inSamplePct: 70, outSamplePct: 30,
-    results: [
-      { window: 1, isSharpe: 1.52, oosSharpe: 1.28, isReturn: 4.2, oosReturn: 3.1, divergence: 0.19 },
-      { window: 2, isSharpe: 1.65, oosSharpe: 1.41, isReturn: 5.1, oosReturn: 4.3, divergence: 0.15 },
-      { window: 3, isSharpe: 1.38, oosSharpe: 1.22, isReturn: 3.8, oosReturn: 3.0, divergence: 0.12 },
-      { window: 4, isSharpe: 1.71, oosSharpe: 1.48, isReturn: 5.6, oosReturn: 4.8, divergence: 0.13 },
-      { window: 5, isSharpe: 1.44, oosSharpe: 1.35, isReturn: 4.0, oosReturn: 3.5, divergence: 0.07 },
-    ],
-    avgDivergence: 0.13, overfitFlag: false,
-    summary: "Stable IS/OOS relationship. Average divergence 13% — within acceptable range.",
-  },
-};
-
-// ── Mock: Paper Comparison ──────────────────────────────────────────────────
-
-const COMPARISON: Record<string, object> = {
-  "bt-001": {
-    backtestId: "bt-001",
-    metrics: [
-      { name: "Total Return", backtest: 18.4, paper: 15.8, deviation: 14.1, flagged: false },
-      { name: "Sharpe Ratio", backtest: 1.42, paper: 1.28, deviation: 9.8, flagged: false },
-      { name: "Max Drawdown", backtest: -8.3, paper: -9.7, deviation: 16.9, flagged: false },
-      { name: "Win Rate", backtest: 58.2, paper: 55.8, deviation: 4.1, flagged: false },
-      { name: "Profit Factor", backtest: 1.65, paper: 1.52, deviation: 7.9, flagged: false },
-    ],
-    overallDeviation: 10.6, acceptable: true,
-    summary: "Backtest and paper results are within 15% across all metrics — good alignment.",
-  },
-};
-
-// ── Routes ──────────────────────────────────────────────────────────────────
-
+/**
+ * GET /api/backtest-v2/results
+ */
 router.get("/results", (_req: Request, res: Response) => {
-  res.json({ backtests: [], total: 0, source: "database" });
+  try {
+    const summary = getBacktestSummary();
+    res.json({ success: true, ...summary });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
+/**
+ * GET /api/backtest-v2/credibility
+ */
 router.get("/credibility", (_req: Request, res: Response) => {
-  const all = Object.entries(CREDIBILITY).map(([id, report]) => ({ id, ...report }));
-  res.json({ reports: all, total: all.length });
+  try {
+    const reports = getAllCredibilityReports();
+    res.json({ success: true, count: reports.length, reports });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
+/**
+ * GET /api/backtest-v2/credibility/:id
+ */
 router.get("/credibility/:id", (req: Request, res: Response) => {
-  const report = CREDIBILITY[req.params.id];
-  if (!report) return res.status(404).json({ error: "Backtest not found" });
-  res.json(report);
+  try {
+    const id = req.params.id as string;
+    const report = getCredibilityReport(id);
+    if (!report) {
+      return res.status(404).json({ error: `No credibility report for ${id}` });
+    }
+    res.json({ success: true, report });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
+/**
+ * GET /api/backtest-v2/overfit/:id
+ */
 router.get("/overfit/:id", (req: Request, res: Response) => {
-  const report = OVERFIT[req.params.id];
-  if (!report) return res.status(404).json({ error: "Backtest not found" });
-  res.json(report);
+  try {
+    const id = req.params.id as string;
+    const report = getOverfitReport(id);
+    if (!report) {
+      return res.status(404).json({ error: `No overfit report for ${id}` });
+    }
+    res.json({ success: true, report });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
+/**
+ * GET /api/backtest-v2/leakage/:id
+ */
 router.get("/leakage/:id", (req: Request, res: Response) => {
-  const report = LEAKAGE[req.params.id];
-  if (!report) return res.status(404).json({ error: "Backtest not found" });
-  res.json(report);
+  try {
+    const id = req.params.id as string;
+    const report = getLeakageReport(id);
+    if (!report) {
+      return res.status(404).json({ error: `No leakage report for ${id}` });
+    }
+    res.json({ success: true, report });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
-router.get("/walk-forward", (_req: Request, res: Response) => {
-  const all = Object.entries(WALK_FORWARD).map(([id, report]) => ({ id, ...report }));
-  res.json({ reports: all, total: all.length });
+/**
+ * GET /api/backtest-v2/promotion/:id
+ */
+router.get("/promotion/:id", (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const bt = getBacktestResult(id);
+    if (!bt) {
+      return res.status(404).json({ error: `No backtest found for ${id}` });
+    }
+    const decision = evaluatePromotion(bt);
+    res.json({ success: true, decision });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
-router.get("/walk-forward/:id", (req: Request, res: Response) => {
-  const report = WALK_FORWARD[req.params.id];
-  if (!report) return res.status(404).json({ error: "Walk-forward not available" });
-  res.json(report);
+/**
+ * GET /api/backtest-v2/promotions
+ */
+router.get("/promotions", (_req: Request, res: Response) => {
+  try {
+    const history = getPromotionHistory();
+    res.json({ success: true, count: history.length, promotions: history });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
-router.get("/comparison/:id", (req: Request, res: Response) => {
-  const report = COMPARISON[req.params.id];
-  if (!report) return res.status(404).json({ error: "Paper comparison not available" });
-  res.json(report);
+/**
+ * GET /api/backtest-v2/summary
+ */
+router.get("/summary", (_req: Request, res: Response) => {
+  try {
+    const summary = getBacktestSummary();
+    res.json({ success: true, ...summary, timestamp: new Date().toISOString() });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
+/**
+ * GET /api/backtest-v2/health
+ */
 router.get("/health", (_req: Request, res: Response) => {
-  res.json({
-    status: "operational",
-    module: "backtest-v2",
-    phase: 110,
-    backtestsAvailable: BACKTESTS.length,
-    uptime: process.uptime(),
-    timestamp: Date.now(),
-  });
+  try {
+    const summary = getBacktestSummary();
+    res.json({
+      success: true,
+      engine: "backtest_credibility_v2",
+      version: "2.0.0",
+      total: summary.total,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 export default router;
