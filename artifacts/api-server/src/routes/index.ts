@@ -320,4 +320,8 @@ import decisionFeedbackRouter from "./decision_feedback";
 router.use("/api/ude", unifiedDecisionRouter);
 router.use("/api/ude/feedback", decisionFeedbackRouter);
 
+// ── Phase 3: Intelligence Graph & Reasoning Traces ─────────────────────
+import intelligenceGraphRouter from "./intelligence_graph";
+router.use("/api/graph", intelligenceGraphRouter);
+
 export default router;
