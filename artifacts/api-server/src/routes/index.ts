@@ -328,4 +328,8 @@ router.use("/api/graph", intelligenceGraphRouter);
 import quantLabRouter from "./quant_lab";
 router.use("/api/quant-lab", quantLabRouter);
 
+// ── Phase 5: Order Flow Intelligence — microstructure + multi-symbol ────
+import orderflowIntelRouter from "./orderflow_intel";
+router.use("/api/orderflow", orderflowIntelRouter);
+
 export default router;
