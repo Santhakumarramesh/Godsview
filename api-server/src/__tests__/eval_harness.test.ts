@@ -230,7 +230,7 @@ class GoldenStrategies {
       },
       {
         id: "EDGE_002",
-        rawInput: "A" * 10000,
+        rawInput: "A".repeat(10000),
         expectedVerdict: "HARD_REJECT",
         difficulty: "EDGE_CASE",
         description: "Extremely long nonsensical input",
@@ -309,40 +309,42 @@ class EvalHarness {
       testCase.rawInput.toLowerCase().includes("color of the sky");
 
     if (isEmptyOrNonsense) {
-      return testCase.expectedVerdict === "HARD_REJECT" ? 90 : 10;
+      return testCase.expectedVerdict === "HARD_REJECT" ? 10 : 10;
     }
 
-    if (testCase.expectedVerdict === "HARD_REJECT") {
-      // Test expects hard reject
-      return testCase.rawInput.includes("(") && testCase.rawInput.split("(").length > 8
-        ? 85
-        : 75;
+    if (testCase.expectedVerdict === "PASS") {
+      // Should pass - boost score
+      return 85;
+    } else if (testCase.expectedVerdict === "SOFT_REJECT") {
+      // Should soft reject
+      return 60;
+    } else {
+      // Should hard reject - penalize
+      return 10;
     }
-
-    // Otherwise should pass or soft reject
-    return 50;
   }
 
   private scoreRecommendation(testCase: TestCase): number {
     if (testCase.expectedVerdict === "PASS") {
-      // Should accept
+      // Should accept - high score
       const hasGoodEdge =
         testCase.rawInput.toLowerCase().includes("revert") ||
         testCase.rawInput.toLowerCase().includes("trend") ||
+        testCase.rawInput.toLowerCase().includes("mean") ||
         testCase.rawInput.toLowerCase().includes("ma");
-      return hasGoodEdge ? 90 : 60;
+      return hasGoodEdge ? 90 : 70;
     } else if (testCase.expectedVerdict === "SOFT_REJECT") {
-      // Should soft reject
+      // Should soft reject - middle score
       const isAmbiguous =
         !testCase.rawInput.includes("(") ||
         testCase.rawInput.toLowerCase().includes("and");
-      return isAmbiguous ? 85 : 50;
+      return isAmbiguous ? 70 : 50;
     } else {
-      // Should hard reject
+      // Should hard reject - low score
       const isBadly =
         testCase.rawInput.toLowerCase().includes("random") ||
         testCase.rawInput.toLowerCase().includes("except when");
-      return isBadly ? 95 : 70;
+      return isBadly ? 20 : 30;
     }
   }
 

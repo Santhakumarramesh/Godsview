@@ -103,7 +103,7 @@ router.post("/analytics/circuit-breaker/trip", (req, res) => {
 /** GET /api/analytics/circuit-breaker/history */
 router.get("/analytics/circuit-breaker/history", (_req, res) => {
   const history = getTripHistory();
-  res.json({ history, count: history.length });
+  res.json({ history, count: history.totalTrips });
 });
 
 export default router;

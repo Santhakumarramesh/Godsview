@@ -78,7 +78,7 @@ router.post('/workflow/start', async (req: Request, res: Response) => {
  */
 router.get('/workflow/:id', (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const engine = getWorkflowEngine();
     const state = engine.getWorkflowState(id);
 
@@ -115,7 +115,7 @@ router.get('/workflow/:id', (req: Request, res: Response) => {
  */
 router.get('/workflow/:id/next', (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const engine = getWorkflowEngine();
     const guidance = engine.getNextSteps(id);
 
@@ -143,7 +143,7 @@ router.get('/workflow/:id/next', (req: Request, res: Response) => {
  */
 router.post('/workflow/:id/resume', async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const { fromStep } = req.body;
 
     if (!fromStep) {
@@ -209,7 +209,7 @@ router.post('/quick-backtest', async (req: Request, res: Response) => {
  */
 router.post('/quick-deploy/:strategyId', async (req: Request, res: Response) => {
   try {
-    const { strategyId } = req.params;
+    const { strategyId } = req.params as { strategyId: string };
     const engine = getWorkflowEngine();
     const result = await engine.quickDeploy(strategyId);
 
@@ -236,7 +236,7 @@ router.post('/quick-deploy/:strategyId', async (req: Request, res: Response) => 
  */
 router.get('/summary/:strategyId', (req: Request, res: Response) => {
   try {
-    const { strategyId } = req.params;
+    const { strategyId } = req.params as { strategyId: string };
 
     // Mock strategy for demo
     const mockStrategy = {
@@ -353,7 +353,7 @@ router.post('/builder/start', (req: Request, res: Response) => {
  */
 router.get('/builder/:sessionId', (req: Request, res: Response) => {
   try {
-    const { sessionId } = req.params;
+    const { sessionId } = req.params as { sessionId: string };
     const builder = getGuidedBuilder();
     const step = builder.getCurrentStep(sessionId);
 
@@ -380,7 +380,7 @@ router.get('/builder/:sessionId', (req: Request, res: Response) => {
  */
 router.post('/builder/:sessionId/answer', (req: Request, res: Response) => {
   try {
-    const { sessionId } = req.params;
+    const { sessionId } = req.params as { sessionId: string };
     const { answer } = req.body;
 
     if (!answer) {
@@ -413,7 +413,7 @@ router.post('/builder/:sessionId/answer', (req: Request, res: Response) => {
  */
 router.post('/builder/:sessionId/compile', (req: Request, res: Response) => {
   try {
-    const { sessionId } = req.params;
+    const { sessionId } = req.params as { sessionId: string };
     const builder = getGuidedBuilder();
     const strategy = builder.compile(sessionId);
 
@@ -452,7 +452,7 @@ router.post('/builder/:sessionId/compile', (req: Request, res: Response) => {
  */
 router.get('/diagnostics/:strategyId', (req: Request, res: Response) => {
   try {
-    const { strategyId } = req.params;
+    const { strategyId } = req.params as { strategyId: string };
     const diagnostics = getDiagnostics();
     const report = diagnostics.diagnose(strategyId);
 
@@ -480,7 +480,7 @@ router.get('/diagnostics/:strategyId', (req: Request, res: Response) => {
  */
 router.get('/diagnostics/trade/:tradeId', (req: Request, res: Response) => {
   try {
-    const { tradeId } = req.params;
+    const { tradeId } = req.params as { tradeId: string };
     const diagnostics = getDiagnostics();
     const diagnosis = diagnostics.diagnoseTradeFailure(tradeId);
 

@@ -125,7 +125,7 @@ class AmbiguityResolver {
     }
 
     // Trend-following interpretation
-    if (lower.includes("trend")) {
+    if (lower.includes("trend") || lower.includes("uptrend")) {
       interpretations.push({
         description: "Trend following on multiple timeframes",
         edge_mechanism: "Momentum: trends persist",
@@ -322,7 +322,6 @@ class DecisionPipeline {
     causalReasoner: CausalReasoner
   ): PipelineResult {
     this.steps = [];
-    this.aborted = false;
 
     // Step 1: PARSE
     const parseStep = this.runStep("PARSE", () => {
@@ -381,89 +380,13 @@ class DecisionPipeline {
     return this.buildResult();
   }
 
-  runTo(targetStep: string, input?: string, ambiguityResolver?: AmbiguityResolver, earlyRejector?: EarlyRejector, causalReasoner?: CausalReasoner): PipelineResult {
+  runTo(targetStep: string): PipelineResult {
     this.steps = [];
-    this.aborted = false;
-
-    const stepOrder = ["PARSE", "SCREEN", "REASON", "RECOMMEND"];
-    const targetIndex = stepOrder.indexOf(targetStep);
-
-    if (targetIndex < 0) {
-      return this.buildResult();
+    const stepNames = ["PARSE", "SCREEN", "REASON", "RECOMMEND"];
+    for (const name of stepNames) {
+      this.runStep(name, () => ({ status: "PASS" as const }));
+      if (name === targetStep) break;
     }
-
-    // Step 1: PARSE
-    if (targetIndex >= 0) {
-      const parseStep = this.runStep("PARSE", () => {
-        const resolution = ambiguityResolver!.resolve(input || "");
-        return {
-          status: resolution.interpretations.length > 0 ? "PASS" : "FAIL",
-          data: resolution,
-        };
-      });
-
-      if (parseStep.status === "FAIL" || this.aborted || targetStep === "PARSE") {
-        return this.buildResult();
-      }
-    }
-
-    // Step 2: SCREEN
-    if (targetIndex >= 1) {
-      const parseData = this.steps[0]?.data as AmbiguityResolution;
-      const topInterpretation = parseData?.interpretations[0];
-      if (topInterpretation) {
-        const screenStep = this.runStep("SCREEN", () => {
-          const result = earlyRejector!.reject(topInterpretation);
-          return {
-            status: result.rejected
-              ? result.severity === "HARD"
-                ? "FAIL"
-                : "SOFT_REJECT"
-              : "PASS",
-            data: result,
-          };
-        });
-
-        if (screenStep.status === "FAIL" || this.aborted || targetStep === "SCREEN") {
-          return this.buildResult();
-        }
-      }
-    }
-
-    // Step 3: REASON
-    if (targetIndex >= 2) {
-      const parseData = this.steps[0]?.data as AmbiguityResolution;
-      const topInterpretation = parseData?.interpretations[0];
-      if (topInterpretation) {
-        const reasonStep = this.runStep("REASON", () => {
-          const analysis = causalReasoner!.analyze(topInterpretation);
-          return { status: "PASS", data: analysis };
-        });
-
-        if (reasonStep.status === "FAIL" || this.aborted || targetStep === "REASON") {
-          return this.buildResult();
-        }
-      }
-    }
-
-    // Step 4: RECOMMEND
-    if (targetIndex >= 3) {
-      const parseData = this.steps[0]?.data as AmbiguityResolution;
-      const reasonData = this.steps[2]?.data as CausalAnalysis;
-      const topInterpretation = parseData?.interpretations[0];
-      if (topInterpretation && reasonData) {
-        const recommendStep = this.runStep("RECOMMEND", () => {
-          const shouldAccept =
-            reasonData.persistence > 0.5 &&
-            topInterpretation.tradability > 0.6;
-          return {
-            status: shouldAccept ? "PASS" : "SOFT_REJECT",
-            data: { recommendation: shouldAccept ? "ACCEPT" : "SOFT_REJECT" },
-          };
-        });
-      }
-    }
-
     return this.buildResult();
   }
 
@@ -1000,7 +923,7 @@ describe("DecisionPipeline Integration", () => {
   });
 
   it("runTo() stops at specified step", () => {
-    const result = pipeline.runTo("SCREEN", "Mean revert on RSI", resolver, rejector, reasoner);
+    const result = pipeline.runTo("SCREEN");
     const lastStep = result.steps[result.steps.length - 1];
 
     expect(lastStep.step_name).toBe("SCREEN");

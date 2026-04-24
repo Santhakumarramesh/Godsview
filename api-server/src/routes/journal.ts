@@ -34,8 +34,8 @@ const router = Router();
 router.get("/", (req: Request, res: Response) => {
   try {
     const symbol   = req.query.symbol   ? String(req.query.symbol).toUpperCase()  : undefined;
-    const decision = req.query.decision as JournalDecision | undefined;
-    const outcome  = req.query.outcome  as JournalOutcome  | undefined;
+    const decision = req.query.decision ? String(req.query.decision) : undefined;
+    const outcome  = req.query.outcome  ? String(req.query.outcome)  : undefined;
     const from     = req.query.from     ? String(req.query.from) : undefined;
     const to       = req.query.to       ? String(req.query.to)   : undefined;
     const limit    = req.query.limit    ? parseInt(String(req.query.limit),  10) : 50;

@@ -250,6 +250,23 @@ describe("equity_engine — generateEquityReport", () => {
       expect(metrics.maxWinStreak).toBeGreaterThanOrEqual(3);
     });
 
+    it("keeps streak ordering deterministic when decidedAt timestamps are identical", () => {
+      const decidedAt = "2026-01-01T00:00:00.000Z";
+      const addSameTimeTrade = (exitPrice: number) => {
+        const entry = recordDecision(makeEntry({ signalPrice: 100 }));
+        entry.decidedAt = decidedAt;
+        recordOutcome(entry.id, { entryPrice: 100, exitPrice });
+      };
+
+      addSameTimeTrade(110); // win
+      addSameTimeTrade(110); // win
+      addSameTimeTrade(110); // win
+      addSameTimeTrade(90);  // loss
+
+      const { metrics } = generateEquityReport();
+      expect(metrics.maxWinStreak).toBeGreaterThanOrEqual(3);
+    });
+
     it("tracks maxLossStreak", () => {
       addResolvedTrade({ entryPrice: 100, exitPrice: 110 }); // win
       addResolvedTrade({ entryPrice: 100, exitPrice:  90 }); // loss

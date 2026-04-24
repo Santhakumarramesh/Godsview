@@ -425,3 +425,5 @@ export class QuantCore {
 export default QuantCore;
 export { HypothesisEngine, StrategyCritic, VariantRanker, AutoImprover };
 export type { Hypothesis, StrategyGrade, VariantScore, Improvement };
+
+export const quantCore = new QuantCore();

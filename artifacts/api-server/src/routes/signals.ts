@@ -458,6 +458,26 @@ signalsRouter.post("/signals", async (req: Request, res: Response) => {
   }
 });
 
+// ─── GET /signals/latest — convenience alias ────────────────────────────────
+
+signalsRouter.get("/signals/latest", async (_req: Request, res: Response) => {
+  try {
+    const rows = await db
+      .select()
+      .from(signalsTable)
+      .orderBy(desc(signalsTable.created_at))
+      .limit(1);
+
+    if (rows.length === 0) {
+      return res.json({ signal: null, message: "No signals recorded yet" });
+    }
+    return res.json({ signal: rows[0] });
+  } catch (err) {
+    logger.error({ err }, "[signals] GET /latest error");
+    return res.status(500).json({ error: "Failed to fetch latest signal" });
+  }
+});
+
 // ─── GET /signals/:id ────────────────────────────────────────────────────────
 
 signalsRouter.get("/signals/:id", async (req: Request, res: Response) => {

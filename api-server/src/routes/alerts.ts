@@ -30,7 +30,7 @@ router.get("/alerts/active", (_req, res) => {
 });
 
 router.post("/alerts/:ts/ack", (req, res) => {
-  const ts = req.params.ts;
+  const ts = String(req.params.ts ?? "");
   if (!ts) {
     res.status(400).json({ error: "Timestamp parameter required" });
     return;

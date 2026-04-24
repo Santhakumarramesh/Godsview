@@ -15,18 +15,19 @@
  *   OI change      → approximated from volume acceleration (rising vol in up-trend = OI buildup)
  */
 
-import Alpaca from "@alpacahq/alpaca-trade-api";
 import { logger } from "./logger";
 import type { MacroBiasInput } from "./macro_bias_engine";
 import type { SentimentInput } from "./sentiment_engine";
+import { getBars, isAlpacaAuthFailureError } from "./alpaca";
+import { getCpiMomentum, getFedFundsRateBps, fetchFredMacroSnapshot, type FredMacroSnapshot } from "./providers/fred_client.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface LiveMacroSnapshot {
   macroBiasInput: MacroBiasInput;
   sentimentInput: SentimentInput;
-  fetchedAt: string;
-  dataQuality: "full" | "partial" | "stale";
+  fredSnapshot: FredMacroSnapshot | null;
+  fetchedAt: string;  dataQuality: "full" | "partial" | "stale";
   sources: Record<string, string>;
 }
 
@@ -39,22 +40,27 @@ interface OhlcvBar {
   v: number;
 }
 
-// ─── Alpaca client factory (lazy, uses runtime config) ────────────────────────
-
-let _alpaca: InstanceType<typeof Alpaca> | null = null;
-
-function getAlpaca(): InstanceType<typeof Alpaca> | null {
-  try {
-    const key    = process.env.ALPACA_KEY_ID    ?? process.env.ALPACA_API_KEY ?? "";
-    const secret = process.env.ALPACA_SECRET_KEY ?? process.env.ALPACA_API_SECRET ?? "";
-    if (!key || !secret) return null;
-    if (!_alpaca) {
-      _alpaca = new Alpaca({ keyId: key, secretKey: secret, paper: true });
-    }
-    return _alpaca;
-  } catch {
-    return null;
-  }
+function toOhlcvBar(bar: {
+  t?: string;
+  Timestamp?: string;
+  o?: number;
+  Open?: number;
+  h?: number;
+  High?: number;
+  l?: number;
+  Low?: number;
+  c?: number;
+  Close?: number;
+  v?: number;
+  Volume?: number;
+}): OhlcvBar {
+  return {
+    t: String(bar.t ?? bar.Timestamp ?? new Date().toISOString()),
+    o: Number(bar.o ?? bar.Open ?? 0),    h: Number(bar.h ?? bar.High ?? 0),
+    l: Number(bar.l ?? bar.Low ?? 0),
+    c: Number(bar.c ?? bar.Close ?? 0),
+    v: Number(bar.v ?? bar.Volume ?? 0),
+  };
 }
 
 // ─── Bar fetching helpers ──────────────────────────────────────────────────────
@@ -64,51 +70,33 @@ function getAlpaca(): InstanceType<typeof Alpaca> | null {
  * Returns empty array on any failure (graceful degradation).
  */
 async function fetchBars(symbol: string, limit: number): Promise<OhlcvBar[]> {
-  const alpaca = getAlpaca();
-  if (!alpaca) return [];
   try {
-    const end   = new Date();
-    const start = new Date(end.getTime() - limit * 2 * 86400_000); // 2x buffer for weekends
-    const resp  = await (alpaca as unknown as {
-      getBarsV2: (sym: string, opts: Record<string, unknown>) => AsyncIterable<OhlcvBar>
-    }).getBarsV2(symbol, {
-      start: start.toISOString(),
-      end:   end.toISOString(),
-      timeframe: "1Day",
-      limit,
-      feed: "iex",
-    });
-    const bars: OhlcvBar[] = [];
-    for await (const bar of resp) bars.push(bar);
-    return bars.slice(-limit);
+    const bars = await getBars(symbol, "1Day", limit);
+    return bars.slice(-limit).map(toOhlcvBar);
   } catch (err) {
-    logger.warn(`[macro_feed] fetchBars ${symbol} failed: ${String(err)}`);
+    const errMsg = err instanceof Error ? err.message : String(err);
+    if (isAlpacaAuthFailureError(err)) {
+      logger.debug(`[macro_feed] fetchBars ${symbol} skipped: ${errMsg}`);
+      return [];
+    }
+    logger.warn(`[macro_feed] fetchBars ${symbol} failed: ${errMsg}`);
     return [];
   }
 }
 
 /**
- * Fetch last `limit` 1-minute crypto bars for a crypto symbol.
- */
+ * Fetch last `limit` 1-minute crypto bars for a crypto symbol. */
 async function fetchCryptoBars(symbol: string, limit: number): Promise<OhlcvBar[]> {
-  const alpaca = getAlpaca();
-  if (!alpaca) return [];
   try {
-    const end   = new Date();
-    const start = new Date(end.getTime() - limit * 2 * 60_000);
-    const resp  = await (alpaca as unknown as {
-      getCryptoBarsV2: (sym: string, opts: Record<string, unknown>) => AsyncIterable<OhlcvBar>
-    }).getCryptoBarsV2(symbol, {
-      start: start.toISOString(),
-      end:   end.toISOString(),
-      timeframe: "1Min",
-      limit,
-    });
-    const bars: OhlcvBar[] = [];
-    for await (const bar of resp) bars.push(bar);
-    return bars.slice(-limit);
+    const bars = await getBars(symbol, "1Min", limit);
+    return bars.slice(-limit).map(toOhlcvBar);
   } catch (err) {
-    logger.warn(`[macro_feed] fetchCryptoBars ${symbol} failed: ${String(err)}`);
+    const errMsg = err instanceof Error ? err.message : String(err);
+    if (isAlpacaAuthFailureError(err)) {
+      logger.debug(`[macro_feed] fetchCryptoBars ${symbol} skipped: ${errMsg}`);
+      return [];
+    }
+    logger.warn(`[macro_feed] fetchCryptoBars ${symbol} failed: ${errMsg}`);
     return [];
   }
 }
@@ -125,8 +113,7 @@ async function fetchDxySlope(): Promise<{ slope: number; source: string }> {
   if (bars.length < 10) return { slope: 0, source: "unavailable" };
 
   const prices = bars.map(b => b.c);
-  const n = prices.length;
-  const xMean = (n - 1) / 2;
+  const n = prices.length;  const xMean = (n - 1) / 2;
   const yMean = prices.reduce((a, b) => a + b, 0) / n;
 
   let num = 0, den = 0;
@@ -155,8 +142,7 @@ async function fetchVixLevel(): Promise<{ vix: number; source: string }> {
 
 /**
  * Compute CVD net from recent crypto bars.
- * Approximation: if close > open → buy bar, else sell bar.
- * CVD net = Σ (bullish_vol - bearish_vol) over window.
+ * Approximation: if close > open → buy bar, else sell bar. * CVD net = Σ (bullish_vol - bearish_vol) over window.
  */
 async function fetchCryptoCvd(symbol: string, window = 60): Promise<{ cvdNet: number; oiChange: number; source: string }> {
   const bars = await fetchCryptoBars(symbol, window);
@@ -185,8 +171,7 @@ async function fetchCryptoCvd(symbol: string, window = 60): Promise<{ cvdNet: nu
   };
 }
 
-/**
- * Estimate funding rate from price trend momentum.
+/** * Estimate funding rate from price trend momentum.
  * A strongly trending-up market with accelerating volume = positive funding proxy.
  * For crypto perpetuals, funding rate tracks the premium/discount.
  * Alpaca doesn't expose raw funding data, so we derive from momentum.
@@ -215,8 +200,7 @@ async function fetchRetailLongRatioProxy(symbol: string): Promise<{ ratio: numbe
 
   const prices = bars.map(b => b.c);
   const n = prices.length;
-  const xMean = (n - 1) / 2;
-  const yMean = prices.reduce((a, b) => a + b, 0) / n;
+  const xMean = (n - 1) / 2;  const yMean = prices.reduce((a, b) => a + b, 0) / n;
 
   let num = 0, den = 0;
   for (let i = 0; i < n; i++) {
@@ -245,8 +229,7 @@ async function fetchRetailLongRatioProxy(symbol: string): Promise<{ ratio: numbe
 // ─── Master snapshot builder ───────────────────────────────────────────────────
 
 /**
- * Fetches all live data sources and returns a complete snapshot for both
- * MacroBiasInput (Layer 0) and SentimentInput (Layer 0.5).
+ * Fetches all live data sources and returns a complete snapshot for both * MacroBiasInput (Layer 0) and SentimentInput (Layer 0.5).
  *
  * Asset class is fixed to "crypto" for now (primary use case).
  * Pass intendedDirection from the caller — it doesn't affect data fetching.
@@ -275,16 +258,32 @@ export async function fetchLiveMacroSnapshot(
   sources["cvd"]     = cvdData.source;
   sources["funding"] = funding.source;
   sources["retail"]  = retail.source;
+  // CPI momentum — fetch from FRED API (real data), fall back to env var, then 0
+  let cpiMomentum = 0;
+  try {
+    const fredCpi = await getCpiMomentum();
+    cpiMomentum = fredCpi.value;
+    sources["cpi"] = fredCpi.source;
+  } catch {
+    cpiMomentum = parseFloat(process.env.MACRO_CPI_MOMENTUM ?? "0");
+    sources["cpi"] = process.env.MACRO_CPI_MOMENTUM
+      ? `env fallback MACRO_CPI_MOMENTUM=${cpiMomentum}`
+      : "unavailable — using 0";
+  }
 
-  // CPI momentum is a monthly release — we read from env or default to 0
-  const cpiMomentum = parseFloat(process.env.MACRO_CPI_MOMENTUM ?? "0");
-  sources["cpi"] = process.env.MACRO_CPI_MOMENTUM
-    ? `env MACRO_CPI_MOMENTUM=${cpiMomentum}`
-    : "not set — using 0 (update after CPI release)";
-
-  // Rate differential: for crypto we use the funding rate as the rate diff proxy
-  const rateDifferentialBps = Math.round(funding.fundingRate * 100_000); // convert to bps
-  sources["rateDiff"] = `funding proxy (${funding.fundingRate.toFixed(5)})`;
+  // Rate differential: use FRED Fed Funds rate if available, else funding proxy
+  let rateDifferentialBps = Math.round(funding.fundingRate * 100_000);
+  try {
+    const fredRate = await getFedFundsRateBps();
+    if (fredRate.bps > 0) {
+      rateDifferentialBps = fredRate.bps;
+      sources["rateDiff"] = fredRate.source;
+    } else {
+      sources["rateDiff"] = `funding proxy (${funding.fundingRate.toFixed(5)})`;
+    }
+  } catch {
+    sources["rateDiff"] = `funding proxy fallback (${funding.fundingRate.toFixed(5)})`;
+  }
 
   // Macro risk score: proxy from VIX + DXY combined stress
   const vixStress = Math.max(0, (vix.vix - 20) / 60); // 0 at VIX=20, 1 at VIX=80
@@ -316,12 +315,21 @@ export async function fetchLiveMacroSnapshot(
     openInterestChange: cvdData.oiChange,
     fundingRate: funding.fundingRate,
     intendedDirection,
-    assetClass,
-  };
+    assetClass,  };
+
+  // Fetch full FRED snapshot (cached 6h, non-blocking)
+  let fredSnapshot: FredMacroSnapshot | null = null;
+  try {
+    fredSnapshot = await fetchFredMacroSnapshot();
+    sources["fred"] = `quality=${fredSnapshot.quality}, risk=${fredSnapshot.macro_risk}`;
+  } catch (err) {
+    logger.debug({ err }, "[macro_feed] FRED snapshot fetch failed — non-critical");
+    sources["fred"] = "unavailable";
+  }
 
   logger.info(
-    `[macro_feed] Snapshot complete — quality: ${dataQuality}, VIX: ${vix.vix.toFixed(1)}, DXY slope: ${dxy.slope.toFixed(4)}`
+    `[macro_feed] Snapshot complete — quality: ${dataQuality}, VIX: ${vix.vix.toFixed(1)}, DXY slope: ${dxy.slope.toFixed(4)}, FRED: ${fredSnapshot?.quality ?? "n/a"}`
   );
 
-  return { macroBiasInput, sentimentInput, fetchedAt, dataQuality, sources };
+  return { macroBiasInput, sentimentInput, fredSnapshot, fetchedAt, dataQuality, sources };
 }

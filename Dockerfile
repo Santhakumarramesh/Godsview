@@ -84,7 +84,6 @@ RUN npm install -g tsx
 # Copy built API bundle
 COPY --from=build /app/artifacts/api-server/dist ./artifacts/api-server/dist
 
-# Copy built Dashboard static assets
 # Copy built Dashboard static assets into API server public dir (SPA serving)
 COPY --from=build /app/artifacts/godsview-dashboard/dist/public/. ./artifacts/api-server/public/
 

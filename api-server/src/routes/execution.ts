@@ -22,12 +22,58 @@ import { emergencyLiquidateAll, getLastLiquidation, isLiquidationInProgress } fr
 import { evaluateExecutionRisk, evaluatePortfolioRisk, triggerEmergencyStopAll } from "../lib/portfolio_risk_guard";
 import { computeATR } from "../lib/strategy_engine";
 import { getBars } from "../lib/alpaca";
+import {
+  canExecuteByIncidentGuard,
+  getExecutionIncidentSnapshot,
+  recordExecutionAttempt,
+  recordExecutionSlippage,
+  resetExecutionIncidentGuard,
+} from "../lib/execution_incident_guard";
+import {
+  evaluateExecutionMarketGuard,
+  getExecutionMarketGuardSnapshot,
+  resetExecutionMarketGuard,
+} from "../lib/execution_market_guard";
+import {
+  evaluateExecutionAutonomyGuard,
+  getExecutionAutonomyGuardSnapshot,
+  resetExecutionAutonomyGuard,
+} from "../lib/execution_autonomy_guard";
+import {
+  beginExecutionIdempotency,
+  buildExecutionFingerprint,
+  finalizeExecutionIdempotency,
+  getExecutionIdempotencySnapshot,
+  requireExecutionIdempotencyKeyInLiveMode,
+  resetExecutionIdempotencyStore,
+} from "../lib/execution_idempotency";
+import { auditExecutionLifecycle } from "../lib/audit_logger";
+import {
+  evaluateContextFusion,
+  getContextFusionSnapshot,
+  type ContextFusionResult,
+} from "../lib/context_fusion_engine";
 
 export const executionRouter = Router();
 
 // ── POST /execute — Full production pipeline ──────────
 
 executionRouter.post("/execute", requireOperator, async (req: Request, res: Response) => {
+  const idempotencyKeyRaw = String(req.body?.idempotency_key ?? req.header("x-idempotency-key") ?? "").trim();
+  const idempotencyKey = idempotencyKeyRaw.length > 0 ? idempotencyKeyRaw : null;
+  const executionTraceId = `exec_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  let idempotencyFingerprint: string | null = null;
+
+  const finalizeTracked = (status: number, payload: unknown): void => {
+    if (!idempotencyFingerprint) return;
+    finalizeExecutionIdempotency({
+      key: idempotencyKey,
+      fingerprint: idempotencyFingerprint,
+      status,
+      body: payload,
+    });
+  };
+
   try {
     const {
       symbol, direction, setup_type, regime,
@@ -36,31 +82,215 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
       spread, volume,
       operator_token,
     } = req.body;
+    const symbolText = typeof symbol === "string" ? symbol.trim().toUpperCase() : "";
+    const directionText = typeof direction === "string" ? direction.trim().toLowerCase() : "";
+    const emitLifecycleAudit = (
+      eventType: "execution_request_received" | "execution_idempotency" | "execution_gate_blocked" | "execution_result",
+      decisionState: string,
+      reason?: string,
+      payload?: Record<string, unknown>,
+    ): void => {
+      void auditExecutionLifecycle(eventType, {
+        symbol: symbolText || undefined,
+        decision_state: decisionState,
+        reason,
+        payload: {
+          trace_id: executionTraceId,
+          idempotency_key_present: Boolean(idempotencyKey),
+          idempotency_key: idempotencyKey,
+          ...payload,
+        },
+      });
+    };
+
+    const sendTracked = (status: number, payload: Record<string, unknown>): void => {
+      const body = {
+        ...payload,
+        idempotency_key: idempotencyKey,
+        idempotent_replay: false,
+      };
+      finalizeTracked(status, body);
+      res.status(status).json(body);
+    };
+
+    const mode = getExecutionMode();
+    emitLifecycleAudit("execution_request_received", "received", undefined, {
+      mode: mode.mode,
+      direction: directionText || null,
+      setup_type: setup_type ?? null,
+      regime: regime ?? null,
+      entry_price: Number(entry_price ?? Number.NaN),
+      stop_loss: Number(stop_loss ?? Number.NaN),
+      take_profit: Number(take_profit ?? Number.NaN),
+    });
 
     if (!symbol || !direction || !entry_price || !stop_loss || !take_profit) {
-      res.status(400).json({
+      emitLifecycleAudit(
+        "execution_gate_blocked",
+        "validation_error",
+        "required_fields_missing",
+        { gate: "validation" },
+      );
+      sendTracked(400, {
         error: "validation_error",
         message: "Required: symbol, direction, entry_price, stop_loss, take_profit",
       });
       return;
     }
 
+    if (mode.isLive && requireExecutionIdempotencyKeyInLiveMode() && !idempotencyKey) {
+      emitLifecycleAudit(
+        "execution_gate_blocked",
+        "idempotency_key_required",
+        "idempotency_key_missing_live_mode",
+        { gate: "idempotency" },
+      );
+      sendTracked(400, {
+        error: "idempotency_key_required",
+        message: "Idempotency key is required for live execution. Pass x-idempotency-key header or idempotency_key in body.",
+      });
+      return;
+    }
+
+    idempotencyFingerprint = buildExecutionFingerprint({
+      symbol,
+      direction,
+      setup_type: setup_type ?? "auto",
+      regime: regime ?? "normal",
+      entry_price,
+      stop_loss,
+      take_profit,
+    });
+    const idempotencyBegin = beginExecutionIdempotency({
+      key: idempotencyKey,
+      fingerprint: idempotencyFingerprint,
+    });
+    emitLifecycleAudit("execution_idempotency", idempotencyBegin.action.toLowerCase(), undefined, {
+      action: idempotencyBegin.action,
+    });
+
+    if (idempotencyBegin.action === "REPLAY") {
+      emitLifecycleAudit("execution_result", "replay", "served_cached_response", {
+        status: idempotencyBegin.status,
+      });
+      const replayBody = (idempotencyBegin.body && typeof idempotencyBegin.body === "object")
+        ? {
+            ...(idempotencyBegin.body as Record<string, unknown>),
+            idempotency_key: idempotencyBegin.key,
+            idempotent_replay: true,
+          }
+        : {
+            replayed: true,
+            idempotency_key: idempotencyBegin.key,
+            idempotent_replay: true,
+            response: idempotencyBegin.body ?? null,
+          };
+      res.status(idempotencyBegin.status).json(replayBody);
+      return;
+    }
+
+    if (idempotencyBegin.action === "CONFLICT") {
+      emitLifecycleAudit(
+        "execution_gate_blocked",
+        "idempotency_conflict",
+        idempotencyBegin.message,
+        { gate: "idempotency", error: idempotencyBegin.error },
+      );
+      res.status(idempotencyBegin.status).json({
+        error: idempotencyBegin.error,
+        message: idempotencyBegin.message,
+        idempotency: getExecutionIdempotencySnapshot(),
+        idempotency_key: idempotencyBegin.key,
+        idempotent_replay: false,
+      });
+      return;
+    }
+
+    const autonomyGuard = await evaluateExecutionAutonomyGuard({ symbol });
+    if (!autonomyGuard.allowed) {
+      const isHalt = autonomyGuard.snapshot.halt_active || autonomyGuard.level === "HALT";
+      emitLifecycleAudit(
+        "execution_gate_blocked",
+        `autonomy_guard_${String(autonomyGuard.action).toLowerCase()}`,
+        autonomyGuard.reasons[0] ?? "autonomy_guard_blocked",
+        { gate: "autonomy_guard", action: autonomyGuard.action, reasons: autonomyGuard.reasons },
+      );
+      recordExecutionAttempt({
+        symbol,
+        outcome: "BLOCKED",
+        detail: `autonomy_guard_block:${autonomyGuard.action}`,
+        reason: autonomyGuard.reasons[0],
+      });
+      sendTracked(isHalt ? 423 : 429, {
+        error: "execution_autonomy_blocked",
+        message: `Execution blocked by autonomy guard (${autonomyGuard.reasons.join(", ") || autonomyGuard.action})`,
+        action: autonomyGuard.action,
+        reasons: autonomyGuard.reasons,
+        autonomy_guard: autonomyGuard.snapshot,
+        incident_guard: getExecutionIncidentSnapshot(),
+        market_guard: getExecutionMarketGuardSnapshot(),
+      });
+      return;
+    }
+
+    const incidentGate = canExecuteByIncidentGuard();
+    if (!incidentGate.allowed) {
+      emitLifecycleAudit(
+        "execution_gate_blocked",
+        "incident_guard_halt",
+        incidentGate.reason ?? "incident_guard_halt",
+        { gate: "incident_guard" },
+      );
+      recordExecutionAttempt({
+        symbol,
+        outcome: "BLOCKED",
+        detail: "incident_guard_halt",
+        reason: incidentGate.reason ?? undefined,
+      });
+      sendTracked(423, {
+        error: "execution_incident_halt",
+        message: `Execution halted by incident guard (${incidentGate.reason ?? "halt"})`,
+        autonomy_guard: getExecutionAutonomyGuardSnapshot(),
+        incident_guard: incidentGate.snapshot,
+        market_guard: getExecutionMarketGuardSnapshot(),
+      });
+      return;
+    }
+
     // Check breaker state first
     if (isCooldownActive()) {
-      res.status(429).json({
+      emitLifecycleAudit(
+        "execution_gate_blocked",
+        "breaker_cooldown",
+        "cooldown_active",
+        { gate: "drawdown_breaker" },
+      );
+      sendTracked(429, {
         error: "cooldown_active",
         message: "Trading paused: consecutive loss cooldown active",
         breaker: getBreakerSnapshot(),
+        autonomy_guard: getExecutionAutonomyGuardSnapshot(),
+        incident_guard: getExecutionIncidentSnapshot(),
+        market_guard: getExecutionMarketGuardSnapshot(),
       });
       return;
     }
 
     const sizeMultiplier = getPositionSizeMultiplier();
     if (sizeMultiplier <= 0) {
-      res.status(429).json({
+      emitLifecycleAudit(
+        "execution_gate_blocked",
+        "breaker_halt",
+        "drawdown_breaker_halt",
+        { gate: "drawdown_breaker" },
+      );
+      sendTracked(429, {
         error: "breaker_halt",
         message: "Trading halted by drawdown circuit breaker",
         breaker: getBreakerSnapshot(),
+        autonomy_guard: getExecutionAutonomyGuardSnapshot(),
+        incident_guard: getExecutionIncidentSnapshot(),
+        market_guard: getExecutionMarketGuardSnapshot(),
       });
       return;
     }
@@ -69,14 +299,87 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
     const portfolioRiskGate = await evaluateExecutionRisk(symbol);
     if (!portfolioRiskGate.allowed) {
       const status = portfolioRiskGate.action === "HALT" ? 423 : 429;
-      res.status(status).json({
+      emitLifecycleAudit(
+        "execution_gate_blocked",
+        `portfolio_risk_${String(portfolioRiskGate.action).toLowerCase()}`,
+        portfolioRiskGate.reasons[0] ?? "portfolio_risk_blocked",
+        { gate: "portfolio_risk", action: portfolioRiskGate.action, reasons: portfolioRiskGate.reasons },
+      );
+      sendTracked(status, {
         error: "portfolio_risk_blocked",
         message: `Execution blocked by portfolio risk guard (${portfolioRiskGate.action})`,
         action: portfolioRiskGate.action,
         reasons: portfolioRiskGate.reasons,
         portfolio_risk: portfolioRiskGate.snapshot,
+        autonomy_guard: getExecutionAutonomyGuardSnapshot(),
+        incident_guard: getExecutionIncidentSnapshot(),
+        market_guard: getExecutionMarketGuardSnapshot(),
       });
       return;
+    }
+
+    // Phase 19: Market microstructure quality guard (spread/liquidity/freshness/volatility)
+    const marketGuard = await evaluateExecutionMarketGuard({ symbol });
+    if (!marketGuard.allowed) {
+      const isHalt = marketGuard.snapshot.halt_active || marketGuard.level === "HALT";
+      emitLifecycleAudit(
+        "execution_gate_blocked",
+        `market_guard_${String(marketGuard.action).toLowerCase()}`,
+        marketGuard.reasons[0] ?? "market_quality_blocked",
+        { gate: "market_guard", action: marketGuard.action, reasons: marketGuard.reasons },
+      );
+      recordExecutionAttempt({
+        symbol,
+        outcome: "BLOCKED",
+        detail: `market_guard_block:${marketGuard.action}`,
+        reason: marketGuard.reasons[0],
+      });
+      sendTracked(isHalt ? 423 : 429, {
+        error: "market_quality_blocked",
+        message: `Execution blocked by market guard (${marketGuard.reasons.join(", ") || marketGuard.action})`,
+        action: marketGuard.action,
+        reasons: marketGuard.reasons,
+        autonomy_guard: getExecutionAutonomyGuardSnapshot(),
+        market_guard: marketGuard.snapshot,
+        incident_guard: getExecutionIncidentSnapshot(),
+        portfolio_risk: portfolioRiskGate.snapshot,
+      });
+      return;
+    }
+
+    // Phase 47: Context fusion intelligence gate (macro + sentiment + event risk + regime)
+    let contextFusion: ContextFusionResult | null = null;
+    try {
+      contextFusion = await evaluateContextFusion({
+        symbol: symbolText,
+        direction: directionText as "long" | "short",
+        regime: regime ?? undefined,
+      });
+      if (contextFusion.blocked) {
+        emitLifecycleAudit(
+          "execution_gate_blocked",
+          "context_fusion_blocked",
+          contextFusion.blockReason ?? "context_fusion_hostile",
+          { gate: "context_fusion", level: contextFusion.level, score: contextFusion.fusionScore, reasons: contextFusion.reasons },
+        );
+        recordExecutionAttempt({
+          symbol: symbolText,
+          outcome: "BLOCKED",
+          detail: `context_fusion_block:${contextFusion.level}`,
+          reason: contextFusion.blockReason ?? undefined,
+        });
+        sendTracked(429, {
+          error: "context_fusion_blocked",
+          message: `Execution blocked by context fusion (${contextFusion.blockReason ?? contextFusion.level})`,
+          context_fusion: contextFusion,
+          autonomy_guard: getExecutionAutonomyGuardSnapshot(),
+          incident_guard: getExecutionIncidentSnapshot(),
+          market_guard: getExecutionMarketGuardSnapshot(),
+        });
+        return;
+      }
+    } catch (cfErr) {
+      logger.warn({ error: String(cfErr) }, "Context fusion evaluation failed, proceeding without");
     }
 
     // Compute ATR from bars if available
@@ -108,7 +411,19 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
     const decision = await evaluateForProduction(siInput);
 
     if (decision.action !== "EXECUTE") {
-      res.json({
+      emitLifecycleAudit(
+        "execution_gate_blocked",
+        `production_gate_${String(decision.action).toLowerCase()}`,
+        decision.block_reasons[0] ?? "production_gate_blocked",
+        { gate: "production_gate", action: decision.action, reasons: decision.block_reasons },
+      );
+      recordExecutionAttempt({
+        symbol,
+        outcome: "BLOCKED",
+        detail: `gate_block:${decision.action}`,
+        reason: decision.block_reasons[0] ?? undefined,
+      });
+      sendTracked(200, {
         executed: false,
         gate_action: decision.action,
         block_reasons: decision.block_reasons,
@@ -122,6 +437,9 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
         },
         meta: decision.meta,
         portfolio_risk: portfolioRiskGate.snapshot,
+        autonomy_guard: getExecutionAutonomyGuardSnapshot(),
+        incident_guard: getExecutionIncidentSnapshot(),
+        market_guard: marketGuard.snapshot,
       });
       return;
     }
@@ -129,7 +447,7 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
     // Apply throttle multiplier from breaker + portfolio risk guard
     const adjustedQty = Math.max(
       1,
-      Math.round(decision.quantity * sizeMultiplier * portfolioRiskGate.size_multiplier),
+      Math.round(decision.quantity * sizeMultiplier * portfolioRiskGate.size_multiplier * (contextFusion?.sizeMultiplier ?? 1.0)),
     );
 
     // 2. Execute order
@@ -146,6 +464,50 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
       decision,
       operator_token,
     });
+    emitLifecycleAudit(
+      "execution_result",
+      executionResult.executed ? "executed" : "failed",
+      executionResult.error,
+      {
+        mode: executionResult.mode,
+        order_id: executionResult.order_id ?? null,
+        adjusted_qty: adjustedQty,
+        original_qty: decision.quantity,
+        si_decision_id: executionResult.si_decision_id ?? null,
+      },
+    );
+
+    if (executionResult.executed) {
+      recordExecutionAttempt({
+        symbol,
+        outcome: "EXECUTED",
+        detail: executionResult.order_id ? `order_id:${executionResult.order_id}` : "order_executed",
+        mode: executionResult.mode,
+      });
+      const filledAvgPrice = Number((executionResult.details as Record<string, unknown>)?.filled_avg_price ?? Number.NaN);
+      if (Number.isFinite(filledAvgPrice) && filledAvgPrice > 0) {
+        recordExecutionSlippage({
+          symbol,
+          expected_price: Number(entry_price),
+          executed_price: filledAvgPrice,
+          side: direction === "long" ? "buy" : "sell",
+        });
+      }
+    } else {
+      const errLower = String(executionResult.error ?? "").toLowerCase();
+      const isRejected =
+        errLower.includes("invalid") ||
+        errLower.includes("required") ||
+        errLower.includes("exceeds") ||
+        errLower.includes("blocked") ||
+        errLower.includes("validation");
+      recordExecutionAttempt({
+        symbol,
+        outcome: isRejected ? "REJECTED" : "ERROR",
+        detail: executionResult.error ?? "execution_failed",
+        mode: executionResult.mode,
+      });
+    }
 
     // 3. If executed, register with position monitor + fill reconciler
     if (executionResult.executed && decision.signal.trailing_stop && decision.signal.profit_targets) {
@@ -167,7 +529,7 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
       registerCostBasis(symbol, direction, Number(entry_price), adjustedQty);
     }
 
-    res.json({
+    sendTracked(200, {
       ...executionResult,
       gate_action: decision.action,
       signal: {
@@ -178,16 +540,53 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
         kelly_pct: decision.signal.kelly_fraction,
       },
       breaker_multiplier: sizeMultiplier,
+        context_fusion: contextFusion ? {
+          score: contextFusion.fusionScore,
+          level: contextFusion.level,
+          size_multiplier: contextFusion.sizeMultiplier,
+          blocked: contextFusion.blocked,
+          reasons: contextFusion.reasons,
+        } : null,
       portfolio_risk_action: portfolioRiskGate.action,
       portfolio_risk_reasons: portfolioRiskGate.reasons,
       portfolio_risk_multiplier: portfolioRiskGate.size_multiplier,
       portfolio_risk: portfolioRiskGate.snapshot,
+      autonomy_guard: getExecutionAutonomyGuardSnapshot(),
       adjusted_qty: adjustedQty,
       original_qty: decision.quantity,
+      incident_guard: getExecutionIncidentSnapshot(),
+      market_guard: marketGuard.snapshot,
     });
   } catch (err) {
+    const symbol = String(req.body?.symbol ?? "UNKNOWN");
+    void auditExecutionLifecycle("execution_result", {
+      symbol: symbol !== "UNKNOWN" ? symbol : undefined,
+      decision_state: "error",
+      reason: err instanceof Error ? err.message : String(err),
+      actor: "execution_router",
+      payload: {
+        trace_id: executionTraceId,
+        idempotency_key_present: Boolean(idempotencyKey),
+        idempotency_key: idempotencyKey,
+      },
+    });
+    recordExecutionAttempt({
+      symbol,
+      outcome: "ERROR",
+      detail: err instanceof Error ? err.message : String(err),
+    });
     logger.error({ err }, "Execution pipeline error");
-    res.status(500).json({ error: "execution_error", message: String(err) });
+    const body = {
+      error: "execution_error",
+      message: String(err),
+      autonomy_guard: getExecutionAutonomyGuardSnapshot(),
+      incident_guard: getExecutionIncidentSnapshot(),
+      market_guard: getExecutionMarketGuardSnapshot(),
+      idempotency_key: idempotencyKey,
+      idempotent_replay: false,
+    };
+    finalizeTracked(500, body);
+    res.status(500).json(body);
   }
 });
 
@@ -273,6 +672,10 @@ executionRouter.get("/execution-status", async (_req: Request, res: Response) =>
     const risk = getRiskEngineSnapshot();
     const lastLiquidation = getLastLiquidation();
     const portfolioRisk = await evaluatePortfolioRisk({ forceRefresh: false });
+    const autonomyGuard = getExecutionAutonomyGuardSnapshot();
+    const incidentGuard = getExecutionIncidentSnapshot();
+    const marketGuard = getExecutionMarketGuardSnapshot();
+    const idempotency = getExecutionIdempotencySnapshot();
 
     res.json({
       mode,
@@ -293,6 +696,10 @@ executionRouter.get("/execution-status", async (_req: Request, res: Response) =>
       gate_stats: gateStats,
       risk,
       portfolio_risk: portfolioRisk,
+      autonomy_guard: autonomyGuard,
+      incident_guard: incidentGuard,
+      market_guard: marketGuard,
+      idempotency,
       last_liquidation: lastLiquidation,
     });
   } catch (err) {
@@ -333,6 +740,147 @@ executionRouter.post("/risk-guard/evaluate", requireOperator, async (req: Reques
   } catch (err) {
     logger.error({ err }, "Risk guard evaluation error");
     res.status(500).json({ error: "internal_error", message: String(err) });
+  }
+});
+
+// ── GET /incident-guard — Execution incident safety state ────────
+
+executionRouter.get("/incident-guard", (_req: Request, res: Response) => {
+  try {
+    res.json(getExecutionIncidentSnapshot());
+  } catch (err) {
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+// ── GET /autonomy-guard — Autonomy control-plane safety state ───
+
+executionRouter.get("/autonomy-guard", async (req: Request, res: Response) => {
+  try {
+    const symbol = String(req.query.symbol ?? "").trim().toUpperCase();
+    const refresh = ["1", "true", "yes", "on"].includes(String(req.query.refresh ?? "").toLowerCase());
+    if (symbol || refresh) {
+      const decision = await evaluateExecutionAutonomyGuard({
+        symbol: symbol || "SYSTEM",
+        autoHeal: refresh,
+      });
+      res.json({
+        ...decision.snapshot,
+        decision: {
+          symbol: symbol || "SYSTEM",
+          allowed: decision.allowed,
+          action: decision.action,
+          reasons: decision.reasons,
+          level: decision.level,
+        },
+      });
+      return;
+    }
+    res.json(getExecutionAutonomyGuardSnapshot());
+  } catch {
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+// ── GET /market-guard — Market quality safety state ─────────────
+
+executionRouter.get("/market-guard", async (req: Request, res: Response) => {
+  try {
+    const symbol = String(req.query.symbol ?? "").trim().toUpperCase();
+    const refresh = ["1", "true", "yes", "on"].includes(String(req.query.refresh ?? "").toLowerCase());
+    if (symbol || refresh) {
+      const targetSymbol = symbol || "BTCUSD";
+      const decision = await evaluateExecutionMarketGuard({ symbol: targetSymbol });
+      res.json({
+        ...decision.snapshot,
+        decision: {
+          symbol: targetSymbol,
+          allowed: decision.allowed,
+          action: decision.action,
+          reasons: decision.reasons,
+          level: decision.level,
+        },
+      });
+      return;
+    }
+    res.json(getExecutionMarketGuardSnapshot());
+  } catch (err) {
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+// ── GET /idempotency — Execution request idempotency state ───────
+
+executionRouter.get("/idempotency", (_req: Request, res: Response) => {
+  try {
+    res.json(getExecutionIdempotencySnapshot());
+  } catch {
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+// ── POST /incident-guard/reset — Manual incident guard reset ─────
+
+executionRouter.post("/incident-guard/reset", requireOperator, (req: Request, res: Response) => {
+  try {
+    const clearKillSwitch =
+      String(req.body?.clear_kill_switch ?? "")
+        .trim()
+        .toLowerCase();
+    const snapshot = resetExecutionIncidentGuard({
+      reason: String(req.body?.reason ?? "manual_reset"),
+      clearKillSwitch: clearKillSwitch === "1" || clearKillSwitch === "true" || clearKillSwitch === "yes" || clearKillSwitch === "on",
+    });
+    res.json(snapshot);
+  } catch (err) {
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+// ── POST /autonomy-guard/reset — Manual autonomy guard reset ────
+
+executionRouter.post("/autonomy-guard/reset", requireOperator, (req: Request, res: Response) => {
+  try {
+    const clearKillSwitch =
+      String(req.body?.clear_kill_switch ?? "")
+        .trim()
+        .toLowerCase();
+    const snapshot = resetExecutionAutonomyGuard({
+      reason: String(req.body?.reason ?? "manual_reset"),
+      clearKillSwitch: clearKillSwitch === "1" || clearKillSwitch === "true" || clearKillSwitch === "yes" || clearKillSwitch === "on",
+    });
+    res.json(snapshot);
+  } catch {
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+// ── POST /market-guard/reset — Manual market guard reset ─────────
+
+executionRouter.post("/market-guard/reset", requireOperator, (req: Request, res: Response) => {
+  try {
+    const clearKillSwitch =
+      String(req.body?.clear_kill_switch ?? "")
+        .trim()
+        .toLowerCase();
+    const snapshot = resetExecutionMarketGuard({
+      reason: String(req.body?.reason ?? "manual_reset"),
+      clearKillSwitch: clearKillSwitch === "1" || clearKillSwitch === "true" || clearKillSwitch === "yes" || clearKillSwitch === "on",
+    });
+    res.json(snapshot);
+  } catch (err) {
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+// ── POST /idempotency/reset — Clear idempotency cache/state ─────
+
+executionRouter.post("/idempotency/reset", requireOperator, (_req: Request, res: Response) => {
+  try {
+    const snapshot = resetExecutionIdempotencyStore();
+    res.json(snapshot);
+  } catch {
+    res.status(500).json({ error: "internal_error" });
   }
 });
 

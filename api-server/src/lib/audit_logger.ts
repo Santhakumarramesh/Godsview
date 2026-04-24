@@ -11,6 +11,8 @@
  * - emergency_liquidation: Nuclear liquidation triggered
  * - session_started / session_ended: Trading session lifecycle
  * - config_changed: Risk config was modified
+ * - execution_request_received / execution_idempotency / execution_gate_blocked / execution_result:
+ *   full execution lifecycle trace
  */
 
 import { logger } from "./logger";
@@ -32,7 +34,17 @@ export type AuditEventType =
   | "session_ended"
   | "config_changed"
   | "preflight_complete"
-  | "degradation_change";
+  | "degradation_change"
+  | "execution_request_received"
+  | "execution_idempotency"
+  | "execution_gate_blocked"
+  | "execution_result";
+
+export type ExecutionLifecycleEventType =
+  | "execution_request_received"
+  | "execution_idempotency"
+  | "execution_gate_blocked"
+  | "execution_result";
 
 export interface AuditEntry {
   event_type: AuditEventType;
@@ -194,5 +206,26 @@ export async function auditBreakerEscalation(
     trigger,
     daily_pnl: dailyPnl,
     consecutive_losses: consecutiveLosses,
+  });
+}
+
+export async function auditExecutionLifecycle(
+  eventType: ExecutionLifecycleEventType,
+  input: {
+    symbol?: string;
+    decision_state?: string;
+    reason?: string;
+    actor?: string;
+    payload?: Record<string, unknown>;
+  },
+): Promise<void> {
+  await logAuditEvent({
+    event_type: eventType,
+    decision_state: input.decision_state,
+    symbol: input.symbol,
+    instrument: input.symbol,
+    actor: input.actor ?? "execution_router",
+    reason: input.reason,
+    payload: input.payload,
   });
 }

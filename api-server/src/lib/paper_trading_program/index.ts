@@ -537,7 +537,7 @@ export function generateCertificate(): {
 
   return {
     success: true,
-    certificate,
+    certificate: certification,
     message: "Certificate generated successfully",
   };
 }

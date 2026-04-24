@@ -1,385 +1,371 @@
 /**
  * institutional_intelligence.test.ts
  *
- * Phase 16 — Institutional Intelligence Layer
- * YoungTraderWealth 3-layer methodology: Macro Bias + Retail Sentiment + Technical Entry
- *
- * Tests:
- *   1. MacroBiasEngine (computeMacroBias / neutralMacroBias)
- *   2. SentimentEngine (computeSentiment / neutralSentiment)
- *   3. Strategy pipeline integration — gates fire and bypass correctly
+ * Unit tests for Phase 16: Macro Bias Engine + Retail Sentiment Engine
+ * (Elliot Hewitt / YoungTraderWealth 3-layer method)
  */
 
 import { describe, it, expect } from "vitest";
-import {
-  computeMacroBias,
-  neutralMacroBias,
-  type MacroBiasInput,
-} from "../lib/macro_bias_engine";
-import {
-  computeSentiment,
-  neutralSentiment,
-  type SentimentInput,
-} from "../lib/sentiment_engine";
-import { applyNoTradeFilters } from "../lib/strategy_engine";
-import type { RecallFeatures } from "../lib/strategy_engine";
+import { computeMacroBias, neutralMacroBias } from "../lib/macro_bias_engine";
+import { computeSentiment, neutralSentiment } from "../lib/sentiment_engine";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Macro Bias Engine
+// ─────────────────────────────────────────────────────────────────────────────
 
-function makeMacroBiasInput(overrides: Partial<MacroBiasInput> = {}): MacroBiasInput {
-  return {
+describe("MacroBiasEngine", () => {
+  const base = {
     dxySlope: 0,
     rateDifferentialBps: 0,
     cpiMomentum: 0,
-    vixLevel: 20,
-    macroRiskScore: 0.3,
-    assetClass: "crypto",
-    intendedDirection: "long",
-    ...overrides,
+    vixLevel: 30,
+    macroRiskScore: 0,
+    assetClass: "forex" as const,
+    intendedDirection: "long" as const,
   };
-}
 
-function makeSentimentInput(overrides: Partial<SentimentInput> = {}): SentimentInput {
-  return {
+  it("returns neutral when all inputs are zero", () => {
+    const result = computeMacroBias(base);
+    expect(result.bias).toBe("neutral");
+    expect(result.direction).toBe("flat");
+    expect(result.score).toBeCloseTo(0.5, 2);
+    expect(result.conviction).toBe("low");
+    expect(result.aligned).toBe(true);
+  });
+
+  it("returns strong_buy for bullish DXY + hawkish rates + falling VIX", () => {
+    const result = computeMacroBias({
+      ...base,
+      dxySlope: 0.05,
+      rateDifferentialBps: 200,
+      cpiMomentum: -0.5,
+      vixLevel: 10,
+    });
+    expect(result.bias).toBe("strong_buy");
+    expect(result.direction).toBe("long");
+    expect(result.conviction).toBe("high");
+    expect(result.score).toBeGreaterThan(0.7);
+    expect(result.tailwind).toBe(true);
+  });
+
+  it("returns strong_sell for bearish DXY + dovish rates + high VIX (forex)", () => {
+    const result = computeMacroBias({
+      ...base,
+      dxySlope: -0.05,
+      rateDifferentialBps: -200,
+      cpiMomentum: 0.5,
+      vixLevel: 50,
+      intendedDirection: "long",
+    });
+    expect(result.bias).toBe("strong_sell");
+    expect(result.direction).toBe("short");
+    expect(result.headwind).toBe(true);
+    expect(result.blockedDirections).toContain("long");
+  });
+
+  it("blocks counter-macro long when high conviction bear", () => {
+    const result = computeMacroBias({
+      ...base,
+      dxySlope: -0.05,
+      rateDifferentialBps: -200,
+      cpiMomentum: 0.5,
+      vixLevel: 50,
+      intendedDirection: "long",
+    });
+    expect(result.blockedDirections).toContain("long");
+    expect(result.aligned).toBe(false);
+  });
+
+  it("returns flat and blocks both directions on macro lockout", () => {
+    const result = computeMacroBias({ ...base, macroRiskScore: 0.9 });
+    expect(result.direction).toBe("flat");
+    expect(result.bias).toBe("neutral");
+    expect(result.blockedDirections).toContain("long");
+    expect(result.blockedDirections).toContain("short");
+  });
+
+  it("applies correct weights for crypto (VIX-dominant)", () => {
+    // For crypto, VIX has 65% weight
+    const high_vix = computeMacroBias({
+      ...base, assetClass: "crypto", vixLevel: 45,
+      dxySlope: 0.001, rateDifferentialBps: 10, cpiMomentum: 0.05,
+    });
+    const low_vix = computeMacroBias({
+      ...base, assetClass: "crypto", vixLevel: 10,
+      dxySlope: 0.001, rateDifferentialBps: 10, cpiMomentum: 0.05,
+    });
+    // High VIX = bearish for crypto; low VIX = bullish for crypto
+    expect(high_vix.score).toBeLessThan(low_vix.score);
+    expect(high_vix.direction).toBe("short");
+    expect(low_vix.direction).toBe("long");
+  });
+
+  it("neutralMacroBias returns safe defaults", () => {
+    const result = neutralMacroBias();
+    expect(result.bias).toBe("neutral");
+    expect(result.blockedDirections).toHaveLength(0);
+    expect(result.aligned).toBe(true);
+  });
+
+  it("populates reasons with human-readable strings", () => {
+    const result = computeMacroBias({
+      ...base, dxySlope: 0.007, rateDifferentialBps: 80, vixLevel: 32,
+    });
+    expect(result.reasons.length).toBeGreaterThan(0);
+    expect(result.reasons.every((r) => typeof r === "string")).toBe(true);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Retail Sentiment Engine
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("SentimentEngine", () => {
+  const base = {
     retailLongRatio: 0.5,
     priceTrendSlope: 0,
     cvdNet: 0,
     openInterestChange: 0,
     fundingRate: 0,
-    intendedDirection: "long",
-    assetClass: "crypto",
-    ...overrides,
+    intendedDirection: "long" as const,
+    assetClass: "crypto" as const,
   };
-}
 
-function makeRecall(overrides: Partial<RecallFeatures> = {}): RecallFeatures {
-  return {
-    trend_slope_5m: 0.005,
-    momentum_1m: 0.002,
-    atr_pct: 0.02,
-    avg_range_1m: 2.0,
-    regime: "trending_bull",
-    session: "us",
-    sk: {
-      bias: "neutral",
-      sequence_stage: "impulse",
-      correction_complete: true,
-      zone_distance_pct: 0.1,
-      swing_high: 110,
-      swing_low: 90,
-      impulse_strength: 0.8,
-      sequence_score: 0.75,
-      rr_quality: 0.7,
-      in_zone: true,
-    },
-    cvd: {
-      cvd_value: 1500,
-      cvd_slope: 0.01,
-      cvd_divergence: true,
-      buy_volume_ratio: 0.55,
-      delta_momentum: 0.02,
-      large_delta_bar: false,
-    },
-    ...overrides,
-  } as RecallFeatures;
-}
-
-// ─── 1. MacroBiasEngine ───────────────────────────────────────────────────────
-
-describe("MacroBiasEngine — computeMacroBias", () => {
-  it("returns low-conviction bias when all inputs are zero/mid-range (VIX=20 is mild bullish for crypto)", () => {
-    // VIX=20 is below-average fear — for crypto (VIX weight 0.65) this scores slightly bullish.
-    // The important check is: no hard block, no high conviction, score within 0–1.
-    const result = computeMacroBias(makeMacroBiasInput());
-    expect(["neutral", "buy"]).toContain(result.bias);
-    expect(["low", "medium"]).toContain(result.conviction);
-    expect(result.blockedDirections).toHaveLength(0);
-    expect(result.aligned).toBe(true);
-    expect(result.score).toBeGreaterThanOrEqual(0);
-    expect(result.score).toBeLessThanOrEqual(1);
-  });
-
-  it("produces strong bearish signal for crypto with high VIX and rising DXY", () => {
-    const result = computeMacroBias(makeMacroBiasInput({
-      vixLevel: 45,
-      dxySlope: 0.04,
-      intendedDirection: "long",
-      assetClass: "crypto",
-    }));
-    // High VIX (weight 0.65 for crypto) + rising DXY → bearish
-    expect(result.score).toBeLessThan(0.45);
-    expect(["sell", "strong_sell"]).toContain(result.bias);
-    expect(result.headwind).toBe(true);
-    expect(result.tailwind).toBe(false);
-  });
-
-  it("produces bullish signal for crypto with low VIX and falling DXY", () => {
-    const result = computeMacroBias(makeMacroBiasInput({
-      vixLevel: 12,
-      dxySlope: -0.03,
-      intendedDirection: "long",
-      assetClass: "crypto",
-    }));
-    expect(result.score).toBeGreaterThan(0.55);
-    expect(["buy", "strong_buy"]).toContain(result.bias);
-    expect(result.tailwind).toBe(true);
-  });
-
-  it("blocks BOTH directions on hard lockout (macroRiskScore >= 0.85)", () => {
-    const result = computeMacroBias(makeMacroBiasInput({
-      macroRiskScore: 0.90,
-      intendedDirection: "long",
-    }));
-    expect(result.bias).toBe("strong_sell");
-    expect(result.conviction).toBe("high");
-    expect(result.blockedDirections).toContain("long");
-    expect(result.blockedDirections).toContain("short");
-    expect(result.direction).toBe("flat");
-    expect(result.reasons.some(r => r.includes("hard lockout"))).toBe(true);
-  });
-
-  it("forex weights DXY heavily — rising DXY bearish for forex pair", () => {
-    const result = computeMacroBias(makeMacroBiasInput({
-      dxySlope: 0.04,       // strong DXY rise — bearish for non-USD
-      vixLevel: 15,         // low VIX (neutral)
-      rateDifferentialBps: 0,
-      cpiMomentum: 0,
-      assetClass: "forex",
-      intendedDirection: "long",
-    }));
-    // DXY weight 0.40 for forex → dominant bearish signal
-    expect(result.score).toBeLessThan(0.5);
-    expect(result.headwind).toBe(true);
-  });
-
-  it("neutralMacroBias returns low conviction, no blocked directions", () => {
-    const neutral = neutralMacroBias();
-    expect(neutral.bias).toBe("neutral");
-    expect(neutral.conviction).toBe("low");
-    expect(neutral.blockedDirections).toHaveLength(0);
-    expect(neutral.aligned).toBe(true);
-    expect(neutral.score).toBe(0.5);
-  });
-
-  it("reports tailwind when bias direction matches intendedDirection", () => {
-    const result = computeMacroBias(makeMacroBiasInput({
-      vixLevel: 12,
-      dxySlope: -0.02,
-      intendedDirection: "long",
-      assetClass: "crypto",
-    }));
-    // Bullish bias + intended long = tailwind
-    if (result.score >= 0.60) {
-      expect(result.tailwind).toBe(true);
-    }
-  });
-
-  it("result always has a valid updatedAt ISO string", () => {
-    const result = computeMacroBias(makeMacroBiasInput());
-    expect(() => new Date(result.updatedAt)).not.toThrow();
-    expect(new Date(result.updatedAt).getTime()).toBeGreaterThan(0);
-  });
-
-  it("high conviction blocks counter-direction when score strongly directional", () => {
-    const result = computeMacroBias(makeMacroBiasInput({
-      vixLevel: 12,         // very low VIX (0.65 weight for crypto → strongly bullish)
-      dxySlope: -0.04,      // falling DXY → bullish
-      rateDifferentialBps: 150,
-      cpiMomentum: -0.3,
-      macroRiskScore: 0.1,
-      assetClass: "crypto",
-      intendedDirection: "short",
-    }));
-    if (result.conviction === "high" && result.direction === "long") {
-      expect(result.blockedDirections).toContain("short");
-    }
-  });
-});
-
-// ─── 2. SentimentEngine ───────────────────────────────────────────────────────
-
-describe("SentimentEngine — computeSentiment", () => {
-  it("returns balanced result on neutral inputs", () => {
-    const result = computeSentiment(makeSentimentInput());
+  it("returns balanced/none edge when retail is 50/50", () => {
+    const result = computeSentiment(base);
     expect(result.retailBias).toBe("balanced");
     expect(result.institutionalEdge).toBe("none");
     expect(result.crowdingLevel).toBe("low");
+    expect(result.contrarian).toBe(false);
+  });
+
+  it("detects extreme crowding and fade_long edge at 80% retail long", () => {
+    const result = computeSentiment({
+      ...base,
+      retailLongRatio: 0.82,
+      priceTrendSlope: 0.03,
+      fundingRate: 0.0015,
+      openInterestChange: 0.1,
+      cvdNet: 8e6,
+      intendedDirection: "long",
+    });
+    expect(result.retailBias).toBe("long_crowded");
+    expect(result.crowdingLevel).toBe("extreme");
+    expect(result.institutionalEdge).toBe("fade_long");
+    expect(result.contrarian).toBe(false); // long is WITH the crowd
+  });
+
+  it("detects extreme crowding and fade_short edge at 80% retail short", () => {
+    const result = computeSentiment({
+      ...base,
+      retailLongRatio: 0.18, // 82% short
+      priceTrendSlope: -0.03,
+      fundingRate: -0.0015,
+      openInterestChange: -0.1,
+      cvdNet: -8e6,
+      intendedDirection: "short",
+    });
+    expect(result.retailBias).toBe("short_crowded");
+    expect(result.crowdingLevel).toBe("extreme");
+    expect(result.institutionalEdge).toBe("fade_short");
+    expect(result.contrarian).toBe(false); // short is WITH the retail crowd
+  });
+
+  it("marks aligned=true when trading against the crowd (contrarian play)", () => {
+    // 80% retail long → institutional short → short is aligned
+    const result = computeSentiment({
+      ...base,
+      retailLongRatio: 0.82,
+      intendedDirection: "short", // going against retail longs
+    });
     expect(result.aligned).toBe(true);
     expect(result.contrarian).toBe(false);
   });
 
-  it("detects extreme long crowding at high retailLongRatio + positive funding", () => {
-    const result = computeSentiment(makeSentimentInput({
-      retailLongRatio: 0.85,
-      fundingRate: 0.0018,
-      priceTrendSlope: 0.02,
-      openInterestChange: 0.12,
-      cvdNet: 8e6,
+  it("positive funding rate increases bearish signal for crypto", () => {
+    const low_funding  = computeSentiment({ ...base, retailLongRatio: 0.65, fundingRate: 0.00005 });
+    const high_funding = computeSentiment({ ...base, retailLongRatio: 0.65, fundingRate: 0.0008 });
+    // Higher funding → stronger long-crowding score
+    expect(high_funding.sentimentScore).toBeGreaterThan(low_funding.sentimentScore);
+  });
+
+  it("detects institutional accumulation pattern (price up, retail still short)", () => {
+    const result = computeSentiment({
+      ...base,
+      retailLongRatio: 0.35, // retail mostly short
+      priceTrendSlope: 0.03, // but price is rising
       intendedDirection: "long",
-    }));
-    expect(result.retailBias).toBe("long_crowded");
-    expect(["extreme", "high"]).toContain(result.crowdingLevel);
-    expect(result.institutionalEdge).toBe("fade_long");
-    expect(result.aligned).toBe(false);      // going long WITH the crowd
-    expect(result.contrarian).toBe(false);   // not contrarian (we're WITH crowd)
+    });
+    expect(result.reasons.some((r) => r.toLowerCase().includes("momentum"))).toBe(true);
+    expect(result.sentimentScore).toBeGreaterThan(0);
   });
 
-  it("identifies institutional edge as contrarian short when crowd is long extreme", () => {
-    const result = computeSentiment(makeSentimentInput({
-      retailLongRatio: 0.85,
-      fundingRate: 0.0018,
-      intendedDirection: "short",   // going SHORT against long crowd
-    }));
-    expect(result.institutionalEdge).toBe("fade_long");
-    expect(result.contrarian).toBe(true);   // short = contrarian = institutional
-    expect(result.aligned).toBe(true);      // not trading WITH crowd
+  it("OI rising with price raises bullish institutional score", () => {
+    const no_oi = computeSentiment({ ...base, retailLongRatio: 0.65, openInterestChange: 0,     priceTrendSlope: 0.003 });
+    const oi    = computeSentiment({ ...base, retailLongRatio: 0.65, openInterestChange: 5000,   priceTrendSlope: 0.003 });
+    // OI confirms institutional longs → less negative (or more positive) score
+    expect(oi.sentimentScore).toBeGreaterThanOrEqual(no_oi.sentimentScore);
   });
 
-  it("detects short crowding at low retailLongRatio + negative funding", () => {
-    const result = computeSentiment(makeSentimentInput({
-      retailLongRatio: 0.18,
-      fundingRate: -0.0018,
+  it("sentimentScore is clamped to [-1, 1]", () => {
+    const extreme = computeSentiment({
+      ...base,
+      retailLongRatio: 0.99,
+      fundingRate: 0.01,
       priceTrendSlope: -0.02,
-      openInterestChange: 0.10,
-      cvdNet: -7e6,
-      intendedDirection: "short",
-    }));
-    expect(result.retailBias).toBe("short_crowded");
-    expect(result.institutionalEdge).toBe("fade_short");
-    expect(result.aligned).toBe(false);     // going short WITH crowd
+      openInterestChange: 100_000,
+    });
+    expect(extreme.sentimentScore).toBeGreaterThanOrEqual(-1);
+    expect(extreme.sentimentScore).toBeLessThanOrEqual(1);
   });
 
-  it("crowding levels scale correctly with long ratio", () => {
-    const extreme = computeSentiment(makeSentimentInput({ retailLongRatio: 0.85 }));
-    const high    = computeSentiment(makeSentimentInput({ retailLongRatio: 0.72 }));
-    const low     = computeSentiment(makeSentimentInput({ retailLongRatio: 0.52 }));
-
-    // Extreme should have highest crowding, low should not be extreme
-    const levelOrder = { extreme: 4, high: 3, moderate: 2, low: 1 };
-    expect(levelOrder[extreme.crowdingLevel]).toBeGreaterThanOrEqual(levelOrder[high.crowdingLevel]);
-    expect(levelOrder[low.crowdingLevel]).toBeLessThan(levelOrder[extreme.crowdingLevel]);
-  });
-
-  it("neutralSentiment returns balanced, no edge, low crowding", () => {
-    const neutral = neutralSentiment();
-    expect(neutral.retailBias).toBe("balanced");
-    expect(neutral.institutionalEdge).toBe("none");
-    expect(neutral.crowdingLevel).toBe("low");
-    expect(neutral.aligned).toBe(true);
-    expect(neutral.contrarian).toBe(false);
-    expect(neutral.sentimentScore).toBe(0.5);
-  });
-
-  it("sentimentScore is always between 0 and 1", () => {
-    const extremeLong  = computeSentiment(makeSentimentInput({ retailLongRatio: 1.0, fundingRate: 0.003, cvdNet: 1e9 }));
-    const extremeShort = computeSentiment(makeSentimentInput({ retailLongRatio: 0.0, fundingRate: -0.003, cvdNet: -1e9 }));
-    expect(extremeLong.sentimentScore).toBeLessThanOrEqual(1);
-    expect(extremeShort.sentimentScore).toBeGreaterThanOrEqual(0);
-  });
-
-  it("result always has a valid updatedAt ISO string", () => {
-    const result = computeSentiment(makeSentimentInput());
-    expect(() => new Date(result.updatedAt)).not.toThrow();
-  });
-
-  it("includes reasons when crowding detected", () => {
-    const result = computeSentiment(makeSentimentInput({
-      retailLongRatio: 0.85,
-      fundingRate: 0.0015,
-    }));
-    expect(result.reasons.length).toBeGreaterThan(0);
-    expect(result.reasons.some(r => r.toLowerCase().includes("retail") || r.toLowerCase().includes("crowd"))).toBe(true);
+  it("neutralSentiment returns safe defaults", () => {
+    const result = neutralSentiment();
+    expect(result.retailBias).toBe("balanced");
+    expect(result.institutionalEdge).toBe("none");
+    expect(result.aligned).toBe(true);
+    expect(result.contrarian).toBe(false);
   });
 });
 
-// ─── 3. Strategy Pipeline Integration ────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Integration: strategy_engine no-trade filters
+// ─────────────────────────────────────────────────────────────────────────────
 
-describe("Strategy pipeline — macro_bias_block and sentiment_crowding_block gates", () => {
-  const bars: never[] = [];
+describe("Strategy pipeline macro/sentiment gates", () => {
+  // Import here so the test uses the real strategy_engine
+  it("applyNoTradeFilters accepts macroBias and sentiment options without crashing", async () => {
+    const { applyNoTradeFilters } = await import("../lib/strategy_engine");
+    const { computeMacroBias }    = await import("../lib/macro_bias_engine");
+    const { computeSentiment }    = await import("../lib/sentiment_engine");
 
-  it("macro_bias_block fires when conviction=high and setup direction is blocked", () => {
-    // Strong bullish macro + setup going short (trend_slope_5m < 0 → short setup)
-    const macroBias = computeMacroBias(makeMacroBiasInput({
-      vixLevel: 12,
-      dxySlope: -0.04,
-      rateDifferentialBps: 180,
-      cpiMomentum: -0.3,
-      macroRiskScore: 0.05,
-      assetClass: "crypto",
-      intendedDirection: "long",
-    }));
+    const dummyRecall = {
+      atr_pct: 0.01, avg_range_1m: 5,
+      regime: "trending_bull" as const,
+      trend_slope_5m: 0.005,
+      momentum_1m: 0.002,
+      sk: { zone_distance_pct: 0.1, bias: "bull" as const, correction_complete: true },
+      cvd: { cvd_divergence: true },
+    } as any;
 
-    // Only test if we actually got high conviction (depends on scoring)
-    if (macroBias.conviction === "high" && macroBias.blockedDirections.includes("short")) {
-      const recall = makeRecall({ trend_slope_5m: -0.01 }); // negative slope → short setup
-      const result = applyNoTradeFilters(bars, recall, "continuation_pullback", {
-        macroBias,
-        replayMode: false,
-      });
-      expect(result.blocked).toBe(true);
-      expect(result.reason).toBe("macro_bias_block");
-    } else {
-      // Scoring didn't reach high conviction — skip assertion (not a test failure)
-      expect(true).toBe(true);
-    }
-  });
-
-  it("sentiment_crowding_block fires on extreme crowding with crowd-aligned trade", () => {
-    const sentiment = computeSentiment(makeSentimentInput({
-      retailLongRatio: 0.88,
-      fundingRate: 0.002,
-      priceTrendSlope: 0.03,
-      openInterestChange: 0.15,
-      cvdNet: 9e6,
-      intendedDirection: "long",
-    }));
-
-    if (sentiment.crowdingLevel === "extreme" && sentiment.institutionalEdge === "fade_long") {
-      const recall = makeRecall({ trend_slope_5m: 0.01 }); // positive → long setup
-      const result = applyNoTradeFilters(bars, recall, "continuation_pullback", {
-        sentiment,
-        replayMode: false,
-      });
-      expect(result.blocked).toBe(true);
-      expect(result.reason).toBe("sentiment_crowding_block");
-    } else {
-      expect(true).toBe(true);
-    }
-  });
-
-  it("both gates bypass in replay mode", () => {
-    const macroBias = computeMacroBias(makeMacroBiasInput({
-      macroRiskScore: 0.90,   // would normally hard-lockout, but replay bypasses gate
-      intendedDirection: "long",
-    }));
-    // Note: hard lockout is in computeMacroBias result itself, not in the filter.
-    // The filter only fires when we explicitly pass the result. In replay the gate is skipped.
-    const sentiment = computeSentiment(makeSentimentInput({
-      retailLongRatio: 0.90,
-      fundingRate: 0.002,
-      intendedDirection: "long",
-    }));
-    const recall = makeRecall({ trend_slope_5m: 0.01 });
-    const result = applyNoTradeFilters(bars, recall, "continuation_pullback", {
-      macroBias,
-      sentiment,
-      replayMode: true,   // <-- replay bypasses both gates
+    const macroBias = computeMacroBias({
+      dxySlope: 0.005, rateDifferentialBps: 80, cpiMomentum: 0.2,
+      vixLevel: 16, macroRiskScore: 0, assetClass: "crypto", intendedDirection: "long",
     });
-    // Should NOT be blocked by macro_bias_block or sentiment_crowding_block
-    expect(result.reason).not.toBe("macro_bias_block");
-    expect(result.reason).not.toBe("sentiment_crowding_block");
-  });
 
-  it("pipeline passes through cleanly when bias and sentiment are both neutral", () => {
-    const macroBias = neutralMacroBias();
-    const sentiment = neutralSentiment();
-    const recall = makeRecall();
-    const result = applyNoTradeFilters(bars, recall, "continuation_pullback", {
-      macroBias,
-      sentiment,
+    const sentiment = computeSentiment({
+      retailLongRatio: 0.55, priceTrendSlope: 0.003, cvdNet: 3000,
+      openInterestChange: 500, fundingRate: 0.0001,
+      intendedDirection: "long", assetClass: "crypto",
+    });
+
+    const result = applyNoTradeFilters([], dummyRecall, "absorption_reversal", {
       replayMode: false,
+      sessionAllowed: true,
+      newsLockoutActive: false,
+      macroBias,
+      sentiment,
     });
-    // Neutral inputs — neither gate should block
+
+    // With bullish macro + balanced sentiment, should not block
+    expect(typeof result.blocked).toBe("boolean");
+    expect(typeof result.reason).toBe("string");
+  });
+
+  it("macro_bias_block fires when high-conviction bear macro and setup is long", async () => {
+    const { applyNoTradeFilters } = await import("../lib/strategy_engine");
+    const { computeMacroBias }    = await import("../lib/macro_bias_engine");
+
+    const bearMacro = computeMacroBias({
+      dxySlope: -0.05, rateDifferentialBps: -200, cpiMomentum: 0.5,
+      vixLevel: 50, macroRiskScore: 0, assetClass: "forex", intendedDirection: "long",
+    });
+    expect(bearMacro.conviction).toBe("high");
+    expect(bearMacro.blockedDirections).toContain("long");
+
+    const dummyRecall = {
+      atr_pct: 0.01, avg_range_1m: 5,
+      regime: "trending_bull" as const,
+      trend_slope_5m: 0.005, // uptrend → setupDir = "long"
+      momentum_1m: 0.002,
+      sk: { zone_distance_pct: 0.1, bias: "neutral" as const, correction_complete: true },
+      cvd: { cvd_divergence: true },
+    } as any;
+
+    const result = applyNoTradeFilters([], dummyRecall, "continuation_pullback", {
+      replayMode: false,
+      sessionAllowed: true,
+      newsLockoutActive: false,
+      macroBias: bearMacro,
+    });
+
+    expect(result.blocked).toBe(true);
+    expect(result.reason).toBe("macro_bias_block");
+  });
+
+  it("sentiment_crowding_block fires when extreme retail crowding with trade", async () => {
+    const { applyNoTradeFilters } = await import("../lib/strategy_engine");
+    const { computeSentiment }    = await import("../lib/sentiment_engine");
+
+    const crowdedSentiment = computeSentiment({
+      retailLongRatio: 0.85, // 85% retail long = extreme
+      priceTrendSlope: 0, cvdNet: 0, openInterestChange: 0, fundingRate: 0.001,
+      intendedDirection: "long", assetClass: "crypto",
+    });
+    expect(crowdedSentiment.crowdingLevel).toBe("extreme");
+    expect(crowdedSentiment.institutionalEdge).toBe("fade_long");
+
+    const dummyRecall = {
+      atr_pct: 0.01, avg_range_1m: 5,
+      regime: "ranging" as const,
+      trend_slope_5m: 0.004, // uptrend → setupDir = "long"
+      momentum_1m: 0.001,
+      sk: { zone_distance_pct: 0.3, bias: "neutral" as const, correction_complete: true },
+      cvd: { cvd_divergence: false },
+    } as any;
+
+    const result = applyNoTradeFilters([], dummyRecall, "sk_bounce", {
+      replayMode: false,
+      sessionAllowed: true,
+      newsLockoutActive: false,
+      sentiment: crowdedSentiment,
+    });
+
+    expect(result.blocked).toBe(true);
+    expect(result.reason).toBe("sentiment_crowding_block");
+  });
+
+  it("macro and sentiment gates are bypassed in replayMode", async () => {
+    const { applyNoTradeFilters } = await import("../lib/strategy_engine");
+    const { computeMacroBias }    = await import("../lib/macro_bias_engine");
+    const { computeSentiment }    = await import("../lib/sentiment_engine");
+
+    const bearMacro = computeMacroBias({
+      dxySlope: -0.01, rateDifferentialBps: -150, cpiMomentum: -0.5,
+      vixLevel: 40, macroRiskScore: 0, assetClass: "forex", intendedDirection: "long",
+    });
+    const crowdedSentiment = computeSentiment({
+      retailLongRatio: 0.90, priceTrendSlope: 0, cvdNet: 0,
+      openInterestChange: 0, fundingRate: 0.002,
+      intendedDirection: "long", assetClass: "crypto",
+    });
+
+    const dummyRecall = {
+      atr_pct: 0.02, avg_range_1m: 5,
+      regime: "ranging" as const,
+      trend_slope_5m: 0.005,
+      momentum_1m: 0.002,
+      sk: { zone_distance_pct: 0.2, bias: "neutral" as const, correction_complete: true },
+      cvd: { cvd_divergence: true },
+    } as any;
+
+    const result = applyNoTradeFilters([], dummyRecall, "sk_bounce", {
+      replayMode: true, // gates disabled in replay
+      macroBias: bearMacro,
+      sentiment: crowdedSentiment,
+    });
+
+    // Should NOT be blocked by macro or sentiment in replay mode
     expect(result.reason).not.toBe("macro_bias_block");
     expect(result.reason).not.toBe("sentiment_crowding_block");
   });

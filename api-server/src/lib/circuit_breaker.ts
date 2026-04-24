@@ -1,291 +1,360 @@
 /**
- * circuit_breaker.ts — Automated Capital-Protection Circuit Breaker
+ * circuit_breaker.ts — Circuit Breaker + Rate Limiter (Phase 55)
  *
- * Monitors realised P&L from the trade journal and automatically engages
- * the kill switch when configurable safety thresholds are breached:
- *
- *   1. Daily Loss Limit      — total session P&L < -maxDailyLossPct
- *   2. Consecutive Losses    — N sequential losing trades
- *   3. Max Drawdown Guard    — current drawdown > maxDrawdownPct (from equity curve)
- *
- * When tripped, the circuit breaker:
- *   - Calls activateKillSwitch() on the risk engine
- *   - Broadcasts an SSE "circuit_breaker" alert
- *   - Records the trip event with full context
- *   - Schedules auto-reset at the next trading session open (configurable)
- *
- * Env vars:
- *   CB_MAX_DAILY_LOSS_PCT      — daily loss % threshold (default 0.02 = 2%)
- *   CB_MAX_CONSECUTIVE_LOSSES  — consecutive loss count (default 4)
- *   CB_MAX_DRAWDOWN_PCT        — drawdown % threshold (default 0.05 = 5%)
- *   CB_AUTO_RESET_HOURS        — hours until auto-reset (default 4; 0 = manual only)
+ * Production safety:
+ *   1. Circuit breaker: stops trading on consecutive losses/drawdown
+ *   2. Rate limiter: prevents API/order spam
+ *   3. Kill switch: emergency global halt
+ *   4. Cooldown periods: progressive backoff after breaches
+ *   5. Escalation policy: auto kill-switch on repeated trips
+ *   6. Trip history persistence
  */
 
-import { listJournalEntries } from "./trade_journal";
-import { setKillSwitchActive } from "./risk_engine";
-import { publishAlert } from "./signal_stream";
-import { logger as _logger } from "./logger";
-
-const logger = _logger.child({ module: "circuit_breaker" });
-
-// ─── Config ───────────────────────────────────────────────────────────────────
-
-const MAX_DAILY_LOSS_PCT     = parseFloat(process.env.CB_MAX_DAILY_LOSS_PCT     ?? "0.02");  // 2%
-const MAX_CONSECUTIVE_LOSSES = parseInt( process.env.CB_MAX_CONSECUTIVE_LOSSES  ?? "4", 10); // 4 in a row
-const MAX_DRAWDOWN_PCT       = parseFloat(process.env.CB_MAX_DRAWDOWN_PCT       ?? "0.05");  // 5%
-const AUTO_RESET_HOURS       = parseFloat(process.env.CB_AUTO_RESET_HOURS       ?? "4");     // 4h
+import { logger } from "./logger.js";
+import { persistAppend, persistRead } from "./persistent_store.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type TripReason =
-  | "daily_loss_limit"
-  | "consecutive_losses"
-  | "max_drawdown"
-  | "manual";
+export type BreakerState = "CLOSED" | "OPEN" | "HALF_OPEN";
 
-export interface CircuitBreakerTripEvent {
-  id:           string;
-  reason:       TripReason;
-  detail:       string;
-  /** Fraction at time of trip (negative = loss) */
-  triggeredAt:  string;
-  value:        number;
-  threshold:    number;
-  autoResetAt:  string | null;
-  /** Whether the CB was already armed before this trip */
-  wasAlreadyTripped: boolean;
+export interface CircuitBreakerConfig {
+  maxConsecutiveLosses: number;
+  maxDrawdownPct: number;
+  maxDailyLossPct: number;
+  cooldownMinutes: number;
+  halfOpenTradeLimit: number;
 }
 
 export interface CircuitBreakerStatus {
-  armed:              boolean;
-  trippedAt:          string | null;
-  lastTripReason:     TripReason | null;
-  lastTripDetail:     string | null;
-  autoResetAt:        string | null;
-  tripCount:          number;
-  lastCheckedAt:      string;
-  config: {
-    maxDailyLossPct:     number;
-    maxConsecutiveLosses: number;
-    maxDrawdownPct:      number;
-    autoResetHours:      number;
-  };
-  todayStats: {
-    sessionPnlPct:       number;
-    consecutiveLosses:   number;
-    currentDrawdownPct:  number;
-  };
+  state: BreakerState;
+  consecutiveLosses: number;
+  dailyPnlPct: number;
+  drawdownPct: number;
+  tripReason: string | null;
+  trippedAt: string | null;
+  cooldownUntil: string | null;
+  halfOpenTradesUsed: number;
 }
+
+export interface RateLimiterStatus {
+  ordersThisMinute: number;
+  ordersThisHour: number;
+  maxPerMinute: number;
+  maxPerHour: number;
+  blocked: boolean;
+}
+
+export interface KillSwitchStatus {
+  active: boolean;
+  reason: string | null;
+  activatedAt: string | null;
+  activatedBy: string | null;
+}
+
+export interface CircuitBreakerSnapshot {
+  breaker: CircuitBreakerStatus;
+  rateLimiter: RateLimiterStatus;
+  killSwitch: KillSwitchStatus;
+  totalTrips: number;
+  totalRateLimitBlocks: number;
+  tradingAllowed: boolean;
+}
+
+export interface BreakerTripEvent {
+  id: string;
+  reason: string;
+  timestamp: string;
+  consecutiveLosses: number;
+  dailyPnlPct: number;
+  drawdownPct: number;
+  cooldownUntil: string | null;
+}
+
+export interface CircuitBreakerHealthCheck {
+  state: BreakerState;
+  tripsToday: number;
+  timeSinceLastTrip: number | null;
+  tripsIn24h: number;
+  escalationPolicy: { triggered: boolean; reason: string | null };
+}
+
+// ─── Config ───────────────────────────────────────────────────────────────────
+
+const DEFAULT_CONFIG: CircuitBreakerConfig = {
+  maxConsecutiveLosses: 5,
+  maxDrawdownPct: 5.0,
+  maxDailyLossPct: 3.0,
+  cooldownMinutes: 30,
+  halfOpenTradeLimit: 2,
+};
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
-let _armed         = false;
-let _trippedAt:     string | null = null;
-let _lastReason:    TripReason | null = null;
-let _lastDetail:    string | null = null;
-let _autoResetAt:   string | null = null;
-let _tripCount      = 0;
-let _lastCheckedAt  = new Date().toISOString();
-let _resetTimer:    ReturnType<typeof setTimeout> | null = null;
+let config = { ...DEFAULT_CONFIG };
+let breakerState: BreakerState = "CLOSED";
+let consecutiveLosses = 0;
+let dailyPnlPct = 0;
+let drawdownPct = 0;
+let tripReason: string | null = null;
+let trippedAt: string | null = null;
+let cooldownUntil: string | null = null;
+let halfOpenTradesUsed = 0;
+let totalTrips = 0;
 
-const _tripHistory: CircuitBreakerTripEvent[] = [];
+// Rate limiter
+let ordersThisMinute = 0;
+let ordersThisHour = 0;
+let maxPerMinute = 10;
+let maxPerHour = 100;
+let lastMinuteReset = Date.now();
+let lastHourReset = Date.now();
+let totalRateLimitBlocks = 0;
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// Kill switch
+let killSwitchActive = false;
+let killSwitchReason: string | null = null;
+let killSwitchActivatedAt: string | null = null;
+let killSwitchActivatedBy: string | null = null;
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+// Escalation policy
+const ESCALATION_THRESHOLD = 3; // 3 trips in 24h triggers auto-kill
+let lastTripTimestamps: number[] = [];
 
-/** Returns today's realised session P&L (sum of all pnlPct for today's closed trades). */
-function getTodaySessionPnl(): number {
-  const today = todayIso();
-  return listJournalEntries({ limit: 0 })
-    .filter(e => e.pnlPct !== null && e.decidedAt.startsWith(today))
-    .reduce((sum, e) => sum + e.pnlPct!, 0);
-}
+// ─── Circuit Breaker ──────────────────────────────────────────────────────────
 
-/** Returns current consecutive loss count (scanning backwards from most recent). */
-function getConsecutiveLosses(): number {
-  const sorted = listJournalEntries({ limit: 0 })
-    .filter(e => e.outcome !== "unknown")
-    .sort((a, b) => b.decidedAt.localeCompare(a.decidedAt));
-  let count = 0;
-  for (const e of sorted) {
-    if (e.outcome === "loss") count++;
-    else break;
-  }
-  return count;
-}
+function tripBreaker(reason: string): void {
+  breakerState = "OPEN";
+  tripReason = reason;
+  const now = new Date();
+  trippedAt = now.toISOString();
+  cooldownUntil = new Date(now.getTime() + config.cooldownMinutes * 60000).toISOString();
+  halfOpenTradesUsed = 0;
+  totalTrips++;
 
-/** Returns current drawdown from journal equity. */
-function getCurrentDrawdownPct(): number {
-  const pnls = listJournalEntries({ limit: 0 })
-    .filter(e => e.pnlPct !== null)
-    .sort((a, b) => a.decidedAt.localeCompare(b.decidedAt))
-    .map(e => e.pnlPct!);
-
-  if (!pnls.length) return 0;
-  let equity = 1;
-  let peak   = 1;
-  let maxDD  = 0;
-  for (const r of pnls) {
-    equity = equity * (1 + r);
-    peak   = Math.max(peak, equity);
-    const dd = (equity - peak) / peak;
-    maxDD  = Math.min(maxDD, dd);
-  }
-  // current drawdown = last value
-  const finalEquity = pnls.reduce((e, r) => e * (1 + r), 1);
-  const finalPeak   = pnls.reduce(([e, pk], r) => { const ne = e * (1 + r); return [ne, Math.max(pk, ne)]; }, [1, 1] as [number, number])[1];
-  return finalPeak > 0 ? (finalEquity - finalPeak) / finalPeak : 0;
-}
-
-// ─── Trip & Reset ─────────────────────────────────────────────────────────────
-
-function trip(reason: TripReason, detail: string, value: number, threshold: number): void {
-  const wasAlready = _armed;
-  _armed       = true;
-  _trippedAt   = new Date().toISOString();
-  _lastReason  = reason;
-  _lastDetail  = detail;
-  _tripCount++;
-
-  const autoResetAt = AUTO_RESET_HOURS > 0
-    ? new Date(Date.now() + AUTO_RESET_HOURS * 3600_000).toISOString()
-    : null;
-  _autoResetAt = autoResetAt;
-
-  const event: CircuitBreakerTripEvent = {
-    id: `cb_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-    reason, detail, triggeredAt: _trippedAt,
-    value, threshold, autoResetAt,
-    wasAlreadyTripped: wasAlready,
+  // Persist trip event
+  const tripEvent: BreakerTripEvent = {
+    id: `trip_${Date.now()}`,
+    reason,
+    timestamp: trippedAt,
+    consecutiveLosses,
+    dailyPnlPct,
+    drawdownPct,
+    cooldownUntil,
   };
-  _tripHistory.unshift(event);
-  if (_tripHistory.length > 50) _tripHistory.pop();
-
-  // Engage kill switch
-  setKillSwitchActive(true);
-
-  // Broadcast SSE alert
-  publishAlert({
-    type:   "circuit_breaker",
-    data: { reason, detail, value, threshold, trippedAt: _trippedAt, autoResetAt },
-  });
-
-  logger.warn({ reason, detail, value, threshold }, "[CB] Circuit breaker TRIPPED — kill switch engaged");
-
-  // Schedule auto-reset
-  if (_resetTimer) clearTimeout(_resetTimer);
-  if (AUTO_RESET_HOURS > 0) {
-    _resetTimer = setTimeout(() => reset("auto_reset"), AUTO_RESET_HOURS * 3600_000);
+  try {
+    persistAppend("breaker_events", tripEvent, 500);
+  } catch (err) {
+    logger.warn({ err }, "Failed to persist breaker trip event");
   }
+
+  // Track escalation
+  const now_ms = now.getTime();
+  lastTripTimestamps.push(now_ms);
+  lastTripTimestamps = lastTripTimestamps.filter((t) => now_ms - t < 24 * 60 * 60 * 1000);
+
+  if (lastTripTimestamps.length >= ESCALATION_THRESHOLD) {
+    activateKillSwitch(`Escalation: ${lastTripTimestamps.length} trips in 24h`, "circuit_breaker");
+  }
+
+  logger.info({ reason, cooldownUntil, tripsInDay: lastTripTimestamps.length }, "Circuit breaker TRIPPED");
 }
 
-function reset(source: "manual" | "auto_reset"): void {
-  if (!_armed) return;
-  if (_resetTimer) { clearTimeout(_resetTimer); _resetTimer = null; }
-  _armed      = false;
-  _trippedAt  = null;
-  _lastReason = null;
-  _lastDetail = null;
-  _autoResetAt = null;
-
-  setKillSwitchActive(false);
-  publishAlert({ type: "circuit_breaker_reset", data: { source, resetAt: new Date().toISOString() } });
-  logger.info({ source }, "[CB] Circuit breaker RESET — kill switch released");
-}
-
-// ─── Check ────────────────────────────────────────────────────────────────────
-
-/**
- * Run a full check against current P&L state.
- * Called by the scanner after each cycle and by the analytics route on demand.
- */
-export function checkCircuitBreaker(): CircuitBreakerStatus {
-  _lastCheckedAt = new Date().toISOString();
-
-  const sessionPnlPct      = getTodaySessionPnl();
-  const consecutiveLosses  = getConsecutiveLosses();
-  const currentDrawdownPct = Math.abs(getCurrentDrawdownPct());
-
-  if (!_armed) {
-    // Daily loss limit
-    if (sessionPnlPct < -MAX_DAILY_LOSS_PCT) {
-      trip(
-        "daily_loss_limit",
-        `Session P&L ${(sessionPnlPct * 100).toFixed(2)}% breached limit of -${(MAX_DAILY_LOSS_PCT * 100).toFixed(2)}%`,
-        sessionPnlPct, -MAX_DAILY_LOSS_PCT,
-      );
-    }
-    // Consecutive losses
-    else if (consecutiveLosses >= MAX_CONSECUTIVE_LOSSES) {
-      trip(
-        "consecutive_losses",
-        `${consecutiveLosses} consecutive losing trades (limit: ${MAX_CONSECUTIVE_LOSSES})`,
-        consecutiveLosses, MAX_CONSECUTIVE_LOSSES,
-      );
-    }
-    // Drawdown guard
-    else if (currentDrawdownPct > MAX_DRAWDOWN_PCT) {
-      trip(
-        "max_drawdown",
-        `Current drawdown ${(currentDrawdownPct * 100).toFixed(2)}% exceeds ${(MAX_DRAWDOWN_PCT * 100).toFixed(2)}% limit`,
-        currentDrawdownPct, MAX_DRAWDOWN_PCT,
-      );
+export function recordTradeResult(pnlPct: number): CircuitBreakerStatus {
+  if (breakerState === "HALF_OPEN") {
+    halfOpenTradesUsed++;
+    if (pnlPct < 0) {
+      tripBreaker("Loss during half-open test");
+    } else if (halfOpenTradesUsed >= config.halfOpenTradeLimit) {
+      breakerState = "CLOSED";
+      consecutiveLosses = 0;
+      tripReason = null;
+      logger.info("Circuit breaker CLOSED after successful half-open test");
     }
   }
 
-  return buildStatus(sessionPnlPct, consecutiveLosses, currentDrawdownPct);
+  dailyPnlPct += pnlPct;
+
+  if (pnlPct < 0) {
+    consecutiveLosses++;
+    drawdownPct = Math.max(drawdownPct, Math.abs(dailyPnlPct));
+  } else {
+    consecutiveLosses = 0;
+  }
+
+  // Check trip conditions
+  if (breakerState === "CLOSED") {
+    if (consecutiveLosses >= config.maxConsecutiveLosses) {
+      tripBreaker(`${consecutiveLosses} consecutive losses`);
+    } else if (drawdownPct >= config.maxDrawdownPct) {
+      tripBreaker(`Drawdown ${drawdownPct.toFixed(1)}% exceeds ${config.maxDrawdownPct}%`);
+    } else if (Math.abs(dailyPnlPct) >= config.maxDailyLossPct && dailyPnlPct < 0) {
+      tripBreaker(`Daily loss ${Math.abs(dailyPnlPct).toFixed(1)}% exceeds ${config.maxDailyLossPct}%`);
+    }
+  }
+
+  return getBreakerStatus();
 }
 
-function buildStatus(
-  sessionPnlPct: number,
-  consecutiveLosses: number,
-  currentDrawdownPct: number,
-): CircuitBreakerStatus {
+export function checkBreaker(): CircuitBreakerStatus {
+  // Auto-transition from OPEN to HALF_OPEN after cooldown
+  if (breakerState === "OPEN" && cooldownUntil && new Date(cooldownUntil).getTime() < Date.now()) {
+    breakerState = "HALF_OPEN";
+    halfOpenTradesUsed = 0;
+    logger.info("Circuit breaker moved to HALF_OPEN");
+  }
+  return getBreakerStatus();
+}
+
+function getBreakerStatus(): CircuitBreakerStatus {
+  return { state: breakerState, consecutiveLosses, dailyPnlPct, drawdownPct, tripReason, trippedAt, cooldownUntil, halfOpenTradesUsed };
+}
+
+// ─── Rate Limiter ─────────────────────────────────────────────────────────────
+
+export function checkRateLimit(): RateLimiterStatus {
+  const now = Date.now();
+  if (now - lastMinuteReset > 60000) { ordersThisMinute = 0; lastMinuteReset = now; }
+  if (now - lastHourReset > 3600000) { ordersThisHour = 0; lastHourReset = now; }
+  const blocked = ordersThisMinute >= maxPerMinute || ordersThisHour >= maxPerHour;
+  return { ordersThisMinute, ordersThisHour, maxPerMinute, maxPerHour, blocked };
+}
+
+export function recordOrder(): RateLimiterStatus {
+  const status = checkRateLimit();
+  if (status.blocked) {
+    totalRateLimitBlocks++;
+    logger.info({ ordersThisMinute, ordersThisHour }, "Rate limit blocked order");
+    return status;
+  }
+  ordersThisMinute++;
+  ordersThisHour++;
+  return checkRateLimit();
+}
+
+// ─── Kill Switch ──────────────────────────────────────────────────────────────
+
+export function activateKillSwitch(reason: string, activatedBy?: string): KillSwitchStatus {
+  killSwitchActive = true;
+  killSwitchReason = reason;
+  killSwitchActivatedAt = new Date().toISOString();
+  killSwitchActivatedBy = activatedBy ?? "system";
+  logger.info({ reason, activatedBy }, "KILL SWITCH ACTIVATED");
+  return getKillSwitchStatus();
+}
+
+export function deactivateKillSwitch(): KillSwitchStatus {
+  killSwitchActive = false;
+  killSwitchReason = null;
+  logger.info("Kill switch deactivated");
+  return getKillSwitchStatus();
+}
+
+function getKillSwitchStatus(): KillSwitchStatus {
+  return { active: killSwitchActive, reason: killSwitchReason, activatedAt: killSwitchActivatedAt, activatedBy: killSwitchActivatedBy };
+}
+
+// ─── Unified Check ────────────────────────────────────────────────────────────
+
+export function isTradingAllowed(): boolean {
+  if (killSwitchActive) return false;
+  const breaker = checkBreaker();
+  if (breaker.state === "OPEN") return false;
+  const rate = checkRateLimit();
+  if (rate.blocked) return false;
+  return true;
+}
+
+// ─── Snapshot & Reset ─────────────────────────────────────────────────────────
+
+export function getCircuitBreakerSnapshot(): CircuitBreakerSnapshot {
   return {
-    armed:          _armed,
-    trippedAt:      _trippedAt,
-    lastTripReason: _lastReason,
-    lastTripDetail: _lastDetail,
-    autoResetAt:    _autoResetAt,
-    tripCount:      _tripCount,
-    lastCheckedAt:  _lastCheckedAt,
-    config: {
-      maxDailyLossPct:      MAX_DAILY_LOSS_PCT,
-      maxConsecutiveLosses: MAX_CONSECUTIVE_LOSSES,
-      maxDrawdownPct:       MAX_DRAWDOWN_PCT,
-      autoResetHours:       AUTO_RESET_HOURS,
-    },
-    todayStats: { sessionPnlPct, consecutiveLosses, currentDrawdownPct },
+    breaker: getBreakerStatus(),
+    rateLimiter: checkRateLimit(),
+    killSwitch: getKillSwitchStatus(),
+    totalTrips,
+    totalRateLimitBlocks,
+    tradingAllowed: isTradingAllowed(),
   };
 }
 
-// ─── Public API ───────────────────────────────────────────────────────────────
-
-export function getCircuitBreakerStatus(): CircuitBreakerStatus {
-  const s = getTodaySessionPnl();
-  const c = getConsecutiveLosses();
-  const d = Math.abs(getCurrentDrawdownPct());
-  return buildStatus(s, c, d);
+export function updateConfig(newConfig: Partial<CircuitBreakerConfig>): CircuitBreakerConfig {
+  config = { ...config, ...newConfig };
+  return config;
 }
 
-export function isCircuitBreakerArmed(): boolean {
-  return _armed;
+export function resetCircuitBreaker(): void {
+  config = { ...DEFAULT_CONFIG };
+  breakerState = "CLOSED"; consecutiveLosses = 0; dailyPnlPct = 0; drawdownPct = 0;
+  tripReason = null; trippedAt = null; cooldownUntil = null; halfOpenTradesUsed = 0; totalTrips = 0;
+  ordersThisMinute = 0; ordersThisHour = 0; totalRateLimitBlocks = 0;
+  killSwitchActive = false; killSwitchReason = null; killSwitchActivatedAt = null; killSwitchActivatedBy = null;
+  logger.info("Circuit breaker reset");
 }
 
-export function resetCircuitBreaker(): CircuitBreakerStatus {
-  reset("manual");
-  return getCircuitBreakerStatus();
+
+// ─── Backward Compatibility Aliases ───────────────────────────────────────────
+
+export function getCircuitBreakerStatus() {
+  return getCircuitBreakerSnapshot();
 }
 
-export function getTripHistory(): CircuitBreakerTripEvent[] {
-  return [..._tripHistory];
+export function checkCircuitBreaker(): { allowed: boolean; reason?: string } {
+  const snap = getCircuitBreakerSnapshot();
+  if (!snap.tradingAllowed) {
+    return { allowed: false, reason: snap.breaker.tripReason ?? "Trading blocked" };
+  }
+  return { allowed: true };
 }
 
-/** Force-trip for testing or manual emergency halt. */
-export function manualTrip(reason: string): CircuitBreakerStatus {
-  trip("manual", reason || "Manual emergency halt", 0, 0);
-  return getCircuitBreakerStatus();
+export function manualTrip(reason?: string): CircuitBreakerStatus {
+  return recordTradeResult(-999); // force trip via massive loss
+}
+
+export function getTripHistory() {
+  return { totalTrips, lastTrip: trippedAt, lastReason: tripReason };
+}
+
+export function getBreakerTripHistory(days: number): BreakerTripEvent[] {
+  try {
+    const safeDays = Math.max(1, Math.min(90, Math.round(days)));
+    const allTrips = persistRead<BreakerTripEvent[]>("breaker_events", []);
+    const cutoff = new Date(Date.now() - safeDays * 24 * 60 * 60 * 1000);
+    return allTrips.filter((t) => new Date(t.timestamp) >= cutoff);
+  } catch (err) {
+    logger.warn({ err, days }, "Failed to read breaker trip history");
+    return [];
+  }
+}
+
+export function CircuitBreakerHealthCheck(): CircuitBreakerHealthCheck {
+  const now = Date.now();
+  const cutoff24h = now - 24 * 60 * 60 * 1000;
+
+  // Get trips in last 24h
+  try {
+    const allTrips = persistRead<BreakerTripEvent[]>("breaker_events", []);
+    const tripsInDay = allTrips.filter((t) => new Date(t.timestamp).getTime() > cutoff24h).length;
+    const tripsToday = tripsInDay;
+    const timeSinceLastTrip = trippedAt ? now - new Date(trippedAt).getTime() : null;
+
+    return {
+      state: breakerState,
+      tripsToday,
+      timeSinceLastTrip,
+      tripsIn24h: tripsInDay,
+      escalationPolicy: {
+        triggered: killSwitchActive,
+        reason: killSwitchReason,
+      },
+    };
+  } catch (err) {
+    logger.warn({ err }, "Failed to compute health check");
+    return {
+      state: breakerState,
+      tripsToday: 0,
+      timeSinceLastTrip: null,
+      tripsIn24h: 0,
+      escalationPolicy: { triggered: killSwitchActive, reason: killSwitchReason },
+    };
+  }
 }

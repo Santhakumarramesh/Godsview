@@ -21,6 +21,7 @@ import {
   isLiveMode,
   resolveSystemMode,
 } from "@workspace/strategy-core";
+import { persistWrite, persistRead, persistAppend } from "./persistent_store";
 
 // ── Types ──────────────────────────────────────────────────────────
 export interface ExecutionRequest {
@@ -48,6 +49,29 @@ export interface ExecutionResult {
   details: Record<string, unknown>;
 }
 
+export interface ExecutionLogEntry {
+  timestamp: string;
+  symbol: string;
+  side: "buy" | "sell";
+  quantity: number;
+  order_type?: string;
+  execution_mode: "paper" | "live" | "dry_run";
+  success: boolean;
+  order_id?: string;
+  error_message?: string;
+  duration_ms: number;
+}
+
+export interface ExecutionHealthCheck {
+  pending_orders: number;
+  avg_latency_ms: number;
+  error_rate_pct: number;
+  total_execution_attempts: number;
+  successful_executions: number;
+  failed_executions: number;
+  last_execution_at: string | null;
+}
+
 // ── Config ─────────────────────────────────────────────────────────
 
 const LEGACY_LIVE = String(process.env.GODSVIEW_ENABLE_LIVE_TRADING ?? "").toLowerCase() === "true";
@@ -57,19 +81,38 @@ const MAX_SINGLE_ORDER_USD = 25_000;
 
 // ── Pre-flight Validation ──────────────────────────────────────────
 
-function validatePreFlight(req: ExecutionRequest): string[] {
+/**
+ * Validate an execution request comprehensively
+ */
+export function validateExecutionRequest(req: ExecutionRequest): string[] {
   const errors: string[] = [];
 
+  // Symbol validation
   if (!req.symbol || req.symbol.trim().length === 0) {
     errors.push("Symbol is required");
+  } else if (!/^[A-Z0-9]{1,5}$/.test(req.symbol.trim())) {
+    errors.push(`Invalid symbol format: ${req.symbol}`);
   }
+
+  // Direction validation
+  if (req.direction !== "long" && req.direction !== "short") {
+    errors.push(`Invalid direction: ${req.direction}`);
+  }
+
+  // Side validation
+  if (req.side !== "buy" && req.side !== "sell") {
+    errors.push(`Invalid side: ${req.side}`);
+  }
+
+  // Quantity validation
   if (req.quantity <= 0 || !Number.isFinite(req.quantity)) {
     errors.push(`Invalid quantity: ${req.quantity}`);
-  }
-  if (req.quantity > MAX_SINGLE_ORDER_QTY) {
+  } else if (req.quantity > MAX_SINGLE_ORDER_QTY) {
     errors.push(`Quantity ${req.quantity} exceeds max ${MAX_SINGLE_ORDER_QTY}`);
   }
-  if (req.entry_price <= 0) {
+
+  // Price validation
+  if (req.entry_price <= 0 || !Number.isFinite(req.entry_price)) {
     errors.push(`Invalid entry price: ${req.entry_price}`);
   }
 
@@ -78,19 +121,22 @@ function validatePreFlight(req: ExecutionRequest): string[] {
   if (dollarValue > MAX_SINGLE_ORDER_USD) {
     errors.push(`Order value $${dollarValue.toFixed(2)} exceeds max $${MAX_SINGLE_ORDER_USD}`);
   }
-  // Stop loss must be on correct side of entry
-  if (req.direction === "long" && req.stop_loss >= req.entry_price) {
+
+  // Stop loss validation
+  if (!Number.isFinite(req.stop_loss) || req.stop_loss <= 0) {
+    errors.push(`Invalid stop loss: ${req.stop_loss}`);
+  } else if (req.direction === "long" && req.stop_loss >= req.entry_price) {
     errors.push("Long stop loss must be below entry price");
-  }
-  if (req.direction === "short" && req.stop_loss <= req.entry_price) {
+  } else if (req.direction === "short" && req.stop_loss <= req.entry_price) {
     errors.push("Short stop loss must be above entry price");
   }
 
-  // Take profit must be on correct side of entry
-  if (req.direction === "long" && req.take_profit <= req.entry_price) {
+  // Take profit validation
+  if (!Number.isFinite(req.take_profit) || req.take_profit <= 0) {
+    errors.push(`Invalid take profit: ${req.take_profit}`);
+  } else if (req.direction === "long" && req.take_profit <= req.entry_price) {
     errors.push("Long take profit must be above entry price");
-  }
-  if (req.direction === "short" && req.take_profit >= req.entry_price) {
+  } else if (req.direction === "short" && req.take_profit >= req.entry_price) {
     errors.push("Short take profit must be below entry price");
   }
 
@@ -100,6 +146,10 @@ function validatePreFlight(req: ExecutionRequest): string[] {
   }
 
   return errors;
+}
+
+function validatePreFlight(req: ExecutionRequest): string[] {
+  return validateExecutionRequest(req);
 }
 
 // ── Persist SI Decision ────────────────────────────────────────────
@@ -139,15 +189,92 @@ async function persistSIDecision(
   }
 }
 
+// ── Execution Log Management ──────────────────────────────────────
+
+function recordExecutionLog(entry: ExecutionLogEntry): void {
+  try {
+    persistAppend("execution_log", entry, 5000);
+  } catch (err) {
+    logger.warn({ err }, "Failed to record execution log entry");
+  }
+}
+
+export function getExecutionLog(symbol?: string, limit: number = 100): ExecutionLogEntry[] {
+  try {
+    const log = persistRead<ExecutionLogEntry[]>("execution_log", []);
+    let filtered = log;
+    if (symbol) {
+      filtered = log.filter((entry) => entry.symbol === symbol);
+    }
+    return filtered.slice(-limit);
+  } catch (err) {
+    logger.warn({ err }, "Failed to retrieve execution log");
+    return [];
+  }
+}
+
+export function executionHealthCheck(): ExecutionHealthCheck {
+  try {
+    const log = persistRead<ExecutionLogEntry[]>("execution_log", []);
+    const total = log.length;
+    const successful = log.filter((e) => e.success).length;
+    const failed = total - successful;
+    const errorRate = total > 0 ? (failed / total) * 100 : 0;
+
+    // Calculate average latency
+    const avgLatency = total > 0
+      ? log.reduce((sum, e) => sum + e.duration_ms, 0) / total
+      : 0;
+
+    // Get pending orders (recent unsuccessful executions)
+    const pending = log.filter(
+      (e) => !e.success && !e.error_message?.includes("blocked"),
+    ).length;
+
+    return {
+      pending_orders: pending,
+      avg_latency_ms: Math.round(avgLatency),
+      error_rate_pct: Math.round(errorRate * 100) / 100,
+      total_execution_attempts: total,
+      successful_executions: successful,
+      failed_executions: failed,
+      last_execution_at: log.length > 0 ? log[log.length - 1].timestamp : null,
+    };
+  } catch (err) {
+    logger.warn({ err }, "Failed to compute execution health check");
+    return {
+      pending_orders: 0,
+      avg_latency_ms: 0,
+      error_rate_pct: 0,
+      total_execution_attempts: 0,
+      successful_executions: 0,
+      failed_executions: 0,
+      last_execution_at: null,
+    };
+  }
+}
+
 // ── Main Execution Function ────────────────────────────────────────
 
 export async function executeOrder(req: ExecutionRequest): Promise<ExecutionResult> {
   const logCtx = { symbol: req.symbol, side: req.side, qty: req.quantity, setup: req.setup_type };
+  const startTime = Date.now();
 
   // 1. Pre-flight validation
   const errors = validatePreFlight(req);
   if (errors.length > 0) {
     logger.warn({ ...logCtx, errors }, "Pre-flight validation failed");
+    const duration = Date.now() - startTime;
+    recordExecutionLog({
+      timestamp: new Date().toISOString(),
+      symbol: req.symbol,
+      side: req.side,
+      quantity: req.quantity,
+      execution_mode: "dry_run",
+      success: false,
+      error_message: errors[0],
+      duration_ms: duration,
+    });
     return {
       executed: false,
       mode: "dry_run",
@@ -164,6 +291,17 @@ export async function executeOrder(req: ExecutionRequest): Promise<ExecutionResu
   // 3. Mode check — can we actually write orders?
   if (!canWriteOrders(SYSTEM_MODE)) {
     logger.info({ ...logCtx, mode: SYSTEM_MODE }, "Dry run — order writing disabled");
+    const duration = Date.now() - startTime;
+    recordExecutionLog({
+      timestamp: new Date().toISOString(),
+      symbol: req.symbol,
+      side: req.side,
+      quantity: req.quantity,
+      execution_mode: "dry_run",
+      success: false,
+      error_message: "Order writing not enabled",
+      duration_ms: duration,
+    });
     return {
       executed: false,
       mode: "dry_run",
@@ -177,15 +315,38 @@ export async function executeOrder(req: ExecutionRequest): Promise<ExecutionResu
     if (!OPERATOR_TOKEN) {
       logger.error(logCtx, "Live mode but no GODSVIEW_OPERATOR_TOKEN configured");
       alertKillSwitch("Live mode without operator token", "order_executor");
+      const duration = Date.now() - startTime;
+      recordExecutionLog({
+        timestamp: new Date().toISOString(),
+        symbol: req.symbol,
+        side: req.side,
+        quantity: req.quantity,
+        execution_mode: "live",
+        success: false,
+        error_message: "Operator token required for live trading",
+        duration_ms: duration,
+      });
       return {
         executed: false,
         mode: "live",
         si_decision_id: siDecisionId,
         error: "Operator token required for live trading",
-        details: {},      };
+        details: {},
+      };
     }
     if (req.operator_token !== OPERATOR_TOKEN) {
       logger.warn(logCtx, "Invalid operator token for live execution");
+      const duration = Date.now() - startTime;
+      recordExecutionLog({
+        timestamp: new Date().toISOString(),
+        symbol: req.symbol,
+        side: req.side,
+        quantity: req.quantity,
+        execution_mode: "live",
+        success: false,
+        error_message: "Invalid operator token",
+        duration_ms: duration,
+      });
       return {
         executed: false,
         mode: "live",
@@ -209,8 +370,22 @@ export async function executeOrder(req: ExecutionRequest): Promise<ExecutionResu
       time_in_force: "day",
     });
 
+    const duration = Date.now() - startTime;
+    recordExecutionLog({
+      timestamp: new Date().toISOString(),
+      symbol: req.symbol,
+      side: req.side,
+      quantity: req.quantity,
+      order_type: "limit",
+      execution_mode: mode,
+      success: true,
+      order_id: order?.id,
+      duration_ms: duration,
+    });
+
     logger.info(
-      { ...logCtx, orderId: order?.id, mode },      "Order placed successfully",
+      { ...logCtx, orderId: order?.id, mode },
+      "Order placed successfully",
     );
 
     // Update metrics
@@ -229,6 +404,9 @@ export async function executeOrder(req: ExecutionRequest): Promise<ExecutionResu
         side: req.side,
         quantity: req.quantity,
         entry_price: req.entry_price,
+        submitted_limit_price: req.entry_price,
+        filled_avg_price: order?.filled_avg_price ? Number(order.filled_avg_price) : null,
+        broker_status: order?.status ?? null,
         stop_loss: req.stop_loss,
         take_profit: req.take_profit,
         kelly_pct: req.decision.meta.kelly_pct,
@@ -237,9 +415,21 @@ export async function executeOrder(req: ExecutionRequest): Promise<ExecutionResu
       },
     };
   } catch (err: any) {
+    const duration = Date.now() - startTime;
+    recordExecutionLog({
+      timestamp: new Date().toISOString(),
+      symbol: req.symbol,
+      side: req.side,
+      quantity: req.quantity,
+      execution_mode: mode,
+      success: false,
+      error_message: err.message ?? "Unknown execution error",
+      duration_ms: duration,
+    });
     logger.error({ ...logCtx, err, mode }, "Order placement failed");
     return {
-      executed: false,      mode,
+      executed: false,
+      mode,
       si_decision_id: siDecisionId,
       error: err.message ?? "Unknown execution error",
       details: { raw_error: String(err) },

@@ -1,4 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
+import { createHash, timingSafeEqual as cryptoTimingSafeEqual } from "node:crypto";
 import { claudeVeto, isClaudeAvailable, type ClaudeVetoResult, type SetupContext } from "../lib/claude";
 import { getBars, getBarsHistorical, getLatestBar, getLatestTrade, getAccount, getPositions, hasValidTradingKey, isBrokerKey, placeOrder, getOrders, cancelOrder, cancelAllOrders, closePosition, getTypedPositions, calcPositionSize, getTodayFills, computeRoundTrips, type AlpacaBar, type AlpacaTimeframe, type AlpacaPosition, type AlpacaFillActivity, type PlaceOrderRequest } from "../lib/alpaca";
 import { alpacaStream, type TickListener } from "../lib/alpaca_stream";
@@ -46,17 +47,6 @@ import {
   type SystemMode,
 } from "@workspace/strategy-core";
 import { eq, desc, and, count, sql, inArray, gte } from "drizzle-orm";
-
-import { recordDecision } from "../lib/trade_journal";
-import { getCurrentMacroContext } from "../lib/macro_context_service";
-import { neutralMacroBias } from "../lib/macro_bias_engine";
-import { neutralSentiment } from "../lib/sentiment_engine";
-import {
-  runSetupDetector as _runSetupDetector,
-  computeC4ContextScore as _computeC4ContextScore,
-  computeC4ConfirmationScore as _computeC4ConfirmationScore,
-  clamp01 as _clamp01,
-} from "../lib/signal_pipeline";
 
 const router: IRouter = Router();
 const LEGACY_LIVE_TRADING_ENABLED = String(process.env.GODSVIEW_ENABLE_LIVE_TRADING ?? "").toLowerCase() === "true";
@@ -430,6 +420,18 @@ function getProvidedOperatorToken(req: Request): string | null {
   return null;
 }
 
+/**
+ * Constant-time token comparison that does not leak the expected token length.
+ *
+ * Hashes both inputs with SHA-256 so the comparison always runs on 32-byte
+ * buffers of equal length, then delegates to Node's native timingSafeEqual.
+ */
+function constantTimeTokenEqual(provided: string, expected: string): boolean {
+  const a = createHash("sha256").update(provided, "utf8").digest();
+  const b = createHash("sha256").update(expected, "utf8").digest();
+  return cryptoTimingSafeEqual(a, b);
+}
+
 function ensureTradingWriteAccess(req: Request, res: Response): boolean {
   if (isKillSwitchActive()) {
     void writeAuditEvent(req, {
@@ -480,7 +482,7 @@ function ensureTradingWriteAccess(req: Request, res: Response): boolean {
   }
 
   const provided = getProvidedOperatorToken(req);
-  if (!provided || provided !== OPERATOR_TOKEN) {
+  if (!provided || !constantTimeTokenEqual(provided, OPERATOR_TOKEN)) {
     void writeAuditEvent(req, {
       eventType: "ORDER_WRITE_BLOCKED",
       decisionState: "REJECTED",
@@ -1484,7 +1486,7 @@ router.delete("/alpaca/orders/:id", async (req, res) => {
   try {
     if (!ensureTradingWriteAccess(req, res)) return;
     if (!hasValidTradingKey) { res.status(403).json({ error: "no_trading_key" }); return; }
-    const result = await cancelOrder(req.params.id);
+    const result = await cancelOrder(String(req.params.id));
     res.json({ success: true, result });
   } catch (err) {
     req.log.error({ err }, "Failed to cancel order");
@@ -1519,7 +1521,7 @@ router.delete("/alpaca/positions/:symbol", async (req, res) => {
   try {
     if (!ensureTradingWriteAccess(req, res)) return;
     if (!hasValidTradingKey) { res.status(403).json({ error: "no_trading_key" }); return; }
-    const result = await closePosition(req.params.symbol);
+    const result = await closePosition(String(req.params.symbol ?? ""));
     res.json({ success: true, result });
   } catch (err) {
     req.log.error({ err }, "Failed to close position");
@@ -1636,21 +1638,6 @@ router.post("/alpaca/analyze", async (req, res) => {
           reason: noTrade.reason,
           decision_state: deriveDecisionState({ blocked: true, meetsThreshold: false }),
         });
-        // Phase 18: journal blocked decision for attribution analysis
-        try {
-          const macroCtx = getCurrentMacroContext();
-          recordDecision({
-            symbol:      instrument,
-            setupType:   setup,
-            direction:   recall.trend_slope_5m >= 0 ? "long" : "short",
-            decision:    "blocked",
-            blockReason: noTrade.reason,
-            macroBias:   macroCtx.macroBias  as any,
-            sentiment:   macroCtx.sentiment  as any,
-            signalPrice: entryPrice,
-            regime,
-          });
-        } catch { /* journal is best-effort — never block the pipeline */ }
         continue;
       }
 
@@ -1902,28 +1889,6 @@ router.post("/alpaca/analyze", async (req, res) => {
         // Emit SSE event for real-time dashboard
         emitSIDecision({ symbol: s.instrument, result: siResult, setup: s.setup_type, direction: s.direction, regime: s.recall_features?.regime ?? "ranging" });
 
-        // Phase 18: journal passed decision for attribution analysis
-        try {
-          const macroCtx = getCurrentMacroContext();
-          recordDecision({
-            symbol:      s.instrument,
-            setupType:   s.setup_type,
-            direction:   s.direction as "long" | "short",
-            decision:    "passed",
-            macroBias:   macroCtx.macroBias as any,
-            sentiment:   macroCtx.sentiment as any,
-            signalPrice: s.entry_price,
-            regime:      s.recall_features?.regime ?? "ranging",
-            quality: {
-              structure:  s.structure_score,
-              orderFlow:  s.order_flow_score,
-              recall:     s.recall_score,
-              ml:         siResult.win_probability ?? 0,
-              final:      siResult.edge_score ?? 0,
-            },
-          });
-        } catch { /* journal is best-effort — never block the pipeline */ }
-
         // SI veto: if SI rejects, downgrade to rejected
         if (!siResult.approved) {
           return { ...s, meets_threshold: false, execution_mode: "skip" as const, decision_state: "REJECTED" as any,
@@ -2046,11 +2011,26 @@ router.post("/alpaca/analyze", async (req, res) => {
   }
 });
 
-// Delegates to shared lib/signal_pipeline.ts (also used by scanner_scheduler)
-const runSetupDetector       = _runSetupDetector;
-const computeC4ContextScore  = _computeC4ContextScore;
-const computeC4ConfirmationScore = _computeC4ConfirmationScore;
-const clamp01 = _clamp01;
+function runSetupDetector(
+  setup: SetupType,
+  bars1m: AlpacaBar[],
+  bars5m: AlpacaBar[],
+  recall: RecallFeatures
+): { detected: boolean; direction: "long" | "short"; structure: number; orderFlow: number } {
+  if (setup === "absorption_reversal") return detectAbsorptionReversal(bars1m, bars5m, recall);
+  if (setup === "sweep_reclaim") return detectSweepReclaim(bars1m, bars5m, recall);
+  if (setup === "cvd_divergence") return detectCVDDivergence(bars1m, bars5m, recall);
+  if (setup === "breakout_failure") return detectBreakoutFailure(bars1m, bars5m, recall);
+  if (setup === "vwap_reclaim") return detectVWAPReclaim(bars1m, bars5m, recall);
+  if (setup === "opening_range_breakout") return detectOpeningRangeBreakout(bars1m, bars5m, recall);
+  if (setup === "post_news_continuation") return detectPostNewsContinuation(bars1m, bars5m, recall);
+  return detectContinuationPullback(bars1m, bars5m, recall);
+}
+
+function clamp01(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(1, value));
+}
 
 function isSetupBiasAligned(
   setupDef: ReturnType<typeof getSetupDefinition>,
@@ -2062,6 +2042,29 @@ function isSetupBiasAligned(
   if (recall.sk.bias === "bull") return slopeUp;
   if (recall.sk.bias === "bear") return !slopeUp;
   return true;
+}
+
+function computeC4ContextScore(recallScore: number, recall: RecallFeatures): number {
+  const fakeEntrySafety = 1 - clamp01(recall.fake_entry_risk);
+  const persistence = clamp01(recall.directional_persistence);
+  return clamp01(recallScore * 0.65 + fakeEntrySafety * 0.2 + persistence * 0.15);
+}
+
+function computeC4ConfirmationScore(
+  setupDef: ReturnType<typeof getSetupDefinition>,
+  detected: { structure: number; orderFlow: number },
+  recall: RecallFeatures,
+): number {
+  const reclaimBonus = setupDef.requiresReclaim ? (detected.structure >= setupDef.minStructureScore ? 1 : 0.35) : 0.7;
+  const flowConfirm = detected.orderFlow >= setupDef.minOrderFlowScore ? 1 : 0.4;
+  const earlyRiskPenalty = 1 - clamp01(recall.fake_entry_risk);
+  return clamp01(
+    detected.structure * 0.35 +
+    detected.orderFlow * 0.35 +
+    reclaimBonus * 0.2 +
+    flowConfirm * 0.05 +
+    earlyRiskPenalty * 0.05,
+  );
 }
 
 // ─── POST /api/alpaca/backtest — walk-forward on recent bars ──────────────────

@@ -16,6 +16,7 @@
 import { logger } from "./logger";
 import { alertDailyLossBreach, alertConsecutiveLosses, fireAlert } from "./alerts";
 import { setKillSwitchActive, getRiskEngineSnapshot } from "./risk_engine";
+import { persistWrite, persistRead, persistAppend } from "./persistent_store";
 
 // ── Types ─────────────────────────────────────────────
 
@@ -82,6 +83,15 @@ let lastResetDay = new Date().toDateString();
 
 // Hourly velocity tracking
 const pnlEvents: Array<{ pnl: number; ts: number }> = [];
+
+export interface DrawdownEvent {
+  timestamp: string;
+  level: BreakerLevel;
+  realized_pnl: number;
+  unrealized_pnl: number;
+  peak_equity: number;
+  reason: string;
+}
 
 // ── Public API ────────────────────────────────────────
 
@@ -235,6 +245,23 @@ function evaluateBreaker(): void {
     }
   }
 
+  // ── Persist level changes ──
+  if (newLevel !== currentLevel) {
+    try {
+      const event: DrawdownEvent = {
+        timestamp: new Date().toISOString(),
+        level: newLevel,
+        realized_pnl: realizedPnlToday,
+        unrealized_pnl: unrealizedPnl,
+        peak_equity: peakEquity,
+        reason: `Level transition: ${currentLevel} → ${newLevel}`,
+      };
+      persistAppend("drawdown_events", event, 5000);
+    } catch (err) {
+      logger.warn({ err }, "Failed to persist drawdown event");
+    }
+  }
+
   // ── Apply level transitions ──
   if (newLevel !== currentLevel) {
     const prevLevel = currentLevel;
@@ -325,4 +352,51 @@ function resetDayIfNeeded(): void {
     pnlEvents.length = 0;
     logger.info("Drawdown breaker: day reset");
   }
+}
+
+/**
+ * Get drawdown history over N days
+ */
+export function getDrawdownHistory(days: number = 30): DrawdownEvent[] {
+  try {
+    const events = persistRead<DrawdownEvent[]>("drawdown_events", []);
+    const cutoffTime = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    return events.filter((e) => new Date(e.timestamp) >= cutoffTime);
+  } catch (err) {
+    logger.warn({ err, days }, "Failed to retrieve drawdown history");
+    return [];
+  }
+}
+
+/**
+ * Drawdown health check
+ */
+export function drawdownHealthCheck(): {
+  current_level: BreakerLevel;
+  peak_equity: number;
+  time_in_throttle_ms: number;
+  time_in_halt_ms: number;
+  cooldown_active: boolean;
+} {
+  const snapshot = getBreakerSnapshot();
+  const events = getDrawdownHistory(1); // Last day
+
+  let timeInThrottle = 0;
+  let timeInHalt = 0;
+
+  for (const event of events) {
+    if (event.level === "THROTTLE") {
+      timeInThrottle += 60_000; // Rough estimate
+    } else if (event.level === "HALT") {
+      timeInHalt += 60_000;
+    }
+  }
+
+  return {
+    current_level: snapshot.level,
+    peak_equity: snapshot.peak_equity,
+    time_in_throttle_ms: timeInThrottle,
+    time_in_halt_ms: timeInHalt,
+    cooldown_active: snapshot.cooldown_active,
+  };
 }

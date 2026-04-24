@@ -1,10 +1,92 @@
 import { DecisionContractSchema, DecisionContract } from "./schemas";
 import Anthropic from "@anthropic-ai/sdk";
 import pTimeout from "p-timeout";
+import { logger as _logger } from "./logger";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || "",
 });
+const logger = _logger.child({ module: "reasoning_engine" });
+const DEFAULT_FALLBACK_WARN_COOLDOWN_MS = 30_000;
+const parsedFallbackWarnCooldownMs = Number.parseInt(
+  process.env.REASONING_FALLBACK_WARN_COOLDOWN_MS ?? String(DEFAULT_FALLBACK_WARN_COOLDOWN_MS),
+  10,
+);
+const FALLBACK_WARN_COOLDOWN_MS =
+  Number.isFinite(parsedFallbackWarnCooldownMs) && parsedFallbackWarnCooldownMs > 0
+    ? parsedFallbackWarnCooldownMs
+    : DEFAULT_FALLBACK_WARN_COOLDOWN_MS;
+
+let reasoningFallbackState: {
+  totalFallbacks: number;
+  consecutiveFallbacks: number;
+  lastFallbackAt: string | null;
+  lastError: string | null;
+  lastSymbol: string | null;
+} = {
+  totalFallbacks: 0,
+  consecutiveFallbacks: 0,
+  lastFallbackAt: null,
+  lastError: null,
+  lastSymbol: null,
+};
+let _lastFallbackWarnMs = 0;
+
+export function getReasoningFallbackState(): {
+  totalFallbacks: number;
+  consecutiveFallbacks: number;
+  lastFallbackAt: string | null;
+  lastError: string | null;
+  lastSymbol: string | null;
+  warnCooldownMs: number;
+} {
+  return {
+    totalFallbacks: reasoningFallbackState.totalFallbacks,
+    consecutiveFallbacks: reasoningFallbackState.consecutiveFallbacks,
+    lastFallbackAt: reasoningFallbackState.lastFallbackAt,
+    lastError: reasoningFallbackState.lastError,
+    lastSymbol: reasoningFallbackState.lastSymbol,
+    warnCooldownMs: FALLBACK_WARN_COOLDOWN_MS,
+  };
+}
+
+export function _resetReasoningFallbackStateForTests(): void {
+  reasoningFallbackState = {
+    totalFallbacks: 0,
+    consecutiveFallbacks: 0,
+    lastFallbackAt: null,
+    lastError: null,
+    lastSymbol: null,
+  };
+  _lastFallbackWarnMs = 0;
+}
+
+function recordClaudeSuccess(): void {
+  reasoningFallbackState.consecutiveFallbacks = 0;
+}
+
+function recordFallback(symbol: string, err: Error): void {
+  reasoningFallbackState = {
+    totalFallbacks: reasoningFallbackState.totalFallbacks + 1,
+    consecutiveFallbacks: reasoningFallbackState.consecutiveFallbacks + 1,
+    lastFallbackAt: new Date().toISOString(),
+    lastError: err.message,
+    lastSymbol: symbol,
+  };
+  const now = Date.now();
+  const payload = {
+    symbol,
+    err: err.message,
+    totalFallbacks: reasoningFallbackState.totalFallbacks,
+    consecutiveFallbacks: reasoningFallbackState.consecutiveFallbacks,
+  };
+  if (now - _lastFallbackWarnMs >= FALLBACK_WARN_COOLDOWN_MS) {
+    _lastFallbackWarnMs = now;
+    logger.warn(payload, "[reasoning] Claude unavailable — using heuristic fallback");
+    return;
+  }
+  logger.debug(payload, "[reasoning] Claude unavailable — using heuristic fallback");
+}
 
 /**
  * HEURISTIC REASONING (The "Safety Net")
@@ -137,6 +219,7 @@ export async function reasonTradeDecision(
       milliseconds: 10000,
       fallback: () => { throw new Error("Claude Timeout"); }
     });
+    recordClaudeSuccess();
 
     return DecisionContractSchema.parse({
       ...claudeResult,
@@ -145,7 +228,8 @@ export async function reasonTradeDecision(
       suggestedQty: 0, // Calculated later by SI
     });
   } catch (err) {
-    console.warn(`[Reasoning] Claude failed/timed out, falling back to heuristics. Symbol: ${symbol}`);
+    const normalizedErr = err instanceof Error ? err : new Error(String(err));
+    recordFallback(symbol, normalizedErr);
     const heuristic = getHeuristicReasoning(input);
 
     return DecisionContractSchema.parse({

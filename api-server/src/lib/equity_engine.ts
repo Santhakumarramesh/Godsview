@@ -158,14 +158,19 @@ export function generateEquityReport(opts: {
 
   // Fetch resolved entries only
   let entries = listJournalEntries({ limit: 0 }) // 0 = no limit
-    .filter(e => e.outcome !== "unknown" && e.pnlPct !== null);
+    .filter(e => e.outcome !== "unknown" && e.pnlPct != null);
 
   if (opts.symbol) entries = entries.filter(e => e.symbol === opts.symbol!.toUpperCase());
   if (opts.from)   entries = entries.filter(e => e.decidedAt.slice(0, 10) >= opts.from!);
   if (opts.to)     entries = entries.filter(e => e.decidedAt.slice(0, 10) <= opts.to!);
 
-  // Sort oldest-first for time-series computation
-  entries = [...entries].sort((a, b) => a.decidedAt.localeCompare(b.decidedAt));
+  // Sort oldest-first for time-series computation.
+  // Tie-break by id so streak/order metrics are deterministic when timestamps match.
+  entries = [...entries].sort((a, b) => {
+    const byTime = a.decidedAt.localeCompare(b.decidedAt);
+    if (byTime !== 0) return byTime;
+    return a.id.localeCompare(b.id);
+  });
 
   if (!entries.length) {
     return {
@@ -205,7 +210,8 @@ export function generateEquityReport(opts: {
   const sortedDays = Array.from(dailyMap.keys()).sort();
   const dailyReturns: number[] = sortedDays.map(day => {
     const pnls = dailyMap.get(day)!;
-    return pnls.reduce((s, v) => s + v, 0);
+    // pnlPct values are stored as percentages (e.g., 10 for +10%), so divide by 100 to get decimal form
+    return pnls.reduce((s, v) => s + v, 0) / 100;
   });
 
   // ── Equity curve & drawdown ────────────────────────────────────────────────
@@ -289,7 +295,7 @@ function computeSetupBreakdown(entries: ReturnType<typeof listJournalEntries>): 
     b.trades++;
     if (e.outcome === "win")  b.wins++;
     if (e.outcome === "loss") b.losses++;
-    if (e.pnlPct !== null) b.pnls.push(e.pnlPct);
+    if (e.pnlPct != null) b.pnls.push(e.pnlPct);
   }
   return Array.from(map.entries())
     .map(([setupType, b]) => {
@@ -315,7 +321,7 @@ function computeSymbolBreakdown(entries: ReturnType<typeof listJournalEntries>):
     b.trades++;
     if (e.outcome === "win")  b.wins++;
     if (e.outcome === "loss") b.losses++;
-    if (e.pnlPct !== null) b.pnls.push(e.pnlPct);
+    if (e.pnlPct != null) b.pnls.push(e.pnlPct);
   }
   return Array.from(map.entries())
     .map(([symbol, b]) => ({
@@ -337,7 +343,7 @@ function computeRegimeBreakdown(entries: ReturnType<typeof listJournalEntries>):
     const b = map.get(k)!;
     b.trades++;
     if (e.outcome === "win") b.wins++;
-    if (e.pnlPct !== null) b.pnls.push(e.pnlPct);
+    if (e.pnlPct != null) b.pnls.push(e.pnlPct);
   }
   return Array.from(map.entries())
     .map(([regime, b]) => ({
