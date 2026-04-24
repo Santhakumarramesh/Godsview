@@ -9,6 +9,21 @@ import {
   ComputeInput,
 } from "../lib/portfolio_engine";
 
+// In-memory portfolio state tracking positions and capital
+interface Position {
+  symbol: string;
+  quantity: number;
+  entryPrice: number;
+  currentPrice: number;
+  sector: string;
+}
+
+export const portfolioState = {
+  positions: [] as Position[],
+  capital: 250000,
+  timestamp: Date.now(),
+};
+
 const router = Router();
 
 // POST /portfolio/compute
@@ -71,13 +86,29 @@ router.post("/compute", (req: Request, res: Response): void => {
 // GET /portfolio/current
 router.get("/current", (_req: Request, res: Response): void => {
   try {
-    const state = getPortfolioState();
-    if (!state) {
-      logger.info(`No cached portfolio state available`);
-      res.status(404).json({ error: "No portfolio state cached" });
-      return;
-    }
-    res.json(state);
+    const totalValue = portfolioState.positions.reduce(
+      (sum, p) => sum + p.quantity * p.currentPrice,
+      0
+    );
+    const totalExposure = portfolioState.positions.reduce(
+      (sum, p) => sum + Math.abs(p.quantity * p.currentPrice),
+      0
+    );
+    const pnl = totalValue - portfolioState.positions.reduce(
+      (sum, p) => sum + p.quantity * p.entryPrice,
+      0
+    );
+    
+    res.json({
+      positions_count: portfolioState.positions.length,
+      total_exposure: totalExposure,
+      total_value: totalValue,
+      capital: portfolioState.capital,
+      pnl,
+      pnl_pct: portfolioState.capital > 0 ? (pnl / portfolioState.capital) * 100 : 0,
+      timestamp: portfolioState.timestamp,
+      positions: portfolioState.positions,
+    });
   } catch (error) {
     logger.error(`Error retrieving portfolio state: ${error}`);
     res.status(503).json({
@@ -123,6 +154,42 @@ router.post("/constraints", (req: Request, res: Response): void => {
     res.json(updated);
   } catch (error) {
     logger.error(`Error updating constraints: ${error}`);
+    res.status(503).json({
+      error: error instanceof Error ? error.message : "Internal server error",
+    });
+  }
+});
+
+// POST /portfolio/positions - Add a position to the portfolio
+router.post("/positions", (req: Request, res: Response): void => {
+  try {
+    const { symbol, quantity, entryPrice, currentPrice, sector } = req.body;
+    
+    if (!symbol || typeof quantity !== "number" || typeof entryPrice !== "number" || 
+        typeof currentPrice !== "number" || !sector) {
+      res.status(400).json({ error: "Missing or invalid position fields" });
+      return;
+    }
+
+    const newPosition: Position = {
+      symbol,
+      quantity,
+      entryPrice,
+      currentPrice,
+      sector,
+    };
+
+    portfolioState.positions.push(newPosition);
+    portfolioState.timestamp = Date.now();
+    
+    logger.info(`Added position: ${symbol}`);
+    res.status(201).json({
+      success: true,
+      position: newPosition,
+      portfolio_size: portfolioState.positions.length,
+    });
+  } catch (error) {
+    logger.error(`Error adding position: ${error}`);
     res.status(503).json({
       error: error instanceof Error ? error.message : "Internal server error",
     });

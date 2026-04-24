@@ -21,71 +21,99 @@ import type { SuperSignal } from "../lib/super_intelligence";
 
 const router = Router();
 
-// ── GET /api/paper-trading/state ────────────────────────────────────
+// ── GET /api/paper-trading/state — Get paper trading state ──────────────────
 
 router.get("/api/paper-trading/state", (req: Request, res: Response): void => {
   try {
     const state = getPaperTradingState();
-    res.status(200).json(state);
+    res.status(200).json({
+      ...state,
+      timestamp: Date.now(),
+      uptime: process.uptime(),
+    });
   } catch (err) {
     logger.error({ err }, "[paper-trading-routes] Failed to get state");
-    res.status(503).json({ error: "Failed to get state" });
+    res.status(503).json({ error: "Failed to get state", timestamp: Date.now() });
   }
 });
 
-// ── POST /api/paper-trading/start ───────────────────────────────────
+// ── POST /api/paper-trading/start — Start paper trading ──────────────────────
 
 router.post("/api/paper-trading/start", (req: Request, res: Response): void => {
   try {
     const config: Partial<PaperTradingConfig> = req.body.config || {};
     const result = startPaperTrading(config);
-    res.status(result.success ? 200 : 400).json(result);
+    res.status(result.success ? 200 : 503).json({
+      ...result,
+      timestamp: Date.now(),
+    });
   } catch (err) {
     logger.error({ err }, "[paper-trading-routes] Failed to start");
-    res.status(503).json({ error: "Failed to start paper trading" });
+    res.status(503).json({ 
+      error: "Failed to start paper trading",
+      timestamp: Date.now(),
+    });
   }
 });
 
-// ── POST /api/paper-trading/stop ────────────────────────────────────
+// ── POST /api/paper-trading/stop — Stop paper trading ────────────────────────
 
 router.post("/api/paper-trading/stop", (req: Request, res: Response): void => {
   try {
     const result = stopPaperTrading();
-    res.status(result.success ? 200 : 400).json(result);
+    res.status(result.success ? 200 : 503).json({
+      ...result,
+      timestamp: Date.now(),
+    });
   } catch (err) {
     logger.error({ err }, "[paper-trading-routes] Failed to stop");
-    res.status(503).json({ error: "Failed to stop paper trading" });
+    res.status(503).json({ 
+      error: "Failed to stop paper trading",
+      timestamp: Date.now(),
+    });
   }
 });
 
-// ── POST /api/paper-trading/pause ───────────────────────────────────
+// ── POST /api/paper-trading/pause — Pause paper trading ──────────────────────
 
 router.post("/api/paper-trading/pause", (req: Request, res: Response): void => {
   try {
     const result = pausePaperTrading();
-    res.status(result.success ? 200 : 400).json(result);
+    res.status(result.success ? 200 : 503).json({
+      ...result,
+      timestamp: Date.now(),
+    });
   } catch (err) {
     logger.error({ err }, "[paper-trading-routes] Failed to pause");
-    res.status(503).json({ error: "Failed to pause paper trading" });
+    res.status(503).json({ 
+      error: "Failed to pause paper trading",
+      timestamp: Date.now(),
+    });
   }
 });
 
-// ── POST /api/paper-trading/resume ──────────────────────────────────
+// ── POST /api/paper-trading/resume — Resume paper trading ────────────────────
 
 router.post(
   "/api/paper-trading/resume",
   (req: Request, res: Response): void => {
     try {
       const result = resumePaperTrading();
-      res.status(result.success ? 200 : 400).json(result);
+      res.status(result.success ? 200 : 503).json({
+        ...result,
+        timestamp: Date.now(),
+      });
     } catch (err) {
       logger.error({ err }, "[paper-trading-routes] Failed to resume");
-      res.status(503).json({ error: "Failed to resume paper trading" });
+      res.status(503).json({ 
+        error: "Failed to resume paper trading",
+        timestamp: Date.now(),
+      });
     }
   }
 );
 
-// ── GET /api/paper-trading/report ───────────────────────────────────
+// ── GET /api/paper-trading/report — Get paper trading report ──────────────────
 
 router.get("/api/paper-trading/report", (req: Request, res: Response): void => {
   try {
@@ -94,38 +122,58 @@ router.get("/api/paper-trading/report", (req: Request, res: Response): void => {
       ? Math.max(1, Math.min(120, parseInt(String(daysStr), 10)))
       : 30;
     const report = getPaperTradingReport(days);
-    res.status(200).json(report);
+    res.status(200).json({
+      ...report,
+      daysRequested: days,
+      timestamp: Date.now(),
+    });
   } catch (err) {
     logger.error({ err }, "[paper-trading-routes] Failed to get report");
-    res.status(503).json({ error: "Failed to get report" });
+    res.status(503).json({ 
+      error: "Failed to get report",
+      timestamp: Date.now(),
+    });
   }
 });
 
-// ── GET /api/paper-trading/health ───────────────────────────────────
+// ── GET /api/paper-trading/health — Paper trading health check ───────────────
 
 router.get("/api/paper-trading/health", (req: Request, res: Response): void => {
   try {
     const health = paperTradingHealthCheck();
-    res.status(200).json(health);
+    res.status(200).json({
+      ...health,
+      uptime: process.uptime(),
+      timestamp: Date.now(),
+    });
   } catch (err) {
     logger.error({ err }, "[paper-trading-routes] Failed to get health");
-    res.status(503).json({ error: "Failed to get health status" });
+    res.status(503).json({ 
+      error: "Failed to get health status",
+      timestamp: Date.now(),
+    });
   }
 });
 
-// ── GET /api/paper-trading/config ───────────────────────────────────
+// ── GET /api/paper-trading/config — Get paper trading config ──────────────────
 
 router.get("/api/paper-trading/config", (req: Request, res: Response): void => {
   try {
     const config = getPaperTradingConfig();
-    res.status(200).json(config);
+    res.status(200).json({
+      config,
+      timestamp: Date.now(),
+    });
   } catch (err) {
     logger.error({ err }, "[paper-trading-routes] Failed to get config");
-    res.status(503).json({ error: "Failed to get config" });
+    res.status(503).json({ 
+      error: "Failed to get config",
+      timestamp: Date.now(),
+    });
   }
 });
 
-// ── POST /api/paper-trading/config ──────────────────────────────────
+// ── POST /api/paper-trading/config — Update paper trading config ──────────────
 
 router.post(
   "/api/paper-trading/config",
@@ -133,15 +181,21 @@ router.post(
     try {
       const config = req.body as Partial<PaperTradingConfig>;
       const updated = setPaperTradingConfig(config);
-      res.status(200).json(updated);
+      res.status(200).json({
+        ...updated,
+        timestamp: Date.now(),
+      });
     } catch (err) {
       logger.error({ err }, "[paper-trading-routes] Failed to set config");
-      res.status(503).json({ error: "Failed to set config" });
+      res.status(503).json({ 
+        error: "Failed to set config",
+        timestamp: Date.now(),
+      });
     }
   }
 );
 
-// ── POST /api/paper-trading/signal ──────────────────────────────────
+// ── POST /api/paper-trading/signal — Process paper trading signal ──────────────
 
 router.post(
   "/api/paper-trading/signal",
@@ -160,15 +214,22 @@ router.post(
       if (!signal.symbol || !signal.entry_price) {
         res.status(400).json({
           error: "Missing required fields: symbol, entry_price",
+          timestamp: Date.now(),
         });
         return;
       }
 
       const result = await processPaperSignal(signal);
-      res.status(result.approved ? 200 : 400).json(result);
+      res.status(result.approved ? 200 : 503).json({
+        ...result,
+        timestamp: Date.now(),
+      });
     } catch (err) {
       logger.error({ err }, "[paper-trading-routes] Failed to process signal");
-      res.status(503).json({ error: "Failed to process signal" });
+      res.status(503).json({ 
+        error: "Failed to process signal",
+        timestamp: Date.now(),
+      });
     }
   }
 );

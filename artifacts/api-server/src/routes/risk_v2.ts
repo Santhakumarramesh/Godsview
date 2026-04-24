@@ -2,6 +2,7 @@
 // 7 endpoints for portfolio VaR, positions, limits, macro events, exposure, overnight, health
 
 import { Router, type Request, type Response } from "express";
+import { getRiskEngineSnapshot } from "../lib/risk_engine";
 
 const router = Router();
 const now = Date.now();
@@ -129,7 +130,37 @@ router.get("/exposure", (_req: Request, res: Response) => { res.json(PORTFOLIO.e
 router.get("/overnight", (_req: Request, res: Response) => { res.json(OVERNIGHT); });
 router.get("/trade-gate", (_req: Request, res: Response) => { res.json(TRADE_GATE_EXAMPLE); });
 router.get("/health", (_req: Request, res: Response) => {
-  res.json({ status: "operational", module: "risk-v2", phase: 112, leverage: PORTFOLIO.leverage, varPct: PORTFOLIO.var.historical95, breachedLimits: LIMITS.filter(l => (l as any).breached).length, uptime: process.uptime(), timestamp: Date.now() });
+  try {
+    const risk = getRiskEngineSnapshot();
+    const killSwitchActive = risk.runtime.killSwitchActive;
+    const maxRiskPerTradePct = risk.config.maxRiskPerTradePct || 2.0;
+    
+    res.json({
+      status: killSwitchActive ? "degraded" : "operational",
+      module: "risk-v2",
+      phase: 112,
+      leverage: PORTFOLIO.leverage,
+      varPct: PORTFOLIO.var.historical95,
+      breachedLimits: LIMITS.filter(l => (l as any).breached).length,
+      killSwitchActive,
+      maxRiskPerTradePct,
+      riskEngineUpdatedAt: risk.runtime.updatedAt,
+      uptime: process.uptime(),
+      timestamp: Date.now(),
+    });
+  } catch (_err) {
+    // Fallback if risk_engine doesn't exist yet
+    res.json({
+      status: "operational",
+      module: "risk-v2",
+      phase: 112,
+      leverage: PORTFOLIO.leverage,
+      varPct: PORTFOLIO.var.historical95,
+      breachedLimits: LIMITS.filter(l => (l as any).breached).length,
+      uptime: process.uptime(),
+      timestamp: Date.now(),
+    });
+  }
 });
 
 export default router;

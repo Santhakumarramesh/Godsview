@@ -76,8 +76,10 @@ check_endpoint "Market structure" "$API/api/market-structure/analyze?symbol=BTCU
 # ============================================================================
 header "4. ORDER FLOW & MICROSTRUCTURE"
 # ============================================================================
-check_endpoint "Order flow features" "$API/api/orderbook/features?symbol=BTCUSD"
-check_endpoint "Microstructure" "$API/api/microstructure/snapshot?symbol=BTCUSD"
+check_endpoint "Order book snapshot" "$API/api/orderbook/snapshot?symbol=BTCUSD"
+check_endpoint "Market microstructure" "$API/api/market/microstructure?symbol=BTCUSD"
+check_endpoint "Liquidity zones" "$API/api/market/liquidity-zones?symbol=BTCUSD"
+check_endpoint "Microstructure current" "$API/api/microstructure/BTCUSD/current"
 
 # ============================================================================
 header "5. RISK ENGINE"

@@ -27,7 +27,7 @@ const router = Router();
 router.get("/api/execution-intelligence/snapshot", async (_req: Request, res: Response) => {
   try {
     const snapshot = getExecutionIntelligenceSnapshot();
-    res.json({ ok: true, snapshot });
+    res.status(200).json({ ok: true, snapshot, timestamp: Date.now() });
   } catch (err) {
     res.status(503).json({ ok: false, error: String(err) });
   }
@@ -44,7 +44,7 @@ router.post("/api/execution-intelligence/slippage", async (req: Request, res: Re
     const estimate = estimateSlippage({
       symbol, direction: direction ?? "long", spread, price, volume, atr, orderSizeUsd,
     });
-    res.json({ ok: true, estimate });
+    res.status(200).json({ ok: true, estimate, timestamp: Date.now() });
   } catch (err) {
     res.status(503).json({ ok: false, error: String(err) });
   }
@@ -62,7 +62,7 @@ router.post("/api/execution-intelligence/plan", async (req: Request, res: Respon
       symbol, direction: direction ?? "long", entryPrice, stopLoss, atr,
       spread, volume, equity, riskPct, riskReward,
     });
-    res.json({ ok: true, plan });
+    res.status(200).json({ ok: true, plan, timestamp: Date.now() });
   } catch (err) {
     res.status(503).json({ ok: false, error: String(err) });
   }
@@ -77,7 +77,7 @@ router.post("/api/execution-intelligence/exit-ladder", async (req: Request, res:
       return;
     }
     const ladder = buildExitLadder({ entryPrice, stopLoss, direction: direction ?? "long", targets, riskReward });
-    res.json({ ok: true, ladder });
+    res.status(200).json({ ok: true, ladder, timestamp: Date.now() });
   } catch (err) {
     res.status(503).json({ ok: false, error: String(err) });
   }
@@ -95,7 +95,7 @@ router.post("/api/execution-intelligence/dynamic-stop", async (req: Request, res
       entryPrice, currentPrice, initialStop, currentStop,
       direction: direction ?? "long", atr, atrMultiplier, highSinceEntry, lowSinceEntry,
     });
-    res.json({ ok: true, stop });
+    res.status(200).json({ ok: true, stop, timestamp: Date.now() });
   } catch (err) {
     res.status(503).json({ ok: false, error: String(err) });
   }
@@ -117,7 +117,7 @@ router.post("/api/execution-intelligence/quality-report", async (req: Request, r
       fillTimeMs: fillTimeMs ?? 0,
       orderType: orderType ?? "MARKET",
     });
-    res.json({ ok: true, report });
+    res.status(200).json({ ok: true, report, timestamp: Date.now() });
   } catch (err) {
     res.status(503).json({ ok: false, error: String(err) });
   }
@@ -127,7 +127,7 @@ router.post("/api/execution-intelligence/quality-report", async (req: Request, r
 router.post("/api/execution-intelligence/reset", async (_req: Request, res: Response) => {
   try {
     resetExecutionIntelligence();
-    res.json({ ok: true, message: "Execution intelligence state reset" });
+    res.status(200).json({ ok: true, message: "Execution intelligence state reset", timestamp: Date.now() });
   } catch (err) {
     res.status(503).json({ ok: false, error: String(err) });
   }

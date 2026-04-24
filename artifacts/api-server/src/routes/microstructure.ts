@@ -56,7 +56,7 @@ function asMicrostructureError(err: unknown): { status: number; code: string; me
     };
   }
   return {
-    status: 500,
+    status: 503,
     code: "microstructure_failed",
     message,
   };

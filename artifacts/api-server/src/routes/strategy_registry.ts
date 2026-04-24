@@ -16,6 +16,17 @@ import {
   type StrategyState,
 } from "../lib/strategy_registry.js";
 
+// In-memory strategy Map for promotion state tracking
+interface InMemoryStrategy {
+  id: string;
+  name: string;
+  state: "draft" | "testing" | "live";
+  promotedAt?: number;
+  winRate?: number;
+}
+
+const strategyMap = new Map<string, InMemoryStrategy>();
+
 const router = Router();
 
 // GET /api/strategy-registry/snapshot
@@ -112,7 +123,77 @@ router.post("/api/strategy-registry/:id/performance", async (req: Request, res: 
 router.post("/api/strategy-registry/reset", async (_req: Request, res: Response) => {
   try {
     resetRegistry();
+    strategyMap.clear();
     res.json({ ok: true, message: "Strategy registry reset" });
+  } catch (err) {
+    res.status(503).json({ ok: false, error: String(err) });
+  }
+});
+
+// POST /api/strategy-registry/:id/promote-track
+// Track strategy promotion state in-memory (draft -> testing -> live)
+router.post("/api/strategy-registry/:id/promote-track", async (req: Request, res: Response) => {
+  try {
+    const { newState, winRate } = req.body;
+    const strategyId = String(req.params.id);
+    
+    if (!["draft", "testing", "live"].includes(newState)) {
+      res.status(400).json({ ok: false, error: "Invalid state" });
+      return;
+    }
+
+    let strategy = strategyMap.get(strategyId);
+    if (!strategy) {
+      strategy = {
+        id: strategyId,
+        name: `Strategy ${strategyId}`,
+        state: "draft",
+      };
+    }
+
+    const validStates = ["draft", "testing", "live"] as const;
+    const currentIndex = validStates.indexOf(strategy.state as any);
+    const newIndex = validStates.indexOf(newState as any);
+
+    if (newIndex < currentIndex) {
+      res.status(400).json({ ok: false, error: "Cannot demote strategy" });
+      return;
+    }
+
+    strategy.state = newState;
+    strategy.promotedAt = Date.now();
+    if (typeof winRate === "number") {
+      strategy.winRate = winRate;
+    }
+
+    strategyMap.set(strategyId, strategy);
+
+    res.json({
+      ok: true,
+      strategy,
+      message: `Strategy promoted to ${newState}`,
+    });
+  } catch (err) {
+    res.status(503).json({ ok: false, error: String(err) });
+  }
+});
+
+// GET /api/strategy-registry/states
+// Get all in-memory strategy promotion states
+router.get("/api/strategy-registry/states", async (_req: Request, res: Response) => {
+  try {
+    const strategies = Array.from(strategyMap.values());
+    const byState = {
+      draft: strategies.filter(s => s.state === "draft"),
+      testing: strategies.filter(s => s.state === "testing"),
+      live: strategies.filter(s => s.state === "live"),
+    };
+
+    res.json({
+      ok: true,
+      count: strategies.length,
+      byState,
+    });
   } catch (err) {
     res.status(503).json({ ok: false, error: String(err) });
   }

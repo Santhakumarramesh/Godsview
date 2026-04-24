@@ -25,6 +25,20 @@ import {
 import { logger } from "../lib/logger";
 import { authGuard } from "../lib/auth_guard";
 
+// In-memory trade memory storage
+interface TradeMemory {
+  id: string;
+  symbol: string;
+  direction: "long" | "short";
+  entryPrice: number;
+  exitPrice?: number;
+  pnl?: number;
+  timestamp: number;
+  tags?: string[];
+}
+
+const tradeMemories: TradeMemory[] = [];
+
 const router = Router();
 
 /**
@@ -120,7 +134,7 @@ router.get("/context", authGuard, async (req: Request, res: Response) => {
     const context = JSON.parse(marketContext as string);
     const prediction = contextMemory.queryContext(context);
 
-    let recommendations = [];
+    let recommendations: any[] = [];
     if (symbol) {
       const patterns = contextMemory.getTemporalPatterns(symbol as string);
       recommendations = contextMemory.getBestStrategiesForContext(context);
@@ -144,28 +158,36 @@ router.get("/context", authGuard, async (req: Request, res: Response) => {
 
 /**
  * GET /api/memory/similar
- * Find similar market states
+ * Find similar trade memories by symbol and direction
  */
 router.get("/similar", authGuard, async (req: Request, res: Response) => {
   try {
-    const { marketState, n } = req.query;
+    const { symbol, direction, n } = req.query;
 
-    if (!marketState) {
+    if (!symbol) {
       return res.status(400).json({
-        error: "Missing marketState",
+        error: "Missing symbol",
       });
     }
 
-    const state = JSON.parse(marketState as string);
     const count = Math.min(20, parseInt((n as string) || "10"));
+    const dir = direction as "long" | "short" | undefined;
 
-    const similar = marketEmbeddings.findSimilar(state, count);
-    const clusters = marketEmbeddings.clusterStates([state]);
+    // Basic matching by symbol and direction
+    let similar = tradeMemories.filter(
+      m => m.symbol.toUpperCase() === (symbol as string).toUpperCase()
+    );
+
+    if (dir) {
+      similar = similar.filter(m => m.direction === dir);
+    }
+
+    similar = similar.slice(-count);
 
     res.json({
       success: true,
-      similar,
-      clusters,
+      count: similar.length,
+      memories: similar,
     });
   } catch (error: any) {
     logger.error({ error }, "Failed to find similar states");
@@ -397,6 +419,65 @@ router.post("/import", authGuard, async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error({ error }, "Failed to import memory");
+    res.status(503).json({
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/memory/store-trade
+ * Store a trade memory in-memory
+ */
+router.post("/store-trade", authGuard, async (req: Request, res: Response) => {
+  try {
+    const { symbol, direction, entryPrice, exitPrice, pnl, tags } = req.body;
+
+    if (!symbol || !direction || typeof entryPrice !== "number") {
+      return res.status(400).json({
+        error: "Missing symbol, direction, or entryPrice",
+      });
+    }
+
+    const memory: TradeMemory = {
+      id: `mem_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      symbol,
+      direction,
+      entryPrice,
+      exitPrice,
+      pnl,
+      timestamp: Date.now(),
+      tags,
+    };
+
+    tradeMemories.push(memory);
+    logger.info({ symbol, direction }, "Trade memory stored");
+
+    res.status(201).json({
+      success: true,
+      memory,
+    });
+  } catch (error: any) {
+    logger.error({ error }, "Failed to store trade memory");
+    res.status(503).json({
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/memory/all-trades
+ * Get all stored trade memories
+ */
+router.get("/all-trades", authGuard, async (_req: Request, res: Response) => {
+  try {
+    res.json({
+      success: true,
+      count: tradeMemories.length,
+      memories: tradeMemories,
+    });
+  } catch (error: any) {
+    logger.error({ error }, "Failed to get trade memories");
     res.status(503).json({
       error: error.message,
     });
