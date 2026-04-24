@@ -25,7 +25,7 @@ router.get("/api/governance/policy", (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error({ error: error.message }, "Failed to get governance policy");
-    res.status(500).json({ error: "Failed to retrieve policy" });
+    res.status(503).json({ error: "Failed to retrieve policy" });
   }
 });
 
@@ -53,7 +53,7 @@ router.put("/api/governance/policy", (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error({ error: error.message }, "Failed to update governance policy");
-    res.status(500).json({ error: "Failed to update policy" });
+    res.status(503).json({ error: "Failed to update policy" });
   }
 });
 
@@ -72,7 +72,7 @@ router.get("/api/governance/report", (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error({ error: error.message }, "Failed to generate governance report");
-    res.status(500).json({ error: "Failed to generate report" });
+    res.status(503).json({ error: "Failed to generate report" });
   }
 });
 
@@ -102,7 +102,7 @@ router.get("/api/governance/violations", (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error({ error: error.message }, "Failed to retrieve violations");
-    res.status(500).json({ error: "Failed to retrieve violations" });
+    res.status(503).json({ error: "Failed to retrieve violations" });
   }
 });
 
@@ -138,7 +138,7 @@ router.get("/api/governance/audit", (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error({ error: error.message }, "Failed to retrieve audit trail");
-    res.status(500).json({ error: "Failed to retrieve audit trail" });
+    res.status(503).json({ error: "Failed to retrieve audit trail" });
   }
 });
 

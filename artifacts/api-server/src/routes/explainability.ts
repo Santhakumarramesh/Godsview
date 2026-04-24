@@ -35,7 +35,7 @@ router.get("/packets", (_req: Request, res: Response) => {
       packets: packets.slice(-limit).reverse(),
     });
   } catch (err: any) {
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(503).json({ ok: false, error: err.message });
   }
 });
 
@@ -53,7 +53,7 @@ router.get("/packets/:id", (req: Request, res: Response) => {
     }
     res.json({ ok: true, packet });
   } catch (err: any) {
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(503).json({ ok: false, error: err.message });
   }
 });
 
@@ -80,7 +80,7 @@ router.get("/comparison", (_req: Request, res: Response) => {
 
     res.json({ ok: true, comparison: result });
   } catch (err: any) {
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(503).json({ ok: false, error: err.message });
   }
 });
 
@@ -99,7 +99,7 @@ router.get("/replays", (_req: Request, res: Response) => {
       replays: results,
     });
   } catch (err: any) {
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(503).json({ ok: false, error: err.message });
   }
 });
 
@@ -113,7 +113,7 @@ router.post("/replays", (req: Request, res: Response) => {
 
     res.json({ ok: true, replay: result });
   } catch (err: any) {
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(503).json({ ok: false, error: err.message });
   }
 });
 
@@ -138,7 +138,7 @@ router.get("/post-mortems", (_req: Request, res: Response) => {
       postMortems: pms.slice(-limit).reverse(),
     });
   } catch (err: any) {
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(503).json({ ok: false, error: err.message });
   }
 });
 
@@ -169,7 +169,7 @@ router.get("/post-mortems/aggregate", (_req: Request, res: Response) => {
 
     res.json({ ok: true, analysis });
   } catch (err: any) {
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(503).json({ ok: false, error: err.message });
   }
 });
 

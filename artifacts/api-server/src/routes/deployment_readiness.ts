@@ -14,7 +14,7 @@ router.get("/system/deployment/readiness", async (req, res) => {
     res.status(statusCode).json(report);
   } catch (err) {
     req.log.error({ err }, "Deployment readiness check failed");
-    res.status(500).json({ error: "deployment_readiness_failed", message: String(err) });
+    res.status(503).json({ error: "deployment_readiness_failed", message: String(err) });
   }
 });
 
@@ -29,7 +29,7 @@ router.get("/ops/deployment/readiness", async (req, res) => {
     res.status(statusCode).json(report);
   } catch (err) {
     req.log.error({ err }, "Ops deployment readiness check failed");
-    res.status(500).json({ error: "deployment_readiness_failed", message: String(err) });
+    res.status(503).json({ error: "deployment_readiness_failed", message: String(err) });
   }
 });
 

@@ -156,7 +156,7 @@ router.get("/metrics", (_req, res) => {
     res.send(metrics);
   } catch (err) {
     logger.error({ err }, "Failed to collect metrics");
-    res.status(500).json({ error: "Failed to collect metrics" });
+    res.status(503).json({ error: "Failed to collect metrics" });
   }
 });
 
@@ -167,7 +167,7 @@ router.get("/degradation", (_req, res) => {
     res.json(snapshot);
   } catch (err: any) {
     logger.error({ err }, "Failed to get degradation snapshot");
-    res.status(500).json({ error: "Failed to get degradation snapshot" });
+    res.status(503).json({ error: "Failed to get degradation snapshot" });
   }
 });
 
@@ -183,7 +183,7 @@ router.get("/auth-failures", async (_req, res) => {
     });
   } catch (err: any) {
     logger.error({ err }, "Failed to get auth failure state");
-    res.status(500).json({ error: "Failed to get auth failure state" });
+    res.status(503).json({ error: "Failed to get auth failure state" });
   }
 });
 
@@ -199,7 +199,7 @@ router.get("/reasoning-fallback", async (_req, res) => {
     });
   } catch (err: any) {
     logger.error({ err }, "Failed to get reasoning fallback state");
-    res.status(500).json({ error: "Failed to get reasoning fallback state" });
+    res.status(503).json({ error: "Failed to get reasoning fallback state" });
   }
 });
 

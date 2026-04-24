@@ -76,7 +76,7 @@ router.get("/api/calibration/scheduler/score", (_req: Request, res: Response) =>
       { err: err?.message ?? String(err) },
       "Calibration score lookup failed",
     );
-    res.status(500).json({
+    res.status(503).json({
       error: "score_lookup_failed",
       message: err?.message ?? "Unknown error",
     });
@@ -101,7 +101,7 @@ router.post(
         { err: err?.message ?? String(err) },
         "Calibration force-cycle failed",
       );
-      res.status(500).json({
+      res.status(503).json({
         error: "force_cycle_failed",
         message: err?.message ?? "Unknown error",
       });

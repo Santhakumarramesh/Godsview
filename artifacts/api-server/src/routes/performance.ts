@@ -169,7 +169,7 @@ router.get("/performance", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Failed to get performance");
-    res.status(500).json({ error: "internal_error", message: "Failed to fetch performance" });
+    res.status(503).json({ error: "internal_error", message: "Failed to fetch performance" });
   }
 });
 

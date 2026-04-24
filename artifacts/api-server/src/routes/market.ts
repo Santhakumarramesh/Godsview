@@ -89,7 +89,7 @@ router.get("/bars/:symbol", async (req: Request, res: Response) => {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return res.status(500).json({ error: message });
+    return res.status(503).json({ error: message });
   }
 });
 
@@ -118,7 +118,7 @@ router.get("/price/:symbol", async (req: Request, res: Response) => {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return res.status(500).json({ error: message });
+    return res.status(503).json({ error: message });
   }
 });
 
@@ -148,7 +148,7 @@ router.get("/health", (req: Request, res: Response) => {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return res.status(500).json({ error: message });
+    return res.status(503).json({ error: message });
   }
 });
 
@@ -174,7 +174,7 @@ router.get("/execution/stats", (req: Request, res: Response) => {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return res.status(500).json({ error: message });
+    return res.status(503).json({ error: message });
   }
 });
 
@@ -199,7 +199,7 @@ router.get("/latency", (req: Request, res: Response) => {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return res.status(500).json({ error: message });
+    return res.status(503).json({ error: message });
   }
 });
 
@@ -236,7 +236,7 @@ router.get("/replay/:id", (req: Request, res: Response) => {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return res.status(500).json({ error: message });
+    return res.status(503).json({ error: message });
   }
 });
 
@@ -279,7 +279,7 @@ router.post("/replay/query", (req: Request, res: Response) => {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return res.status(500).json({ error: message });
+    return res.status(503).json({ error: message });
   }
 });
 
@@ -305,7 +305,7 @@ router.get("/replay/stats", (req: Request, res: Response) => {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return res.status(500).json({ error: message });
+    return res.status(503).json({ error: message });
   }
 });
 
@@ -324,7 +324,7 @@ router.post("/replay/store", (req: Request, res: Response) => {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return res.status(500).json({ error: message });
+    return res.status(503).json({ error: message });
   }
 });
 
@@ -352,7 +352,7 @@ router.post("/replay/whatif", (req: Request, res: Response) => {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return res.status(500).json({ error: message });
+    return res.status(503).json({ error: message });
   }
 });
 

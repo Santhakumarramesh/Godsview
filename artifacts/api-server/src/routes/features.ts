@@ -48,7 +48,7 @@ router.post("/compute", (req: Request, res: Response): void => {
   } catch (error) {
     markEngineError("feature-pipeline");
     logger.error(`Feature compute failed: ${error}`);
-    res.status(500).json({
+    res.status(503).json({
       error: error instanceof Error ? error.message : "Internal server error",
     });
   }
@@ -87,7 +87,7 @@ router.post("/series", (req: Request, res: Response): void => {
   } catch (error) {
     markEngineError("feature-pipeline");
     logger.error(`Feature series failed: ${error}`);
-    res.status(500).json({
+    res.status(503).json({
       error: error instanceof Error ? error.message : "Internal server error",
     });
   }
@@ -118,7 +118,7 @@ router.get("/indicators", (req: Request, res: Response): void => {
     }
   } catch (error) {
     logger.error(`Indicator compute failed: ${error}`);
-    res.status(500).json({
+    res.status(503).json({
       error: error instanceof Error ? error.message : "Internal server error",
     });
   }

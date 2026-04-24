@@ -151,7 +151,7 @@ router.get("/brain/entities", async (req, res) => {
     res.json({ count: rows.length, entities: rows });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch brain entities");
-    res.status(500).json({ error: "internal_error", message: "Failed to fetch brain entities" });
+    res.status(503).json({ error: "internal_error", message: "Failed to fetch brain entities" });
   }
 });
 
@@ -321,7 +321,7 @@ router.get("/brain/snapshot", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch brain snapshot");
-    res.status(500).json({ error: "internal_error", message: "Failed to fetch brain snapshot" });
+    res.status(503).json({ error: "internal_error", message: "Failed to fetch brain snapshot" });
   }
 });
 
@@ -339,7 +339,7 @@ router.get("/brain/consciousness", async (req, res) => {
     res.json({ has_data: true, ...consciousness });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch consciousness snapshot");
-    res.status(500).json({ error: "internal_error", message: "Failed to fetch consciousness snapshot" });
+    res.status(503).json({ error: "internal_error", message: "Failed to fetch consciousness snapshot" });
   }
 });
 
@@ -370,7 +370,7 @@ router.post("/brain/update", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Failed to run brain update");
-    res.status(500).json({
+    res.status(503).json({
       error: "internal_error",
       message: err instanceof Error ? err.message : "Failed to run brain update",
     });
@@ -400,7 +400,7 @@ router.post("/brain/evolve", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Failed to run brain evolve cycle");
-    res.status(500).json({
+    res.status(503).json({
       error: "internal_error",
       message: err instanceof Error ? err.message : "Failed to run brain evolve cycle",
     });
@@ -441,7 +441,7 @@ router.get("/brain/:symbol/memories", async (req, res) => {
     res.json({ symbol, count: memories.length, memories });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch brain memories");
-    res.status(500).json({ error: "internal_error", message: "Failed to fetch brain memories" });
+    res.status(503).json({ error: "internal_error", message: "Failed to fetch brain memories" });
   }
 });
 
@@ -538,7 +538,7 @@ router.get("/brain/:symbol/context", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch brain context");
-    res.status(500).json({ error: "internal_error", message: "Failed to fetch brain context" });
+    res.status(503).json({ error: "internal_error", message: "Failed to fetch brain context" });
   }
 });
 
@@ -581,7 +581,7 @@ router.get("/brain/:symbol/dna", async (req, res) => {
     res.json(dna);
   } catch (err) {
     req.log.error({ err }, "Failed to compute Market DNA");
-    res.status(500).json({ error: "internal_error", message: "Failed to compute Market DNA" });
+    res.status(503).json({ error: "internal_error", message: "Failed to compute Market DNA" });
   }
 });
 
@@ -594,7 +594,7 @@ router.get("/brain/:symbol/memory", async (req, res) => {
     res.json(memory);
   } catch (err) {
     req.log.error({ err }, "Failed to compute setup memory");
-    res.status(500).json({ error: "internal_error", message: "Failed to compute setup memory" });
+    res.status(503).json({ error: "internal_error", message: "Failed to compute setup memory" });
   }
 });
 
@@ -651,7 +651,7 @@ router.get("/brain/:symbol/intelligence", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch brain intelligence");
-    res.status(500).json({ error: "internal_error", message: "Failed to fetch brain intelligence" });
+    res.status(503).json({ error: "internal_error", message: "Failed to fetch brain intelligence" });
   }
 });
 
@@ -692,7 +692,7 @@ router.get("/brain/:symbol/smc", async (req, res) => {
     res.json(smc);
   } catch (err) {
     req.log.error({ err }, "Failed to compute SMC state");
-    res.status(500).json({ error: "internal_error", message: "Failed to compute SMC state" });
+    res.status(503).json({ error: "internal_error", message: "Failed to compute SMC state" });
   }
 });
 
@@ -715,7 +715,7 @@ router.get("/brain/:symbol/regime", async (req, res) => {
     res.json({ symbol, ...regime });
   } catch (err) {
     req.log.error({ err }, "Failed to compute regime state");
-    res.status(500).json({ error: "internal_error", message: "Failed to compute regime state" });
+    res.status(503).json({ error: "internal_error", message: "Failed to compute regime state" });
   }
 });
 
@@ -752,7 +752,7 @@ router.get("/brain/:symbol/orderflow", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Failed to compute orderflow state");
-    res.status(500).json({ error: "internal_error", message: "Failed to compute orderflow state" });
+    res.status(503).json({ error: "internal_error", message: "Failed to compute orderflow state" });
   }
 });
 
@@ -775,7 +775,7 @@ router.get("/brain/:symbol/stress", async (req, res) => {
     res.json({ symbol, volatility: vol });
   } catch (err) {
     req.log.error({ err }, "Failed to compute stress state");
-    res.status(500).json({ error: "internal_error", message: "Failed to compute stress state" });
+    res.status(503).json({ error: "internal_error", message: "Failed to compute stress state" });
   }
 });
 
@@ -820,7 +820,7 @@ router.get("/brain/:symbol/brain-state", async (req, res) => {
     res.json(brainState);
   } catch (err) {
     req.log.error({ err }, "Failed to compute brain state");
-    res.status(500).json({ error: "internal_error", message: "Failed to compute brain state" });
+    res.status(503).json({ error: "internal_error", message: "Failed to compute brain state" });
   }
 });
 
@@ -859,7 +859,7 @@ router.get("/brain/market-stress", async (req, res) => {
     return res.json(marketStress);
   } catch (err) {
     req.log.error({ err }, "Failed to compute global market stress");
-    return res.status(500).json({ error: "internal_error", message: "Failed to compute global market stress" });
+    return res.status(503).json({ error: "internal_error", message: "Failed to compute global market stress" });
   }
 });
 

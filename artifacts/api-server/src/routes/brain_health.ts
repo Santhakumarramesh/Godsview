@@ -59,7 +59,7 @@ router.get("/brain/health/mtf/:symbol", async (req, res) => {
     res.json({ ok: true, confluence });
   } catch (err) {
     logger.error({ err, symbol }, "MTF confluence check failed");
-    res.status(500).json({ ok: false, error: "MTF check failed" });
+    res.status(503).json({ ok: false, error: "MTF check failed" });
   }
 });
 
@@ -70,10 +70,10 @@ router.get("/brain/health/regime-sizing", (_req, res) => {
     import("../lib/regime_sizing_adapter.js").then(({ getRegimeMultiplierTable }) => {
       res.json({ ok: true, table: getRegimeMultiplierTable() });
     }).catch(err => {
-      res.status(500).json({ ok: false, error: String(err) });
+      res.status(503).json({ ok: false, error: String(err) });
     });
   } catch (err) {
-    res.status(500).json({ ok: false, error: String(err) });
+    res.status(503).json({ ok: false, error: String(err) });
   }
 });
 

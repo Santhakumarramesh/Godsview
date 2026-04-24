@@ -132,10 +132,27 @@ if (fs.existsSync(publicDir)) {
   });
 }
 
+// Detect database connection errors for graceful 503 responses
+function isDbConnectionError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message.toLowerCase();
+  const dbPatterns = [
+    "connection refused", "econnrefused", "connection terminated",
+    "connection reset", "no pg_hba.conf", "could not connect",
+    "database", "relation", "does not exist", "pool",
+    "timeout expired", "too many clients", "connection is closed",
+  ];
+  return dbPatterns.some((p) => msg.includes(p));
+}
+
 const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
-  const status = Number.isFinite((err as { status?: number }).status)
-    ? Math.max(400, Math.min(599, Number((err as { status?: number }).status)))
-    : 500;
+  // Detect DB connection errors and return 503 Service Unavailable
+  const isDbError = isDbConnectionError(err);
+  const status = isDbError
+    ? 503
+    : Number.isFinite((err as { status?: number }).status)
+      ? Math.max(400, Math.min(599, Number((err as { status?: number }).status)))
+      : 500;
 
   logger.error(
     {
@@ -143,11 +160,22 @@ const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
       requestId: req.id,
       method: req.method,
       path: req.originalUrl ?? req.url,
+      isDbError,
     },
-    "Unhandled API error",
+    isDbError ? "Database unavailable — returning 503" : "Unhandled API error",
   );
 
   if (res.headersSent) {
+    return;
+  }
+
+  if (isDbError) {
+    res.status(503).json({
+      error: "service_unavailable",
+      message: "Database temporarily unavailable. The system continues operating with reduced capabilities.",
+      source: "unavailable",
+      request_id: req.id,
+    });
     return;
   }
 

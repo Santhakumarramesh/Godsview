@@ -43,11 +43,11 @@ certificationRouter.post("/:strategyId/initiate", async (req: Request, res: Resp
     if (id) {
       res.json({ certification_id: id, strategy_id: strategyId, target_tier, status: "initiated" });
     } else {
-      res.status(500).json({ error: "initiation_failed" });
+      res.status(503).json({ error: "initiation_failed" });
     }
   } catch (err) {
     logger.error({ err }, "Failed to initiate certification");
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -104,11 +104,11 @@ certificationRouter.post("/:strategyId/evaluate", async (req: Request, res: Resp
         packet,
       });
     } else {
-      res.status(500).json({ error: "completion_failed" });
+      res.status(503).json({ error: "completion_failed" });
     }
   } catch (err) {
     logger.error({ err }, "Certification evaluation failed");
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -121,7 +121,7 @@ certificationRouter.get("/:strategyId/history", async (req: Request, res: Respon
     res.json({ certifications: history, count: history.length });
   } catch (err) {
     logger.error({ err }, "Failed to get certification history");
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -133,7 +133,7 @@ certificationRouter.get("/:strategyId/active", async (req: Request, res: Respons
     res.json({ certification: cert });
   } catch (err) {
     logger.error({ err }, "Failed to get active certification");
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -145,7 +145,7 @@ certificationRouter.get("/pending", async (_req: Request, res: Response) => {
     res.json({ certifications: pending, count: pending.length });
   } catch (err) {
     logger.error({ err }, "Failed to get pending certifications");
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 

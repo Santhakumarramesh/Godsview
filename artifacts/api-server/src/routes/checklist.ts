@@ -90,7 +90,7 @@ router.post("/evaluate", (req: Request, res: Response<any>): void => {
     res.json(result);
   } catch (err) {
     logger.error(`[CHECKLIST] /evaluate error: ${err instanceof Error ? err.message : "unknown"}`);
-    res.status(500).json({
+    res.status(503).json({
       error: "Evaluation failed",
       message: err instanceof Error ? err.message : String(err),
     });
@@ -133,7 +133,7 @@ router.post("/auto/:symbol", async (req: Request, res: Response<any>): Promise<v
       bars = await getBars(symbol, timeframe as "1Min" | "5Min" | "15Min" | "1Hour" | "1Day", 500);
     } catch (err) {
       logger.error(`[CHECKLIST] Failed to fetch bars for ${symbol}: ${err instanceof Error ? err.message : "unknown"}`);
-      res.status(500).json({
+      res.status(503).json({
         error: "Failed to fetch market data",
         message: err instanceof Error ? err.message : String(err),
       });
@@ -162,7 +162,7 @@ router.post("/auto/:symbol", async (req: Request, res: Response<any>): Promise<v
       smcState = computeSMCState(symbol, smcBars, smcBars);
     } catch (err) {
       logger.error(`[CHECKLIST] Failed to compute SMC for ${symbol}: ${err instanceof Error ? err.message : "unknown"}`);
-      res.status(500).json({
+      res.status(503).json({
         error: "SMC computation failed",
         message: err instanceof Error ? err.message : String(err),
       });
@@ -188,7 +188,7 @@ router.post("/auto/:symbol", async (req: Request, res: Response<any>): Promise<v
     res.json(result);
   } catch (err) {
     logger.error(`[CHECKLIST] /auto/:symbol error: ${err instanceof Error ? err.message : "unknown"}`);
-    res.status(500).json({
+    res.status(503).json({
       error: "Auto-evaluation failed",
       message: err instanceof Error ? err.message : String(err),
     });
@@ -222,7 +222,7 @@ router.get("/:symbol", (req: Request, res: Response<any>): void => {
     res.json(cached);
   } catch (err) {
     logger.error(`[CHECKLIST] /:symbol error: ${err instanceof Error ? err.message : "unknown"}`);
-    res.status(500).json({
+    res.status(503).json({
       error: "Retrieval failed",
       message: err instanceof Error ? err.message : String(err),
     });

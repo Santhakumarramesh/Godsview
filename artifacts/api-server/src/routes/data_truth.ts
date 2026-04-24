@@ -13,6 +13,7 @@ import {
   dataTruthGate,
   type Candle,
 } from '../lib/data_truth_engine';
+import { withDegradation } from '../lib/degradation';
 
 const router = Router();
 
@@ -65,7 +66,7 @@ router.get('/quality/:symbol/:timeframe', async (req: Request, res: Response) =>
       metadata: score.metadata,
     });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch quality score', details: String(error) });
+    res.status(503).json({ error: 'Database unavailable', source: 'unavailable', details: String(error) });
   }
 });
 
@@ -75,25 +76,33 @@ router.get('/quality/:symbol/:timeframe', async (req: Request, res: Response) =>
  */
 router.get('/feeds', async (req: Request, res: Response) => {
   try {
-    const allFeeds = await db
-      .select()
-      .from(dataFeedHealth)
-      .orderBy(desc(dataFeedHealth.checkedAt));
-
-    const feeds = allFeeds.map((feed) => ({
-      feedName: feed.feedName,
-      status: feed.status,
-      lastTickAt: feed.lastTickAt,
-      avgLatencyMs: feed.avgLatencyMs,
-      gapEvents24h: feed.gapEvents24h,
-      uptime24hPct: feed.uptime24hPct,
-      checkedAt: feed.checkedAt,
-      details: feed.details,
-    }));
-
-    res.json({ feeds, count: feeds.length });
+    const { result, degraded } = await withDegradation(
+      'database',
+      async () => {
+        const allFeeds = await db
+          .select()
+          .from(dataFeedHealth)
+          .orderBy(desc(dataFeedHealth.checkedAt));
+        return allFeeds.map((feed) => ({
+          feedName: feed.feedName,
+          status: feed.status,
+          lastTickAt: feed.lastTickAt,
+          avgLatencyMs: feed.avgLatencyMs,
+          gapEvents24h: feed.gapEvents24h,
+          uptime24hPct: feed.uptime24hPct,
+          checkedAt: feed.checkedAt,
+          details: feed.details,
+        }));
+      },
+      [],
+    );
+    if (degraded) {
+      res.status(503).json({ feeds: result, count: 0, source: 'unavailable', message: 'Database unavailable' });
+      return;
+    }
+    res.json({ feeds: result, count: result.length });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch feed health', details: String(error) });
+    res.status(503).json({ feeds: [], count: 0, source: 'unavailable', message: 'Database unavailable' });
   }
 });
 
@@ -130,7 +139,7 @@ router.get('/feeds/:feedName', async (req: Request, res: Response) => {
       details: f.details,
     });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch feed health', details: String(error) });
+    res.status(503).json({ error: 'Failed to fetch feed health', details: String(error) });
   }
 });
 
@@ -173,7 +182,7 @@ router.get('/consistency/:symbol', async (req: Request, res: Response) => {
       count: results.length,
     });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch consistency checks', details: String(error) });
+    res.status(503).json({ error: 'Failed to fetch consistency checks', details: String(error) });
   }
 });
 
@@ -223,7 +232,7 @@ router.get('/gate/:symbol/:timeframe', async (req: Request, res: Response) => {
 
     res.json(verdict);
   } catch (error) {
-    res.status(500).json({ error: 'Failed to execute gate check', details: String(error) });
+    res.status(503).json({ error: 'Failed to execute gate check', details: String(error) });
   }
 });
 
@@ -301,7 +310,7 @@ router.get('/system', async (req: Request, res: Response) => {
       lastUpdate: allFeeds.length > 0 ? allFeeds[0].checkedAt : new Date(),
     });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to compute system status', details: String(error) });
+    res.status(503).json({ error: 'Failed to compute system status', details: String(error) });
   }
 });
 

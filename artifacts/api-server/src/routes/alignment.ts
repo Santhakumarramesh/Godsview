@@ -37,7 +37,7 @@ alignmentRouter.get("/:strategyId/history", async (req: Request, res: Response) 
     res.json({ snapshots, count: snapshots.length });
   } catch (err) {
     logger.error({ err }, "Failed to get alignment history");
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -55,7 +55,7 @@ alignmentRouter.get("/:strategyId/latest", async (req: Request, res: Response) =
     res.json({ snapshot: latest });
   } catch (err) {
     logger.error({ err }, "Failed to get latest alignment");
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -117,7 +117,7 @@ alignmentRouter.post("/:strategyId/check", async (req: Request, res: Response) =
     res.json({ alignment: result });
   } catch (err) {
     logger.error({ err }, "Alignment check failed");
-    res.status(500).json({ error: "alignment_check_failed" });
+    res.status(503).json({ error: "alignment_check_failed" });
   }
 });
 
@@ -130,7 +130,7 @@ alignmentRouter.get("/drift-events", async (req: Request, res: Response) => {
     res.json({ events, count: events.length });
   } catch (err) {
     logger.error({ err }, "Failed to get drift events");
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -142,11 +142,11 @@ alignmentRouter.post("/drift-events/:id/resolve", requireOperator, async (req: R
     if (success) {
       res.json({ resolved: true });
     } else {
-      res.status(500).json({ error: "resolve_failed" });
+      res.status(503).json({ error: "resolve_failed" });
     }
   } catch (err) {
     logger.error({ err }, "Failed to resolve drift event");
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -163,7 +163,7 @@ alignmentRouter.get("/slippage/:symbol", async (req: Request, res: Response) => 
     res.json({ calibration });
   } catch (err) {
     logger.error({ err }, "Failed to get slippage calibration");
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -199,7 +199,7 @@ alignmentRouter.post("/slippage/:symbol/calibrate", async (req: Request, res: Re
     res.json({ calibration: result, symbol });
   } catch (err) {
     logger.error({ err }, "Slippage calibration failed");
-    res.status(500).json({ error: "calibration_failed" });
+    res.status(503).json({ error: "calibration_failed" });
   }
 });
 

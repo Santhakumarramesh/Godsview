@@ -302,7 +302,7 @@ router.get("/decision-replay/:tradeId", async (req, res) => {
     res.json(replay);
   } catch (err) {
     req.log.error({ err }, "Failed to load decision replay");
-    res.status(500).json({ error: "decision_replay_failed", message: "Failed to load replay" });
+    res.status(503).json({ error: "decision_replay_failed", message: "Failed to load replay" });
   }
 });
 
@@ -322,7 +322,7 @@ router.get("/decision-replay/:tradeId/timeline", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Failed to load decision replay timeline");
-    res.status(500).json({ error: "decision_replay_timeline_failed", message: "Failed to load timeline" });
+    res.status(503).json({ error: "decision_replay_timeline_failed", message: "Failed to load timeline" });
   }
 });
 
@@ -394,7 +394,7 @@ router.get("/decision-replay/block-reasons", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Failed to load block reason analytics");
-    res.status(500).json({ error: "block_reason_analytics_failed", message: "Failed to load block reasons" });
+    res.status(503).json({ error: "block_reason_analytics_failed", message: "Failed to load block reasons" });
   }
 });
 
@@ -471,7 +471,7 @@ router.get("/decision-replay/latency", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Failed to load latency analytics");
-    res.status(500).json({ error: "latency_analytics_failed", message: "Failed to load latency analytics" });
+    res.status(503).json({ error: "latency_analytics_failed", message: "Failed to load latency analytics" });
   }
 });
 

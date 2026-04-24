@@ -42,7 +42,7 @@ mlOperationsRouter.get("/models/:name/champion", async (req: Request, res: Respo
     res.json({ champion, shadow });
   } catch (err) {
     logger.error({ err }, "Failed to get champion");
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -55,7 +55,7 @@ mlOperationsRouter.get("/models/:name/history", async (req: Request, res: Respon
     res.json({ versions, count: versions.length });
   } catch (err) {
     logger.error({ err }, "Failed to get model history");
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -82,11 +82,11 @@ mlOperationsRouter.post("/models/:name/register", async (req: Request, res: Resp
     if (id) {
       res.json({ version_id: id, model_name: req.params.name });
     } else {
-      res.status(500).json({ error: "registration_failed" });
+      res.status(503).json({ error: "registration_failed" });
     }
   } catch (err) {
     logger.error({ err }, "Failed to register model version");
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -99,7 +99,7 @@ mlOperationsRouter.post("/models/:versionId/shadow", requireOperator, async (req
     res.json({ promoted: success, to: "shadow" });
   } catch (err) {
     logger.error({ err }, "Failed to promote to shadow");
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -113,7 +113,7 @@ mlOperationsRouter.post("/models/:versionId/champion", requireOperator, async (r
     res.json({ promoted: success, to: "champion" });
   } catch (err) {
     logger.error({ err }, "Failed to promote to champion");
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -130,7 +130,7 @@ mlOperationsRouter.post("/models/:name/evaluate", async (req: Request, res: Resp
     res.json({ verdict });
   } catch (err) {
     logger.error({ err }, "Model evaluation failed");
-    res.status(500).json({ error: "evaluation_failed" });
+    res.status(503).json({ error: "evaluation_failed" });
   }
 });
 
@@ -142,7 +142,7 @@ mlOperationsRouter.get("/features", async (_req: Request, res: Response) => {
     res.json({ features, count: features.length });
   } catch (err) {
     logger.error({ err }, "Failed to get features");
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -159,7 +159,7 @@ mlOperationsRouter.post("/features", async (req: Request, res: Response) => {
     res.json({ feature_id: id });
   } catch (err) {
     logger.error({ err }, "Failed to register feature");
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -173,7 +173,7 @@ mlOperationsRouter.get("/retrain/history", async (req: Request, res: Response) =
     res.json({ events, count: events.length });
   } catch (err) {
     logger.error({ err }, "Failed to get retrain history");
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -186,7 +186,7 @@ mlOperationsRouter.get("/evaluations", async (req: Request, res: Response) => {
     res.json({ evaluations, count: evaluations.length });
   } catch (err) {
     logger.error({ err }, "Failed to get evaluation history");
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 

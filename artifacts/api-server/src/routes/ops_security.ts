@@ -47,7 +47,7 @@ router.get("/ops-security/security/audit", (_req: Request, res: Response) => {
       audit: result,
     });
   } catch (err: any) {
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(503).json({ ok: false, error: err.message });
   }
 });
 
@@ -61,7 +61,7 @@ router.get("/ops-security/security/score", (_req: Request, res: Response) => {
       riskLevel: score >= 80 ? "low" : score >= 60 ? "medium" : score >= 40 ? "high" : "critical",
     });
   } catch (err: any) {
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(503).json({ ok: false, error: err.message });
   }
 });
 
@@ -75,7 +75,7 @@ router.get("/ops-security/security/history", (req: Request, res: Response) => {
       history,
     });
   } catch (err: any) {
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(503).json({ ok: false, error: err.message });
   }
 });
 
@@ -99,7 +99,7 @@ router.post("/ops-security/chaos/run", (req: Request, res: Response) => {
       });
     });
   } catch (err: any) {
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(503).json({ ok: false, error: err.message });
   }
 });
 
@@ -112,7 +112,7 @@ router.get("/ops-security/chaos/results", (_req: Request, res: Response) => {
       results,
     });
   } catch (err: any) {
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(503).json({ ok: false, error: err.message });
   }
 });
 
@@ -125,7 +125,7 @@ router.get("/ops-security/chaos/resiliency", (_req: Request, res: Response) => {
       });
     });
   } catch (err: any) {
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(503).json({ ok: false, error: err.message });
   }
 });
 
@@ -138,7 +138,7 @@ router.get("/ops-security/chaos/recovery", (_req: Request, res: Response) => {
       metrics,
     });
   } catch (err: any) {
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(503).json({ ok: false, error: err.message });
   }
 });
 
@@ -154,7 +154,7 @@ router.get("/ops-security/ops/snapshot", (_req: Request, res: Response) => {
       snapshot,
     });
   } catch (err: any) {
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(503).json({ ok: false, error: err.message });
   }
 });
 
@@ -168,7 +168,7 @@ router.get("/ops-security/ops/incidents", (req: Request, res: Response) => {
       incidents,
     });
   } catch (err: any) {
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(503).json({ ok: false, error: err.message });
   }
 });
 
@@ -196,7 +196,7 @@ router.post("/ops-security/ops/incidents", (req: Request, res: Response) => {
       incident,
     });
   } catch (err: any) {
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(503).json({ ok: false, error: err.message });
   }
 });
 
@@ -215,7 +215,7 @@ router.patch("/ops-security/ops/incidents/:id/resolve", (req: Request, res: Resp
       incident,
     });
   } catch (err: any) {
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(503).json({ ok: false, error: err.message });
   }
 });
 
@@ -237,7 +237,7 @@ router.get("/ops-security/ops/runbook/:component", (req: Request, res: Response)
       runbook,
     });
   } catch (err: any) {
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(503).json({ ok: false, error: err.message });
   }
 });
 
@@ -258,7 +258,7 @@ router.get("/ops-security/deploy/gate", (_req: Request, res: Response) => {
       blockers: checks.filter((c) => !c.passed).map((c) => c.name),
     });
   } catch (err: any) {
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(503).json({ ok: false, error: err.message });
   }
 });
 
@@ -273,7 +273,7 @@ router.get("/ops-security/deploy/history", (req: Request, res: Response) => {
       history: history.reverse(), // Most recent first
     });
   } catch (err: any) {
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(503).json({ ok: false, error: err.message });
   }
 });
 
@@ -301,7 +301,7 @@ router.post("/ops-security/deploy/record", (req: Request, res: Response) => {
       record,
     });
   } catch (err: any) {
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(503).json({ ok: false, error: err.message });
   }
 });
 

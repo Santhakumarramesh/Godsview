@@ -66,7 +66,7 @@ router.post("/", async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error({ error }, "[feedback] Record outcome failed");
-    res.status(500).json({ error: error.message });
+    res.status(503).json({ error: error.message });
   }
 });
 
@@ -84,7 +84,7 @@ router.get("/history", async (req: Request, res: Response) => {
       feedback: history,
     });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    res.status(503).json({ error: error.message });
   }
 });
 
@@ -99,7 +99,7 @@ router.get("/stats", async (_req: Request, res: Response) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    res.status(503).json({ error: error.message });
   }
 });
 
@@ -113,7 +113,7 @@ router.get("/accuracy/strategies", async (_req: Request, res: Response) => {
       strategies: getStrategyAccuracy(),
     });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    res.status(503).json({ error: error.message });
   }
 });
 
@@ -127,7 +127,7 @@ router.get("/accuracy/regimes", async (_req: Request, res: Response) => {
       regimes: getRegimeAccuracy(),
     });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    res.status(503).json({ error: error.message });
   }
 });
 
@@ -141,7 +141,7 @@ router.get("/accuracy/factors", async (_req: Request, res: Response) => {
       factors: getFactorAccuracy(),
     });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    res.status(503).json({ error: error.message });
   }
 });
 

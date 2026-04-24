@@ -49,7 +49,7 @@ router.post("/backtest/run", async (req, res): Promise<void> => {
     res.json(result);
   } catch (err) {
     req.log.error({ err }, "Backtest execution failed");
-    res.status(500).json({ error: "backtest_failed", message: String(err) });
+    res.status(503).json({ error: "backtest_failed", message: String(err) });
   }
 });
 
@@ -101,7 +101,7 @@ router.get("/backtest/quick", async (_req, res): Promise<void> => {
       cached: false,
     });
   } catch (err) {
-    res.status(500).json({ error: "quick_backtest_failed", message: String(err) });
+    res.status(503).json({ error: "quick_backtest_failed", message: String(err) });
   }
 });
 
@@ -112,7 +112,7 @@ router.post("/backtest/continuous/start", async (_req, res): Promise<void> => {
     const result = await startContinuousBacktest();
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: "continuous_start_failed", message: String(err) });
+    res.status(503).json({ error: "continuous_start_failed", message: String(err) });
   }
 });
 
@@ -123,7 +123,7 @@ router.post("/backtest/continuous/stop", async (_req, res): Promise<void> => {
     const result = stopContinuousBacktest();
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: "continuous_stop_failed", message: String(err) });
+    res.status(503).json({ error: "continuous_stop_failed", message: String(err) });
   }
 });
 
@@ -134,7 +134,7 @@ router.get("/backtest/continuous/status", async (_req, res): Promise<void> => {
     const status = getContinuousBacktestStatus();
     res.json(status);
   } catch (err) {
-    res.status(500).json({ error: "internal_error", message: "Failed to get continuous backtest status" });
+    res.status(503).json({ error: "internal_error", message: "Failed to get continuous backtest status" });
   }
 });
 
@@ -148,7 +148,7 @@ router.get("/backtest/strategy-leaderboard", async (_req, res): Promise<void> =>
       strategies: leaderboard,
     });
   } catch (err) {
-    res.status(500).json({ error: "internal_error", message: "Failed to get strategy leaderboard" });
+    res.status(503).json({ error: "internal_error", message: "Failed to get strategy leaderboard" });
   }
 });
 
@@ -178,7 +178,7 @@ async function handleWalkForward(req: Request, res: Response): Promise<void> {
     res.json(result);
   } catch (err) {
     req.log.error({ err }, "Walk-forward backtest failed");
-    res.status(500).json({ error: "walk_forward_failed", message: String(err) });
+    res.status(503).json({ error: "walk_forward_failed", message: String(err) });
   }
 }
 
@@ -196,7 +196,7 @@ router.get("/backtest/walk-forward/tiers", async (_req, res): Promise<void> => {
     const tiers = getWalkForwardTierRegistry();
     res.json({ count: tiers.length, tiers });
   } catch (err) {
-    res.status(500).json({ error: "internal_error", message: "Failed to get strategy tiers" });
+    res.status(503).json({ error: "internal_error", message: "Failed to get strategy tiers" });
   }
 });
 
@@ -205,7 +205,7 @@ router.get("/brain/backtest/walk-forward/tiers", async (_req, res): Promise<void
     const tiers = getWalkForwardTierRegistry();
     res.json({ count: tiers.length, tiers });
   } catch (err) {
-    res.status(500).json({ error: "internal_error", message: "Failed to get strategy tiers" });
+    res.status(503).json({ error: "internal_error", message: "Failed to get strategy tiers" });
   }
 });
 
@@ -216,7 +216,7 @@ router.get("/backtest/walk-forward/latest", async (_req, res): Promise<void> => 
     const rows = Array.isArray(latest) ? latest : latest ? [latest] : [];
     res.json({ count: rows.length, results: rows });
   } catch (err) {
-    res.status(500).json({ error: "internal_error", message: "Failed to get latest walk-forward results" });
+    res.status(503).json({ error: "internal_error", message: "Failed to get latest walk-forward results" });
   }
 });
 
@@ -229,7 +229,7 @@ router.get("/backtest/walk-forward/latest/:strategyId", async (req, res): Promis
     }
     res.json(latest);
   } catch (err) {
-    res.status(500).json({ error: "internal_error", message: "Failed to get walk-forward result" });
+    res.status(503).json({ error: "internal_error", message: "Failed to get walk-forward result" });
   }
 });
 
@@ -254,7 +254,7 @@ router.post("/backtest/optimize/:strategyId", async (req, res): Promise<void> =>
     res.json(result);
   } catch (err) {
     req.log.error({ err }, "Strategy optimization failed");
-    res.status(500).json({ error: "strategy_optimization_failed", message: String(err) });
+    res.status(503).json({ error: "strategy_optimization_failed", message: String(err) });
   }
 });
 
@@ -278,7 +278,7 @@ router.post("/brain/backtest/optimize/:strategyId", async (req, res): Promise<vo
     res.json(result);
   } catch (err) {
     req.log.error({ err }, "Brain strategy optimization failed");
-    res.status(500).json({ error: "strategy_optimization_failed", message: String(err) });
+    res.status(503).json({ error: "strategy_optimization_failed", message: String(err) });
   }
 });
 

@@ -23,7 +23,7 @@ productionHealthRouter.get("/", async (_req: Request, res: Response) => {
     res.status(statusCode).json(report);
   } catch (err) {
     logger.error({ err }, "Failed to generate health report");
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -33,7 +33,7 @@ productionHealthRouter.get("/summary", async (_req: Request, res: Response) => {
     res.type("text/plain").send(summary);
   } catch (err) {
     logger.error({ err }, "Failed to generate operator summary");
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -55,7 +55,7 @@ productionHealthRouter.get("/alerts", async (_req: Request, res: Response) => {
     res.json({ alerts, count: alerts.length });
   } catch (err) {
     logger.error({ err }, "Failed to check alerts");
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 

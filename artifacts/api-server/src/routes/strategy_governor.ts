@@ -40,7 +40,7 @@ router.post("/brain/strategy/governor/start", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Strategy governor start failed");
-    res.status(500).json({ error: "strategy_governor_start_failed", message: String(err) });
+    res.status(503).json({ error: "strategy_governor_start_failed", message: String(err) });
   }
 });
 
@@ -57,7 +57,7 @@ router.post("/brain/strategy/governor/run-once", async (_req, res) => {
     const snapshot = await runStrategyGovernorCycle("manual_route");
     res.json({ ok: true, snapshot });
   } catch (err) {
-    res.status(500).json({ error: "strategy_governor_cycle_failed", message: String(err) });
+    res.status(503).json({ error: "strategy_governor_cycle_failed", message: String(err) });
   }
 });
 

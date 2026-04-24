@@ -34,7 +34,7 @@ router.get("/brief", (_req, res) => {
     res.json(brief);
   } catch (err: any) {
     logger.error({ err: err.message }, "Failed to generate operator brief");
-    res.status(500).json({ error: "Failed to generate brief" });
+    res.status(503).json({ error: "Failed to generate brief" });
   }
 });
 

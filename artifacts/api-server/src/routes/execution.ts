@@ -586,7 +586,7 @@ executionRouter.post("/execute", requireOperator, async (req: Request, res: Resp
       idempotent_replay: false,
     };
     finalizeTracked(500, body);
-    res.status(500).json(body);
+    res.status(503).json(body);
   }
 });
 
@@ -622,7 +622,7 @@ executionRouter.post("/kill-switch", requireOperator, async (req: Request, res: 
     }
   } catch (err) {
     logger.error({ err }, "Kill switch toggle error");
-    res.status(500).json({ error: "internal_error", message: String(err) });
+    res.status(503).json({ error: "internal_error", message: String(err) });
   }
 });
 
@@ -643,7 +643,7 @@ executionRouter.post("/emergency-close", requireOperator, async (req: Request, r
     res.json(result);
   } catch (err) {
     logger.error({ err }, "Emergency close error");
-    res.status(500).json({ error: "internal_error", message: String(err) });
+    res.status(503).json({ error: "internal_error", message: String(err) });
   }
 });
 
@@ -656,7 +656,7 @@ executionRouter.post("/emergency-stop-all", requireOperator, async (req: Request
     res.json(result);
   } catch (err) {
     logger.error({ err }, "Emergency stop all error");
-    res.status(500).json({ error: "internal_error", message: String(err) });
+    res.status(503).json({ error: "internal_error", message: String(err) });
   }
 });
 
@@ -704,7 +704,7 @@ executionRouter.get("/execution-status", async (_req: Request, res: Response) =>
     });
   } catch (err) {
     logger.error({ err }, "Execution status error");
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -721,7 +721,7 @@ executionRouter.get("/status", async (_req: Request, res: Response) => {
     });
   } catch (err) {
     logger.error({ err }, "Execution status error");
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -738,7 +738,7 @@ executionRouter.get("/risk-guard", async (req: Request, res: Response) => {
     res.json(snapshot);
   } catch (err) {
     logger.error({ err }, "Risk guard status error");
-    res.status(500).json({ error: "internal_error", message: String(err) });
+    res.status(503).json({ error: "internal_error", message: String(err) });
   }
 });
 
@@ -756,7 +756,7 @@ executionRouter.post("/risk-guard/evaluate", requireOperator, async (req: Reques
     res.json(snapshot);
   } catch (err) {
     logger.error({ err }, "Risk guard evaluation error");
-    res.status(500).json({ error: "internal_error", message: String(err) });
+    res.status(503).json({ error: "internal_error", message: String(err) });
   }
 });
 
@@ -766,7 +766,7 @@ executionRouter.get("/incident-guard", (_req: Request, res: Response) => {
   try {
     res.json(getExecutionIncidentSnapshot());
   } catch (err) {
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -795,7 +795,7 @@ executionRouter.get("/autonomy-guard", async (req: Request, res: Response) => {
     }
     res.json(getExecutionAutonomyGuardSnapshot());
   } catch {
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -822,7 +822,7 @@ executionRouter.get("/market-guard", async (req: Request, res: Response) => {
     }
     res.json(getExecutionMarketGuardSnapshot());
   } catch (err) {
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -832,7 +832,7 @@ executionRouter.get("/idempotency", (_req: Request, res: Response) => {
   try {
     res.json(getExecutionIdempotencySnapshot());
   } catch {
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -850,7 +850,7 @@ executionRouter.post("/incident-guard/reset", requireOperator, (req: Request, re
     });
     res.json(snapshot);
   } catch (err) {
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -868,7 +868,7 @@ executionRouter.post("/autonomy-guard/reset", requireOperator, (req: Request, re
     });
     res.json(snapshot);
   } catch {
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -886,7 +886,7 @@ executionRouter.post("/market-guard/reset", requireOperator, (req: Request, res:
     });
     res.json(snapshot);
   } catch (err) {
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -897,7 +897,7 @@ executionRouter.post("/idempotency/reset", requireOperator, (_req: Request, res:
     const snapshot = resetExecutionIdempotencyStore();
     res.json(snapshot);
   } catch {
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -910,7 +910,7 @@ executionRouter.get("/fills", (_req: Request, res: Response) => {
     const snapshot = getReconciliationSnapshot();
     res.json({ fills, snapshot });
   } catch (err) {
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -920,7 +920,7 @@ executionRouter.get("/breaker", (_req: Request, res: Response) => {
   try {
     res.json(getBreakerSnapshot());
   } catch (err) {
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -932,7 +932,7 @@ executionRouter.post("/breaker/reset", requireOperator, (_req: Request, res: Res
     logger.warn("Drawdown breaker manually reset via API");
     res.json(snapshot);
   } catch (err) {
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -944,7 +944,7 @@ executionRouter.get("/monitor-events", (_req: Request, res: Response) => {
     const events = getMonitorEvents(limit);
     res.json({ events });
   } catch (err) {
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 

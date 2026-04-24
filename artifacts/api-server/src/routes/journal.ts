@@ -45,7 +45,7 @@ router.get("/", (req: Request, res: Response) => {
     res.json({ entries, count: entries.length });
   } catch (err) {
     logger.error(`[journal] GET / error: ${String(err)}`);
-    res.status(500).json({ error: "Failed to list journal entries" });
+    res.status(503).json({ error: "Failed to list journal entries" });
   }
 });
 
@@ -56,7 +56,7 @@ router.get("/stats", (_req: Request, res: Response) => {
     res.json({ stats: getJournalStats() });
   } catch (err) {
     logger.error(`[journal] GET /stats error: ${String(err)}`);
-    res.status(500).json({ error: "Failed to get journal stats" });
+    res.status(503).json({ error: "Failed to get journal stats" });
   }
 });
 
@@ -71,7 +71,7 @@ router.get("/attribution", (req: Request, res: Response) => {
     res.json({ report });
   } catch (err) {
     logger.error(`[journal] GET /attribution error: ${String(err)}`);
-    res.status(500).json({ error: "Failed to generate attribution report" });
+    res.status(503).json({ error: "Failed to generate attribution report" });
   }
 });
 
@@ -83,7 +83,7 @@ router.get("/attribution/ytw", (_req: Request, res: Response) => {
     res.json({ summary });
   } catch (err) {
     logger.error(`[journal] GET /attribution/ytw error: ${String(err)}`);
-    res.status(500).json({ error: "Failed to get YTW gate summary" });
+    res.status(503).json({ error: "Failed to get YTW gate summary" });
   }
 });
 
@@ -96,7 +96,7 @@ router.get("/:id", (req: Request, res: Response) => {
     res.json({ entry });
   } catch (err) {
     logger.error(`[journal] GET /:id error: ${String(err)}`);
-    res.status(500).json({ error: "Failed to get journal entry" });
+    res.status(503).json({ error: "Failed to get journal entry" });
   }
 });
 
@@ -118,7 +118,7 @@ router.post("/outcome/:id", (req: Request, res: Response) => {
     res.json({ entry: updated });
   } catch (err) {
     logger.error(`[journal] POST /outcome/:id error: ${String(err)}`);
-    res.status(500).json({ error: "Failed to update journal outcome" });
+    res.status(503).json({ error: "Failed to update journal outcome" });
   }
 });
 
@@ -136,7 +136,7 @@ router.delete("/", (req: Request, res: Response) => {
     res.json({ cleared: true });
   } catch (err) {
     logger.error(`[journal] DELETE / error: ${String(err)}`);
-    res.status(500).json({ error: "Failed to clear journal" });
+    res.status(503).json({ error: "Failed to clear journal" });
   }
 });
 

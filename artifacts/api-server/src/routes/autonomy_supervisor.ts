@@ -40,7 +40,7 @@ router.post("/brain/autonomy/supervisor/start", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Autonomy supervisor start failed");
-    res.status(500).json({ error: "autonomy_supervisor_start_failed", message: String(err) });
+    res.status(503).json({ error: "autonomy_supervisor_start_failed", message: String(err) });
   }
 });
 
@@ -57,7 +57,7 @@ router.post("/brain/autonomy/supervisor/tick", async (_req, res) => {
     const snapshot = await runAutonomySupervisorTick("manual_route");
     res.json({ ok: true, snapshot });
   } catch (err) {
-    res.status(500).json({ error: "autonomy_supervisor_tick_failed", message: String(err) });
+    res.status(503).json({ error: "autonomy_supervisor_tick_failed", message: String(err) });
   }
 });
 

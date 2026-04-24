@@ -12,7 +12,7 @@ router.get("/portfolio/allocator/status", async (_req, res) => {
     res.json(snapshot);
   } catch (err) {
     _req.log.error({ err }, "Failed to load portfolio allocator status");
-    res.status(500).json({ error: "portfolio_allocator_status_failed", message: "Failed to load allocator status" });
+    res.status(503).json({ error: "portfolio_allocator_status_failed", message: "Failed to load allocator status" });
   }
 });
 
@@ -26,7 +26,7 @@ router.get("/portfolio/opportunities", async (_req, res) => {
     });
   } catch (err) {
     _req.log.error({ err }, "Failed to load portfolio opportunities");
-    res.status(500).json({ error: "portfolio_opportunities_failed", message: "Failed to load opportunities" });
+    res.status(503).json({ error: "portfolio_opportunities_failed", message: "Failed to load opportunities" });
   }
 });
 
@@ -41,7 +41,7 @@ router.get("/portfolio/exposures", async (_req, res) => {
     });
   } catch (err) {
     _req.log.error({ err }, "Failed to load portfolio exposures");
-    res.status(500).json({ error: "portfolio_exposures_failed", message: "Failed to load exposures" });
+    res.status(503).json({ error: "portfolio_exposures_failed", message: "Failed to load exposures" });
   }
 });
 
@@ -56,7 +56,7 @@ router.get("/portfolio/allocations", async (_req, res) => {
     });
   } catch (err) {
     _req.log.error({ err }, "Failed to load portfolio allocations");
-    res.status(500).json({ error: "portfolio_allocations_failed", message: "Failed to load allocations" });
+    res.status(503).json({ error: "portfolio_allocations_failed", message: "Failed to load allocations" });
   }
 });
 
@@ -72,7 +72,7 @@ router.post("/portfolio/allocate", async (_req, res) => {
     });
   } catch (err) {
     _req.log.error({ err }, "Portfolio allocate run failed");
-    res.status(500).json({ error: "portfolio_allocate_failed", message: "Failed to compute allocations" });
+    res.status(503).json({ error: "portfolio_allocate_failed", message: "Failed to compute allocations" });
   }
 });
 
@@ -88,7 +88,7 @@ router.post("/portfolio/rebalance", async (_req, res) => {
     });
   } catch (err) {
     _req.log.error({ err }, "Portfolio rebalance run failed");
-    res.status(500).json({ error: "portfolio_rebalance_failed", message: "Failed to run rebalance" });
+    res.status(503).json({ error: "portfolio_rebalance_failed", message: "Failed to run rebalance" });
   }
 });
 

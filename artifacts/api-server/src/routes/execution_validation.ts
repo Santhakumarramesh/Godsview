@@ -141,7 +141,7 @@ router.post(
       res.json({ success: true, validation });
     } catch (error) {
       console.error("Execution validation error:", error);
-      res.status(500).json({
+      res.status(503).json({
         error: error instanceof Error ? error.message : "Unknown error",
       });
     }
@@ -180,7 +180,7 @@ router.get(
       res.json({ success: true, distribution });
     } catch (error) {
       console.error("Slippage computation error:", error);
-      res.status(500).json({
+      res.status(503).json({
         error: error instanceof Error ? error.message : "Unknown error",
       });
     }
@@ -214,7 +214,7 @@ router.get(
       res.json({ success: true, comparison });
     } catch (error) {
       console.error("Backtest vs live comparison error:", error);
-      res.status(500).json({
+      res.status(503).json({
         error: error instanceof Error ? error.message : "Unknown error",
       });
     }
@@ -246,7 +246,7 @@ router.get(
       });
     } catch (error) {
       console.error("Drift status error:", error);
-      res.status(500).json({
+      res.status(503).json({
         error: error instanceof Error ? error.message : "Unknown error",
       });
     }
@@ -296,7 +296,7 @@ router.get(
       res.json({ success: true, events });
     } catch (error) {
       console.error("Drift events error:", error);
-      res.status(500).json({
+      res.status(503).json({
         error: error instanceof Error ? error.message : "Unknown error",
       });
     }
@@ -330,7 +330,7 @@ router.get(
       res.json({ success: true, report });
     } catch (error) {
       console.error("Execution report error:", error);
-      res.status(500).json({
+      res.status(503).json({
         error: error instanceof Error ? error.message : "Unknown error",
       });
     }
@@ -409,7 +409,7 @@ router.get(
       });
     } catch (error) {
       console.error("System health error:", error);
-      res.status(500).json({
+      res.status(503).json({
         error: error instanceof Error ? error.message : "Unknown error",
       });
     }

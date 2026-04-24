@@ -78,7 +78,7 @@ const errorHandler = (
   next: NextFunction
 ) => {
   console.error('Route error:', err);
-  res.status(500).json({
+  res.status(503).json({
     success: false,
     error: err.message || 'Internal server error',
     timestamp: Date.now(),

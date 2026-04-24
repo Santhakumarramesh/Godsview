@@ -105,7 +105,7 @@ router.post("/api/daily-review/generate", (req, res) => {
     saveDailyReview(review);
     res.json(review);
   } catch (err: any) {
-    res.status(500).json({ error: "generation_failed", message: err.message });
+    res.status(503).json({ error: "generation_failed", message: err.message });
   }
 });
 
@@ -135,7 +135,7 @@ router.post("/api/daily-review/generate-all", (req, res) => {
 
     res.json({ generated, count: generated.length });
   } catch (err: any) {
-    res.status(500).json({ error: "generation_failed", message: err.message });
+    res.status(503).json({ error: "generation_failed", message: err.message });
   }
 });
 
@@ -148,7 +148,7 @@ router.post("/api/daily-review/scheduler/start", (_req, res) => {
     startDailyReviewScheduler();
     res.json({ ok: true, message: "Scheduler started", status: getSchedulerHistory() });
   } catch (err: any) {
-    res.status(500).json({ error: "start_failed", message: err.message });
+    res.status(503).json({ error: "start_failed", message: err.message });
   }
 });
 
@@ -161,7 +161,7 @@ router.post("/api/daily-review/scheduler/stop", (_req, res) => {
     stopDailyReviewScheduler();
     res.json({ ok: true, message: "Scheduler stopped", status: getSchedulerHistory() });
   } catch (err: any) {
-    res.status(500).json({ error: "stop_failed", message: err.message });
+    res.status(503).json({ error: "stop_failed", message: err.message });
   }
 });
 
@@ -174,7 +174,7 @@ router.get("/api/daily-review/scheduler/status", (_req, res) => {
     const status = getSchedulerHistory();
     res.json(status);
   } catch (err: any) {
-    res.status(500).json({ error: "status_failed", message: err.message });
+    res.status(503).json({ error: "status_failed", message: err.message });
   }
 });
 
@@ -189,7 +189,7 @@ router.post("/api/daily-review/scheduler/run", async (req, res) => {
     const reviews = await runDailyReviews(date);
     res.json({ ok: true, reviews, count: reviews.length });
   } catch (err: any) {
-    res.status(500).json({ error: "run_failed", message: err.message });
+    res.status(503).json({ error: "run_failed", message: err.message });
   }
 });
 

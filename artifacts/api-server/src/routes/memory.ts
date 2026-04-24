@@ -49,7 +49,7 @@ router.get("/advice", authGuard, async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error({ error }, "Failed to get memory advice");
-    res.status(500).json({
+    res.status(503).json({
       error: error.message,
     });
   }
@@ -75,7 +75,7 @@ router.get("/failures", authGuard, async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error({ error }, "Failed to get failure patterns");
-    res.status(500).json({
+    res.status(503).json({
       error: error.message,
     });
   }
@@ -97,7 +97,7 @@ router.get("/improvements", authGuard, async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error({ error }, "Failed to get improvements");
-    res.status(500).json({
+    res.status(503).json({
       error: error.message,
     });
   }
@@ -136,7 +136,7 @@ router.get("/context", authGuard, async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error({ error }, "Failed to query context");
-    res.status(500).json({
+    res.status(503).json({
       error: error.message,
     });
   }
@@ -169,7 +169,7 @@ router.get("/similar", authGuard, async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error({ error }, "Failed to find similar states");
-    res.status(500).json({
+    res.status(503).json({
       error: error.message,
     });
   }
@@ -191,7 +191,7 @@ router.get("/stats", authGuard, async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error({ error }, "Failed to get memory stats");
-    res.status(500).json({
+    res.status(503).json({
       error: error.message,
     });
   }
@@ -230,7 +230,7 @@ router.post("/learn", authGuard, async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error({ error }, "Failed to record learning");
-    res.status(500).json({
+    res.status(503).json({
       error: error.message,
     });
   }
@@ -259,7 +259,7 @@ router.get("/suggestions", authGuard, async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error({ error }, "Failed to get suggestions");
-    res.status(500).json({
+    res.status(503).json({
       error: error.message,
     });
   }
@@ -289,7 +289,7 @@ router.post("/regime-transition", authGuard, async (req: Request, res: Response)
     });
   } catch (error: any) {
     logger.error({ error }, "Failed to record regime transition");
-    res.status(500).json({
+    res.status(503).json({
       error: error.message,
     });
   }
@@ -320,7 +320,7 @@ router.get("/regime-transitions", authGuard, async (req: Request, res: Response)
     });
   } catch (error: any) {
     logger.error({ error }, "Failed to get regime transitions");
-    res.status(500).json({
+    res.status(503).json({
       error: error.message,
     });
   }
@@ -346,7 +346,7 @@ router.post("/prune", authGuard, async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error({ error }, "Failed to prune memory");
-    res.status(500).json({
+    res.status(503).json({
       error: error.message,
     });
   }
@@ -367,7 +367,7 @@ router.get("/export", authGuard, async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error({ error }, "Failed to export memory");
-    res.status(500).json({
+    res.status(503).json({
       error: error.message,
     });
   }
@@ -397,7 +397,7 @@ router.post("/import", authGuard, async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error({ error }, "Failed to import memory");
-    res.status(500).json({
+    res.status(503).json({
       error: error.message,
     });
   }

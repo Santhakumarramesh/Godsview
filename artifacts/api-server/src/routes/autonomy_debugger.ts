@@ -18,7 +18,7 @@ router.get("/brain/autonomy/debug", async (req, res) => {
     res.status(statusCode).json(snapshot);
   } catch (err) {
     req.log.error({ err }, "Autonomy debug snapshot failed");
-    res.status(500).json({ error: "autonomy_debug_failed", message: String(err) });
+    res.status(503).json({ error: "autonomy_debug_failed", message: String(err) });
   }
 });
 
@@ -33,7 +33,7 @@ router.get("/ops/autonomy/debug", async (req, res) => {
     res.status(statusCode).json(snapshot);
   } catch (err) {
     req.log.error({ err }, "Ops autonomy debug snapshot failed");
-    res.status(500).json({ error: "autonomy_debug_failed", message: String(err) });
+    res.status(503).json({ error: "autonomy_debug_failed", message: String(err) });
   }
 });
 
@@ -57,7 +57,7 @@ router.post("/brain/autonomy/debug/fix", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Autonomy debug auto-fix failed");
-    res.status(500).json({ error: "autonomy_debug_fix_failed", message: String(err) });
+    res.status(503).json({ error: "autonomy_debug_fix_failed", message: String(err) });
   }
 });
 

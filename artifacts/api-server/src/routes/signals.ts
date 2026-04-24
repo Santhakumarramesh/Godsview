@@ -233,7 +233,7 @@ signalsRouter.get("/signals", async (req: Request, res: Response) => {
     res.json({ signals: rows, count: rows.length });
   } catch (err) {
     logger.error({ err }, "[signals] GET / error");
-    res.status(500).json({ error: "Failed to fetch signals" });
+    res.status(503).json({ error: "Failed to fetch signals" });
   }
 });
 
@@ -454,7 +454,7 @@ signalsRouter.post("/signals", async (req: Request, res: Response) => {
     });
   } catch (err) {
     logger.error({ err }, "[signals] POST / error");
-    res.status(500).json({ error: "Failed to create signal" });
+    res.status(503).json({ error: "Failed to create signal" });
   }
 });
 
@@ -474,7 +474,7 @@ signalsRouter.get("/signals/latest", async (_req: Request, res: Response) => {
     return res.json({ signal: rows[0] });
   } catch (err) {
     logger.error({ err }, "[signals] GET /latest error");
-    return res.status(500).json({ error: "Failed to fetch latest signal" });
+    return res.status(503).json({ error: "Failed to fetch latest signal" });
   }
 });
 
@@ -497,7 +497,7 @@ signalsRouter.get("/signals/:id", async (req: Request, res: Response) => {
     return res.json({ signal });
   } catch (err) {
     logger.error({ err }, "[signals] GET /:id error");
-    return res.status(500).json({ error: "Failed to fetch signal" });
+    return res.status(503).json({ error: "Failed to fetch signal" });
   }
 });
 
@@ -561,7 +561,7 @@ signalsRouter.get("/signals/:id/plot", async (req: Request, res: Response) => {
     });
   } catch (err) {
     logger.error({ err }, "[signals] GET /:id/plot error");
-    return res.status(500).json({ error: "Failed to build signal plot payload" });
+    return res.status(503).json({ error: "Failed to build signal plot payload" });
   }
 });
 
@@ -806,7 +806,7 @@ signalsRouter.post("/signals/:id/autobacktest", async (req: Request, res: Respon
     });
   } catch (err) {
     logger.error({ err }, "[signals] POST /:id/autobacktest error");
-    return res.status(500).json({ error: "Failed to run auto backtest" });
+    return res.status(503).json({ error: "Failed to run auto backtest" });
   }
 });
 

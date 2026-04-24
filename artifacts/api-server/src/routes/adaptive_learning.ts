@@ -28,7 +28,7 @@ const router = Router();
 router.get("/api/learning/snapshot", (_req: Request, res: Response) => {
   try {
     res.json({ ok: true, snapshot: getAdaptiveLearningSnapshot() });
-  } catch (err) { res.status(500).json({ ok: false, error: String(err) }); }
+  } catch (err) { res.status(503).json({ ok: false, error: String(err) }); }
 });
 
 router.post("/api/learning/compare", (req: Request, res: Response) => {
@@ -40,7 +40,7 @@ router.post("/api/learning/compare", (req: Request, res: Response) => {
     }
     const result = compareStrategies(champion_id, challenger_id, regime ?? "ALL");
     res.json({ ok: true, result });
-  } catch (err) { res.status(500).json({ ok: false, error: String(err) }); }
+  } catch (err) { res.status(503).json({ ok: false, error: String(err) }); }
 });
 
 router.post("/api/learning/record", (req: Request, res: Response) => {
@@ -66,7 +66,7 @@ router.post("/api/learning/record", (req: Request, res: Response) => {
       updatedAt: new Date().toISOString(),
     });
     res.json({ ok: true, message: "Performance recorded" });
-  } catch (err) { res.status(500).json({ ok: false, error: String(err) }); }
+  } catch (err) { res.status(503).json({ ok: false, error: String(err) }); }
 });
 
 router.post("/api/learning/attribute", (req: Request, res: Response) => {
@@ -94,34 +94,34 @@ router.post("/api/learning/attribute", (req: Request, res: Response) => {
       sentimentAligned: p.sentimentAligned ?? true,
     });
     res.json({ ok: true, attribution: result });
-  } catch (err) { res.status(500).json({ ok: false, error: String(err) }); }
+  } catch (err) { res.status(503).json({ ok: false, error: String(err) }); }
 });
 
 router.get("/api/learning/triggers/:strategyId", (req: Request, res: Response) => {
   try {
     const triggers = evaluateRetrainTriggers(String(req.params.strategyId));
     res.json({ ok: true, triggers });
-  } catch (err) { res.status(500).json({ ok: false, error: String(err) }); }
+  } catch (err) { res.status(503).json({ ok: false, error: String(err) }); }
 });
 
 router.get("/api/learning/regime/:strategyId", (req: Request, res: Response) => {
   try {
     const performance = getRegimePerformance(String(req.params.strategyId));
     res.json({ ok: true, performance });
-  } catch (err) { res.status(500).json({ ok: false, error: String(err) }); }
+  } catch (err) { res.status(503).json({ ok: false, error: String(err) }); }
 });
 
 router.get("/api/learning/retirement", (_req: Request, res: Response) => {
   try {
     res.json({ ok: true, candidates: getRetirementCandidates() });
-  } catch (err) { res.status(500).json({ ok: false, error: String(err) }); }
+  } catch (err) { res.status(503).json({ ok: false, error: String(err) }); }
 });
 
 router.post("/api/learning/reset", (_req: Request, res: Response) => {
   try {
     resetAdaptiveLearning();
     res.json({ ok: true, message: "Adaptive learning state reset" });
-  } catch (err) { res.status(500).json({ ok: false, error: String(err) }); }
+  } catch (err) { res.status(503).json({ ok: false, error: String(err) }); }
 });
 
 export default router;

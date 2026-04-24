@@ -53,7 +53,7 @@ router.get("/tiers", (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error({ error }, "Error getting tier breakdown");
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: "Failed to get tier breakdown",
     });
@@ -83,7 +83,7 @@ router.get("/tiers/:strategyId", (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error({ error }, "Error getting strategy tier");
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: "Failed to get strategy tier",
     });
@@ -107,7 +107,7 @@ router.post("/tiers/:strategyId/promote", (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error({ error }, "Error requesting promotion");
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: "Failed to request promotion",
     });
@@ -139,7 +139,7 @@ router.post("/tiers/:strategyId/demote", (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error({ error }, "Error demoting strategy");
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: "Failed to demote strategy",
     });
@@ -163,7 +163,7 @@ router.get("/tiers/:strategyId/history", (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error({ error }, "Error getting promotion history");
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: "Failed to get promotion history",
     });
@@ -185,7 +185,7 @@ router.get("/allocation", (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error({ error }, "Error getting capital allocation");
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: "Failed to get capital allocation",
     });
@@ -210,7 +210,7 @@ router.get("/launch/plan", (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error({ error }, "Error getting launch plan");
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: "Failed to get launch plan",
     });
@@ -245,7 +245,7 @@ router.post("/launch/plan", (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error({ error }, "Error creating launch plan");
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: "Failed to create launch plan",
     });
@@ -271,7 +271,7 @@ router.get("/launch/status", (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error({ error }, "Error getting launch status");
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: "Failed to get launch status",
     });
@@ -294,7 +294,7 @@ router.post("/launch/advance", (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error({ error }, "Error advancing launch phase");
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: "Failed to advance launch phase",
     });
@@ -325,7 +325,7 @@ router.post("/launch/pause", (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error({ error }, "Error pausing launch");
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: "Failed to pause launch",
     });
@@ -356,7 +356,7 @@ router.post("/launch/abort", (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error({ error }, "Error aborting launch");
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: "Failed to abort launch",
     });
@@ -378,7 +378,7 @@ router.get("/launch/metrics", (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error({ error }, "Error getting launch metrics");
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: "Failed to get launch metrics",
     });
@@ -407,7 +407,7 @@ router.get("/launch/ramp", (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error({ error }, "Error getting ramp schedule");
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: "Failed to get ramp schedule",
     });
@@ -432,7 +432,7 @@ router.get("/protection/checklist", (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error({ error }, "Error running pre-launch checklist");
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: "Failed to run pre-launch checklist",
     });
@@ -457,7 +457,7 @@ router.get("/protection/capital-at-risk", (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error({ error }, "Error getting capital at risk");
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: "Failed to get capital at risk",
     });
@@ -487,7 +487,7 @@ router.get("/protection/drawdown-budget", (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error({ error }, "Error getting drawdown budget");
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: "Failed to get drawdown budget",
     });
@@ -518,7 +518,7 @@ router.post("/protection/max-drawdown", (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error({ error }, "Error setting max drawdown");
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: "Failed to set max drawdown",
     });
@@ -549,7 +549,7 @@ router.post("/protection/emergency-halt", (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error({ error }, "Error triggering emergency halt");
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: "Failed to trigger emergency halt",
     });

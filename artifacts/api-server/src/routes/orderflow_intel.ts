@@ -21,7 +21,7 @@ router.get("/snapshot/:symbol", (req: Request, res: Response) => {
     const snapshot = generateSnapshot(symbol);
     res.json({ ok: true, snapshot });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(503).json({ error: err.message });
   }
 });
 
@@ -33,7 +33,7 @@ router.get("/history/:symbol", (req: Request, res: Response) => {
     const history = getSnapshotHistory(symbol, limit);
     res.json({ ok: true, symbol, count: history.length, history });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(503).json({ error: err.message });
   }
 });
 
@@ -45,7 +45,7 @@ router.get("/imbalance/:symbol", (req: Request, res: Response) => {
     const candles = generateImbalanceCandles(symbol, count);
     res.json({ ok: true, symbol, count: candles.length, candles });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(503).json({ error: err.message });
   }
 });
 
@@ -58,7 +58,7 @@ router.get("/heatmap/:symbol", (req: Request, res: Response) => {
     const cells = generateHeatmap(symbol, levels, periods);
     res.json({ ok: true, symbol, cellCount: cells.length, cells });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(503).json({ error: err.message });
   }
 });
 
@@ -69,7 +69,7 @@ router.get("/confluence/:symbol", (req: Request, res: Response) => {
     const confluence = computeConfluence(symbol);
     res.json({ ok: true, confluence });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(503).json({ error: err.message });
   }
 });
 
@@ -81,7 +81,7 @@ router.get("/confluence-history/:symbol", (req: Request, res: Response) => {
     const history = getConfluenceHistory(symbol, limit);
     res.json({ ok: true, symbol, count: history.length, history });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(503).json({ error: err.message });
   }
 });
 
@@ -92,7 +92,7 @@ router.get("/multi", (req: Request, res: Response) => {
     const snapshots = getMultiSymbolSnapshot(symbols);
     res.json({ ok: true, count: snapshots.length, snapshots });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(503).json({ error: err.message });
   }
 });
 
@@ -103,7 +103,7 @@ router.get("/multi-confluence", (req: Request, res: Response) => {
     const confluences = getMultiSymbolConfluence(symbols);
     res.json({ ok: true, count: confluences.length, confluences });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(503).json({ error: err.message });
   }
 });
 
@@ -113,7 +113,7 @@ router.get("/symbols", (_req: Request, res: Response) => {
     const symbols = getTrackedSymbols();
     res.json({ ok: true, count: symbols.length, symbols });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(503).json({ error: err.message });
   }
 });
 
@@ -123,7 +123,7 @@ router.get("/summary", (_req: Request, res: Response) => {
     const summary = getOrderFlowSummary();
     res.json({ ok: true, summary });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(503).json({ error: err.message });
   }
 });
 

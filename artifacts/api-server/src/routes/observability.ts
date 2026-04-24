@@ -224,7 +224,7 @@ router.use(
     next: NextFunction
   ) => {
     logger.error({ err }, "Observability route error");
-    res.status(500).json({
+    res.status(503).json({
       error: "Internal server error",
       message: err.message,
     });

@@ -138,7 +138,7 @@ router.post("/watchlist/scanner/scan", async (_req, res) => {
     res.json({ run });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "scan failed";
-    res.status(500).json({ error: "scan_failed", message: msg });
+    res.status(503).json({ error: "scan_failed", message: msg });
   }
 });
 

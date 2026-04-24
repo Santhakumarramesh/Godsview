@@ -51,7 +51,7 @@ executionTruthRouter.get("/orders", async (req: Request, res: Response) => {
     res.json({ orders, count: orders.length });
   } catch (err) {
     logger.error({ err }, "Failed to list orders");
-    res.status(500).json({ error: "internal_error", message: "Failed to list orders" });
+    res.status(503).json({ error: "internal_error", message: "Failed to list orders" });
   }
 });
 
@@ -67,7 +67,7 @@ executionTruthRouter.get("/orders/:uuid", async (req: Request, res: Response) =>
     res.json({ order, fills });
   } catch (err) {
     logger.error({ err }, "Failed to get order");
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -83,7 +83,7 @@ executionTruthRouter.get("/orders/:uuid/fills", async (req: Request, res: Respon
     res.json({ fills, count: fills.length });
   } catch (err) {
     logger.error({ err }, "Failed to get fills");
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -101,7 +101,7 @@ executionTruthRouter.get("/fills/today", async (_req: Request, res: Response) =>
     });
   } catch (err) {
     logger.error({ err }, "Failed to get today's fills");
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -130,7 +130,7 @@ executionTruthRouter.get("/metrics", async (req: Request, res: Response) => {
     }
   } catch (err) {
     logger.error({ err }, "Failed to get execution metrics");
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -144,7 +144,7 @@ executionTruthRouter.get("/slippage", async (req: Request, res: Response) => {
     res.json({ report, days });
   } catch (err) {
     logger.error({ err }, "Failed to get slippage report");
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -160,7 +160,7 @@ executionTruthRouter.get("/reconciliation", async (req: Request, res: Response) 
     res.json({ events, count: events.length });
   } catch (err) {
     logger.error({ err }, "Failed to get reconciliation events");
-    res.status(500).json({ error: "internal_error" });
+    res.status(503).json({ error: "internal_error" });
   }
 });
 
@@ -170,7 +170,7 @@ executionTruthRouter.post("/reconcile", requireOperator, async (_req: Request, r
     res.json({ reconciliation: result });
   } catch (err) {
     logger.error({ err }, "Manual reconciliation failed");
-    res.status(500).json({ error: "reconciliation_failed" });
+    res.status(503).json({ error: "reconciliation_failed" });
   }
 });
 

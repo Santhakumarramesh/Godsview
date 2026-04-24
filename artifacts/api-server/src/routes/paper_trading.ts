@@ -29,7 +29,7 @@ router.get("/api/paper-trading/state", (req: Request, res: Response): void => {
     res.status(200).json(state);
   } catch (err) {
     logger.error({ err }, "[paper-trading-routes] Failed to get state");
-    res.status(500).json({ error: "Failed to get state" });
+    res.status(503).json({ error: "Failed to get state" });
   }
 });
 
@@ -42,7 +42,7 @@ router.post("/api/paper-trading/start", (req: Request, res: Response): void => {
     res.status(result.success ? 200 : 400).json(result);
   } catch (err) {
     logger.error({ err }, "[paper-trading-routes] Failed to start");
-    res.status(500).json({ error: "Failed to start paper trading" });
+    res.status(503).json({ error: "Failed to start paper trading" });
   }
 });
 
@@ -54,7 +54,7 @@ router.post("/api/paper-trading/stop", (req: Request, res: Response): void => {
     res.status(result.success ? 200 : 400).json(result);
   } catch (err) {
     logger.error({ err }, "[paper-trading-routes] Failed to stop");
-    res.status(500).json({ error: "Failed to stop paper trading" });
+    res.status(503).json({ error: "Failed to stop paper trading" });
   }
 });
 
@@ -66,7 +66,7 @@ router.post("/api/paper-trading/pause", (req: Request, res: Response): void => {
     res.status(result.success ? 200 : 400).json(result);
   } catch (err) {
     logger.error({ err }, "[paper-trading-routes] Failed to pause");
-    res.status(500).json({ error: "Failed to pause paper trading" });
+    res.status(503).json({ error: "Failed to pause paper trading" });
   }
 });
 
@@ -80,7 +80,7 @@ router.post(
       res.status(result.success ? 200 : 400).json(result);
     } catch (err) {
       logger.error({ err }, "[paper-trading-routes] Failed to resume");
-      res.status(500).json({ error: "Failed to resume paper trading" });
+      res.status(503).json({ error: "Failed to resume paper trading" });
     }
   }
 );
@@ -97,7 +97,7 @@ router.get("/api/paper-trading/report", (req: Request, res: Response): void => {
     res.status(200).json(report);
   } catch (err) {
     logger.error({ err }, "[paper-trading-routes] Failed to get report");
-    res.status(500).json({ error: "Failed to get report" });
+    res.status(503).json({ error: "Failed to get report" });
   }
 });
 
@@ -109,7 +109,7 @@ router.get("/api/paper-trading/health", (req: Request, res: Response): void => {
     res.status(200).json(health);
   } catch (err) {
     logger.error({ err }, "[paper-trading-routes] Failed to get health");
-    res.status(500).json({ error: "Failed to get health status" });
+    res.status(503).json({ error: "Failed to get health status" });
   }
 });
 
@@ -121,7 +121,7 @@ router.get("/api/paper-trading/config", (req: Request, res: Response): void => {
     res.status(200).json(config);
   } catch (err) {
     logger.error({ err }, "[paper-trading-routes] Failed to get config");
-    res.status(500).json({ error: "Failed to get config" });
+    res.status(503).json({ error: "Failed to get config" });
   }
 });
 
@@ -136,7 +136,7 @@ router.post(
       res.status(200).json(updated);
     } catch (err) {
       logger.error({ err }, "[paper-trading-routes] Failed to set config");
-      res.status(500).json({ error: "Failed to set config" });
+      res.status(503).json({ error: "Failed to set config" });
     }
   }
 );
@@ -168,7 +168,7 @@ router.post(
       res.status(result.approved ? 200 : 400).json(result);
     } catch (err) {
       logger.error({ err }, "[paper-trading-routes] Failed to process signal");
-      res.status(500).json({ error: "Failed to process signal" });
+      res.status(503).json({ error: "Failed to process signal" });
     }
   }
 );

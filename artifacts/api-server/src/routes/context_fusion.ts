@@ -23,7 +23,7 @@ router.get("/api/context/fusion/snapshot", async (_req: Request, res: Response) 
     const snapshot = getContextFusionSnapshot();
     res.json({ ok: true, snapshot });
   } catch (err) {
-    res.status(500).json({ ok: false, error: String(err) });
+    res.status(503).json({ ok: false, error: String(err) });
   }
 });
 
@@ -33,7 +33,7 @@ router.post("/api/context/fusion/reset", async (_req: Request, res: Response) =>
     resetContextFusionState();
     res.json({ ok: true, message: "Context fusion state reset" });
   } catch (err) {
-    res.status(500).json({ ok: false, error: String(err) });
+    res.status(503).json({ ok: false, error: String(err) });
   }
 });
 
@@ -56,7 +56,7 @@ router.get("/api/context/fusion/evaluate", async (req: Request, res: Response) =
     const result = await evaluateContextFusion(input);
     res.json({ ok: true, result });
   } catch (err) {
-    res.status(500).json({ ok: false, error: String(err) });
+    res.status(503).json({ ok: false, error: String(err) });
   }
 });
 
@@ -75,7 +75,7 @@ router.get("/api/context/fusion/:symbol", async (req: Request, res: Response) =>
     const result = await evaluateContextFusion({ symbol, direction, regime });
     res.json({ ok: true, result });
   } catch (err) {
-    res.status(500).json({ ok: false, error: String(err) });
+    res.status(503).json({ ok: false, error: String(err) });
   }
 });
 

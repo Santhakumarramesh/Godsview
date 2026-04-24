@@ -71,7 +71,7 @@ router.get("/orderbook/snapshot", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch order book snapshot");
-    res.status(500).json({ error: "orderbook_fetch_failed", message: String(err) });
+    res.status(503).json({ error: "orderbook_fetch_failed", message: String(err) });
   }
 });
 
@@ -223,7 +223,7 @@ router.get("/market/microstructure", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Failed to compute microstructure");
-    res.status(500).json({ error: "microstructure_failed", message: String(err) });
+    res.status(503).json({ error: "microstructure_failed", message: String(err) });
   }
 });
 
@@ -256,7 +256,7 @@ router.get("/market/liquidity-zones", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Failed to compute liquidity zones");
-    res.status(500).json({ error: "liquidity_zones_failed", message: String(err) });
+    res.status(503).json({ error: "liquidity_zones_failed", message: String(err) });
   }
 });
 
@@ -368,7 +368,7 @@ router.get("/market/volume-profile", async (req, res) => {
       computed_at:   new Date().toISOString(),
     });
   } catch (err) {
-    res.status(500).json({ error: "volume_profile_failed", message: String(err) });
+    res.status(503).json({ error: "volume_profile_failed", message: String(err) });
   }
 });
 
@@ -478,7 +478,7 @@ router.get("/market/candle-intelligence", async (req, res) => {
       },
     });
   } catch (err) {
-    res.status(500).json({ error: "candle_intelligence_failed", message: String(err) });
+    res.status(503).json({ error: "candle_intelligence_failed", message: String(err) });
   }
 });
 
@@ -572,7 +572,7 @@ router.get("/market/cvd", async (req, res) => {
       avg_volume:   Math.round(avgVol * 10000) / 10000,
     });
   } catch (err) {
-    res.status(500).json({ error: "cvd_failed", message: String(err) });
+    res.status(503).json({ error: "cvd_failed", message: String(err) });
   }
 });
 

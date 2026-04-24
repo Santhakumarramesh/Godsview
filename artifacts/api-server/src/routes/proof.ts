@@ -47,7 +47,7 @@ router.get(
       res.status(200).json(dashboard);
     } catch (error) {
       logger.error(`[Proof Dashboard] ${error instanceof Error ? error.message : "unknown"}`);
-      res.status(500).json({
+      res.status(503).json({
         error: "Dashboard generation failed",
         message: error instanceof Error ? error.message : "Unknown error",
       });
@@ -85,7 +85,7 @@ router.get(
       res.status(200).json(proof);
     } catch (error) {
       logger.error(`[Proof By Setup] ${error instanceof Error ? error.message : "unknown"}`);
-      res.status(500).json({
+      res.status(503).json({
         error: "Setup proof retrieval failed",
         message: error instanceof Error ? error.message : "Unknown error",
       });
@@ -110,7 +110,7 @@ router.get(
       });
     } catch (error) {
       logger.error(`[Proof Drift] ${error instanceof Error ? error.message : "unknown"}`);
-      res.status(500).json({
+      res.status(503).json({
         error: "Drift reports retrieval failed",
         message: error instanceof Error ? error.message : "Unknown error",
       });
@@ -151,7 +151,7 @@ router.get(
       });
     } catch (error) {
       logger.error(`[Proof By Regime] ${error instanceof Error ? error.message : "unknown"}`);
-      res.status(500).json({
+      res.status(503).json({
         error: "Regime proof retrieval failed",
         message: error instanceof Error ? error.message : "Unknown error",
       });
@@ -169,7 +169,7 @@ router.get(
       res.status(200).json(stats);
     } catch (error) {
       logger.error(`[Proof Cache Stats] ${error instanceof Error ? error.message : "unknown"}`);
-      res.status(500).json({
+      res.status(503).json({
         error: "Cache stats retrieval failed",
         message: error instanceof Error ? error.message : "Unknown error",
       });
@@ -194,7 +194,7 @@ router.post(
       }
     } catch (error) {
       logger.error(`[Proof Cache Clear] ${error instanceof Error ? error.message : "unknown"}`);
-      res.status(500).json({
+      res.status(503).json({
         error: "Cache clear failed",
         message: error instanceof Error ? error.message : "Unknown error",
       });

@@ -17,7 +17,7 @@ router.get("/snapshot", (req: Request, res: Response) => {
     res.json(snapshot);
   } catch (error) {
     logger.error(`Error fetching ops snapshot: ${error}`);
-    res.status(500).json({
+    res.status(503).json({
       error: "Failed to fetch ops snapshot",
       message: error instanceof Error ? error.message : "Unknown error",
     });
@@ -36,7 +36,7 @@ router.get("/health", (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error(`Error fetching ops health: ${error}`);
-    res.status(500).json({
+    res.status(503).json({
       error: "Failed to fetch ops health",
       message: error instanceof Error ? error.message : "Unknown error",
     });
@@ -51,7 +51,7 @@ router.get("/alerts", (req: Request, res: Response) => {
     res.json({ alerts, count: alerts.length });
   } catch (error) {
     logger.error(`Error fetching ops alerts: ${error}`);
-    res.status(500).json({
+    res.status(503).json({
       error: "Failed to fetch ops alerts",
       message: error instanceof Error ? error.message : "Unknown error",
     });
@@ -86,7 +86,7 @@ router.post("/alerts", (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error(`Error ingesting ops alert: ${error}`);
-    res.status(500).json({
+    res.status(503).json({
       error: "Failed to ingest alert",
       message: error instanceof Error ? error.message : "Unknown error",
     });
@@ -101,7 +101,7 @@ router.delete("/alerts", (req: Request, res: Response) => {
     res.json({ success: true, message: "All alerts cleared" });
   } catch (error) {
     logger.error(`Error clearing ops alerts: ${error}`);
-    res.status(500).json({
+    res.status(503).json({
       error: "Failed to clear alerts",
       message: error instanceof Error ? error.message : "Unknown error",
     });

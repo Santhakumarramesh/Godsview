@@ -71,7 +71,7 @@ export function createSystemBridgeRouter(bridge: SystemBridge, docs: QuantAPIDoc
         } as ApiResponse<FullEvaluationResult>);
       } catch (error) {
         logger.error('Strategy evaluation error:', error);
-        return res.status(500).json({
+        return res.status(503).json({
           success: false,
           error: error instanceof Error ? error.message : 'Strategy evaluation failed',
           code: 500,
@@ -118,7 +118,7 @@ export function createSystemBridgeRouter(bridge: SystemBridge, docs: QuantAPIDoc
         } as ApiResponse<EnhancedSignalResult>);
       } catch (error) {
         logger.error('Signal evaluation error:', error);
-        return res.status(500).json({
+        return res.status(503).json({
           success: false,
           error: error instanceof Error ? error.message : 'Signal evaluation failed',
           code: 500,
@@ -161,7 +161,7 @@ export function createSystemBridgeRouter(bridge: SystemBridge, docs: QuantAPIDoc
         } as ApiResponse<PostTradeAnalysis>);
       } catch (error) {
         logger.error('Post-trade review error:', error);
-        return res.status(500).json({
+        return res.status(503).json({
           success: false,
           error: error instanceof Error ? error.message : 'Post-trade review failed',
           code: 500,
@@ -190,7 +190,7 @@ export function createSystemBridgeRouter(bridge: SystemBridge, docs: QuantAPIDoc
       } as ApiResponse<SystemStatus>);
     } catch (error) {
       logger.error('Status check error:', error);
-      return res.status(500).json({
+      return res.status(503).json({
         success: false,
         error: error instanceof Error ? error.message : 'Status check failed',
         code: 500,
@@ -250,7 +250,7 @@ export function createSystemBridgeRouter(bridge: SystemBridge, docs: QuantAPIDoc
       } as ApiResponse<MaintenanceReport>);
     } catch (error) {
       logger.error('Maintenance error:', error);
-      return res.status(500).json({
+      return res.status(503).json({
         success: false,
         error: error instanceof Error ? error.message : 'Maintenance failed',
         code: 500,
@@ -278,7 +278,7 @@ export function createSystemBridgeRouter(bridge: SystemBridge, docs: QuantAPIDoc
       });
     } catch (error) {
       logger.error('Documentation error:', error);
-      return res.status(500).json({
+      return res.status(503).json({
         success: false,
         error: error instanceof Error ? error.message : 'Documentation retrieval failed',
         code: 500,
@@ -302,7 +302,7 @@ export function createSystemBridgeRouter(bridge: SystemBridge, docs: QuantAPIDoc
       });
     } catch (error) {
       logger.error('OpenAPI spec error:', error);
-      return res.status(500).json({
+      return res.status(503).json({
         success: false,
         error: error instanceof Error ? error.message : 'OpenAPI spec generation failed',
         code: 500,
@@ -336,7 +336,7 @@ export function createSystemBridgeRouter(bridge: SystemBridge, docs: QuantAPIDoc
       });
     } catch (error) {
       logger.error('Endpoint documentation error:', error);
-      return res.status(500).json({
+      return res.status(503).json({
         success: false,
         error: error instanceof Error ? error.message : 'Endpoint documentation retrieval failed',
         code: 500,

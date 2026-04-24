@@ -72,7 +72,7 @@ router.post("/analyze/:symbol", async (req: Request, res: Response): Promise<voi
     res.status(200).json(verdict);
   } catch (error: unknown) {
     logger.error(`[War Room POST] ${error instanceof Error ? error.message : "unknown"}`);
-    res.status(500).json({ error: "War Room analysis failed", message: error instanceof Error ? error.message : "Unknown" });
+    res.status(503).json({ error: "War Room analysis failed", message: error instanceof Error ? error.message : "Unknown" });
   }
 });
 
@@ -82,7 +82,7 @@ router.get("/cache/stats", async (_req: Request, res: Response): Promise<void> =
     res.status(200).json(getWarRoomCacheStats());
   } catch (error: unknown) {
     logger.error(`[War Room Cache Stats] ${error instanceof Error ? error.message : "unknown"}`);
-    res.status(500).json({ error: "Cache stats failed" });
+    res.status(503).json({ error: "Cache stats failed" });
   }
 });
 // POST /war-room/cache/clear
@@ -93,7 +93,7 @@ router.post("/cache/clear", async (req: Request, res: Response): Promise<void> =
     res.status(200).json({ message: symbol ? `Cache cleared for ${symbol}` : "All cache cleared" });
   } catch (error: unknown) {
     logger.error(`[War Room Cache Clear] ${error instanceof Error ? error.message : "unknown"}`);
-    res.status(500).json({ error: "Cache clear failed" });
+    res.status(503).json({ error: "Cache clear failed" });
   }
 });
 
@@ -111,7 +111,7 @@ router.get("/:symbol", async (req: Request, res: Response): Promise<void> => {
     res.status(200).json(verdict);
   } catch (error: unknown) {
     logger.error(`[War Room GET] ${error instanceof Error ? error.message : "unknown"}`);
-    res.status(500).json({ error: "War Room retrieval failed" });
+    res.status(503).json({ error: "War Room retrieval failed" });
   }
 });
 

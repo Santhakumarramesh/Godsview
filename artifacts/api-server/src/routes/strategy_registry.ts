@@ -23,7 +23,7 @@ router.get("/api/strategy-registry/snapshot", async (_req: Request, res: Respons
   try {
     res.json({ ok: true, snapshot: getRegistrySnapshot() });
   } catch (err) {
-    res.status(500).json({ ok: false, error: String(err) });
+    res.status(503).json({ ok: false, error: String(err) });
   }
 });
 
@@ -35,7 +35,7 @@ router.get("/api/strategy-registry/list", async (req: Request, res: Response) =>
     const author = req.query.author ? String(req.query.author) : undefined;
     res.json({ ok: true, strategies: listStrategies({ state, tag, author }) });
   } catch (err) {
-    res.status(500).json({ ok: false, error: String(err) });
+    res.status(503).json({ ok: false, error: String(err) });
   }
 });
 
@@ -44,7 +44,7 @@ router.get("/api/strategy-registry/live", async (_req: Request, res: Response) =
   try {
     res.json({ ok: true, strategies: getLiveStrategies() });
   } catch (err) {
-    res.status(500).json({ ok: false, error: String(err) });
+    res.status(503).json({ ok: false, error: String(err) });
   }
 });
 
@@ -55,7 +55,7 @@ router.get("/api/strategy-registry/:id", async (req: Request, res: Response) => 
     if (!entry) { res.status(404).json({ ok: false, error: "Strategy not found" }); return; }
     res.json({ ok: true, strategy: entry });
   } catch (err) {
-    res.status(500).json({ ok: false, error: String(err) });
+    res.status(503).json({ ok: false, error: String(err) });
   }
 });
 
@@ -67,7 +67,7 @@ router.post("/api/strategy-registry/register", async (req: Request, res: Respons
     const entry = registerStrategy({ name, description, author, tags, parameters });
     res.json({ ok: true, strategy: entry });
   } catch (err) {
-    res.status(500).json({ ok: false, error: String(err) });
+    res.status(503).json({ ok: false, error: String(err) });
   }
 });
 
@@ -114,7 +114,7 @@ router.post("/api/strategy-registry/reset", async (_req: Request, res: Response)
     resetRegistry();
     res.json({ ok: true, message: "Strategy registry reset" });
   } catch (err) {
-    res.status(500).json({ ok: false, error: String(err) });
+    res.status(503).json({ ok: false, error: String(err) });
   }
 });
 

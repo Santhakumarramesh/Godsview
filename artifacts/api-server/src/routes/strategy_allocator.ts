@@ -50,7 +50,7 @@ router.post("/brain/strategy/allocator/start", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Strategy allocator start failed");
-    res.status(500).json({ error: "strategy_allocator_start_failed", message: String(err) });
+    res.status(503).json({ error: "strategy_allocator_start_failed", message: String(err) });
   }
 });
 
@@ -67,7 +67,7 @@ router.post("/brain/strategy/allocator/run-once", async (_req, res) => {
     const snapshot = await runStrategyAllocatorCycle("manual_route");
     res.json({ ok: true, snapshot });
   } catch (err) {
-    res.status(500).json({ error: "strategy_allocator_cycle_failed", message: String(err) });
+    res.status(503).json({ error: "strategy_allocator_cycle_failed", message: String(err) });
   }
 });
 

@@ -26,7 +26,7 @@ router.get("/brain/nodes", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Failed to list brain nodes");
-    res.status(500).json({ error: "brain_nodes_failed", message: "Failed to list brain nodes" });
+    res.status(503).json({ error: "brain_nodes_failed", message: "Failed to list brain nodes" });
   }
 });
 
@@ -40,7 +40,7 @@ router.get("/brain/nodes/:symbol", async (req, res) => {
     res.json({ node });
   } catch (err) {
     req.log.error({ err }, "Failed to load brain node");
-    res.status(500).json({ error: "brain_node_failed", message: "Failed to load brain node" });
+    res.status(503).json({ error: "brain_node_failed", message: "Failed to load brain node" });
   }
 });
 
@@ -64,7 +64,7 @@ router.get("/brain/nodes/:symbol/drilldown", async (req, res) => {
     res.json(drilldown);
   } catch (err) {
     req.log.error({ err }, "Failed to load brain node drilldown");
-    res.status(500).json({ error: "brain_node_drilldown_failed", message: "Failed to load node drilldown" });
+    res.status(503).json({ error: "brain_node_drilldown_failed", message: "Failed to load node drilldown" });
   }
 });
 
@@ -78,7 +78,7 @@ router.get("/brain/clusters", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Failed to load brain node clusters");
-    res.status(500).json({ error: "brain_clusters_failed", message: "Failed to load brain clusters" });
+    res.status(503).json({ error: "brain_clusters_failed", message: "Failed to load brain clusters" });
   }
 });
 
@@ -94,7 +94,7 @@ router.get("/brain/relationships", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Failed to load brain relationships");
-    res.status(500).json({ error: "brain_relationships_failed", message: "Failed to load relationships" });
+    res.status(503).json({ error: "brain_relationships_failed", message: "Failed to load relationships" });
   }
 });
 

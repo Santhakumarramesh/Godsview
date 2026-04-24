@@ -39,7 +39,7 @@ router.post('/analyze', (req: Request, res: Response) => {
       data: analysis,
     });
   } catch (error: any) {
-    return res.status(500).json({
+    return res.status(503).json({
       error: 'Analysis failed',
       message: error?.message || 'Unknown error',
     });
@@ -65,7 +65,7 @@ router.post('/prescreen', (req: Request, res: Response) => {
       data: result,
     });
   } catch (error: any) {
-    return res.status(500).json({
+    return res.status(503).json({
       error: 'Pre-screen failed',
       message: error?.message || 'Unknown error',
     });
@@ -91,7 +91,7 @@ router.post('/critique', (req: Request, res: Response) => {
       data: critique,
     });
   } catch (error: any) {
-    return res.status(500).json({
+    return res.status(503).json({
       error: 'Critique failed',
       message: error?.message || 'Unknown error',
     });
@@ -117,7 +117,7 @@ router.post('/improve', (req: Request, res: Response) => {
       data: improvementPlan,
     });
   } catch (error: any) {
-    return res.status(500).json({
+    return res.status(503).json({
       error: 'Improvement generation failed',
       message: error?.message || 'Unknown error',
     });
@@ -143,7 +143,7 @@ router.post('/rank', (req: Request, res: Response) => {
       data: rankings,
     });
   } catch (error: any) {
-    return res.status(500).json({
+    return res.status(503).json({
       error: 'Variant ranking failed',
       message: error?.message || 'Unknown error',
     });
@@ -169,7 +169,7 @@ router.post('/hypothesis', (req: Request, res: Response) => {
       data: assessment,
     });
   } catch (error: any) {
-    return res.status(500).json({
+    return res.status(503).json({
       error: 'Hypothesis assessment failed',
       message: error?.message || 'Unknown error',
     });
@@ -195,7 +195,7 @@ router.post('/reject', (req: Request, res: Response) => {
       data: rejection,
     });
   } catch (error: any) {
-    return res.status(500).json({
+    return res.status(503).json({
       error: 'Rejection assessment failed',      message: error?.message || 'Unknown error',
     });
   }
@@ -243,7 +243,7 @@ router.post('/compare', (req: Request, res: Response) => {
       data: comparison,
     });
   } catch (error: any) {
-    return res.status(500).json({
+    return res.status(503).json({
       error: 'Strategy comparison failed',
       message: error?.message || 'Unknown error',
     });

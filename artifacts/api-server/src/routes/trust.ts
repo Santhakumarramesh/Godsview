@@ -51,7 +51,7 @@ export function createTrustRouter(
         generatedAt: new Date().toISOString(),
       });
     } catch (error) {
-      res.status(500).json({
+      res.status(503).json({
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
       });
@@ -76,7 +76,7 @@ export function createTrustRouter(
         generatedAt: new Date().toISOString(),
       });
     } catch (error) {
-      res.status(500).json({
+      res.status(503).json({
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
       });
@@ -101,7 +101,7 @@ export function createTrustRouter(
         generatedAt: new Date().toISOString(),
       });
     } catch (error) {
-      res.status(500).json({
+      res.status(503).json({
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
       });
@@ -126,7 +126,7 @@ export function createTrustRouter(
         generatedAt: new Date().toISOString(),
       });
     } catch (error) {
-      res.status(500).json({
+      res.status(503).json({
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
       });
@@ -149,7 +149,7 @@ export function createTrustRouter(
         generatedAt: new Date().toISOString(),
       });
     } catch (error) {
-      res.status(500).json({
+      res.status(503).json({
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
       });
@@ -174,7 +174,7 @@ export function createTrustRouter(
         generatedAt: new Date().toISOString(),
       });
     } catch (error) {
-      res.status(500).json({
+      res.status(503).json({
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
       });
@@ -199,7 +199,7 @@ export function createTrustRouter(
         generatedAt: new Date().toISOString(),
       });
     } catch (error) {
-      res.status(500).json({
+      res.status(503).json({
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
       });
@@ -227,7 +227,7 @@ export function createTrustRouter(
         generatedAt: new Date().toISOString(),
       });
     } catch (error) {
-      res.status(500).json({
+      res.status(503).json({
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
       });
@@ -253,7 +253,7 @@ export function createTrustRouter(
         generatedAt: new Date().toISOString(),
       });
     } catch (error) {
-      res.status(500).json({
+      res.status(503).json({
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
       });
@@ -280,7 +280,7 @@ export function createTrustRouter(
         generatedAt: new Date().toISOString(),
       });
     } catch (error) {
-      res.status(500).json({
+      res.status(503).json({
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
       });
@@ -316,7 +316,7 @@ export function createTrustRouter(
         generatedAt: new Date().toISOString(),
       });
     } catch (error) {
-      res.status(500).json({
+      res.status(503).json({
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
       });
@@ -342,7 +342,7 @@ export function createTrustRouter(
         generatedAt: new Date().toISOString(),
       });
     } catch (error) {
-      res.status(500).json({
+      res.status(503).json({
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
       });

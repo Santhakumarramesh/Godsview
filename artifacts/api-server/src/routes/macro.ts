@@ -50,7 +50,7 @@ router.get("/context", (req: Request, res: Response) => {
     res.json(context);
   } catch (error) {
     logger.error(`Error fetching macro context: ${String(error)}`);
-    res.status(500).json({ error: "Failed to fetch macro context" });
+    res.status(503).json({ error: "Failed to fetch macro context" });
   }
 });
 
@@ -71,7 +71,7 @@ router.post("/events", (req: Request, res: Response): void => {
     res.status(201).json({ success: true, id: event.id });
   } catch (error) {
     logger.error(`Error ingesting macro event: ${String(error)}`);
-    res.status(500).json({ error: "Failed to ingest macro event" });
+    res.status(503).json({ error: "Failed to ingest macro event" });
   }
 });
 
@@ -86,7 +86,7 @@ router.get("/lockout/:symbol", (req: Request, res: Response) => {
     logger.info(`Checked news lockout for ${symbol}: locked=${result.locked}`);
     res.json(result);  } catch (error) {
     logger.error(`Error checking news lockout: ${String(error)}`);
-    res.status(500).json({ error: "Failed to check news lockout" });
+    res.status(503).json({ error: "Failed to check news lockout" });
   }
 });
 
@@ -101,7 +101,7 @@ router.get("/events", (req: Request, res: Response) => {
     res.json({ events: context.events });
   } catch (error) {
     logger.error(`Error fetching macro events: ${String(error)}`);
-    res.status(500).json({ error: "Failed to fetch macro events" });
+    res.status(503).json({ error: "Failed to fetch macro events" });
   }
 });
 
@@ -114,7 +114,7 @@ router.get("/stats", (req: Request, res: Response) => {
     const stats = getMacroCacheStats();
     res.json(stats);
   } catch (error) {    logger.error(`Error fetching macro stats: ${String(error)}`);
-    res.status(500).json({ error: "Failed to fetch macro stats" });
+    res.status(503).json({ error: "Failed to fetch macro stats" });
   }
 });
 
@@ -129,7 +129,7 @@ router.delete("/clear", (req: Request, res: Response) => {
     res.json({ success: true, message: "All macro events cleared" });
   } catch (error) {
     logger.error(`Error clearing macro events: ${String(error)}`);
-    res.status(500).json({ error: "Failed to clear macro events" });
+    res.status(503).json({ error: "Failed to clear macro events" });
   }
 });
 
@@ -147,7 +147,7 @@ router.post("/bias", (req: Request, res: Response) => {
     res.json({ bias });
   } catch (error) {
     logger.error(`[macro] /bias error: ${String(error)}`);
-    res.status(500).json({ error: "Failed to compute macro bias" });
+    res.status(503).json({ error: "Failed to compute macro bias" });
   }
 });
 
@@ -166,7 +166,7 @@ router.post("/sentiment", (req: Request, res: Response) => {
     res.json({ sentiment });
   } catch (error) {
     logger.error(`[macro] /sentiment error: ${String(error)}`);
-    res.status(500).json({ error: "Failed to compute sentiment" });
+    res.status(503).json({ error: "Failed to compute sentiment" });
   }
 });
 
@@ -205,7 +205,7 @@ router.get("/sentiment", async (_req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error(`[macro] GET /sentiment error: ${String(error)}`);
-    res.status(500).json({ error: "Failed to get sentiment" });
+    res.status(503).json({ error: "Failed to get sentiment" });
   }
 });
 

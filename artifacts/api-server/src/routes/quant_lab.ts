@@ -22,7 +22,7 @@ router.post("/run", (req: Request, res: Response) => {
     const experiment = runLabExperiment(prompt);
     res.json({ ok: true, experiment });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(503).json({ error: err.message });
   }
 });
 
@@ -37,7 +37,7 @@ router.post("/parse", (req: Request, res: Response) => {
     const spec = parseStrategyPrompt(prompt);
     res.json({ ok: true, strategy: spec });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(503).json({ error: err.message });
   }
 });
 
@@ -48,7 +48,7 @@ router.get("/experiments", (_req: Request, res: Response) => {
     const experiments = getRecentExperiments(limit);
     res.json({ ok: true, count: experiments.length, experiments });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(503).json({ error: err.message });
   }
 });
 
@@ -60,7 +60,7 @@ router.get("/experiment/:id", (req: Request, res: Response) => {
     if (!experiment) { res.status(404).json({ error: "experiment not found" }); return; }
     res.json({ ok: true, experiment });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(503).json({ error: err.message });
   }
 });
 
@@ -70,7 +70,7 @@ router.get("/strategies", (_req: Request, res: Response) => {
     const strategies = getAllStrategies();
     res.json({ ok: true, count: strategies.length, strategies });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(503).json({ error: err.message });
   }
 });
 
@@ -82,7 +82,7 @@ router.get("/strategy/:id", (req: Request, res: Response) => {
     if (!strategy) { res.status(404).json({ error: "strategy not found" }); return; }
     res.json({ ok: true, strategy });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(503).json({ error: err.message });
   }
 });
 
@@ -92,7 +92,7 @@ router.get("/summary", (_req: Request, res: Response) => {
     const summary = getLabSummary();
     res.json({ ok: true, summary });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(503).json({ error: err.message });
   }
 });
 

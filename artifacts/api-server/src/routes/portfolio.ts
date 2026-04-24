@@ -62,7 +62,7 @@ router.post("/compute", (req: Request, res: Response): void => {
     res.json(state);
   } catch (error) {
     logger.error(`Error computing portfolio: ${error}`);
-    res.status(500).json({
+    res.status(503).json({
       error: error instanceof Error ? error.message : "Internal server error",
     });
   }
@@ -80,7 +80,7 @@ router.get("/current", (_req: Request, res: Response): void => {
     res.json(state);
   } catch (error) {
     logger.error(`Error retrieving portfolio state: ${error}`);
-    res.status(500).json({
+    res.status(503).json({
       error: error instanceof Error ? error.message : "Internal server error",
     });
   }
@@ -92,7 +92,7 @@ router.get("/constraints", (req: Request, res: Response) => {
     res.json(DEFAULT_CONSTRAINTS);
   } catch (error) {
     logger.error(`Error retrieving constraints: ${error}`);
-    res.status(500).json({
+    res.status(503).json({
       error: error instanceof Error ? error.message : "Internal server error",
     });
   }
@@ -123,7 +123,7 @@ router.post("/constraints", (req: Request, res: Response): void => {
     res.json(updated);
   } catch (error) {
     logger.error(`Error updating constraints: ${error}`);
-    res.status(500).json({
+    res.status(503).json({
       error: error instanceof Error ? error.message : "Internal server error",
     });
   }

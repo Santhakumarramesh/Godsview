@@ -25,7 +25,7 @@ router.get("/api/live/preflight", async (req: Request, res: Response) => {
     return;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    res.status(500).json({ error: message });
+    res.status(503).json({ error: message });
     return;
   }
 });
@@ -38,7 +38,7 @@ router.get("/api/live/state", (req: Request, res: Response) => {
     return;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    res.status(500).json({ error: message });
+    res.status(503).json({ error: message });
     return;
   }
 });
@@ -51,7 +51,7 @@ router.get("/api/live/safety-check", (req: Request, res: Response) => {
     return;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    res.status(500).json({ error: message });
+    res.status(503).json({ error: message });
     return;
   }
 });
@@ -65,7 +65,7 @@ router.post("/api/live/initiate", async (req: Request, res: Response) => {
     return;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    res.status(500).json({ error: message });
+    res.status(503).json({ error: message });
     return;
   }
 });
@@ -78,7 +78,7 @@ router.post("/api/live/terminate", (req: Request, res: Response) => {
     return;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    res.status(500).json({ error: message });
+    res.status(503).json({ error: message });
     return;
   }
 });
@@ -92,7 +92,7 @@ router.post("/api/live/emergency-shutdown", (req: Request, res: Response) => {
     return;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    res.status(500).json({ error: message });
+    res.status(503).json({ error: message });
     return;
   }
 });
@@ -107,7 +107,7 @@ router.post("/api/live/config", (req: Request, res: Response) => {
     return;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    res.status(500).json({ error: message });
+    res.status(503).json({ error: message });
     return;
   }
 });
@@ -120,7 +120,7 @@ router.get("/api/live/config", (req: Request, res: Response) => {
     return;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    res.status(500).json({ error: message });
+    res.status(503).json({ error: message });
     return;
   }
 });
@@ -134,7 +134,7 @@ router.post("/api/live/reset-daily-metrics", (req: Request, res: Response) => {
     return;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    res.status(500).json({ error: message });
+    res.status(503).json({ error: message });
     return;
   }
 });

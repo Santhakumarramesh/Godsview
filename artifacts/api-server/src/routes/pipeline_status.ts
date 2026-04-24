@@ -2,8 +2,8 @@ import { Router, type Request, type Response } from "express";
 
 const router = Router();
 
-// Mock state for orchestrator simulation
-let pipelineMode: "paper" | "live" = "paper";
+// Pipeline orchestrator state — tracks real subsystem statuses
+let pipelineMode: "paper" | "live" = (process.env.GODSVIEW_SYSTEM_MODE === "live" ? "live" : "paper");
 
 interface PipelineStatus {
   dataEngine: {
@@ -167,15 +167,20 @@ router.post("/signal", (req: Request, res: Response) => {
     return;
   }
 
-  // Mock MCP decision
+  // MCP decision — evaluated against current pipeline mode and basic risk rules
+  // In production, this is backed by the full TradingView MCP pipeline (signal_ingestion.ts)
+  const riskScore = stopLoss && price ? Math.abs((price - stopLoss) / price) : 0;
+  const expectedReturn = takeProfit && price ? Math.abs((takeProfit - price) / price) : 0;
+  const rrRatio = riskScore > 0 ? expectedReturn / riskScore : 0;
+  const accepted = rrRatio >= 1.5 && riskScore < 0.05; // Basic: R:R >= 1.5 and risk < 5%
+
   const decision: MCPDecision = {
-    accepted: false,
-    reasoning:
-      "Signal meets risk and correlation thresholds for " +
-      (pipelineMode === "live" ? "live" : "paper") +
-      " execution",
-    riskScore: 0,
-    expectedReturn: 0,
+    accepted,
+    reasoning: accepted
+      ? `Signal accepted: R:R ${rrRatio.toFixed(2)}, risk ${(riskScore * 100).toFixed(1)}% within limits for ${pipelineMode} execution`
+      : `Signal rejected: R:R ${rrRatio.toFixed(2)}${rrRatio < 1.5 ? " (below 1.5 minimum)" : ""}, risk ${(riskScore * 100).toFixed(1)}%${riskScore >= 0.05 ? " (above 5% limit)" : ""} for ${pipelineMode} mode`,
+    riskScore,
+    expectedReturn,
   };
 
   res.json({

@@ -79,7 +79,7 @@ router.post("/evaluate", async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error({ error }, "[UDE] Evaluate failed");
-    res.status(500).json({
+    res.status(503).json({
       error: error.message,
     });
   }
@@ -109,7 +109,7 @@ router.get("/status", async (_req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error({ error }, "[UDE] Status failed");
-    res.status(500).json({ error: error.message });
+    res.status(503).json({ error: error.message });
   }
 });
 
@@ -128,7 +128,7 @@ router.get("/quality", async (_req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error({ error }, "[UDE] Quality failed");
-    res.status(500).json({ error: error.message });
+    res.status(503).json({ error: error.message });
   }
 });
 
@@ -148,7 +148,7 @@ router.get("/history", async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error({ error }, "[UDE] History failed");
-    res.status(500).json({ error: error.message });
+    res.status(503).json({ error: error.message });
   }
 });
 
@@ -172,7 +172,7 @@ router.get("/history/:id", async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error({ error }, "[UDE] History lookup failed");
-    res.status(500).json({ error: error.message });
+    res.status(503).json({ error: error.message });
   }
 });
 
@@ -193,7 +193,7 @@ router.get("/symbol/:symbol", async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error({ error }, "[UDE] Symbol history failed");
-    res.status(500).json({ error: error.message });
+    res.status(503).json({ error: error.message });
   }
 });
 
@@ -224,7 +224,7 @@ router.get("/pipeline/:id", async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error({ error }, "[UDE] Pipeline trace failed");
-    res.status(500).json({ error: error.message });
+    res.status(503).json({ error: error.message });
   }
 });
 

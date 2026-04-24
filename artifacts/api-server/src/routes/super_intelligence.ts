@@ -21,7 +21,7 @@ router.get("/super-intelligence/status", async (_req, res) => {
     const status = getSuperIntelligenceStatus();
     res.json(status);
   } catch (err) {
-    res.status(500).json({ error: "internal_error", message: "Failed to get SI status" });
+    res.status(503).json({ error: "internal_error", message: "Failed to get SI status" });
   }
 });
 
@@ -47,7 +47,7 @@ router.post("/super-intelligence/signal", async (req, res): Promise<void> => {
     res.json(result);
   } catch (err) {
     req.log.error({ err }, "Super Intelligence signal processing failed");
-    res.status(500).json({ error: "internal_error", message: "Signal processing failed" });
+    res.status(503).json({ error: "internal_error", message: "Signal processing failed" });
   }
 });
 
@@ -63,7 +63,7 @@ router.post("/super-intelligence/retrain", async (_req, res) => {
       ensemble: status.ensemble,
     });
   } catch (err) {
-    res.status(500).json({ error: "retrain_failed", message: String(err) });
+    res.status(503).json({ error: "retrain_failed", message: String(err) });
   }
 });
 
@@ -108,7 +108,7 @@ router.get("/super-intelligence/edge-analysis", async (req, res) => {
       profit_targets: result.profit_targets,
     });
   } catch (err) {
-    res.status(500).json({ error: "internal_error", message: "Edge analysis failed" });
+    res.status(503).json({ error: "internal_error", message: "Edge analysis failed" });
   }
 });
 
@@ -128,7 +128,7 @@ router.post("/super-intelligence/production-gate", async (req, res): Promise<voi
     res.json(decision);
   } catch (err) {
     req.log.error({ err }, "Production gate evaluation failed");
-    res.status(500).json({ error: "internal_error", message: "Production gate failed" });
+    res.status(503).json({ error: "internal_error", message: "Production gate failed" });
   }
 });
 
@@ -150,7 +150,7 @@ router.get("/super-intelligence/production-stats", async (_req, res) => {
   try {
     res.json(getProductionGateStats());
   } catch (err) {
-    res.status(500).json({ error: "internal_error", message: "Failed to get production stats" });
+    res.status(503).json({ error: "internal_error", message: "Failed to get production stats" });
   }
 });
 
@@ -161,7 +161,7 @@ router.post("/super-intelligence/autonomous/start", async (_req, res) => {
     const result = await startAutonomousMode();
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: "autonomous_start_failed", message: String(err) });
+    res.status(503).json({ error: "autonomous_start_failed", message: String(err) });
   }
 });
 
@@ -172,7 +172,7 @@ router.post("/super-intelligence/autonomous/stop", async (_req, res) => {
     const result = stopAutonomousMode();
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: "autonomous_stop_failed", message: String(err) });
+    res.status(503).json({ error: "autonomous_stop_failed", message: String(err) });
   }
 });
 
@@ -183,7 +183,7 @@ router.get("/super-intelligence/autonomous/status", async (_req, res) => {
     const status = getAutonomousModeStatus();
     res.json(status);
   } catch (err) {
-    res.status(500).json({ error: "internal_error", message: "Failed to get autonomous status" });
+    res.status(503).json({ error: "internal_error", message: "Failed to get autonomous status" });
   }
 });
 
@@ -197,7 +197,7 @@ router.get("/super-intelligence/strategy-leaderboard", async (_req, res) => {
       strategies: leaderboard,
     });
   } catch (err) {
-    res.status(500).json({ error: "internal_error", message: "Failed to get strategy leaderboard" });
+    res.status(503).json({ error: "internal_error", message: "Failed to get strategy leaderboard" });
   }
 });
 

@@ -74,7 +74,7 @@ router.post("/backtest/enhanced", async (req: Request, res: Response): Promise<v
     });
   } catch (err) {
     req.log.error({ err }, "Enhanced backtest failed");
-    res.status(500).json({
+    res.status(503).json({
       error: "enhanced_backtest_failed",
       message: String(err),
     });
@@ -125,7 +125,7 @@ router.post("/backtest/sensitivity", async (req: Request, res: Response): Promis
     });
   } catch (err) {
     req.log.error({ err }, "Sensitivity analysis failed");
-    res.status(500).json({
+    res.status(503).json({
       error: "sensitivity_failed",
       message: String(err),
     });
@@ -189,7 +189,7 @@ router.post("/backtest/montecarlo", async (req: Request, res: Response): Promise
     });
   } catch (err) {
     req.log.error({ err }, "Monte Carlo analysis failed");
-    res.status(500).json({
+    res.status(503).json({
       error: "montecarlo_failed",
       message: String(err),
     });
@@ -253,7 +253,7 @@ router.post("/backtest/portfolio", async (req: Request, res: Response): Promise<
     });
   } catch (err) {
     req.log.error({ err }, "Portfolio analysis failed");
-    res.status(500).json({
+    res.status(503).json({
       error: "portfolio_failed",
       message: String(err),
     });
@@ -334,7 +334,7 @@ router.post("/backtest/validate", async (req: Request, res: Response): Promise<v
     });
   } catch (err) {
     req.log.error({ err }, "Validation failed");
-    res.status(500).json({
+    res.status(503).json({
       error: "validation_failed",
       message: String(err),
     });
@@ -387,7 +387,7 @@ router.get("/backtest/tearsheet", async (req: Request, res: Response): Promise<v
     });
   } catch (err) {
     req.log.error({ err }, "Tearsheet generation failed");
-    res.status(500).json({
+    res.status(503).json({
       error: "tearsheet_failed",
       message: String(err),
     });

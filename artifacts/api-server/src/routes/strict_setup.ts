@@ -524,7 +524,7 @@ router.get("/market/strict-setup", async (req, res) => {
       return;
     }
     req.log.error({ err, symbol }, "strict setup evaluation failed");
-    res.status(500).json({
+    res.status(503).json({
       error: "strict_setup_failed",
       message: String(err),
     });
@@ -581,7 +581,7 @@ router.get("/market/strict-setup/backtest", async (req, res) => {
       return;
     }
     req.log.error({ err, symbol }, "strict setup backtest failed");
-    res.status(500).json({
+    res.status(503).json({
       error: "strict_setup_backtest_failed",
       message: String(err),
     });
@@ -635,7 +635,7 @@ router.get("/market/strict-setup/report", async (req, res) => {
       return;
     }
     req.log.error({ err, symbol }, "strict setup report failed");
-    res.status(500).json({
+    res.status(503).json({
       error: "strict_setup_report_failed",
       message: String(err),
     });
@@ -704,7 +704,7 @@ router.get("/market/strict-setup/promotion-check", async (req, res) => {
       return;
     }
     req.log.error({ err, symbol }, "strict setup promotion check failed");
-    res.status(500).json({
+    res.status(503).json({
       error: "strict_setup_promotion_check_failed",
       message: String(err),
     });
@@ -828,7 +828,7 @@ router.get("/market/strict-setup/matrix", async (req, res) => {
       return;
     }
     req.log.error({ err, symbols }, "strict setup matrix failed");
-    res.status(500).json({
+    res.status(503).json({
       error: "strict_setup_matrix_failed",
       message: String(err),
     });

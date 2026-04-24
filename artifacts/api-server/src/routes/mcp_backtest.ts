@@ -518,7 +518,7 @@ router.post("/mcp-backtest/run", async (req: Request, res: Response): Promise<vo
     });
   } catch (err) {
     (req as any).log?.error?.({ err }, "MCP backtest failed");
-    res.status(500).json({
+    res.status(503).json({
       error: "backtest_failed",
       message: String(err instanceof Error ? err.message : err),
     });
@@ -588,7 +588,7 @@ router.get("/mcp-backtest/compare/:runId", (req: Request, res: Response): void =
     });
   } catch (err) {
     (req as any).log?.error?.({ err }, "Compare retrieval failed");
-    res.status(500).json({
+    res.status(503).json({
       error: "compare_failed",
       message: String(err instanceof Error ? err.message : err),
     });
@@ -675,7 +675,7 @@ router.get("/mcp-backtest/signal-log/:runId", (req: Request, res: Response): voi
     });
   } catch (err) {
     (req as any).log?.error?.({ err }, "Signal log retrieval failed");
-    res.status(500).json({
+    res.status(503).json({
       error: "signal_log_failed",
       message: String(err instanceof Error ? err.message : err),
     });
@@ -724,7 +724,7 @@ router.get("/mcp-backtest/history", (req: Request, res: Response): void => {
     });
   } catch (err) {
     (req as any).log?.error?.({ err }, "History retrieval failed");
-    res.status(500).json({
+    res.status(503).json({
       error: "history_failed",
       message: String(err instanceof Error ? err.message : err),
     });

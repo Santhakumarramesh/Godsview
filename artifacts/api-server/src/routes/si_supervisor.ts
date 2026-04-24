@@ -30,7 +30,7 @@ router.get("/api/si/supervisor/health", async (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error({ error }, "Failed to get SI health");
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: "Health check failed",
       details: String(error),
@@ -48,7 +48,7 @@ router.get("/api/si/supervisor/retrain-eval", async (req: Request, res: Response
     });
   } catch (error) {
     logger.error({ error }, "Failed to evaluate retrain need");
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: "Retrain eval failed",
       details: String(error),
@@ -66,7 +66,7 @@ router.post("/api/si/supervisor/cycle", async (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error({ error }, "Failed to run supervisor cycle");
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: "Cycle failed",
       details: String(error),
@@ -87,7 +87,7 @@ router.post("/api/si/supervisor/start", (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error({ error }, "Failed to start SI Supervisor");
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: "Start failed",
       details: String(error),
@@ -106,7 +106,7 @@ router.post("/api/si/supervisor/stop", (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error({ error }, "Failed to stop SI Supervisor");
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: "Stop failed",
       details: String(error),
@@ -129,7 +129,7 @@ router.get("/api/si/supervisor/history", (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error({ error }, "Failed to get supervisor history");
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: "History fetch failed",
       details: String(error),
@@ -147,7 +147,7 @@ router.get("/api/si/supervisor/status", async (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error({ error }, "Failed to get ensemble status");
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: "Status fetch failed",
       details: String(error),
@@ -165,7 +165,7 @@ router.get("/api/si/supervisor/config", (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error({ error }, "Failed to get supervisor config");
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: "Config fetch failed",
       details: String(error),
@@ -186,7 +186,7 @@ router.put("/api/si/supervisor/config", (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error({ error }, "Failed to update supervisor config");
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: "Config update failed",
       details: String(error),

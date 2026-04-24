@@ -8,7 +8,7 @@ const router = Router();
 
 router.get("/api/position-sizing/snapshot", async (_req: Request, res: Response) => {
   try { res.json({ ok: true, snapshot: getSizingOracleSnapshot() }); }
-  catch (err) { res.status(500).json({ ok: false, error: String(err) }); }
+  catch (err) { res.status(503).json({ ok: false, error: String(err) }); }
 });
 
 router.post("/api/position-sizing/calculate", async (req: Request, res: Response) => {
@@ -20,12 +20,12 @@ router.post("/api/position-sizing/calculate", async (req: Request, res: Response
       winRate, avgWinLossRatio, atr, regime, contextScore, method,
     });
     res.json({ ok: true, result });
-  } catch (err) { res.status(500).json({ ok: false, error: String(err) }); }
+  } catch (err) { res.status(503).json({ ok: false, error: String(err) }); }
 });
 
 router.post("/api/position-sizing/reset", async (_req: Request, res: Response) => {
   try { resetSizingOracle(); res.json({ ok: true, message: "Sizing oracle reset" }); }
-  catch (err) { res.status(500).json({ ok: false, error: String(err) }); }
+  catch (err) { res.status(503).json({ ok: false, error: String(err) }); }
 });
 
 export default router;

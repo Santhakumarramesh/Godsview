@@ -53,14 +53,14 @@ function errorHandler(err: unknown, req: Request, res: Response, next: NextFunct
   console.error('[ops_quant] Error:', err);
 
   if (err instanceof Error) {
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: err.message,
       timestamp: new Date().toISOString(),
       statusCode: 500,
     } as ApiError);
   } else {
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: 'Internal server error',
       timestamp: new Date().toISOString(),

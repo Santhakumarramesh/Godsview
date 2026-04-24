@@ -66,7 +66,7 @@ router.post('/workflow/start', async (req: Request, res: Response) => {
       message: result.message,
     });
   } catch (error) {
-    return res.status(500).json({
+    return res.status(503).json({
       error: error instanceof Error ? error.message : 'Workflow start failed',
     });
   }
@@ -103,7 +103,7 @@ router.get('/workflow/:id', (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    return res.status(500).json({
+    return res.status(503).json({
       error: error instanceof Error ? error.message : 'Failed to get workflow',
     });
   }
@@ -131,7 +131,7 @@ router.get('/workflow/:id/next', (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    return res.status(500).json({
+    return res.status(503).json({
       error: error instanceof Error ? error.message : 'Failed to get next steps',
     });
   }
@@ -159,7 +159,7 @@ router.post('/workflow/:id/resume', async (req: Request, res: Response) => {
       message: result.message,
     });
   } catch (error) {
-    return res.status(500).json({
+    return res.status(503).json({
       error: error instanceof Error ? error.message : 'Workflow resume failed',
     });
   }
@@ -197,7 +197,7 @@ router.post('/quick-backtest', async (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    return res.status(500).json({
+    return res.status(503).json({
       error: error instanceof Error ? error.message : 'Quick backtest failed',
     });
   }
@@ -220,7 +220,7 @@ router.post('/quick-deploy/:strategyId', async (req: Request, res: Response) => 
       timestamp: result.timestamp,
     });
   } catch (error) {
-    return res.status(500).json({
+    return res.status(503).json({
       error: error instanceof Error ? error.message : 'Quick deploy failed',
     });
   }
@@ -272,7 +272,7 @@ router.get('/summary/:strategyId', (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    return res.status(500).json({
+    return res.status(503).json({
       error: error instanceof Error ? error.message : 'Failed to get summary',
     });
   }
@@ -305,7 +305,7 @@ router.post('/summary/compare', (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    return res.status(500).json({
+    return res.status(503).json({
       error: error instanceof Error ? error.message : 'Comparison failed',
     });
   }
@@ -341,7 +341,7 @@ router.post('/builder/start', (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    return res.status(500).json({
+    return res.status(503).json({
       error: error instanceof Error ? error.message : 'Failed to start builder',
     });
   }
@@ -368,7 +368,7 @@ router.get('/builder/:sessionId', (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    return res.status(500).json({
+    return res.status(503).json({
       error: error instanceof Error ? error.message : 'Failed to get step',
     });
   }
@@ -401,7 +401,7 @@ router.post('/builder/:sessionId/answer', (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    return res.status(500).json({
+    return res.status(503).json({
       error: error instanceof Error ? error.message : 'Failed to process answer',
     });
   }
@@ -436,7 +436,7 @@ router.post('/builder/:sessionId/compile', (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    return res.status(500).json({
+    return res.status(503).json({
       error: error instanceof Error ? error.message : 'Failed to compile strategy',
     });
   }
@@ -468,7 +468,7 @@ router.get('/diagnostics/:strategyId', (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    return res.status(500).json({
+    return res.status(503).json({
       error: error instanceof Error ? error.message : 'Diagnosis failed',
     });
   }
@@ -495,7 +495,7 @@ router.get('/diagnostics/trade/:tradeId', (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    return res.status(500).json({
+    return res.status(503).json({
       error: error instanceof Error ? error.message : 'Trade diagnosis failed',
     });
   }
@@ -521,7 +521,7 @@ router.get('/diagnostics/inactivity', (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    return res.status(500).json({
+    return res.status(503).json({
       error: error instanceof Error ? error.message : 'Inactivity diagnosis failed',
     });
   }
@@ -547,7 +547,7 @@ router.get('/diagnostics/system', (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    return res.status(500).json({
+    return res.status(503).json({
       error: error instanceof Error ? error.message : 'System check failed',
     });
   }

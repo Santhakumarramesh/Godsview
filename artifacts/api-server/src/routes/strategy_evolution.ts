@@ -41,7 +41,7 @@ router.post("/brain/strategy/evolution/start", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Strategy evolution scheduler start failed");
-    res.status(500).json({ error: "strategy_evolution_start_failed", message: String(err) });
+    res.status(503).json({ error: "strategy_evolution_start_failed", message: String(err) });
   }
 });
 
@@ -58,7 +58,7 @@ router.post("/brain/strategy/evolution/run-once", async (_req, res) => {
     const snapshot = await runStrategyEvolutionCycle("manual_route");
     res.json({ ok: true, snapshot });
   } catch (err) {
-    res.status(500).json({ error: "strategy_evolution_cycle_failed", message: String(err) });
+    res.status(503).json({ error: "strategy_evolution_cycle_failed", message: String(err) });
   }
 });
 

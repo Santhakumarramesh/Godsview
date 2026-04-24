@@ -50,7 +50,7 @@ router.get("/status", (_req, res) => {
     res.json(status);
   } catch (err) {
     console.error("Failed to get program status", err);
-    res.status(500).json({ error: "status_failed", message: String(err) });
+    res.status(503).json({ error: "status_failed", message: String(err) });
   }
 });
 
@@ -91,7 +91,7 @@ router.post("/start", (req, res) => {
     res.json(result);
   } catch (err) {
     req.log.error({ err }, "Failed to start paper program");
-    res.status(500).json({ error: "start_failed", message: String(err) });
+    res.status(503).json({ error: "start_failed", message: String(err) });
   }
 });
 
@@ -105,7 +105,7 @@ router.post("/advance", (_req, res) => {
     res.json(result);
   } catch (err) {
     req.log.error({ err }, "Failed to advance paper program day");
-    res.status(500).json({ error: "advance_failed", message: String(err) });
+    res.status(503).json({ error: "advance_failed", message: String(err) });
   }
 });
 
@@ -123,7 +123,7 @@ router.post("/pause", (_req, res) => {
     }
   } catch (err) {
     req.log.error({ err }, "Failed to pause paper program");
-    res.status(500).json({ error: "pause_failed", message: String(err) });
+    res.status(503).json({ error: "pause_failed", message: String(err) });
   }
 });
 
@@ -141,7 +141,7 @@ router.post("/resume", (_req, res) => {
     }
   } catch (err) {
     req.log.error({ err }, "Failed to resume paper program");
-    res.status(500).json({ error: "resume_failed", message: String(err) });
+    res.status(503).json({ error: "resume_failed", message: String(err) });
   }
 });
 
@@ -162,7 +162,7 @@ router.get("/phase/:phase", (req, res) => {
     res.json(report);
   } catch (err) {
     req.log.error({ err }, "Failed to get phase report");
-    res.status(500).json({ error: "phase_failed", message: String(err) });
+    res.status(503).json({ error: "phase_failed", message: String(err) });
   }
 });
 
@@ -177,7 +177,7 @@ router.get("/signals", (req, res) => {
     res.json({ count: signals.length, signals });
   } catch (err) {
     req.log.error({ err }, "Failed to get signal log");
-    res.status(500).json({ error: "signals_failed", message: String(err) });
+    res.status(503).json({ error: "signals_failed", message: String(err) });
   }
 });
 
@@ -192,7 +192,7 @@ router.get("/executions", (req, res) => {
     res.json({ count: executions.length, executions });
   } catch (err) {
     req.log.error({ err }, "Failed to get execution log");
-    res.status(500).json({ error: "executions_failed", message: String(err) });
+    res.status(503).json({ error: "executions_failed", message: String(err) });
   }
 });
 
@@ -206,7 +206,7 @@ router.get("/risk-compliance", (_req, res) => {
     res.json(report);
   } catch (err) {
     req.log.error({ err }, "Failed to get risk compliance report");
-    res.status(500).json({ error: "risk_failed", message: String(err) });
+    res.status(503).json({ error: "risk_failed", message: String(err) });
   }
 });
 
@@ -220,7 +220,7 @@ router.get("/strategy-comparison", (_req, res) => {
     res.json(report);
   } catch (err) {
     req.log.error({ err }, "Failed to get strategy comparison report");
-    res.status(500).json({ error: "comparison_failed", message: String(err) });
+    res.status(503).json({ error: "comparison_failed", message: String(err) });
   }
 });
 
@@ -234,7 +234,7 @@ router.get("/certification", (_req, res) => {
     res.json(status);
   } catch (err) {
     req.log.error({ err }, "Failed to get certification status");
-    res.status(500).json({ error: "certification_failed", message: String(err) });
+    res.status(503).json({ error: "certification_failed", message: String(err) });
   }
 });
 
@@ -252,7 +252,7 @@ router.post("/certify", (_req, res) => {
     }
   } catch (err) {
     req.log.error({ err }, "Failed to generate certificate");
-    res.status(500).json({ error: "certify_failed", message: String(err) });
+    res.status(503).json({ error: "certify_failed", message: String(err) });
   }
 });
 
@@ -266,7 +266,7 @@ router.get("/report", (_req, res) => {
     res.json(report);
   } catch (err) {
     req.log.error({ err }, "Failed to get full report");
-    res.status(500).json({ error: "report_failed", message: String(err) });
+    res.status(503).json({ error: "report_failed", message: String(err) });
   }
 });
 

@@ -45,7 +45,7 @@ router.post("/webhook", async (req: Request, res: Response) => {
       processingMs: decision.processingMs,
     });
   } catch (error) {
-    res.status(500).json({
+    res.status(503).json({
       ok: false,
       error: error instanceof Error ? error.message : "Unknown error",
     });
@@ -81,7 +81,7 @@ router.post("/signal/internal", async (req: Request, res: Response) => {
       processingMs: decision.processingMs,
     });
   } catch (error) {
-    res.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Unknown error" });
+    res.status(503).json({ ok: false, error: error instanceof Error ? error.message : "Unknown error" });
   }
 });
 
@@ -156,7 +156,7 @@ router.post("/config", (req: Request, res: Response) => {
     processor.updateConfig(parsed.data as Partial<MCPPipelineConfig>);
     res.json({ ok: true, message: "Config updated" });
   } catch (error) {
-    res.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Unknown error" });
+    res.status(503).json({ ok: false, error: error instanceof Error ? error.message : "Unknown error" });
   }
 });
 

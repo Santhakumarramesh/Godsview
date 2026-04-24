@@ -35,7 +35,7 @@ router.get("/alt/:symbol", async (req: Request, res: Response) => {
     res.json(snapshot);
   } catch (error) {
     logger.error(`[finnhub-alt] /alt/:symbol error: ${String(error)}`);
-    res.status(500).json({ error: "Failed to fetch alternative data" });
+    res.status(503).json({ error: "Failed to fetch alternative data" });
   }
 });
 

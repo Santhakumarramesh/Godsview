@@ -1103,7 +1103,7 @@ router.get("/alpaca/candles", async (req, res) => {
     res.json({ symbol, timeframe, bars: formatted, fetched_at: new Date().toISOString() });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch candles");
-    res.status(500).json({ error: "candle_fetch_failed", message: String(err) });
+    res.status(503).json({ error: "candle_fetch_failed", message: String(err) });
   }
 });
 
@@ -1325,7 +1325,7 @@ router.get("/alpaca/account", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Failed to get Alpaca account");
-    res.status(500).json({ error: "alpaca_error", message: "Failed to fetch account" });
+    res.status(503).json({ error: "alpaca_error", message: "Failed to fetch account" });
   }
 });
 
@@ -1336,7 +1336,7 @@ router.get("/alpaca/positions", async (req, res) => {
     res.json(positions);
   } catch (err) {
     req.log.error({ err }, "Failed to get Alpaca positions");
-    res.status(500).json({ error: "alpaca_error", message: "Failed to fetch positions" });
+    res.status(503).json({ error: "alpaca_error", message: "Failed to fetch positions" });
   }
 });
 
@@ -1398,7 +1398,7 @@ router.post("/alpaca/orders", async (req, res) => {
       payload: { error: String(err) },
     });
     req.log.error({ err }, "Failed to place order");
-    res.status(500).json({ error: "order_failed", message: String(err) });
+    res.status(503).json({ error: "order_failed", message: String(err) });
   }
 });
 
@@ -1460,7 +1460,7 @@ router.get("/alpaca/risk/status", async (req, res) => {
       gate_state: gateReasons.length > 0 ? "BLOCKED_BY_RISK" : "PASS",
     });
   } catch (err) {
-    res.status(500).json({ error: "risk_status_failed", message: String(err) });
+    res.status(503).json({ error: "risk_status_failed", message: String(err) });
   }
 });
 
@@ -1477,7 +1477,7 @@ router.get("/alpaca/orders", async (req, res) => {
     res.json({ orders, fetched_at: new Date().toISOString() });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch orders");
-    res.status(500).json({ error: "orders_fetch_failed", message: String(err) });
+    res.status(503).json({ error: "orders_fetch_failed", message: String(err) });
   }
 });
 
@@ -1490,7 +1490,7 @@ router.delete("/alpaca/orders/:id", async (req, res) => {
     res.json({ success: true, result });
   } catch (err) {
     req.log.error({ err }, "Failed to cancel order");
-    res.status(500).json({ error: "cancel_failed", message: String(err) });
+    res.status(503).json({ error: "cancel_failed", message: String(err) });
   }
 });
 
@@ -1502,7 +1502,7 @@ router.delete("/alpaca/orders", async (req, res) => {
     const result = await cancelAllOrders();
     res.json({ success: true, result });
   } catch (err) {
-    res.status(500).json({ error: "cancel_all_failed", message: String(err) });
+    res.status(503).json({ error: "cancel_all_failed", message: String(err) });
   }
 });
 
@@ -1512,7 +1512,7 @@ router.get("/alpaca/positions/live", async (req, res) => {
     const positions = await getTypedPositions();
     res.json({ positions, fetched_at: new Date().toISOString() });
   } catch (err) {
-    res.status(500).json({ error: "positions_fetch_failed", message: String(err) });
+    res.status(503).json({ error: "positions_fetch_failed", message: String(err) });
   }
 });
 
@@ -1525,7 +1525,7 @@ router.delete("/alpaca/positions/:symbol", async (req, res) => {
     res.json({ success: true, result });
   } catch (err) {
     req.log.error({ err }, "Failed to close position");
-    res.status(500).json({ error: "close_failed", message: String(err) });
+    res.status(503).json({ error: "close_failed", message: String(err) });
   }
 });
 
@@ -1544,7 +1544,7 @@ router.get("/alpaca/size", async (req, res) => {
     const riskDollars = equity * riskPct;
     res.json({ qty, risk_dollars: riskDollars, entry, stop_loss: stopLoss, equity, risk_pct: riskPct });
   } catch (err) {
-    res.status(500).json({ error: "size_calc_failed", message: String(err) });
+    res.status(503).json({ error: "size_calc_failed", message: String(err) });
   }
 });
 
@@ -1563,7 +1563,7 @@ router.get("/alpaca/bars", async (req, res) => {
     res.json({ symbol, timeframe, bars });
   } catch (err) {
     req.log.error({ err }, "Failed to get bars");
-    res.status(500).json({ error: "alpaca_error", message: "Failed to fetch bars" });
+    res.status(503).json({ error: "alpaca_error", message: "Failed to fetch bars" });
   }
 });
 
@@ -2007,7 +2007,7 @@ router.post("/alpaca/analyze", async (req, res) => {
       payload: { error: String(err) },
     });
     req.log.error({ err }, "Failed to analyze market");
-    res.status(500).json({ error: "analysis_error", message: String(err) });
+    res.status(503).json({ error: "analysis_error", message: String(err) });
   }
 });
 
@@ -2490,7 +2490,7 @@ router.post("/alpaca/backtest", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Backtest failed");
-    res.status(500).json({ error: "backtest_error", message: String(err) });
+    res.status(503).json({ error: "backtest_error", message: String(err) });
   }
 });
 
@@ -2883,7 +2883,7 @@ router.post("/alpaca/backtest-batch", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Batch backtest failed");
-    res.status(500).json({ error: "batch_backtest_error", message: String(err) });
+    res.status(503).json({ error: "batch_backtest_error", message: String(err) });
   }
 });
 
@@ -3024,7 +3024,7 @@ router.post("/alpaca/recall-build", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Recall build failed");
-    res.status(500).json({ error: "recall_build_error", message: String(err) });
+    res.status(503).json({ error: "recall_build_error", message: String(err) });
   }
 });
 
@@ -3123,7 +3123,7 @@ router.get("/alpaca/accuracy", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Failed to get accuracy");
-    res.status(500).json({ error: "accuracy_error", message: String(err) });
+    res.status(503).json({ error: "accuracy_error", message: String(err) });
   }
 });
 

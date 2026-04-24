@@ -82,7 +82,7 @@ router.post('/run', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error('[EVAL] Full run error:', error);
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: error.message || 'Evaluation run failed'
     });
@@ -130,7 +130,7 @@ router.post('/single/:testId', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error('[EVAL] Single test error:', error);
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: error.message || 'Single test evaluation failed'
     });
@@ -172,7 +172,7 @@ router.get('/golden-suite', (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error('[EVAL] Golden suite error:', error);
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: error.message || 'Failed to list golden suite'
     });
@@ -221,7 +221,7 @@ router.post('/compare', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error('[EVAL] Comparison error:', error);
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: error.message || 'Baseline comparison failed'
     });
@@ -254,7 +254,7 @@ router.get('/leaderboard', (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error('[EVAL] Leaderboard error:', error);
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: error.message || 'Failed to fetch leaderboard'
     });
@@ -298,7 +298,7 @@ router.get('/report', (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error('[EVAL] Report error:', error);
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: error.message || 'Failed to fetch eval report'
     });
@@ -357,7 +357,7 @@ router.post('/regression-check', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error('[EVAL] Regression check error:', error);
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: error.message || 'Regression check failed'
     });

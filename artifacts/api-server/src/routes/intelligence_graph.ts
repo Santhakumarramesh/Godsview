@@ -39,7 +39,7 @@ router.get("/summary", (_req: Request, res: Response) => {
   try {
     res.json({ success: true, ...getGraphSummary(), timestamp: new Date().toISOString() });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    res.status(503).json({ error: error.message });
   }
 });
 
@@ -52,7 +52,7 @@ router.get("/traces", (req: Request, res: Response) => {
     const traces = getRecentTraces(limit);
     res.json({ success: true, count: traces.length, traces });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    res.status(503).json({ error: error.message });
   }
 });
 
@@ -66,7 +66,7 @@ router.get("/traces/:id", (req: Request, res: Response) => {
     if (!trace) return res.status(404).json({ error: `Trace ${id} not found` });
     res.json({ success: true, trace });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    res.status(503).json({ error: error.message });
   }
 });
 
@@ -80,7 +80,7 @@ router.get("/symbol/:symbol", (req: Request, res: Response) => {
     const traces = getTracesForSymbol(symbol, limit);
     res.json({ success: true, symbol, count: traces.length, traces });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    res.status(503).json({ error: error.message });
   }
 });
 
@@ -93,7 +93,7 @@ router.get("/full", (req: Request, res: Response) => {
     const graph = getFullGraph(limit);
     res.json({ success: true, nodes: graph.nodes.length, edges: graph.edges.length, ...graph });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    res.status(503).json({ error: error.message });
   }
 });
 
@@ -107,7 +107,7 @@ router.get("/symbol-graph/:symbol", (req: Request, res: Response) => {
     const graph = getSymbolGraph(symbol, limit);
     res.json({ success: true, symbol, nodes: graph.nodes.length, edges: graph.edges.length, ...graph });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    res.status(503).json({ error: error.message });
   }
 });
 
@@ -123,7 +123,7 @@ router.get("/distributions", (_req: Request, res: Response) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    res.status(503).json({ error: error.message });
   }
 });
 
@@ -165,7 +165,7 @@ router.post("/trace", (req: Request, res: Response) => {
 
     res.json({ success: true, trace });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    res.status(503).json({ error: error.message });
   }
 });
 
@@ -183,7 +183,7 @@ router.put("/outcome/:id", (req: Request, res: Response) => {
     if (!updated) return res.status(404).json({ error: `Trace ${id} not found` });
     res.json({ success: true, traceId: id, outcome });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    res.status(503).json({ error: error.message });
   }
 });
 
@@ -202,7 +202,7 @@ router.get("/health", (_req: Request, res: Response) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    res.status(503).json({ error: error.message });
   }
 });
 

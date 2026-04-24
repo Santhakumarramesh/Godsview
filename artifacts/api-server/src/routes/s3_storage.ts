@@ -36,7 +36,7 @@ router.get("/health", async (_req: Request, res: Response) => {
     res.json({ provider: "S3 (Massive.com)", ...result });
   } catch (error) {
     logger.error(`[s3] /health error: ${String(error)}`);
-    res.status(500).json({ error: "S3 health check failed" });
+    res.status(503).json({ error: "S3 health check failed" });
   }
 });
 
@@ -55,7 +55,7 @@ router.post("/put", async (req: Request, res: Response) => {
     res.json(result);
   } catch (error) {
     logger.error(`[s3] /put error: ${String(error)}`);
-    res.status(500).json({ error: "S3 PUT failed" });
+    res.status(503).json({ error: "S3 PUT failed" });
   }
 });
 /**
@@ -73,7 +73,7 @@ router.post("/get", async (req: Request, res: Response) => {
     res.json(result);
   } catch (error) {
     logger.error(`[s3] /get error: ${String(error)}`);
-    res.status(500).json({ error: "S3 GET failed" });
+    res.status(503).json({ error: "S3 GET failed" });
   }
 });
 
@@ -92,7 +92,7 @@ router.post("/trade-journal", async (req: Request, res: Response) => {
     res.json(result);
   } catch (error) {
     logger.error(`[s3] /trade-journal error: ${String(error)}`);
-    res.status(500).json({ error: "Failed to save trade journal" });
+    res.status(503).json({ error: "Failed to save trade journal" });
   }
 });
 /**
@@ -110,7 +110,7 @@ router.post("/backtest", async (req: Request, res: Response) => {
     res.json(result);
   } catch (error) {
     logger.error(`[s3] /backtest error: ${String(error)}`);
-    res.status(500).json({ error: "Failed to save backtest result" });
+    res.status(503).json({ error: "Failed to save backtest result" });
   }
 });
 
@@ -129,7 +129,7 @@ router.post("/brain-snapshot", async (req: Request, res: Response) => {
     res.json(result);
   } catch (error) {
     logger.error(`[s3] /brain-snapshot error: ${String(error)}`);
-    res.status(500).json({ error: "Failed to save brain snapshot" });
+    res.status(503).json({ error: "Failed to save brain snapshot" });
   }
 });
 /**
@@ -147,7 +147,7 @@ router.post("/macro-archive", async (req: Request, res: Response) => {
     res.json(result);
   } catch (error) {
     logger.error(`[s3] /macro-archive error: ${String(error)}`);
-    res.status(500).json({ error: "Failed to save macro archive" });
+    res.status(503).json({ error: "Failed to save macro archive" });
   }
 });
 

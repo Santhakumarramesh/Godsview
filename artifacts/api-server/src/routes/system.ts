@@ -10,6 +10,7 @@ import { resolveSystemMode, canWriteOrders, isLiveMode } from "@workspace/strate
 import { getCurrentTradingSession, getRiskEngineSnapshot, isKillSwitchActive, isSessionAllowed, resetRiskEngineRuntime, setKillSwitchActive, updateRiskConfig } from "../lib/risk_engine";
 import { runBrainCycle } from "../lib/brain_bridge";
 import { requireOperator } from "../lib/auth_guard";
+import { withDegradation } from "../lib/degradation";
 
 const router: IRouter = Router();
 const LEGACY_LIVE_TRADING_ENABLED = String(process.env.GODSVIEW_ENABLE_LIVE_TRADING ?? "").toLowerCase() === "true";
@@ -494,7 +495,7 @@ router.get("/system/status", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Failed to get system status");
-    res.status(500).json({ error: "internal_error", message: "Failed to fetch system status" });
+    res.status(503).json({ error: "internal_error", message: "Failed to fetch system status" });
   }
 });
 
@@ -547,7 +548,7 @@ router.post("/system/recall/refresh", requireOperator, async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Failed to refresh recall context");
-    res.status(500).json({ error: "recall_refresh_failed", message: "Failed to refresh recall context" });
+    res.status(503).json({ error: "recall_refresh_failed", message: "Failed to refresh recall context" });
   }
 });
 
@@ -557,7 +558,7 @@ router.post("/system/retrain", requireOperator, async (req, res) => {
     const result = await retrainModel();
     res.json(result);
   } catch (err) {
-    res.status(500).json({ success: false, message: String(err) });
+    res.status(503).json({ success: false, message: String(err) });
   }
 });
 
@@ -567,7 +568,7 @@ router.get("/system/learning", async (_req, res) => {
     const { getLearningState } = await import("../lib/continuous_learning");
     res.json(getLearningState());
   } catch (err) {
-    res.status(500).json({ error: "learning_state_failed", message: String(err) });
+    res.status(503).json({ error: "learning_state_failed", message: String(err) });
   }
 });
 
@@ -579,7 +580,7 @@ router.post("/system/learning/retrain", requireOperator, async (req, res) => {
     const result = await forceRetrain(reason);
     res.json(result);
   } catch (err) {
-    res.status(500).json({ success: false, message: String(err) });
+    res.status(503).json({ success: false, message: String(err) });
   }
 });
 
@@ -590,7 +591,7 @@ router.get("/system/learning/promotions", async (_req, res) => {
     const candidates = await evaluatePromotions();
     res.json({ candidates, evaluatedAt: new Date().toISOString() });
   } catch (err) {
-    res.status(500).json({ error: "promotion_eval_failed", message: String(err) });
+    res.status(503).json({ error: "promotion_eval_failed", message: String(err) });
   }
 });
 
@@ -604,7 +605,7 @@ router.get("/system/model/diagnostics", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch model diagnostics");
-    res.status(500).json({ error: "model_diagnostics_failed", message: "Failed to fetch model diagnostics" });
+    res.status(503).json({ error: "model_diagnostics_failed", message: "Failed to fetch model diagnostics" });
   }
 });
 
@@ -650,7 +651,7 @@ router.get("/system/proof/by-setup", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch proof metrics by setup");
-    res.status(500).json({ error: "proof_by_setup_failed", message: "Failed to fetch proof metrics by setup" });
+    res.status(503).json({ error: "proof_by_setup_failed", message: "Failed to fetch proof metrics by setup" });
   }
 });
 
@@ -696,7 +697,7 @@ router.get("/system/proof/by-regime", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch proof metrics by regime");
-    res.status(500).json({ error: "proof_by_regime_failed", message: "Failed to fetch proof metrics by regime" });
+    res.status(503).json({ error: "proof_by_regime_failed", message: "Failed to fetch proof metrics by regime" });
   }
 });
 
@@ -777,7 +778,7 @@ router.get("/system/proof/oos-vs-is", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch OOS vs IS proof metrics");
-    res.status(500).json({ error: "proof_oos_vs_is_failed", message: "Failed to fetch OOS vs IS proof metrics" });
+    res.status(503).json({ error: "proof_oos_vs_is_failed", message: "Failed to fetch OOS vs IS proof metrics" });
   }
 });
 
@@ -813,7 +814,7 @@ router.put("/system/risk", requireOperator, (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Failed to update runtime risk controls");
-    res.status(500).json({ error: "risk_update_failed", message: "Failed to update runtime risk controls" });
+    res.status(503).json({ error: "risk_update_failed", message: "Failed to update runtime risk controls" });
   }
 });
 
@@ -923,7 +924,7 @@ router.get("/system/audit", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch audit events");
-    res.status(500).json({ error: "audit_fetch_failed", message: "Failed to fetch audit events" });
+    res.status(503).json({ error: "audit_fetch_failed", message: "Failed to fetch audit events" });
   }
 });
 
@@ -989,7 +990,7 @@ router.get("/system/audit/summary", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch audit summary");
-    res.status(500).json({ error: "audit_summary_failed", message: "Failed to fetch audit summary" });
+    res.status(503).json({ error: "audit_summary_failed", message: "Failed to fetch audit summary" });
   }
 });
 
@@ -1148,7 +1149,7 @@ router.get("/system/governance/overview", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch governance overview");
-    res.status(500).json({ error: "governance_overview_failed", message: "Failed to fetch governance overview" });
+    res.status(503).json({ error: "governance_overview_failed", message: "Failed to fetch governance overview" });
   }
 });
 
@@ -1268,7 +1269,7 @@ router.get("/system/pipeline/latest", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch latest pipeline trace");
-    res.status(500).json({ error: "pipeline_trace_failed", message: "Failed to fetch latest pipeline trace" });
+    res.status(503).json({ error: "pipeline_trace_failed", message: "Failed to fetch latest pipeline trace" });
   }
 });
 
@@ -1499,7 +1500,7 @@ router.get("/system/consciousness/latest", async (req, res) => {
     const brainResult = StockBrainStateSchema.safeParse(stockBrainCandidate);
     if (!brainResult.success) {
       req.log.warn({ issues: brainResult.error.issues }, "Consciousness state validation failed");
-      res.status(500).json({
+      res.status(503).json({
         error: "consciousness_validation_failed",
         message: "Failed to normalize latest stock brain state",
       });
@@ -1540,7 +1541,7 @@ router.get("/system/consciousness/latest", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Failed to build consciousness board snapshot");
-    res.status(500).json({ error: "consciousness_snapshot_failed", message: "Failed to fetch consciousness snapshot" });
+    res.status(503).json({ error: "consciousness_snapshot_failed", message: "Failed to fetch consciousness snapshot" });
   }
 });
 
@@ -1733,7 +1734,7 @@ router.get("/market-readiness", async (req, res) => {
     return;
   } catch (err) {
     req.log.error({ err }, "Failed to calculate market readiness");
-    res.status(500).json({ error: "market_readiness_failed", message: "Failed to calculate market readiness assessment" });
+    res.status(503).json({ error: "market_readiness_failed", message: "Failed to calculate market readiness assessment" });
     return;
   }
 });

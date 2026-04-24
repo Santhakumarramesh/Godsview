@@ -24,7 +24,7 @@ router.post("/api/autonomous/start", async (req: Request, res: Response) => {
     return;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    res.status(500).json({ error: message });
+    res.status(503).json({ error: message });
     return;
   }
 });
@@ -38,7 +38,7 @@ router.post("/api/autonomous/stop", async (req: Request, res: Response) => {
     return;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    res.status(500).json({ error: message });
+    res.status(503).json({ error: message });
     return;
   }
 });
@@ -51,7 +51,7 @@ router.get("/api/autonomous/state", (req: Request, res: Response) => {
     return;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    res.status(500).json({ error: message });
+    res.status(503).json({ error: message });
     return;
   }
 });
@@ -64,7 +64,7 @@ router.post("/api/autonomous/cycle", async (req: Request, res: Response) => {
     return;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    res.status(500).json({ error: message });
+    res.status(503).json({ error: message });
     return;
   }
 });
@@ -78,7 +78,7 @@ router.get("/api/autonomous/report", async (req: Request, res: Response) => {
     return;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    res.status(500).json({ error: message });
+    res.status(503).json({ error: message });
     return;
   }
 });
@@ -93,7 +93,7 @@ router.post("/api/autonomous/config", (req: Request, res: Response) => {
     return;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    res.status(500).json({ error: message });
+    res.status(503).json({ error: message });
     return;
   }
 });
@@ -106,7 +106,7 @@ router.get("/api/autonomous/config", (req: Request, res: Response) => {
     return;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    res.status(500).json({ error: message });
+    res.status(503).json({ error: message });
     return;
   }
 });

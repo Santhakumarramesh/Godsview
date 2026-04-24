@@ -29,7 +29,7 @@ router.get("/api/execution-intelligence/snapshot", async (_req: Request, res: Re
     const snapshot = getExecutionIntelligenceSnapshot();
     res.json({ ok: true, snapshot });
   } catch (err) {
-    res.status(500).json({ ok: false, error: String(err) });
+    res.status(503).json({ ok: false, error: String(err) });
   }
 });
 
@@ -46,7 +46,7 @@ router.post("/api/execution-intelligence/slippage", async (req: Request, res: Re
     });
     res.json({ ok: true, estimate });
   } catch (err) {
-    res.status(500).json({ ok: false, error: String(err) });
+    res.status(503).json({ ok: false, error: String(err) });
   }
 });
 
@@ -64,7 +64,7 @@ router.post("/api/execution-intelligence/plan", async (req: Request, res: Respon
     });
     res.json({ ok: true, plan });
   } catch (err) {
-    res.status(500).json({ ok: false, error: String(err) });
+    res.status(503).json({ ok: false, error: String(err) });
   }
 });
 
@@ -79,7 +79,7 @@ router.post("/api/execution-intelligence/exit-ladder", async (req: Request, res:
     const ladder = buildExitLadder({ entryPrice, stopLoss, direction: direction ?? "long", targets, riskReward });
     res.json({ ok: true, ladder });
   } catch (err) {
-    res.status(500).json({ ok: false, error: String(err) });
+    res.status(503).json({ ok: false, error: String(err) });
   }
 });
 
@@ -97,7 +97,7 @@ router.post("/api/execution-intelligence/dynamic-stop", async (req: Request, res
     });
     res.json({ ok: true, stop });
   } catch (err) {
-    res.status(500).json({ ok: false, error: String(err) });
+    res.status(503).json({ ok: false, error: String(err) });
   }
 });
 
@@ -119,7 +119,7 @@ router.post("/api/execution-intelligence/quality-report", async (req: Request, r
     });
     res.json({ ok: true, report });
   } catch (err) {
-    res.status(500).json({ ok: false, error: String(err) });
+    res.status(503).json({ ok: false, error: String(err) });
   }
 });
 
@@ -129,7 +129,7 @@ router.post("/api/execution-intelligence/reset", async (_req: Request, res: Resp
     resetExecutionIntelligence();
     res.json({ ok: true, message: "Execution intelligence state reset" });
   } catch (err) {
-    res.status(500).json({ ok: false, error: String(err) });
+    res.status(503).json({ ok: false, error: String(err) });
   }
 });
 

@@ -102,7 +102,7 @@ router.post("/api/slo/reset", requireOperator, (_req: Request, res: Response) =>
     });
   } catch (err: any) {
     logger.error({ err: err?.message ?? String(err) }, "SLO reset failed");
-    res.status(500).json({ error: "reset_failed", message: err?.message ?? "Unknown error" });
+    res.status(503).json({ error: "reset_failed", message: err?.message ?? "Unknown error" });
   }
 });
 

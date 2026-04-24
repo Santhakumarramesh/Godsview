@@ -44,7 +44,7 @@ router.post("/brain/autonomy/debug/scheduler/start", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Autonomy debug scheduler start failed");
-    res.status(500).json({ error: "autonomy_debug_scheduler_start_failed", message: String(err) });
+    res.status(503).json({ error: "autonomy_debug_scheduler_start_failed", message: String(err) });
   }
 });
 
@@ -61,7 +61,7 @@ router.post("/brain/autonomy/debug/scheduler/run-once", async (_req, res) => {
     const snapshot = await runAutonomyDebugSchedulerCycle("manual_route");
     res.json({ ok: true, snapshot });
   } catch (err) {
-    res.status(500).json({ error: "autonomy_debug_scheduler_cycle_failed", message: String(err) });
+    res.status(503).json({ error: "autonomy_debug_scheduler_cycle_failed", message: String(err) });
   }
 });
 

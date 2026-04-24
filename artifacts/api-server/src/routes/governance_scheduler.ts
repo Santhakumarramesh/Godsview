@@ -77,7 +77,7 @@ router.post(
         { err: err?.message ?? String(err) },
         "Governance force-cycle failed",
       );
-      res.status(500).json({
+      res.status(503).json({
         error: "force_cycle_failed",
         message: err?.message ?? "Unknown error",
       });

@@ -49,7 +49,7 @@ router.get("/signal/:id", async (req, res) => {
     res.json(explanation);
   } catch (err) {
     req.log.error({ err }, "Failed to explain signal");
-    res.status(500).json({ error: "internal_error", message: "Failed to explain signal" });
+    res.status(503).json({ error: "internal_error", message: "Failed to explain signal" });
   }
 });
 
@@ -81,7 +81,7 @@ router.get("/trade/:id", async (req, res) => {
     res.json(explanation);
   } catch (err) {
     req.log.error({ err }, "Failed to explain trade");
-    res.status(500).json({ error: "internal_error", message: "Failed to explain trade" });
+    res.status(503).json({ error: "internal_error", message: "Failed to explain trade" });
   }
 });
 
@@ -113,7 +113,7 @@ router.get("/strategy/:id", async (req, res) => {
     res.json(explanation);
   } catch (err) {
     req.log.error({ err }, "Failed to explain strategy");
-    res.status(500).json({ error: "internal_error", message: "Failed to explain strategy" });
+    res.status(503).json({ error: "internal_error", message: "Failed to explain strategy" });
   }
 });
 
@@ -132,7 +132,7 @@ router.get("/no-trade/:symbol", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Failed to explain no-trade");
-    res.status(500).json({ error: "internal_error", message: "Failed to explain no-trade" });
+    res.status(503).json({ error: "internal_error", message: "Failed to explain no-trade" });
   }
 });
 
@@ -164,7 +164,7 @@ router.get("/attribution/:strategyId", async (req, res) => {
     res.json(explanation);
   } catch (err) {
     req.log.error({ err }, "Failed to analyze attribution");
-    res.status(500).json({ error: "internal_error", message: "Failed to analyze attribution" });
+    res.status(503).json({ error: "internal_error", message: "Failed to analyze attribution" });
   }
 });
 
@@ -196,7 +196,7 @@ router.get("/fragility/:strategyId", async (req, res) => {
     res.json(explanation);
   } catch (err) {
     req.log.error({ err }, "Failed to analyze fragility");
-    res.status(500).json({ error: "internal_error", message: "Failed to analyze fragility" });
+    res.status(503).json({ error: "internal_error", message: "Failed to analyze fragility" });
   }
 });
 
@@ -229,7 +229,7 @@ router.get("/report/:strategyId", async (req, res) => {
     res.json(explanation);
   } catch (err) {
     req.log.error({ err }, "Failed to generate strategy report");
-    res.status(500).json({ error: "internal_error", message: "Failed to generate strategy report" });
+    res.status(503).json({ error: "internal_error", message: "Failed to generate strategy report" });
   }
 });
 
@@ -259,7 +259,7 @@ router.get("/daily", async (req, res) => {
     res.json(explanation);
   } catch (err) {
     req.log.error({ err }, "Failed to generate daily report");
-    res.status(500).json({ error: "internal_error", message: "Failed to generate daily report" });
+    res.status(503).json({ error: "internal_error", message: "Failed to generate daily report" });
   }
 });
 
@@ -274,7 +274,7 @@ router.get("/performance", async (req, res) => {
     res.json(explanation);
   } catch (err) {
     req.log.error({ err }, "Failed to generate performance review");
-    res.status(500).json({ error: "internal_error", message: "Failed to generate performance review" });
+    res.status(503).json({ error: "internal_error", message: "Failed to generate performance review" });
   }
 });
 
@@ -287,7 +287,7 @@ router.get("/executive", async (req, res) => {
     res.json(explanation);
   } catch (err) {
     req.log.error({ err }, "Failed to generate executive summary");
-    res.status(500).json({ error: "internal_error", message: "Failed to generate executive summary" });
+    res.status(503).json({ error: "internal_error", message: "Failed to generate executive summary" });
   }
 });
 
@@ -311,7 +311,7 @@ router.get("/skill-luck", async (req, res) => {
     res.json(explanation);
   } catch (err) {
     req.log.error({ err }, "Failed to decompose skill/luck");
-    res.status(500).json({ error: "internal_error", message: "Failed to decompose skill/luck" });
+    res.status(503).json({ error: "internal_error", message: "Failed to decompose skill/luck" });
   }
 });
 
@@ -332,7 +332,7 @@ router.get("/regime-attribution", async (req, res) => {
     res.json(explanation);
   } catch (err) {
     req.log.error({ err }, "Failed to analyze regime attribution");
-    res.status(500).json({ error: "internal_error", message: "Failed to analyze regime attribution" });
+    res.status(503).json({ error: "internal_error", message: "Failed to analyze regime attribution" });
   }
 });
 
@@ -352,7 +352,7 @@ router.get("/temporal-patterns", async (req, res) => {
     res.json(explanation);
   } catch (err) {
     req.log.error({ err }, "Failed to analyze temporal patterns");
-    res.status(500).json({ error: "internal_error", message: "Failed to analyze temporal patterns" });
+    res.status(503).json({ error: "internal_error", message: "Failed to analyze temporal patterns" });
   }
 });
 
@@ -371,7 +371,7 @@ router.get("/entry-exit-quality", async (req, res) => {
     res.json(explanation);
   } catch (err) {
     req.log.error({ err }, "Failed to analyze entry/exit quality");
-    res.status(500).json({ error: "internal_error", message: "Failed to analyze entry/exit quality" });
+    res.status(503).json({ error: "internal_error", message: "Failed to analyze entry/exit quality" });
   }
 });
 
@@ -393,7 +393,7 @@ router.get("/factor-analysis", async (req, res) => {
     res.json(explanation);
   } catch (err) {
     req.log.error({ err }, "Failed to analyze factors");
-    res.status(500).json({ error: "internal_error", message: "Failed to analyze factors" });
+    res.status(503).json({ error: "internal_error", message: "Failed to analyze factors" });
   }
 });
 

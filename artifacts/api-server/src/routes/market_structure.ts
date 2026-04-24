@@ -101,7 +101,7 @@ router.get("/market-structure/:symbol/analyze", async (req: Request, res: Respon
     const result = analyzeMultiTimeframe(barsByTf as Record<Timeframe, Bar[]>, symbol!);
     res.json(result);
   } catch (err: any) {
-    res.status(500).json({ error: "analysis_failed", message: err.message });
+    res.status(503).json({ error: "analysis_failed", message: err.message });
   }
 });
 
@@ -118,7 +118,7 @@ router.get("/market-structure/:symbol/:timeframe", async (req: Request, res: Res
     const result = analyzeTimeframe(bars, timeframe as Timeframe);
     res.json({ symbol, ...result });
   } catch (err: any) {
-    res.status(500).json({ error: "analysis_failed", message: err.message });
+    res.status(503).json({ error: "analysis_failed", message: err.message });
   }
 });
 
@@ -135,7 +135,7 @@ router.get("/market-structure/:symbol/order-blocks", async (req: Request, res: R
     allBlocks.sort((a, b) => b.score - a.score);
     res.json({ symbol, orderBlocks: allBlocks, count: allBlocks.length });
   } catch (err: any) {
-    res.status(500).json({ error: "analysis_failed", message: err.message });
+    res.status(503).json({ error: "analysis_failed", message: err.message });
   }
 });
 
@@ -152,7 +152,7 @@ router.get("/market-structure/:symbol/abcd", async (req: Request, res: Response)
     allPatterns.sort((a, b) => b.score - a.score);
     res.json({ symbol, abcdPatterns: allPatterns, count: allPatterns.length });
   } catch (err: any) {
-    res.status(500).json({ error: "analysis_failed", message: err.message });
+    res.status(503).json({ error: "analysis_failed", message: err.message });
   }
 });
 
@@ -173,7 +173,7 @@ router.get("/market-structure/:symbol/probability", async (req: Request, res: Re
 
     res.json({ symbol, currentPrice: price, probability: prob, htfBias: mtf.htfBias });
   } catch (err: any) {
-    res.status(500).json({ error: "analysis_failed", message: err.message });
+    res.status(503).json({ error: "analysis_failed", message: err.message });
   }
 });
 

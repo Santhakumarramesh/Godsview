@@ -87,7 +87,7 @@ router.post("/api/side-by-side/start", (req, res) => {
       }
     })();
   } catch (err: any) {
-    res.status(500).json({ error: "start_failed", message: err.message });
+    res.status(503).json({ error: "start_failed", message: err.message });
   }
 });
 

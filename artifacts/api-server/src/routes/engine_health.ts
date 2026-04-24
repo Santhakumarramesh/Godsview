@@ -72,7 +72,7 @@ router.get("/engine-health", (_req: Request, res: Response): void => {
     });
   } catch (error) {
     logger.error(`Engine health check failed: ${error}`);
-    res.status(500).json({
+    res.status(503).json({
       status: "error",
       error: error instanceof Error ? error.message : "Internal error",
     });

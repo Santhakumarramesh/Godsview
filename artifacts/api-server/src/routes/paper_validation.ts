@@ -70,7 +70,7 @@ router.post("/paper/validation/run-once", async (req, res) => {
     res.json(report);
   } catch (err) {
     req.log.error({ err }, "Paper validation run-once failed");
-    res.status(500).json({ error: "paper_validation_failed", message: String(err) });
+    res.status(503).json({ error: "paper_validation_failed", message: String(err) });
   }
 });
 
@@ -90,7 +90,7 @@ router.post("/brain/paper/validation/run-once", async (req, res) => {
     res.json(report);
   } catch (err) {
     req.log.error({ err }, "Brain paper validation run-once failed");
-    res.status(500).json({ error: "paper_validation_failed", message: String(err) });
+    res.status(503).json({ error: "paper_validation_failed", message: String(err) });
   }
 });
 
@@ -105,7 +105,7 @@ router.post("/paper/validation/start", async (req, res) => {
     res.json(result);
   } catch (err) {
     req.log.error({ err }, "Paper validation start failed");
-    res.status(500).json({ error: "paper_validation_start_failed", message: String(err) });
+    res.status(503).json({ error: "paper_validation_start_failed", message: String(err) });
   }
 });
 
@@ -120,7 +120,7 @@ router.post("/brain/paper/validation/start", async (req, res) => {
     res.json(result);
   } catch (err) {
     req.log.error({ err }, "Brain paper validation start failed");
-    res.status(500).json({ error: "paper_validation_start_failed", message: String(err) });
+    res.status(503).json({ error: "paper_validation_start_failed", message: String(err) });
   }
 });
 

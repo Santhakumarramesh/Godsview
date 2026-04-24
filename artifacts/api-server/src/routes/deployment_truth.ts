@@ -84,7 +84,7 @@ export function initDeploymentTruthRoutes(
         timestamp: new Date().toISOString(),
       });
     } catch (error) {
-      res.status(500).json({
+      res.status(503).json({
         success: false,
         error: error instanceof Error ? error.message : String(error),
         timestamp: new Date().toISOString(),
@@ -237,7 +237,7 @@ export function initDeploymentTruthRoutes(
         timestamp: new Date().toISOString(),
       });
     } catch (error) {
-      res.status(500).json({
+      res.status(503).json({
         success: false,
         error: error instanceof Error ? error.message : String(error),
         timestamp: new Date().toISOString(),

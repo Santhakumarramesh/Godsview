@@ -49,7 +49,7 @@ router.post('/parse', (req: Request, res: Response) => {
       interpretations: result.interpretations,
     });
   } catch (error) {
-    return res.status(500).json({
+    return res.status(503).json({
       error: error instanceof Error ? error.message : 'Parse failed',
     });
   }
@@ -83,7 +83,7 @@ router.post('/critique', (req: Request, res: Response) => {
       report,
     });
   } catch (error) {
-    return res.status(500).json({
+    return res.status(503).json({
       error: error instanceof Error ? error.message : 'Critique failed',
     });
   }
@@ -114,7 +114,7 @@ router.post('/variants', (req: Request, res: Response) => {
       variants: ranked,
     });
   } catch (error) {
-    return res.status(500).json({
+    return res.status(503).json({
       error: error instanceof Error ? error.message : 'Variant generation failed',
     });
   }
@@ -157,7 +157,7 @@ router.post('/process', async (req: Request, res: Response) => {
       timestamp: result.timestamp,
     });
   } catch (error) {
-    return res.status(500).json({
+    return res.status(503).json({
       error: error instanceof Error ? error.message : 'Processing failed',
     });
   }
@@ -199,7 +199,7 @@ router.post('/refine', async (req: Request, res: Response) => {
       nextSteps: result.nextSteps,      timestamp: result.timestamp,
     });
   } catch (error) {
-    return res.status(500).json({
+    return res.status(503).json({
       error: error instanceof Error ? error.message : 'Refinement failed',
     });
   }
@@ -241,7 +241,7 @@ router.post('/compare', async (req: Request, res: Response) => {
       recommendation: comparison.recommendation,
     });
   } catch (error) {
-    return res.status(500).json({
+    return res.status(503).json({
       error: error instanceof Error ? error.message : 'Comparison failed',
     });
   }
@@ -268,7 +268,7 @@ router.post('/validate', (req: Request, res: Response) => {
       warnings: validation.warnings,
     });
   } catch (error) {
-    return res.status(500).json({
+    return res.status(503).json({
       error: error instanceof Error ? error.message : 'Validation failed',
     });
   }

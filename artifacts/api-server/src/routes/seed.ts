@@ -37,7 +37,7 @@ router.post("/seed/run", async (_req: Request, res: Response) => {
     });
   } catch (err: any) {
     logger.error({ err }, "[seed] Seeder failed");
-    res.status(500).json({ error: "seeder_failed", message: err?.message });
+    res.status(503).json({ error: "seeder_failed", message: err?.message });
   }
 });
 
@@ -56,7 +56,7 @@ router.post("/seed/force", async (_req: Request, res: Response) => {
     res.json({ status: "ok", purged: true, seeder: result });
   } catch (err: any) {
     logger.error({ err }, "[seed] Force seeder failed");
-    res.status(500).json({ error: "force_seeder_failed", message: err?.message });
+    res.status(503).json({ error: "force_seeder_failed", message: err?.message });
   }
 });
 
@@ -90,7 +90,7 @@ router.get("/seed/status", async (_req: Request, res: Response) => {
       threshold: { min_for_backtest: 50, target: 800 },
     });
   } catch (err: any) {
-    res.status(500).json({ error: "status_check_failed", message: err?.message });
+    res.status(503).json({ error: "status_check_failed", message: err?.message });
   }
 });
 

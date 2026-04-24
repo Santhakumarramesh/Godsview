@@ -54,7 +54,7 @@ router.get("/api/persistence/status", (req, res) => {
     });
   } catch (error) {
     logger.error({ error }, "Failed to get persistence status");
-    res.status(500).json({ ok: false, error: "Failed to get status" });
+    res.status(503).json({ ok: false, error: "Failed to get status" });
   }
 });
 
@@ -75,7 +75,7 @@ router.get("/api/persistence/validation-reports", (req, res) => {
     });
   } catch (error) {
     logger.error({ error }, "Failed to get validation reports");
-    res.status(500).json({ ok: false, error: "Failed to get reports" });
+    res.status(503).json({ ok: false, error: "Failed to get reports" });
   }
 });
 
@@ -110,7 +110,7 @@ router.get("/api/persistence/monitor-events", (req, res) => {
     });
   } catch (error) {
     logger.error({ error }, "Failed to get monitor events");
-    res.status(500).json({ ok: false, error: "Failed to get events" });
+    res.status(503).json({ ok: false, error: "Failed to get events" });
   }
 });
 
@@ -130,7 +130,7 @@ router.post("/api/persistence/monitor-events/:id/resolve", (req, res) => {
     }
   } catch (error) {
     logger.error({ error }, "Failed to resolve monitor event");
-    res.status(500).json({ ok: false, error: "Failed to resolve event" });
+    res.status(503).json({ ok: false, error: "Failed to resolve event" });
   }
 });
 
@@ -153,7 +153,7 @@ router.get("/api/persistence/overlay-snapshots", (req, res) => {
     });
   } catch (error) {
     logger.error({ error }, "Failed to get overlay snapshots");
-    res.status(500).json({ ok: false, error: "Failed to get snapshots" });
+    res.status(503).json({ ok: false, error: "Failed to get snapshots" });
   }
 });
 
@@ -174,7 +174,7 @@ router.get("/api/persistence/strategy-versions/:strategyId", (req, res) => {
     });
   } catch (error) {
     logger.error({ error }, "Failed to get strategy versions");
-    res.status(500).json({ ok: false, error: "Failed to get versions" });
+    res.status(503).json({ ok: false, error: "Failed to get versions" });
   }
 });
 

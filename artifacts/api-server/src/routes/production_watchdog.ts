@@ -44,7 +44,7 @@ router.post("/brain/production/watchdog/start", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Production watchdog start failed");
-    res.status(500).json({ error: "production_watchdog_start_failed", message: String(err) });
+    res.status(503).json({ error: "production_watchdog_start_failed", message: String(err) });
   }
 });
 
@@ -61,7 +61,7 @@ router.post("/brain/production/watchdog/run-once", async (_req, res) => {
     const snapshot = await runProductionWatchdogCycle("manual_route");
     res.json({ ok: true, snapshot });
   } catch (err) {
-    res.status(500).json({ error: "production_watchdog_cycle_failed", message: String(err) });
+    res.status(503).json({ error: "production_watchdog_cycle_failed", message: String(err) });
   }
 });
 
