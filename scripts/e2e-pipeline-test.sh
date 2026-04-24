@@ -226,6 +226,18 @@ check_endpoint "Production health" "$API/api/production-health/summary"
 check_endpoint "SLO tracking" "$API/api/slo/summary"
 
 # ============================================================================
+header "12b. PRODUCTION DEPLOYMENT PHASES"
+# ============================================================================
+check_endpoint "Data quality health" "$API/api/data-quality/health"
+check_endpoint "Data quality feeds" "$API/api/data-quality/feeds"
+check_endpoint "Pipeline status" "$API/api/pipeline/status"
+check_endpoint "Pipeline stages" "$API/api/pipeline/stages"
+check_endpoint "Trading safety status" "$API/api/safety/status"
+check_endpoint "Trading safety live check" "$API/api/safety/live-allowed"
+check_endpoint "Monetization plans" "$API/api/monetization/plans"
+check_endpoint "Monetization usage" "$API/api/monetization/usage"
+
+# ============================================================================
 header "13. FRONTEND BUILD CHECK"
 # ============================================================================
 # Check relative to script location or common paths

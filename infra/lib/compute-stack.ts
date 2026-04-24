@@ -34,6 +34,8 @@ export interface ComputeStackProps extends StackProps {
 }
 
 export class ComputeStack extends Stack {
+  public readonly albArn: string;
+
   constructor(scope: Construct, id: string, props: ComputeStackProps) {
     super(scope, id, props);
 
@@ -174,6 +176,9 @@ export class ComputeStack extends Stack {
         },
       },
     });
+
+    // Export ALB ARN for alarms stack
+    this.albArn = alb.loadBalancerFullName;
 
     // ── Outputs ───────────────────────────────────────────────────
     new CfnOutput(this, "AlbDns", { value: alb.loadBalancerDnsName });

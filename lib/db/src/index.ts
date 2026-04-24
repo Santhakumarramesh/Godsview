@@ -491,6 +491,92 @@ if (dbUrl) {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
+    -- Positions table (Phase 2 persistence)
+    CREATE TABLE IF NOT EXISTS positions (
+      position_id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+      symbol TEXT NOT NULL,
+      side TEXT NOT NULL CHECK (side IN ('long','short')),
+      quantity DOUBLE PRECISION NOT NULL,
+      entry_price DOUBLE PRECISION NOT NULL,
+      current_price DOUBLE PRECISION NOT NULL DEFAULT 0,
+      unrealized_pnl DOUBLE PRECISION NOT NULL DEFAULT 0,
+      realized_pnl DOUBLE PRECISION NOT NULL DEFAULT 0,
+      stop_loss DOUBLE PRECISION,
+      take_profit DOUBLE PRECISION,
+      opened_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      closed_at TIMESTAMPTZ
+    );
+
+    -- Watchlist table
+    CREATE TABLE IF NOT EXISTS watchlist (
+      id SERIAL PRIMARY KEY,
+      symbol TEXT NOT NULL UNIQUE,
+      priority INTEGER DEFAULT 0,
+      tags TEXT,
+      notes TEXT,
+      added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    -- Trade journal table
+    CREATE TABLE IF NOT EXISTS trade_journal (
+      id SERIAL PRIMARY KEY,
+      symbol TEXT NOT NULL,
+      direction TEXT NOT NULL,
+      entry_price DOUBLE PRECISION NOT NULL,
+      exit_price DOUBLE PRECISION,
+      pnl DOUBLE PRECISION,
+      pnl_pct DOUBLE PRECISION,
+      notes TEXT,
+      tags TEXT,
+      setup_type TEXT,
+      regime TEXT,
+      lessons TEXT,
+      screenshot_url TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    -- Setup memories for recall engine
+    CREATE TABLE IF NOT EXISTS setup_memories (
+      id SERIAL PRIMARY KEY,
+      symbol TEXT NOT NULL,
+      setup_type TEXT NOT NULL,
+      direction TEXT,
+      context_json JSONB,
+      outcome TEXT,
+      pnl DOUBLE PRECISION,
+      screenshot_url TEXT,
+      similarity_hash TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    -- Strategy registry (in-memory replacement)
+    CREATE TABLE IF NOT EXISTS strategies (
+      id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT,
+      dsl_payload JSONB,
+      raw_input TEXT,
+      status TEXT NOT NULL DEFAULT 'draft',
+      version INTEGER NOT NULL DEFAULT 1,
+      parent_id UUID,
+      created_by TEXT DEFAULT 'system',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    -- Promotion events
+    CREATE TABLE IF NOT EXISTS promotion_events (
+      id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+      strategy_id UUID NOT NULL,
+      from_status TEXT NOT NULL,
+      to_status TEXT NOT NULL,
+      approved_by TEXT NOT NULL,
+      evidence_packet JSONB,
+      reason TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
     -- Phase 20: Certification Run Orchestration
     CREATE TABLE IF NOT EXISTS certification_runs (
       id SERIAL PRIMARY KEY,

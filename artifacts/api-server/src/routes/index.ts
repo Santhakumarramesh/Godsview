@@ -329,4 +329,14 @@ import decisionFeedbackRouter from "./decision_feedback";
 router.use("/api/ude", unifiedDecisionRouter);
 router.use("/api/ude/feedback", decisionFeedbackRouter);
 
+// ── Production Deployment Phases ────────────────────────────────────
+import dataQualityRouter from "./data_quality";
+import pipelineHealthRouter from "./pipeline_health";
+import tradingSafetyRouter from "./trading_safety";
+import monetizationRouter from "./monetization";
+router.use("/api/data-quality", dataQualityRouter);
+router.use("/api/pipeline", pipelineHealthRouter);
+router.use("/api/safety", tradingSafetyRouter);
+router.use("/api/monetization", monetizationRouter);
+
 export default router;

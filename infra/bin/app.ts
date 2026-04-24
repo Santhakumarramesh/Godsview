@@ -18,6 +18,7 @@ import { NetworkStack } from "../lib/network-stack";
 import { DataStack } from "../lib/data-stack";
 import { StorageStack } from "../lib/storage-stack";
 import { ComputeStack } from "../lib/compute-stack";
+import { AlarmsStack } from "../lib/alarms-stack";
 
 const app = new cdk.App();
 
@@ -48,7 +49,7 @@ const data = new DataStack(app, `${baseName}-data`, {
   vpc: network.vpc,
 });
 
-new ComputeStack(app, `${baseName}-compute`, {
+const compute = new ComputeStack(app, `${baseName}-compute`, {
   env: awsEnv,
   envName,
   vpc: network.vpc,
@@ -58,6 +59,17 @@ new ComputeStack(app, `${baseName}-compute`, {
   apiRepo: storage.apiRepo,
   dashboardBucket: storage.dashboardBucket,
   brokerSecret: data.brokerSecret,
+});
+
+new AlarmsStack(app, `${baseName}-alarms`, {
+  env: awsEnv,
+  envName,
+  ecsClusterName: `godsview-${envName}`,
+  ecsServiceName: `godsview-${envName}-api`,
+  rdsInstanceId: data.dbInstance.instanceIdentifier,
+  redisClusterId: `godsview-${envName}-redis`,
+  albArn: compute.albArn,
+  notificationEmail: process.env.GODSVIEW_ALERT_EMAIL,
 });
 
 // Tag everything for cost allocation & ownership.
