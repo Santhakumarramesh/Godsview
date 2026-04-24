@@ -113,9 +113,15 @@ app.use(router);
 const publicDir = path.resolve(__dirname, "../public");
 if (fs.existsSync(publicDir)) {
   app.use(express.static(publicDir));
-  // SPA fallback — serve index.html for non-API routes
+  // SPA fallback — serve index.html for non-API routes only
   // Express 5 requires a named wildcard: use /{*path} instead of bare *
-  app.get("/{*path}", (_req: Request, res: Response) => {
+  // CRITICAL: Must NOT catch /api/* requests — those must 404 as JSON, not serve HTML
+  app.get("/{*path}", (req: Request, res: Response) => {
+    // Never serve SPA HTML for API routes — let them 404 as JSON
+    if (req.path.startsWith("/api/") || req.path.startsWith("/healthz") || req.path.startsWith("/readyz")) {
+      res.status(404).json({ error: "not_found", message: `Endpoint not found: GET ${req.path}` });
+      return;
+    }
     const indexPath = path.join(publicDir, "index.html");
     if (fs.existsSync(indexPath)) {
       res.sendFile(indexPath);
