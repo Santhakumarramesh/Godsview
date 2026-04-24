@@ -10,15 +10,17 @@ An autonomous market intelligence and execution system that watches live markets
 
 | Metric | Value |
 |--------|-------|
-| Lines of Code | 115,000+ TypeScript/TSX |
-| Git Commits | 500+ |
-| Backend Modules | 387 files, 72 API routes, 136 lib modules |
-| Frontend Pages | 85 React pages across 10 sidebar sections (zero placeholders) |
-| Sidebar Architecture | 68 production pages organized into 10 sections |
-| Automated Tests | 1,420 |
+| Lines of Code | 140,000+ TypeScript/TSX/Python |
+| Git Commits | 550+ |
+| Backend Modules | 400+ files, 72 API routes, 136 lib modules |
+| Frontend Pages | 120 React pages across 10 sidebar sections (zero placeholders) |
+| Sidebar Architecture | 68 core + 52 supplementary production pages |
+| Automated Tests | 3,785 |
+| Microservices | 14 Docker Compose services, 12 Python microservices |
 | Data Sources | Alpaca (live crypto), Yahoo Finance (14 equity symbols) |
-| Deployment | AWS CDK (ECS Fargate + RDS + ElastiCache + S3/CloudFront) |
+| Deployment | AWS CDK (5 stacks: ECS Fargate + RDS + ElastiCache + S3/CloudFront) |
 | Database | PostgreSQL 16 with 21 schemas, full audit trails |
+| CI/CD | 5 GitHub Actions workflows |
 
 ---
 
@@ -39,7 +41,7 @@ GodsView runs a continuous loop: **ingest → analyze → decide → execute →
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
 │  PRESENTATION — React 19 + Three.js                                  │
-│  85 pages · 3D Brain Hologram · Real-time SSE · Nginx (port 80)      │
+│  120 pages · 3D Brain Hologram · Real-time SSE · Nginx (port 80)     │
 ├──────────────────────────────────────────────────────────────────────┤
 │  API SERVER — Express 5 + TypeScript                                 │
 │  72 route files · 136 lib modules · OpenAPI · RBAC · Rate limiting   │
@@ -122,9 +124,9 @@ AWS infrastructure (4 CDK stacks): VPC with 2 AZs, ECS Fargate (auto-scaling 2-1
 
 ---
 
-## 68 Core Dashboard Pages (85 Total)
+## 68 Core Dashboard Pages (120 Total)
 
-All 68 planned sidebar pages are implemented with real API connections. An additional 17 supplementary pages (Signals, Trades, Analytics, War Room, Proof, Checklist, Reports, Super Intelligence, Institutional Intelligence, Intelligence Center, Decision Replay, Candle X-Ray, Stitch Lab, Settings, etc.) bring the total to 85.
+All 68 planned sidebar pages are implemented with real API connections and full error/loading state handling. An additional 52 supplementary pages (Signals, Trades, Analytics, War Room, Proof, Checklist, Reports, Super Intelligence, Institutional Intelligence, Intelligence Center, Decision Replay, Candle X-Ray, Stitch Lab, Data Integrity, System Audit, Model Governance, Infinity View, Settings, and more) bring the total to 120. Every data-fetching page includes proper loading skeletons, error boundaries, and empty states.
 
 | Section | Pages | What It Covers |
 |---------|-------|----------------|
@@ -138,6 +140,7 @@ All 68 planned sidebar pages are implemented with real API connections. An addit
 | Portfolio / Risk | 8 | Portfolio Command, Position Monitor, Allocation Engine, Correlation Risk, Drawdown Protection, Risk Policy, Pre-Trade Gate, Capital Efficiency |
 | Execution | 8 | Execution Center, Paper Trading, Assisted Live, Semi-Auto, Autonomous Mode, Broker Connector, Fill Quality, Kill Switch |
 | Governance | 6 | Audit Trail, Ops Monitor, Decision Replay, Intelligence Hub, War Room, Settings |
+| Extended | 52 | Signals, Trades, Analytics, Reports, Proof, Checklist, Data Integrity, System Audit, Model Governance, Super Intelligence, Institutional Intelligence, Candle X-Ray, Infinity View, and more |
 
 ---
 
@@ -155,7 +158,7 @@ All 68 planned sidebar pages are implemented with real API connections. An addit
 | Charts | TradingView Lightweight Charts |
 | Infrastructure | AWS CDK (ECS Fargate + RDS + ElastiCache + S3/CloudFront) |
 | Monitoring | CloudWatch Alarms + Container Insights + Prometheus + Grafana |
-| Testing | Vitest (1,420 tests) |
+| Testing | Vitest (3,785 tests) |
 | Security | RBAC (4 roles) + Kill switch + Audit trail |
 
 ---
@@ -163,6 +166,12 @@ All 68 planned sidebar pages are implemented with real API connections. An addit
 ## Security
 
 Role-Based Access Control with 4 roles (admin, operator, trader, viewer). A two-layer kill switch halts all mutations instantly. Full audit trail records every protected action with actor, role, permission, and outcome. Pre-trade risk gate validates every order against all 5 safety layers before execution. API key rotation via environment variables only — no secrets in code.
+
+---
+
+## Production Hardening
+
+Environment validation fails fast before server listen — missing required vars crash immediately with clear messages. Graceful shutdown handles SIGTERM/SIGINT with connection draining and LIFO cleanup callbacks. Health endpoint at `/healthz` is wired to Docker HEALTHCHECK with 30s intervals. All 120 frontend pages include error boundaries, loading skeletons, and empty states for every data-fetching query. 14 Docker Compose services orchestrate the full stack. 5 CI workflows run on every push. Production observability via CloudWatch alarms, Container Insights, and structured logging.
 
 ---
 
@@ -175,7 +184,7 @@ Godsview/
 │   ├── src/lib/             # Intelligence engines, ML, risk, execution
 │   ├── src/engines/         # Autonomous brain, governance, paper trading
 │   └── src/__tests__/       # 1,420 automated tests
-├── godsview-dashboard/       # React frontend (85 pages, 10-section sidebar)
+├── artifacts/godsview-dashboard/  # React frontend (120 pages, 10-section sidebar)
 ├── lib/                     # Shared libraries (db, types, validation)
 ├── infra/                   # AWS CDK infrastructure
 ├── deploy/                  # Deployment scripts
@@ -191,4 +200,4 @@ MIT
 
 ---
 
-Built by [Santhakumar](https://github.com/Santhakumarramesh) · 115,000+ lines · 500+ commits · Live on AWS
+Built by [Santhakumar](https://github.com/Santhakumarramesh) · 140,000+ lines · 550+ commits · 120 pages · 3,785 tests · Live on AWS
