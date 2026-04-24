@@ -53,14 +53,18 @@ if [ -n "$DATABASE_URL" ]; then
   for sqlfile in ./lib/db/migrations/*.sql; do
     if [ -f "$sqlfile" ]; then
       echo "[entrypoint]   Running $(basename "$sqlfile")..."
+      # Use node with dynamic import for ESM pg driver, fallback to warning
       node -e "
-        const { Pool } = require('pg');
-        const fs = require('fs');
-        const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 1 });
-        pool.query(fs.readFileSync('$sqlfile', 'utf8'))
-          .then(() => { console.log('  OK'); pool.end(); })
-          .catch(e => { console.error('  WARN:', e.message); pool.end(); });
-      " 2>&1 || true
+        import('pg').then(({ default: pg }) => {
+          const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 1 });
+          const fs = require('fs');
+          pool.query(fs.readFileSync('$sqlfile', 'utf8'))
+            .then(() => { console.log('  OK'); pool.end(); })
+            .catch(e => { console.error('  WARN:', e.message); pool.end(); });
+        }).catch(() => {
+          console.log('  SKIP (pg module not available — migrations handled by drizzle)');
+        });
+      " 2>&1 || echo "[entrypoint]   SKIP: supplemental SQL (non-critical)"
     fi
   done
 else

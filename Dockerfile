@@ -99,6 +99,8 @@ RUN chmod +x /app/docker-entrypoint.sh
 
 # Create runtime directories (writable by non-root user)
 RUN mkdir -p /app/.runtime/persistent && chown -R godsview:godsview /app/.runtime
+# Create memory store directory (Docker volume mount point — must be writable)
+RUN mkdir -p /data/memory && chown -R godsview:godsview /data/memory
 
 # Switch to non-root user
 USER godsview
