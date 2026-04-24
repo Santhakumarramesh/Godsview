@@ -23,7 +23,8 @@ credentials.json
 *.pem
 *.key
 
-# ── Runtime state ─────────────────────────────────────────────────────────────
+# ── Runtime state / data ──────────────────────────────────────────────────────
+data/
 .runtime/
 **/.runtime/
 *.runtime.json

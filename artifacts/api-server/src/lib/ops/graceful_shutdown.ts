@@ -1,7 +1,7 @@
 /**
  * Graceful Shutdown — Handles SIGTERM/SIGINT for clean container shutdown.
  *
- * When the container receives a stop signal (Railway, Docker, K8s):
+ * When the container receives a stop signal (Docker, ECS, K8s):
  * 1. Stop accepting new HTTP connections
  * 2. Cancel any pending orders (safety first)
  * 3. Close WebSocket connections

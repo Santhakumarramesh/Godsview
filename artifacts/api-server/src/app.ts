@@ -109,7 +109,7 @@ app.use("/api", router);
 // Also mount non-prefixed routes (backtest, health)
 app.use(router);
 
-// ── Static file serving for Replit / single-process deployment ──────────────
+// ── Static file serving for single-process / Docker deployment ──────────────
 const publicDir = path.resolve(__dirname, "../public");
 if (fs.existsSync(publicDir)) {
   app.use(express.static(publicDir));
