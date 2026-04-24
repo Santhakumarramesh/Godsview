@@ -297,7 +297,6 @@ function artifactFileChecks(): CheckResult[] {
     { name: "Dashboard dist index exists", rel: "artifacts/godsview-dashboard/dist/public/index.html", critical: true },
     { name: "Dockerfile exists", rel: "Dockerfile", critical: false },
     { name: "Docker entrypoint exists", rel: "docker-entrypoint.sh", critical: false },
-    { name: "Replit startup script exists", rel: "replit-start.sh", critical: false },
   ];
 
   return checks.map((check) => {

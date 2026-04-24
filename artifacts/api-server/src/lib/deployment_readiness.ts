@@ -219,7 +219,6 @@ function buildArtifactChecks(checks: DeploymentReadinessCheck[]): void {
     { rel: "artifacts/godsview-dashboard/dist/public/index.html", critical: true, label: "Dashboard build output" },
     { rel: "Dockerfile", critical: false, label: "Dockerfile" },
     { rel: "docker-entrypoint.sh", critical: false, label: "Docker entrypoint" },
-    { rel: "replit-start.sh", critical: false, label: "Replit start script" },
   ];
 
   for (const file of files) {

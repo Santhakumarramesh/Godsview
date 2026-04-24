@@ -6,8 +6,7 @@
  * Exits 0 on full pass, exits 1 if any critical check fails.
  *
  * Usage:
- *   BASE_URL=https://your-app.replit.app pnpm run health-check
- *   BASE_URL=http://localhost:3000       pnpm run health-check
+ *   BASE_URL=http://localhost:3000 pnpm run health-check
  */
 
 const BASE_URL = (process.env.BASE_URL ?? "http://localhost:3000").replace(/\/$/, "");

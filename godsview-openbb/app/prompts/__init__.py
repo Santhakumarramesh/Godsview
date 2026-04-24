@@ -1,1 +1,0 @@
-# Godsview Claude Prompt Templates

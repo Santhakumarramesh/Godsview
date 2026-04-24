@@ -2,10 +2,8 @@ import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import path from "path";
 
-// Vitest config is separate from vite.config.ts because the dashboard's
-// Vite config pulls in @replit/* plugins at the top level. Those plugins
-// are dev-server-only and do not load under jsdom, so we construct a
-// minimal config here that only enables what's needed to render React
+// Vitest config is separate from vite.config.ts — minimal config
+// that only enables what's needed to render React
 // components under jsdom against MSW-mocked fetch.
 export default defineConfig({
   plugins: [react()],

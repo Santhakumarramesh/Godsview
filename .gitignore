@@ -1,5 +1,5 @@
 # ══════════════════════════════════════════════════════════════════════════════
-# GodsView — .gitignore
+# GodsView — .gitignore (production)
 # ══════════════════════════════════════════════════════════════════════════════
 
 # ── Build outputs ─────────────────────────────────────────────────────────────
@@ -8,16 +8,12 @@ build/
 tmp/
 out-tsc/
 *.tsbuildinfo
-.expo/
-.expo-shared/
-.next/
 .turbo/
 .cache/
 
 # ── Dependencies ──────────────────────────────────────────────────────────────
 node_modules/
 .pnpm-store/
-.yarn/
 
 # ── Secrets & environment ─────────────────────────────────────────────────────
 .env
@@ -27,7 +23,7 @@ credentials.json
 *.pem
 *.key
 
-# ── Runtime state (never track) ───────────────────────────────────────────────
+# ── Runtime state ─────────────────────────────────────────────────────────────
 .runtime/
 **/.runtime/
 *.runtime.json
@@ -35,6 +31,8 @@ credentials.json
 
 # ── Temp files ────────────────────────────────────────────────────────────────
 _tmp_*
+*.patch
+*.backup
 _brain_sync.b64
 _brain_sync.tar.gz
 
@@ -54,28 +52,10 @@ venv/
 
 # ── IDE / Editor ──────────────────────────────────────────────────────────────
 /.idea/
-.project
-.classpath
-.c9/
-*.launch
-.settings/
-*.sublime-workspace
 .vscode/*
 !.vscode/settings.json
-!.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
-.cursor/rules/nx-rules.mdc
-.github/instructions/nx.instructions.md
-
-# ── Replit (not needed for production) ────────────────────────────────────────
-.replit
-.replitignore
-replit.md
-.local/
-.bashrc
-.bash_logout
-.profile
 
 # ── Claude / AI assistant ────────────────────────────────────────────────────
 .claude/
@@ -83,22 +63,14 @@ replit.md
 # ── Logs ──────────────────────────────────────────────────────────────────────
 *.log
 npm-debug.log*
-yarn-error.log*
 pnpm-debug.log*
 
 # ── Coverage / Testing ───────────────────────────────────────────────────────
-/coverage/
-/.nyc_output/
+coverage/
+.nyc_output/
 
 # ── Local scratch ─────────────────────────────────────────────────────────────
 attached_assets/
-godsview_engine_analysis_dashboard.html
-
-# ── GodsView Python runtime artifacts ─────────────────────────────────────────
-godsview-openbb/data/processed/
-godsview-openbb/charts/
-godsview-openbb/reports/
-godsview-openbb/memory/
 
 # ── Build artifact guards ─────────────────────────────────────────────────────
 artifacts/api-server/public/public/

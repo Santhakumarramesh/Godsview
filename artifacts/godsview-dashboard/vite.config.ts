@@ -3,27 +3,6 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 
-// Replit plugins — optional, only loaded when running inside Replit
-const replitPlugins: any[] = [];
-if (process.env.REPL_ID !== undefined) {
-  try {
-    const { default: runtimeErrorOverlay } = await import(
-      "@replit/vite-plugin-runtime-error-modal"
-    );
-    replitPlugins.push(runtimeErrorOverlay());
-    if (process.env.NODE_ENV !== "production") {
-      const { cartographer } = await import(
-        "@replit/vite-plugin-cartographer"
-      );
-      replitPlugins.push(cartographer({ root: path.resolve(import.meta.dirname, "..") }));
-      const { devBanner } = await import("@replit/vite-plugin-dev-banner");
-      replitPlugins.push(devBanner());
-    }
-  } catch {
-    // Replit plugins not installed — skip silently (Docker / local builds)
-  }
-}
-
 const rawPort = process.env.PORT ?? "5173";
 
 const port = Number(rawPort);
@@ -39,7 +18,6 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
-    ...replitPlugins,
   ],
   resolve: {
     alias: {
