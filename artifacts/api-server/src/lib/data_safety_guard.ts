@@ -22,11 +22,14 @@ export function isLiveMode(): boolean {
 
 export function allowSyntheticFallback(context: string): boolean {
   const mode = getDataMode();
-  if (mode === "live" || mode === "strict_live") {
-    logger.error({ context, mode }, "BLOCKED: Synthetic data fallback attempted in live mode");
+  // STRICT: Block synthetic data in ALL modes — GodsView uses only real market data
+  // Set GODSVIEW_ALLOW_SYNTHETIC=true to explicitly re-enable for development
+  const allowSynthetic = process.env.GODSVIEW_ALLOW_SYNTHETIC === "true";
+  if (!allowSynthetic) {
+    logger.error({ context, mode }, "BLOCKED: Synthetic data fallback — GodsView uses real data only");
     return false;
   }
-  logger.warn({ context, mode }, "Synthetic data fallback activated (allowed in non-live mode)");
+  logger.warn({ context, mode }, "Synthetic data fallback activated (GODSVIEW_ALLOW_SYNTHETIC=true)");
   return true;
 }
 

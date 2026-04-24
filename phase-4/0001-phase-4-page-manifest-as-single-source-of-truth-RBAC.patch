@@ -1,0 +1,1294 @@
+From 99dd09f392f44e88d7c7624dafc7dbd5feacd1c9 Mon Sep 17 00:00:00 2001
+From: claude-bot <noreply@anthropic.com>
+Date: Fri, 17 Apr 2026 23:52:57 -0400
+Subject: [PATCH] phase-4: page-manifest as single source of truth + RBAC route
+ guard
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The 68 dashboard pages were registered ad-hoc in App.tsx, with three routes
+(tradingview-chart, bloomberg-terminal, news-monitor) accidentally registered
+twice. There was also no client-side authorization at all — any browser tab
+could hit /execution-control or /risk-command-v2 and submit destructive
+mutations. Fixed both:
+
+1. src/pages/page-manifest.ts — every page is now a single entry containing
+   path, scope, label, lazy loader, and minRole. App.tsx maps over the
+   manifest to build <Route> elements; duplicate paths are now impossible by
+   construction (the manifest module asserts uniqueness at load time and
+   throws on violation).
+
+2. src/auth/role-context.tsx + route-guard.tsx — RoleProvider exposes
+   { role, setRole, can }. RouteGuard renders an access-denied panel with a
+   one-click elevation button when the page's minRole isn't satisfied. Server
+   remains the source of truth (Phase 2's require503IfNoBroker still
+   fail-closes broker endpoints in production); this client gate adds
+   intent-confirmation and routing-level affordances.
+
+3. src/auth/role-switcher.tsx — small viewer/operator toggle in the Shell
+   footer for unauthenticated dev rollouts. Will be replaced by SSO claims in
+   a future auth integration.
+
+4. App.tsx shrinks from 282 lines to 154 (removed 67 import lines + 67 route
+   declarations + 3 duplicate routes). Same routing surface, half the lines,
+   no possible drift.
+
+5. PAGES.md — concrete migration backlog for the fetch → React Query
+   conversion. Audit categorizes all 68 pages: 4 rq-only (gold standard),
+   31 mixed, 20 raw-fetch, 13 static. Phase 5/6 will work this backlog.
+
+Operator-gated paths (12): /command-center, /execution, /execution-control,
+/exec-reliability, /risk, /risk-command-v2, /advanced-risk, /capital-gating,
+/paper-trading-program, /ops-security, /model-governance, /settings.
+
+Verification: tsc --build exits 0 across the workspace (all 68 manifest
+imports resolved, RoleProvider + RouteGuard type-check, App.tsx wiring
+type-checks).
+
+Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+---
+ artifacts/godsview-dashboard/PAGES.md         | 153 +++++
+ artifacts/godsview-dashboard/src/App.tsx      | 196 ++----
+ .../src/auth/role-context.tsx                 |  88 +++
+ .../src/auth/role-switcher.tsx                |  69 +++
+ .../src/auth/route-guard.tsx                  |  76 +++
+ .../src/components/layout/Shell.tsx           |   2 +
+ .../src/pages/page-manifest.ts                | 558 ++++++++++++++++++
+ 7 files changed, 979 insertions(+), 163 deletions(-)
+ create mode 100644 artifacts/godsview-dashboard/PAGES.md
+ create mode 100644 artifacts/godsview-dashboard/src/auth/role-context.tsx
+ create mode 100644 artifacts/godsview-dashboard/src/auth/role-switcher.tsx
+ create mode 100644 artifacts/godsview-dashboard/src/auth/route-guard.tsx
+ create mode 100644 artifacts/godsview-dashboard/src/pages/page-manifest.ts
+
+diff --git a/artifacts/godsview-dashboard/PAGES.md b/artifacts/godsview-dashboard/PAGES.md
+new file mode 100644
+index 0000000..f6ae822
+--- /dev/null
++++ b/artifacts/godsview-dashboard/PAGES.md
+@@ -0,0 +1,153 @@
++# GodsView Dashboard — Page Inventory & Migration Tracker
++
++Generated at the end of Phase 4. Tracks the data-fetching pattern of every
++routed page so the fetch → `@tanstack/react-query` migration has a concrete
++backlog instead of anecdote.
++
++## Summary
++
++| Pattern      | Count | Description                                                                     |
++| ------------ | ----- | ------------------------------------------------------------------------------- |
++| `rq-only`    | 4     | Uses React Query hooks only. This is the target state.                          |
++| `mixed`      | 31    | Uses React Query **and** raw `fetch(` escape hatches. Needs cleanup.            |
++| `raw-fetch`  | 20    | No React Query — raw `fetch(` plus `useEffect`/`useState` loading state. Highest migration priority. |
++| `static`     | 13    | Purely presentational — no remote data calls. Fine as-is.                       |
++| **Total**    | **68**| Matches the sidebar and the `PAGE_MANIFEST` source of truth.                    |
++
++Source of truth: `src/pages/page-manifest.ts`. Sidebar: `src/components/layout/Shell.tsx`.
++
++## Why we care
++
++Every `fetch(` inside a component is a missed cache-hit, a lost retry, a lost
++stale-while-revalidate, and a lost chance to participate in the query
++invalidation graph. When Phase 2 added `X-Demo-Data: true` + the `_demo: true`
++body flag, only the React Query call sites picked up the signal (via
++`select()`) — raw-`fetch` call sites silently keep rendering demo data as if
++it were live.
++
++Converting every page to `useQuery`/`useMutation`:
++- lets the query client handle retries consistently,
++- lets React Query's `staleTime` cut down on redundant round trips,
++- surfaces Phase 2 demo-mode banners everywhere, not just the 4 gold-standard
++  pages,
++- and gives Phase 5 (auto-promotion + calibration cron) a single invalidation
++  surface to bust caches after a model promotion.
++
++## RBAC status (new in Phase 4)
++
++Pages that can mutate live state now require `operator` role. See
++`src/auth/role-context.tsx` + `src/auth/route-guard.tsx`. The Shell footer
++includes a `RoleSwitcher` for dev/testing.
++
++Operator-gated paths (10):
++- `/command-center`
++- `/execution`
++- `/execution-control`
++- `/exec-reliability`
++- `/risk`
++- `/risk-command-v2`
++- `/advanced-risk`
++- `/capital-gating`
++- `/paper-trading-program`
++- `/ops-security`
++- `/model-governance`
++- `/settings`
++
++Everything else is `viewer`.
++
++## Migration backlog — raw-fetch pages (priority A)
++
++Do these first. They have no React Query at all.
++
++| Page                        | Route                         | Why it's touchy                          |
++| --------------------------- | ----------------------------- | ---------------------------------------- |
++| `autonomous-brain.tsx`      | `/autonomous-brain`           | Per-symbol AI — live tick & setup data   |
++| `calibration.tsx`           | `/calibration`                | Phase 5 cron invalidation point          |
++| `capital-gating.tsx`        | `/capital-gating`             | Operator-only; launch control            |
++| `checklist.tsx`             | `/checklist`                  | Cold reads, low stakes                   |
++| `dashboard.tsx`             | `/`                           | Landing page — high visibility           |
++| `decision-loop.tsx`         | `/decision-loop`              | Strategy pipeline live feed              |
++| `eval-harness.tsx`          | `/eval-harness`               | Benchmarks — query invalidation wanted   |
++| `infinity.tsx`              | `/infinity`                   | Multi-chart aggregate                    |
++| `institutional-intelligence.tsx` | `/institutional-intelligence` | Macro/sentiment blend                |
++| `intelligence-center.tsx`   | `/intelligence-center`        | Top-level intel roll-up                  |
++| `ops.tsx`                   | `/ops`                        | Health dashboard                         |
++| `paper-trading-program.tsx` | `/paper-trading-program`      | Operator-only; validation tracking       |
++| `performance.tsx`           | `/performance`                | Perf dashboard                           |
++| `performance-analytics.tsx` | `/performance-analytics`      | Deep drill-down                          |
++| `risk-command-v2.tsx`       | `/risk-command-v2`            | Operator-only; VaR + capital guard       |
++| `stitch-lab.tsx`            | `/stitch-lab`                 | Design-pack — low stakes                 |
++| `super-intelligence.tsx`    | `/super-intelligence`         | AI engine dashboard                      |
++| `trades.tsx`                | `/trades`                     | Trade log                                |
++| `trust-surface.tsx`         | `/trust-surface`              | Operator view of live truth              |
++| `war-room.tsx`              | `/war-room`                   | Consensus / group view                   |
++
++## Migration backlog — mixed pages (priority B)
++
++These already import `useQuery` from `@tanstack/react-query` but still have
++raw `fetch(` calls. Convert the escape hatches to dedicated query hooks; that
++usually means adding a hook to `src/lib/api.ts` and the corresponding server
++endpoint to `api-server/src/routes/…`.
++
++- alert-center
++- alerts
++- alpaca
++- analytics
++- audit
++- backtest-credibility
++- backtester
++- candle-xray
++- correlation-lab
++- data-integrity
++- decision-explainability
++- decision-replay
++- exec-reliability
++- execution
++- execution-control
++- microstructure
++- model-governance
++- pipeline
++- pipeline-status
++- portfolio
++- proof
++- regime-intelligence
++- reports
++- risk
++- sentiment-intel
++- setup-explorer
++- signals
++- system
++- system-audit
++- trade-journal
++- watchlist
++
++## Gold standard — keep these as the reference implementation
++
++- `daily-review.tsx`
++- `market-structure.tsx`
++- `mcp-backtester.tsx`
++- `side-by-side.tsx`
++
++## Static pages — acceptable as-is
++
++- advanced-risk, bloomberg-terminal, brain, brain-graph, brain-nodes,
++  command-center, economic-calendar, mcp-signals, news-monitor, ops-security,
++  quant-lab, settings, tradingview-chart
++
++(These render Bloomberg-style terminals or static docs — no remote data to
++migrate. If they grow live data in a future phase, add React Query at that
++time.)
++
++## Completion criteria
++
++The "68/68 hooks + tests" gate is satisfied when:
++
++1. `raw-fetch` count reaches 0 (move everything to React Query hooks).
++2. `mixed` count reaches 0 (remove every `fetch(` escape hatch).
++3. Each page has a corresponding `*.test.tsx` smoke test that mounts the
++   component with an MSW-intercepted happy / error path.
++
++Phase 4 lands the **structural prerequisites** (manifest, RBAC, duplicate-route
++fix, tracker). The conversion work above is budgeted for Phase 5/6 alongside
++the auto-promotion pipeline and SLO work respectively — those phases touch the
++same endpoints, so batching minimizes context-switching.
+diff --git a/artifacts/godsview-dashboard/src/App.tsx b/artifacts/godsview-dashboard/src/App.tsx
+index 666ce0f..033d9f5 100644
+--- a/artifacts/godsview-dashboard/src/App.tsx
++++ b/artifacts/godsview-dashboard/src/App.tsx
+@@ -6,79 +6,15 @@ import { TooltipProvider } from "@/components/ui/tooltip";
+ import { Shell } from "@/components/layout/Shell";
+ import { GlobalDataProvider } from "@/components/GlobalDataProvider";
+ import { NotificationSystem } from "@/components/NotificationSystem";
++import { RoleProvider } from "@/auth/role-context";
++import { RouteGuard } from "@/auth/route-guard";
++import { PAGE_MANIFEST, type PageManifestEntry } from "@/pages/page-manifest";
+ 
+ // ── Eager: primary landing page (fastest first paint) ───────────────────────
+ import Dashboard from "@/pages/dashboard";
+ 
+-// ── Lazy: all other pages (each becomes its own JS chunk) ───────────────────
+-const Signals            = React.lazy(() => import("@/pages/signals"));
+-const Trades             = React.lazy(() => import("@/pages/trades"));
+-const Performance        = React.lazy(() => import("@/pages/performance"));
+-const System             = React.lazy(() => import("@/pages/system"));
+-const AlpacaPage         = React.lazy(() => import("@/pages/alpaca"));
+-const InfinityPage       = React.lazy(() => import("@/pages/infinity"));
+-const BrainPage          = React.lazy(() => import("@/pages/brain"));
+-const StitchLabPage      = React.lazy(() => import("@/pages/stitch-lab"));
+-const PipelinePage       = React.lazy(() => import("@/pages/pipeline"));
+-const CandleXRayPage     = React.lazy(() => import("@/pages/candle-xray"));
+-const TradingViewChartPage = React.lazy(() => import("@/pages/tradingview-chart")); // Phase 125
+-const BloombergTerminalPage = React.lazy(() => import("@/pages/bloomberg-terminal")); // Phase 126
+-const NewsMonitorPage = React.lazy(() => import("@/pages/news-monitor")); // Phase 127
+-const SetupExplorerPage  = React.lazy(() => import("@/pages/setup-explorer"));
+-const ReportsPage        = React.lazy(() => import("@/pages/reports"));
+-const RiskPage           = React.lazy(() => import("@/pages/risk"));
+-const SettingsPage       = React.lazy(() => import("@/pages/settings"));
+-const SuperIntelligencePage = React.lazy(() => import("@/pages/super-intelligence"));
+-const InstitutionalIntelligencePage = React.lazy(() => import("@/pages/institutional-intelligence"));
+-const BacktesterPage        = React.lazy(() => import("@/pages/backtester"));
+-const IntelligenceCenterPage = React.lazy(() => import("@/pages/intelligence-center"));
+-const TradeJournalPage               = React.lazy(() => import("@/pages/trade-journal"));
+-const WatchlistPage                  = React.lazy(() => import("@/pages/watchlist"));
+-const AnalyticsPage                  = React.lazy(() => import("@/pages/analytics"));
+-const WarRoom            = React.lazy(() => import("@/pages/war-room"));
+-const Proof              = React.lazy(() => import("@/pages/proof"));
+-const Checklist          = React.lazy(() => import("@/pages/checklist"));
+-const OpsPage            = React.lazy(() => import("@/pages/ops"));
+-const QuantLabPage       = React.lazy(() => import("@/pages/quant-lab"));
+-const PortfolioPage      = React.lazy(() => import("@/pages/portfolio"));
+-const ExecutionPage      = React.lazy(() => import("@/pages/execution"));
+-const AuditPage          = React.lazy(() => import("@/pages/audit"));
+-const DecisionReplayPage = React.lazy(() => import("@/pages/decision-replay"));
+-const AlertsPage         = React.lazy(() => import("@/pages/alerts"));
+-const CommandCenterPage  = React.lazy(() => import("@/pages/command-center"));
+-const MarketStructurePage = React.lazy(() => import("@/pages/market-structure"));
+-const DailyReviewPage     = React.lazy(() => import("@/pages/daily-review"));
+-const SideBySidePage      = React.lazy(() => import("@/pages/side-by-side"));
+-const DecisionLoopPage    = React.lazy(() => import("@/pages/decision-loop"));
+-const TrustSurfacePage    = React.lazy(() => import("@/pages/trust-surface"));
+-const EvalHarnessPage     = React.lazy(() => import("@/pages/eval-harness"));
+-const CalibrationPage     = React.lazy(() => import("@/pages/calibration"));
+-const MCPSignalsPage      = React.lazy(() => import("@/pages/mcp-signals"));
+-const MCPBacktesterPage   = React.lazy(() => import("@/pages/mcp-backtester"));
+-const PipelineStatusPage  = React.lazy(() => import("@/pages/pipeline-status"));
+-const BrainGraphPage      = React.lazy(() => import("@/pages/brain-graph"));
+-const RegimeIntelligencePage = React.lazy(() => import("@/pages/regime-intelligence"));
+-const CorrelationLabPage  = React.lazy(() => import("@/pages/correlation-lab"));
+-const ExecutionControlPage = React.lazy(() => import("@/pages/execution-control"));
+-const SentimentIntelPage  = React.lazy(() => import("@/pages/sentiment-intel"));
+-const PerformanceAnalyticsPage = React.lazy(() => import("@/pages/performance-analytics"));
+-const AlertCenterPage     = React.lazy(() => import("@/pages/alert-center"));
+-const MicrostructurePage  = React.lazy(() => import("@/pages/microstructure"));
+-const SystemAuditPage    = React.lazy(() => import("@/pages/system-audit"));
+-const DataIntegrityPage  = React.lazy(() => import("@/pages/data-integrity"));
+-const BacktestCredibilityPage = React.lazy(() => import("@/pages/backtest-credibility"));
+-const ExecReliabilityPage = React.lazy(() => import("@/pages/exec-reliability"));
+-const RiskCommandV2Page  = React.lazy(() => import("@/pages/risk-command-v2"));
+-const ModelGovernancePage = React.lazy(() => import("@/pages/model-governance"));
+-const DecisionExplainabilityPage = React.lazy(() => import("@/pages/decision-explainability"));
+-const OpsSecurityPage    = React.lazy(() => import("@/pages/ops-security"));
+-const PaperTradingProgramPage = React.lazy(() => import("@/pages/paper-trading-program"));
+-const CapitalGatingPage  = React.lazy(() => import("@/pages/capital-gating"));
+-const BrainNodesPage     = React.lazy(() => import("@/pages/brain-nodes"));
+-const AdvancedRiskPage   = React.lazy(() => import("@/pages/advanced-risk"));
+-const EconomicCalendarPage = React.lazy(() => import("@/pages/economic-calendar"));
+-const AutonomousBrainPage = React.lazy(() => import("@/pages/autonomous-brain")); // Phase 148
+-const NotFound           = React.lazy(() => import("@/pages/not-found"));
++// ── Lazy: 404 fallback ──────────────────────────────────────────────────────
++const NotFound = React.lazy(() => import("@/pages/not-found"));
+ 
+ // ── QueryClient ─────────────────────────────────────────────────────────────
+ const queryClient = new QueryClient({
+@@ -144,23 +80,22 @@ class AppErrorBoundary extends React.Component<
+   }
+ }
+ 
+-// ── Route wrapper: Suspense + ErrorBoundary per page ────────────────────────
+-function RoutedPage({
+-  path,
+-  component: Component,
+-  scope,
+-}: {
+-  path: string;
+-  component: React.ComponentType;
+-  scope: string;
+-}) {
++// ── Route wrapper: Suspense + ErrorBoundary + RBAC per page ─────────────────
++function ManifestRoute({ entry }: { entry: PageManifestEntry }) {
++  const Component = entry.component;
++  const body = (
++    <AppErrorBoundary scope={entry.scope}>
++      <Suspense fallback={<PageSkeleton />}>
++        <Component />
++      </Suspense>
++    </AppErrorBoundary>
++  );
++
+   return (
+-    <Route path={path}>
+-      <AppErrorBoundary scope={scope}>
+-        <Suspense fallback={<PageSkeleton />}>
+-          <Component />
+-        </Suspense>
+-      </AppErrorBoundary>
++    <Route path={entry.path}>
++      {entry.minRole === "viewer" ? body : (
++        <RouteGuard required={entry.minRole}>{body}</RouteGuard>
++      )}
+     </Route>
+   );
+ }
+@@ -177,76 +112,9 @@ function Router() {
+           </AppErrorBoundary>
+         </Route>
+ 
+-        <RoutedPage path="/signals"           component={Signals}               scope="page:signals" />
+-        <RoutedPage path="/trades"            component={Trades}                scope="page:trades" />
+-        <RoutedPage path="/performance"       component={Performance}           scope="page:performance" />
+-        <RoutedPage path="/system"            component={System}                scope="page:system" />
+-        <RoutedPage path="/alpaca"            component={AlpacaPage}            scope="page:alpaca" />
+-        <RoutedPage path="/infinity"          component={InfinityPage}          scope="page:infinity" />
+-        <RoutedPage path="/brain"             component={BrainPage}             scope="page:brain" />
+-        <RoutedPage path="/stitch-lab"        component={StitchLabPage}         scope="page:stitch-lab" />
+-        <RoutedPage path="/pipeline"          component={PipelinePage}          scope="page:pipeline" />
+-        <RoutedPage path="/candle-xray"       component={CandleXRayPage}        scope="page:candle-xray" />
+-        <RoutedPage path="/tradingview-chart" component={TradingViewChartPage}  scope="page:tradingview-chart" />
+-        <RoutedPage path="/bloomberg-terminal" component={BloombergTerminalPage} scope="page:bloomberg-terminal" />
+-        <RoutedPage path="/news-monitor" component={NewsMonitorPage} scope="page:news-monitor" />
+-        <RoutedPage path="/setup-explorer"    component={SetupExplorerPage}     scope="page:setup-explorer" />
+-        <RoutedPage path="/reports"           component={ReportsPage}           scope="page:reports" />
+-        <RoutedPage path="/risk"              component={RiskPage}              scope="page:risk" />
+-        <RoutedPage path="/super-intelligence"       component={SuperIntelligencePage}            scope="page:super-intelligence" />
+-        <RoutedPage path="/institutional-intelligence" component={InstitutionalIntelligencePage} scope="page:institutional-intelligence" />
+-        <RoutedPage path="/backtester"            component={BacktesterPage}        scope="page:backtester" />
+-        <RoutedPage path="/intelligence-center"   component={IntelligenceCenterPage} scope="page:intelligence-center" />
+-        <RoutedPage path="/trade-journal"     component={TradeJournalPage}      scope="page:trade-journal" />
+-        <RoutedPage path="/watchlist"         component={WatchlistPage}         scope="page:watchlist" />
+-        <RoutedPage path="/analytics"         component={AnalyticsPage}         scope="page:analytics" />
+-        <RoutedPage path="/settings"          component={SettingsPage}          scope="page:settings" />
+-        <RoutedPage path="/war-room"          component={WarRoom}               scope="page:war-room" />
+-        <RoutedPage path="/proof"             component={Proof}                 scope="page:proof" />
+-        <RoutedPage path="/checklist"         component={Checklist}             scope="page:checklist" />
+-        <RoutedPage path="/ops"               component={OpsPage}               scope="page:ops" />
+-        <RoutedPage path="/quant-lab"         component={QuantLabPage}          scope="page:quant-lab" />
+-        <RoutedPage path="/portfolio"         component={PortfolioPage}         scope="page:portfolio" />
+-        <RoutedPage path="/execution"         component={ExecutionPage}         scope="page:execution" />
+-        <RoutedPage path="/audit"             component={AuditPage}             scope="page:audit" />
+-        <RoutedPage path="/decision-replay"   component={DecisionReplayPage}    scope="page:decision-replay" />
+-        <RoutedPage path="/alerts"            component={AlertsPage}            scope="page:alerts" />
+-        <RoutedPage path="/command-center"   component={CommandCenterPage}     scope="page:command-center" />
+-        <RoutedPage path="/market-structure" component={MarketStructurePage}   scope="page:market-structure" />
+-        <RoutedPage path="/daily-review"     component={DailyReviewPage}       scope="page:daily-review" />
+-        <RoutedPage path="/side-by-side"     component={SideBySidePage}        scope="page:side-by-side" />
+-        <RoutedPage path="/decision-loop"    component={DecisionLoopPage}      scope="page:decision-loop" />
+-        <RoutedPage path="/trust-surface"    component={TrustSurfacePage}      scope="page:trust-surface" />
+-        <RoutedPage path="/eval-harness"     component={EvalHarnessPage}       scope="page:eval-harness" />
+-        <RoutedPage path="/calibration"      component={CalibrationPage}       scope="page:calibration" />
+-        <RoutedPage path="/mcp-signals"      component={MCPSignalsPage}        scope="page:mcp-signals" />
+-        <RoutedPage path="/mcp-backtester"   component={MCPBacktesterPage}     scope="page:mcp-backtester" />
+-        <RoutedPage path="/pipeline-status"  component={PipelineStatusPage}    scope="page:pipeline-status" />
+-        <RoutedPage path="/brain-graph"      component={BrainGraphPage}        scope="page:brain-graph" />
+-        <RoutedPage path="/regime-intelligence" component={RegimeIntelligencePage} scope="page:regime-intelligence" />
+-        <RoutedPage path="/correlation-lab" component={CorrelationLabPage} scope="page:correlation-lab" />
+-        <RoutedPage path="/execution-control" component={ExecutionControlPage} scope="page:execution-control" />
+-        <RoutedPage path="/sentiment-intel" component={SentimentIntelPage} scope="page:sentiment-intel" />
+-        <RoutedPage path="/performance-analytics" component={PerformanceAnalyticsPage} scope="page:performance-analytics" />
+-        <RoutedPage path="/alert-center" component={AlertCenterPage} scope="page:alert-center" />
+-        <RoutedPage path="/microstructure" component={MicrostructurePage} scope="page:microstructure" />
+-        <RoutedPage path="/system-audit" component={SystemAuditPage} scope="page:system-audit" />
+-        <RoutedPage path="/data-integrity" component={DataIntegrityPage} scope="page:data-integrity" />
+-        <RoutedPage path="/backtest-credibility" component={BacktestCredibilityPage} scope="page:backtest-credibility" />
+-        <RoutedPage path="/exec-reliability" component={ExecReliabilityPage} scope="page:exec-reliability" />
+-        <RoutedPage path="/risk-command-v2" component={RiskCommandV2Page} scope="page:risk-command-v2" />
+-        <RoutedPage path="/model-governance" component={ModelGovernancePage} scope="page:model-governance" />
+-        <RoutedPage path="/decision-explainability" component={DecisionExplainabilityPage} scope="page:decision-explainability" />
+-        <RoutedPage path="/ops-security" component={OpsSecurityPage} scope="page:ops-security" />
+-        <RoutedPage path="/paper-trading-program" component={PaperTradingProgramPage} scope="page:paper-trading-program" />
+-        <RoutedPage path="/capital-gating" component={CapitalGatingPage} scope="page:capital-gating" />
+-        <RoutedPage path="/tradingview-chart" component={TradingViewChartPage} scope="page:tradingview-chart" />
+-        <RoutedPage path="/bloomberg-terminal" component={BloombergTerminalPage} scope="page:bloomberg-terminal" />
+-        <RoutedPage path="/news-monitor" component={NewsMonitorPage} scope="page:news-monitor" />
+-        <RoutedPage path="/brain-nodes" component={BrainNodesPage} scope="page:brain-nodes" />
+-        <RoutedPage path="/advanced-risk" component={AdvancedRiskPage} scope="page:advanced-risk" />
+-        <RoutedPage path="/economic-calendar" component={EconomicCalendarPage} scope="page:economic-calendar" />
+-        <RoutedPage path="/autonomous-brain" component={AutonomousBrainPage} scope="page:autonomous-brain" />
++        {PAGE_MANIFEST.map((entry) => (
++          <ManifestRoute key={entry.path} entry={entry} />
++        ))}
+ 
+         <Route>
+           <AppErrorBoundary scope="page:not-found">
+@@ -265,14 +133,16 @@ function App() {
+   return (
+     <QueryClientProvider client={queryClient}>
+       <TooltipProvider>
+-        <GlobalDataProvider>
+-          <AppErrorBoundary scope="app-root">
+-            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+-              <Router />
+-            </WouterRouter>
+-          </AppErrorBoundary>
+-          <NotificationSystem />
+-        </GlobalDataProvider>
++        <RoleProvider>
++          <GlobalDataProvider>
++            <AppErrorBoundary scope="app-root">
++              <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
++                <Router />
++              </WouterRouter>
++            </AppErrorBoundary>
++            <NotificationSystem />
++          </GlobalDataProvider>
++        </RoleProvider>
+         <Toaster />
+       </TooltipProvider>
+     </QueryClientProvider>
+diff --git a/artifacts/godsview-dashboard/src/auth/role-context.tsx b/artifacts/godsview-dashboard/src/auth/role-context.tsx
+new file mode 100644
+index 0000000..a66ac88
+--- /dev/null
++++ b/artifacts/godsview-dashboard/src/auth/role-context.tsx
+@@ -0,0 +1,88 @@
++/**
++ * Role-based access control context.
++ *
++ * Two roles ship today:
++ *   - viewer    (default): can read every page, cannot mutate broker / risk / system state
++ *   - operator           : can do everything viewer can plus run mutations on guarded pages
++ *
++ * Role is persisted in localStorage under `godsview.role`.
++ *
++ * In production this hook is the *only* place that decides "can the current user
++ * see/operate this page?" — pages must NOT decide this themselves.
++ *
++ * Wiring in App.tsx is via <RouteGuard required="operator"> (see ./route-guard.tsx).
++ * The current role is mutated through the small switcher widget in the Shell footer.
++ *
++ * NOTE: this is a *client-side* gate that controls UI affordances. The api-server
++ * already enforces fail-closed `503 broker_not_configured` in production when no
++ * Alpaca credentials are present (see Phase 2 demo_mode.ts). RBAC + that 503 are
++ * the two layers that protect against accidental destructive actions.
++ */
++import {
++  createContext,
++  useContext,
++  useEffect,
++  useMemo,
++  useState,
++  type ReactNode,
++} from "react";
++
++export type Role = "viewer" | "operator";
++
++const STORAGE_KEY = "godsview.role";
++
++type RoleContextValue = {
++  role: Role;
++  setRole: (next: Role) => void;
++  /** True if `role` includes the privileges of `required`. */
++  can: (required: Role) => boolean;
++};
++
++const RoleContext = createContext<RoleContextValue | null>(null);
++
++function readPersistedRole(): Role {
++  if (typeof window === "undefined") return "viewer";
++  try {
++    const value = window.localStorage.getItem(STORAGE_KEY);
++    if (value === "operator" || value === "viewer") return value;
++  } catch {
++    // localStorage may be blocked in some sandboxed contexts.
++  }
++  return "viewer";
++}
++
++function rolePrivilegeLevel(role: Role): number {
++  return role === "operator" ? 1 : 0;
++}
++
++export function RoleProvider({ children }: { children: ReactNode }) {
++  const [role, setRoleState] = useState<Role>(() => readPersistedRole());
++
++  useEffect(() => {
++    if (typeof window === "undefined") return;
++    try {
++      window.localStorage.setItem(STORAGE_KEY, role);
++    } catch {
++      // ignore quota / privacy mode failures
++    }
++  }, [role]);
++
++  const value = useMemo<RoleContextValue>(
++    () => ({
++      role,
++      setRole: (next) => setRoleState(next),
++      can: (required) => rolePrivilegeLevel(role) >= rolePrivilegeLevel(required),
++    }),
++    [role],
++  );
++
++  return <RoleContext.Provider value={value}>{children}</RoleContext.Provider>;
++}
++
++export function useRole(): RoleContextValue {
++  const ctx = useContext(RoleContext);
++  if (!ctx) {
++    throw new Error("useRole must be used inside <RoleProvider>");
++  }
++  return ctx;
++}
+diff --git a/artifacts/godsview-dashboard/src/auth/role-switcher.tsx b/artifacts/godsview-dashboard/src/auth/role-switcher.tsx
+new file mode 100644
+index 0000000..d098d98
+--- /dev/null
++++ b/artifacts/godsview-dashboard/src/auth/role-switcher.tsx
+@@ -0,0 +1,69 @@
++/**
++ * Role-switcher widget.
++ *
++ * Renders in the Shell footer — small, unobtrusive. Lets the operator switch
++ * between viewer and operator roles without opening DevTools.
++ *
++ * In a real auth-integrated build this widget would be replaced by the user's
++ * SSO identity card, with role coming from the JWT claims. The control here is
++ * intentionally explicit so that during the unauthenticated dev rollout the
++ * operator can still demonstrate / test the RBAC gate.
++ */
++import { useRole, type Role } from "./role-context";
++
++const ROLES: Role[] = ["viewer", "operator"];
++
++export function RoleSwitcher() {
++  const { role, setRole } = useRole();
++
++  return (
++    <div
++      className="px-3 py-2 rounded mt-2"
++      style={{
++        backgroundColor: "rgba(255,255,255,0.02)",
++        border: "1px solid rgba(72,72,73,0.2)",
++      }}
++      data-testid="role-switcher"
++    >
++      <div
++        style={{
++          fontSize: "8px",
++          color: "#484849",
++          letterSpacing: "0.2em",
++          textTransform: "uppercase",
++          fontFamily: "Space Grotesk",
++          fontWeight: 700,
++          marginBottom: "6px",
++        }}
++      >
++        Active Role
++      </div>
++      <div className="flex gap-1">
++        {ROLES.map((option) => {
++          const active = option === role;
++          return (
++            <button
++              key={option}
++              type="button"
++              onClick={() => setRole(option)}
++              data-testid={`role-switch-${option}`}
++              className="flex-1 px-2 py-1 rounded text-[10px] font-medium transition-colors"
++              style={{
++                backgroundColor: active ? "rgba(156,255,147,0.12)" : "transparent",
++                color: active ? "#9cff93" : "#767576",
++                border: active
++                  ? "1px solid rgba(156,255,147,0.35)"
++                  : "1px solid rgba(72,72,73,0.2)",
++                fontFamily: "Space Grotesk",
++                letterSpacing: "0.1em",
++                textTransform: "uppercase",
++              }}
++            >
++              {option}
++            </button>
++          );
++        })}
++      </div>
++    </div>
++  );
++}
+diff --git a/artifacts/godsview-dashboard/src/auth/route-guard.tsx b/artifacts/godsview-dashboard/src/auth/route-guard.tsx
+new file mode 100644
+index 0000000..8b09197
+--- /dev/null
++++ b/artifacts/godsview-dashboard/src/auth/route-guard.tsx
+@@ -0,0 +1,76 @@
++/**
++ * Route-level RBAC gate.
++ *
++ * Wrap any page tree in <RouteGuard required="operator">…</RouteGuard>. If the
++ * current role lacks the required privilege, render a small access-denied panel
++ * with a one-click switcher that elevates to the required role (this UI affordance
++ * exists because the *server* is the real gate; this client gate is only here to
++ * (a) surface the right call-to-action and (b) prevent destructive UI actions from
++ * being even reachable without intent).
++ */
++import type { ReactNode } from "react";
++import { useRole, type Role } from "./role-context";
++
++export function RouteGuard({
++  required,
++  children,
++}: {
++  required: Role;
++  children: ReactNode;
++}) {
++  const { role, setRole, can } = useRole();
++  if (can(required)) return <>{children}</>;
++
++  return (
++    <div className="min-h-[60vh] flex items-center justify-center p-8">
++      <div
++        className="max-w-md w-full rounded-lg p-6 border"
++        style={{
++          backgroundColor: "rgba(251, 191, 36, 0.05)",
++          borderColor: "rgba(251, 191, 36, 0.25)",
++        }}
++        data-testid="route-guard-denied"
++      >
++        <div className="flex items-center gap-2 mb-3">
++          <span
++            className="material-symbols-outlined"
++            style={{ color: "#fbbf24", fontSize: "20px" }}
++          >
++            lock
++          </span>
++          <h2
++            className="font-headline font-bold text-sm tracking-[0.15em] uppercase"
++            style={{ color: "#fbbf24" }}
++          >
++            Operator role required
++          </h2>
++        </div>
++        <p className="text-sm text-[#adaaab] mb-4">
++          This page can mutate live state (broker orders, risk caps, system
++          config). It is locked behind the <code className="text-white">{required}</code>{" "}
++          role. You are currently signed in as <code className="text-white">{role}</code>.
++        </p>
++        <button
++          type="button"
++          onClick={() => setRole(required)}
++          className="px-4 py-2 rounded text-sm font-medium"
++          style={{
++            backgroundColor: "rgba(156, 255, 147, 0.1)",
++            border: "1px solid rgba(156, 255, 147, 0.3)",
++            color: "#9cff93",
++          }}
++          data-testid="route-guard-elevate"
++        >
++          Elevate to {required}
++        </button>
++        <p
++          className="text-[10px] mt-3"
++          style={{ color: "#767576", fontFamily: "JetBrains Mono, monospace" }}
++        >
++          Server-side authorization (api-server) remains the source of truth.
++          This client-side gate only controls UI affordances.
++        </p>
++      </div>
++    </div>
++  );
++}
+diff --git a/artifacts/godsview-dashboard/src/components/layout/Shell.tsx b/artifacts/godsview-dashboard/src/components/layout/Shell.tsx
+index 3ff31bc..0d4e78e 100644
+--- a/artifacts/godsview-dashboard/src/components/layout/Shell.tsx
++++ b/artifacts/godsview-dashboard/src/components/layout/Shell.tsx
+@@ -9,6 +9,7 @@ import {
+   normalizeMarketSymbol,
+   toAlpacaSymbol,
+ } from "@/lib/market/symbols";
++import { RoleSwitcher } from "@/auth/role-switcher";
+ 
+ type FeedMode = "sse" | "poll" | "hybrid";
+ 
+@@ -626,6 +627,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
+               Crypto · 6-Layer Pipeline
+             </div>
+           </div>
++          <RoleSwitcher />
+         </div>
+       </aside>
+ 
+diff --git a/artifacts/godsview-dashboard/src/pages/page-manifest.ts b/artifacts/godsview-dashboard/src/pages/page-manifest.ts
+new file mode 100644
+index 0000000..0ce20a0
+--- /dev/null
++++ b/artifacts/godsview-dashboard/src/pages/page-manifest.ts
+@@ -0,0 +1,558 @@
++/**
++ * Single source of truth for the 68 dashboard pages.
++ *
++ * Every entry in this manifest is:
++ *   - imported lazily by App.tsx (to build <Route> elements)
++ *   - referenced by the Shell sidebar navigation (see components/layout/Shell.tsx)
++ *   - used by the RBAC gate to decide the minimum role required to access
++ *
++ * When adding a new page:
++ *   1. Create the component at src/pages/<slug>.tsx with a default export
++ *   2. Add one entry here (path + lazy loader + label + minRole)
++ *   3. Add it to the correct sidebar section in Shell.tsx
++ *
++ * DO NOT add `<Route>` elements outside this manifest. The duplicate-route
++ * defect that landed pre-Phase-4 (tradingview-chart / bloomberg-terminal /
++ * news-monitor were each registered twice in App.tsx) is exactly what this
++ * single-source-of-truth eliminates by construction.
++ */
++import { lazy, type ComponentType, type LazyExoticComponent } from "react";
++import type { Role } from "@/auth/role-context";
++
++export type PageManifestEntry = {
++  /** URL path, must start with `/`. */
++  path: string;
++  /** Short stable identifier used for error-boundary scope + tests. */
++  scope: string;
++  /** Human-readable label shown in loading states / audit logs. */
++  label: string;
++  /** Minimum role required to view the page; viewer = everyone. */
++  minRole: Role;
++  /** Lazy-loaded component. App.tsx renders this inside a Suspense boundary. */
++  component: LazyExoticComponent<ComponentType>;
++};
++
++/**
++ * Rule of thumb for `minRole: "operator"`:
++ *   - the page can mutate live state (send broker orders, flip kill switches,
++ *     edit risk caps, rotate secrets, promote models to live)
++ *   - the page renders chaos / deploy / infra controls
++ *   - the page exposes raw credentials or full trade history for compliance
++ *
++ * Everything else is `viewer`.
++ */
++export const PAGE_MANIFEST: readonly PageManifestEntry[] = [
++  // ── Command ────────────────────────────────────────────────────────────
++  {
++    path: "/command-center",
++    scope: "page:command-center",
++    label: "Command Center",
++    minRole: "operator",
++    component: lazy(() => import("@/pages/command-center")),
++  },
++  {
++    path: "/bloomberg-terminal",
++    scope: "page:bloomberg-terminal",
++    label: "Bloomberg Terminal",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/bloomberg-terminal")),
++  },
++  {
++    path: "/brain",
++    scope: "page:brain",
++    label: "Brain",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/brain")),
++  },
++  {
++    path: "/brain-graph",
++    scope: "page:brain-graph",
++    label: "God Brain",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/brain-graph")),
++  },
++  {
++    path: "/brain-nodes",
++    scope: "page:brain-nodes",
++    label: "Brain Nodes",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/brain-nodes")),
++  },
++  {
++    path: "/infinity",
++    scope: "page:infinity",
++    label: "Infinity Screen",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/infinity")),
++  },
++
++  // ── Intelligence ───────────────────────────────────────────────────────
++  {
++    path: "/intelligence-center",
++    scope: "page:intelligence-center",
++    label: "Intelligence Hub",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/intelligence-center")),
++  },
++  {
++    path: "/alpaca",
++    scope: "page:alpaca",
++    label: "Live Intelligence",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/alpaca")),
++  },
++  {
++    path: "/super-intelligence",
++    scope: "page:super-intelligence",
++    label: "Super Intelligence",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/super-intelligence")),
++  },
++  {
++    path: "/institutional-intelligence",
++    scope: "page:institutional-intelligence",
++    label: "Institutional Intelligence",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/institutional-intelligence")),
++  },
++  {
++    path: "/regime-intelligence",
++    scope: "page:regime-intelligence",
++    label: "Regime Intelligence",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/regime-intelligence")),
++  },
++  {
++    path: "/sentiment-intel",
++    scope: "page:sentiment-intel",
++    label: "Sentiment",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/sentiment-intel")),
++  },
++  {
++    path: "/decision-loop",
++    scope: "page:decision-loop",
++    label: "Decision Loop",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/decision-loop")),
++  },
++  {
++    path: "/decision-replay",
++    scope: "page:decision-replay",
++    label: "Decision Replay",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/decision-replay")),
++  },
++  {
++    path: "/decision-explainability",
++    scope: "page:decision-explainability",
++    label: "Decision Explainability",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/decision-explainability")),
++  },
++
++  // ── Signals & Data ─────────────────────────────────────────────────────
++  {
++    path: "/signals",
++    scope: "page:signals",
++    label: "Signal Feed",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/signals")),
++  },
++  {
++    path: "/mcp-signals",
++    scope: "page:mcp-signals",
++    label: "MCP Signals",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/mcp-signals")),
++  },
++  {
++    path: "/pipeline",
++    scope: "page:pipeline",
++    label: "Pipeline Engine",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/pipeline")),
++  },
++  {
++    path: "/pipeline-status",
++    scope: "page:pipeline-status",
++    label: "Pipeline Status",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/pipeline-status")),
++  },
++  {
++    path: "/candle-xray",
++    scope: "page:candle-xray",
++    label: "Candle X-Ray",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/candle-xray")),
++  },
++  {
++    path: "/tradingview-chart",
++    scope: "page:tradingview-chart",
++    label: "TradingView Chart",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/tradingview-chart")),
++  },
++  {
++    path: "/news-monitor",
++    scope: "page:news-monitor",
++    label: "News Monitor",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/news-monitor")),
++  },
++  {
++    path: "/economic-calendar",
++    scope: "page:economic-calendar",
++    label: "Economic Calendar",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/economic-calendar")),
++  },
++  {
++    path: "/autonomous-brain",
++    scope: "page:autonomous-brain",
++    label: "Autonomous Brain",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/autonomous-brain")),
++  },
++  {
++    path: "/microstructure",
++    scope: "page:microstructure",
++    label: "Microstructure",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/microstructure")),
++  },
++  {
++    path: "/market-structure",
++    scope: "page:market-structure",
++    label: "Market Structure",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/market-structure")),
++  },
++  {
++    path: "/setup-explorer",
++    scope: "page:setup-explorer",
++    label: "Setup Explorer",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/setup-explorer")),
++  },
++  {
++    path: "/watchlist",
++    scope: "page:watchlist",
++    label: "Watchlist Scanner",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/watchlist")),
++  },
++  {
++    path: "/correlation-lab",
++    scope: "page:correlation-lab",
++    label: "Correlation Lab",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/correlation-lab")),
++  },
++  {
++    path: "/data-integrity",
++    scope: "page:data-integrity",
++    label: "Data Integrity",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/data-integrity")),
++  },
++
++  // ── Execution (writes to broker — operator only) ───────────────────────
++  {
++    path: "/execution",
++    scope: "page:execution",
++    label: "Execution",
++    minRole: "operator",
++    component: lazy(() => import("@/pages/execution")),
++  },
++  {
++    path: "/execution-control",
++    scope: "page:execution-control",
++    label: "Execution Control",
++    minRole: "operator",
++    component: lazy(() => import("@/pages/execution-control")),
++  },
++  {
++    path: "/exec-reliability",
++    scope: "page:exec-reliability",
++    label: "Execution Reliability",
++    minRole: "operator",
++    component: lazy(() => import("@/pages/exec-reliability")),
++  },
++  {
++    path: "/trades",
++    scope: "page:trades",
++    label: "Trade Log",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/trades")),
++  },
++  {
++    path: "/trade-journal",
++    scope: "page:trade-journal",
++    label: "Trade Journal",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/trade-journal")),
++  },
++  {
++    path: "/portfolio",
++    scope: "page:portfolio",
++    label: "Portfolio",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/portfolio")),
++  },
++
++  // ── Backtesting ────────────────────────────────────────────────────────
++  {
++    path: "/backtester",
++    scope: "page:backtester",
++    label: "Backtester",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/backtester")),
++  },
++  {
++    path: "/mcp-backtester",
++    scope: "page:mcp-backtester",
++    label: "MCP Backtester",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/mcp-backtester")),
++  },
++  {
++    path: "/backtest-credibility",
++    scope: "page:backtest-credibility",
++    label: "Backtest Credibility",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/backtest-credibility")),
++  },
++  {
++    path: "/quant-lab",
++    scope: "page:quant-lab",
++    label: "Quant Lab",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/quant-lab")),
++  },
++  {
++    path: "/side-by-side",
++    scope: "page:side-by-side",
++    label: "Side-by-Side",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/side-by-side")),
++  },
++
++  // ── Risk & Safety (writes to risk caps / kill switch — operator only) ──
++  {
++    path: "/risk",
++    scope: "page:risk",
++    label: "Risk Command",
++    minRole: "operator",
++    component: lazy(() => import("@/pages/risk")),
++  },
++  {
++    path: "/risk-command-v2",
++    scope: "page:risk-command-v2",
++    label: "Risk Command v2",
++    minRole: "operator",
++    component: lazy(() => import("@/pages/risk-command-v2")),
++  },
++  {
++    path: "/alerts",
++    scope: "page:alerts",
++    label: "Alerts",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/alerts")),
++  },
++  {
++    path: "/alert-center",
++    scope: "page:alert-center",
++    label: "Alert Center",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/alert-center")),
++  },
++  {
++    path: "/advanced-risk",
++    scope: "page:advanced-risk",
++    label: "Advanced Risk",
++    minRole: "operator",
++    component: lazy(() => import("@/pages/advanced-risk")),
++  },
++  {
++    path: "/capital-gating",
++    scope: "page:capital-gating",
++    label: "Capital Gating",
++    minRole: "operator",
++    component: lazy(() => import("@/pages/capital-gating")),
++  },
++  {
++    path: "/paper-trading-program",
++    scope: "page:paper-trading-program",
++    label: "Paper Trading Program",
++    minRole: "operator",
++    component: lazy(() => import("@/pages/paper-trading-program")),
++  },
++
++  // ── Analytics ──────────────────────────────────────────────────────────
++  {
++    path: "/performance",
++    scope: "page:performance",
++    label: "Performance",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/performance")),
++  },
++  {
++    path: "/performance-analytics",
++    scope: "page:performance-analytics",
++    label: "Deep Analytics",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/performance-analytics")),
++  },
++  {
++    path: "/analytics",
++    scope: "page:analytics",
++    label: "Equity Analytics",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/analytics")),
++  },
++  {
++    path: "/reports",
++    scope: "page:reports",
++    label: "Session Reports",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/reports")),
++  },
++  {
++    path: "/daily-review",
++    scope: "page:daily-review",
++    label: "Daily Review",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/daily-review")),
++  },
++  {
++    path: "/proof",
++    scope: "page:proof",
++    label: "Proof",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/proof")),
++  },
++
++  // ── Operations (chaos / deploy — operator only) ────────────────────────
++  {
++    path: "/ops",
++    scope: "page:ops",
++    label: "Ops Monitor",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/ops")),
++  },
++  {
++    path: "/ops-security",
++    scope: "page:ops-security",
++    label: "Ops & Security",
++    minRole: "operator",
++    component: lazy(() => import("@/pages/ops-security")),
++  },
++  {
++    path: "/war-room",
++    scope: "page:war-room",
++    label: "War Room",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/war-room")),
++  },
++  {
++    path: "/checklist",
++    scope: "page:checklist",
++    label: "Checklist",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/checklist")),
++  },
++
++  // ── Governance (model promotion / audit — operator only on writes) ─────
++  {
++    path: "/model-governance",
++    scope: "page:model-governance",
++    label: "Model Governance",
++    minRole: "operator",
++    component: lazy(() => import("@/pages/model-governance")),
++  },
++  {
++    path: "/trust-surface",
++    scope: "page:trust-surface",
++    label: "Trust Surface",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/trust-surface")),
++  },
++  {
++    path: "/calibration",
++    scope: "page:calibration",
++    label: "Calibration",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/calibration")),
++  },
++  {
++    path: "/eval-harness",
++    scope: "page:eval-harness",
++    label: "Eval Harness",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/eval-harness")),
++  },
++  {
++    path: "/audit",
++    scope: "page:audit",
++    label: "Audit Trail",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/audit")),
++  },
++  {
++    path: "/system-audit",
++    scope: "page:system-audit",
++    label: "System Audit",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/system-audit")),
++  },
++
++  // ── System ─────────────────────────────────────────────────────────────
++  {
++    path: "/system",
++    scope: "page:system",
++    label: "System Core",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/system")),
++  },
++  {
++    path: "/stitch-lab",
++    scope: "page:stitch-lab",
++    label: "Stitch Vault",
++    minRole: "viewer",
++    component: lazy(() => import("@/pages/stitch-lab")),
++  },
++  {
++    path: "/settings",
++    scope: "page:settings",
++    label: "Settings",
++    minRole: "operator",
++    component: lazy(() => import("@/pages/settings")),
++  },
++
++  // Note: The root route "/" (Dashboard) is eager-loaded in App.tsx and is NOT
++  // part of this manifest. It is always accessible to `viewer`.
++] as const;
++
++/** Number of routes registered via manifest (does not count root "/" or 404). */
++export const MANIFEST_ROUTE_COUNT = PAGE_MANIFEST.length;
++
++/** Paths protected by an operator gate — useful for audit tooling. */
++export const OPERATOR_PATHS: readonly string[] = PAGE_MANIFEST
++  .filter((entry) => entry.minRole === "operator")
++  .map((entry) => entry.path);
++
++/** Runtime invariant: no duplicate paths. Throws at module load if violated. */
++(() => {
++  const seen = new Set<string>();
++  for (const entry of PAGE_MANIFEST) {
++    if (seen.has(entry.path)) {
++      throw new Error(
++        `[page-manifest] duplicate path detected: ${entry.path}. ` +
++          "Every entry must have a unique path.",
++      );
++    }
++    seen.add(entry.path);
++  }
++})();
+-- 
+2.34.1
+

@@ -15,12 +15,12 @@ Free tier: 25 requests/day → aggressive caching required.
 
 from __future__ import annotations
 
-import logging
 import os
+import logging
 from dataclasses import dataclass, field
 
-import pandas as pd
 import requests
+import pandas as pd
 
 from app.data.base import BaseDataClient
 
@@ -30,11 +30,10 @@ logger = logging.getLogger("godsview.data.alphavantage")
 @dataclass
 class SentimentResult:
     """News sentiment for a ticker."""
-
     ticker: str
-    sentiment_score: float = 0.0  # -1 to +1
-    sentiment_label: str = "neutral"  # Bullish / Bearish / Neutral
-    relevance_score: float = 0.0  # 0 to 1
+    sentiment_score: float = 0.0       # -1 to +1
+    sentiment_label: str = "neutral"   # Bullish / Bearish / Neutral
+    relevance_score: float = 0.0       # 0 to 1
     article_count: int = 0
     bullish_count: int = 0
     bearish_count: int = 0
@@ -48,7 +47,6 @@ class SentimentResult:
 @dataclass
 class TechnicalSnapshot:
     """Pre-computed technical indicators from Alpha Vantage."""
-
     symbol: str
     rsi_14: float | None = None
     macd_line: float | None = None
@@ -65,7 +63,7 @@ class TechnicalSnapshot:
     atr: float | None = None
     stoch_k: float | None = None
     stoch_d: float | None = None
-    indicator_bias: str = "neutral"  # "bull" | "bear" | "neutral"
+    indicator_bias: str = "neutral"     # "bull" | "bear" | "neutral"
     fetched_at: str = ""
 
     def to_dict(self) -> dict:
@@ -89,14 +87,10 @@ class AlphaVantageClient(BaseDataClient):
     BASE_URL = "https://www.alphavantage.co/query"
 
     def __init__(self):
-        super().__init__(
-            name="AlphaVantage", default_ttl=14400.0, max_retries=2
-        )  # 4h cache
+        super().__init__(name="AlphaVantage", default_ttl=14400.0, max_retries=2)  # 4h cache
         self.api_key = os.getenv("ALPHA_VANTAGE_API_KEY", "")
         if not self.api_key:
-            logger.warning(
-                "[AlphaVantage] No ALPHA_VANTAGE_API_KEY — indicators will use local computation"
-            )
+            logger.warning("[AlphaVantage] No ALPHA_VANTAGE_API_KEY — indicators will use local computation")
 
     def _is_available(self) -> bool:
         return bool(self.api_key)
@@ -116,15 +110,11 @@ class AlphaVantageClient(BaseDataClient):
                 raise ValueError(f"AV error: {data['Error Message']}")
             return data
 
-        return self._fetch_with_retry(
-            _do_fetch, label=f"AV/{params.get('function', '?')}"
-        )
+        return self._fetch_with_retry(_do_fetch, label=f"AV/{params.get('function', '?')}")
 
     # ── Individual Indicators ────────────────────────────────────────────────
 
-    def get_rsi(
-        self, symbol: str, interval: str = "daily", period: int = 14
-    ) -> pd.DataFrame:
+    def get_rsi(self, symbol: str, interval: str = "daily", period: int = 14) -> pd.DataFrame:
         """Fetch RSI series."""
         cache_key = f"rsi:{symbol}:{interval}:{period}"
         cached = self._cache_get(cache_key)
@@ -134,23 +124,19 @@ class AlphaVantageClient(BaseDataClient):
         if not self._is_available():
             return pd.DataFrame(columns=["date", "RSI"])
 
-        data = self._request(
-            {
-                "function": "RSI",
-                "symbol": symbol,
-                "interval": interval,
-                "time_period": period,
-                "series_type": "close",
-            }
-        )
+        data = self._request({
+            "function": "RSI",
+            "symbol": symbol,
+            "interval": interval,
+            "time_period": period,
+            "series_type": "close",
+        })
         if not data:
             return pd.DataFrame(columns=["date", "RSI"])
 
-        key = "Technical Analysis: RSI"
+        key = f"Technical Analysis: RSI"
         series = data.get(key, {})
-        rows = [
-            {"date": pd.Timestamp(d), "RSI": float(v["RSI"])} for d, v in series.items()
-        ]
+        rows = [{"date": pd.Timestamp(d), "RSI": float(v["RSI"])} for d, v in series.items()]
         df = pd.DataFrame(rows).sort_values("date").reset_index(drop=True)
         self._cache_set(cache_key, df)
         return df
@@ -165,34 +151,27 @@ class AlphaVantageClient(BaseDataClient):
         if not self._is_available():
             return pd.DataFrame(columns=["date", "MACD", "MACD_Signal", "MACD_Hist"])
 
-        data = self._request(
-            {
-                "function": "MACD",
-                "symbol": symbol,
-                "interval": interval,
-                "series_type": "close",
-            }
-        )
+        data = self._request({
+            "function": "MACD",
+            "symbol": symbol,
+            "interval": interval,
+            "series_type": "close",
+        })
         if not data:
             return pd.DataFrame(columns=["date", "MACD", "MACD_Signal", "MACD_Hist"])
 
         series = data.get("Technical Analysis: MACD", {})
-        rows = [
-            {
-                "date": pd.Timestamp(d),
-                "MACD": float(v.get("MACD", 0)),
-                "MACD_Signal": float(v.get("MACD_Signal", 0)),
-                "MACD_Hist": float(v.get("MACD_Hist", 0)),
-            }
-            for d, v in series.items()
-        ]
+        rows = [{
+            "date": pd.Timestamp(d),
+            "MACD": float(v.get("MACD", 0)),
+            "MACD_Signal": float(v.get("MACD_Signal", 0)),
+            "MACD_Hist": float(v.get("MACD_Hist", 0)),
+        } for d, v in series.items()]
         df = pd.DataFrame(rows).sort_values("date").reset_index(drop=True)
         self._cache_set(cache_key, df)
         return df
 
-    def get_bbands(
-        self, symbol: str, interval: str = "daily", period: int = 20
-    ) -> pd.DataFrame:
+    def get_bbands(self, symbol: str, interval: str = "daily", period: int = 20) -> pd.DataFrame:
         """Fetch Bollinger Bands."""
         cache_key = f"bbands:{symbol}:{interval}:{period}"
         cached = self._cache_get(cache_key)
@@ -202,28 +181,23 @@ class AlphaVantageClient(BaseDataClient):
         if not self._is_available():
             return pd.DataFrame(columns=["date", "upper", "middle", "lower"])
 
-        data = self._request(
-            {
-                "function": "BBANDS",
-                "symbol": symbol,
-                "interval": interval,
-                "time_period": period,
-                "series_type": "close",
-            }
-        )
+        data = self._request({
+            "function": "BBANDS",
+            "symbol": symbol,
+            "interval": interval,
+            "time_period": period,
+            "series_type": "close",
+        })
         if not data:
             return pd.DataFrame(columns=["date", "upper", "middle", "lower"])
 
         series = data.get("Technical Analysis: BBANDS", {})
-        rows = [
-            {
-                "date": pd.Timestamp(d),
-                "upper": float(v.get("Real Upper Band", 0)),
-                "middle": float(v.get("Real Middle Band", 0)),
-                "lower": float(v.get("Real Lower Band", 0)),
-            }
-            for d, v in series.items()
-        ]
+        rows = [{
+            "date": pd.Timestamp(d),
+            "upper": float(v.get("Real Upper Band", 0)),
+            "middle": float(v.get("Real Middle Band", 0)),
+            "lower": float(v.get("Real Lower Band", 0)),
+        } for d, v in series.items()]
         df = pd.DataFrame(rows).sort_values("date").reset_index(drop=True)
         self._cache_set(cache_key, df)
         return df
@@ -312,14 +286,12 @@ class AlphaVantageClient(BaseDataClient):
         if not self._is_available():
             return result
 
-        data = self._request(
-            {
-                "function": "NEWS_SENTIMENT",
-                "tickers": ticker,
-                "limit": 50,
-                "sort": "LATEST",
-            }
-        )
+        data = self._request({
+            "function": "NEWS_SENTIMENT",
+            "tickers": ticker,
+            "limit": 50,
+            "sort": "LATEST",
+        })
         if not data or "feed" not in data:
             return result
 

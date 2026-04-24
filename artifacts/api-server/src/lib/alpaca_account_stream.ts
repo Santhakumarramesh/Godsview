@@ -262,32 +262,29 @@ export const alpacaAccountStream = new AlpacaAccountStream();
 
 export function wireAccountStreamToReconciler(): void {
   alpacaAccountStream.onFill(async (fill) => {
-    // 1. Push into fill reconciler. We don't mutate the reconciler's
-    //    internal queue directly — it polls Alpaca on its own timer and
-    //    dedupes via execution_id. The WebSocket path is purely advisory
-    //    for low-latency brain wiring below.
+    // 1. Push into fill reconciler (replaces polling for this fill)
     try {
-      await import("./fill_reconciler.js");
-    } catch {
-      /* fill_reconciler not loaded */
-    }
+      const { registerCostBasis } = await import("./fill_reconciler.js");
+      // The reconciler handles deduplication via execution_id
+      // We inject directly into the reconciler's tick processing:
+      const { _injectFill } = await import("./fill_reconciler.js");
+      if (typeof _injectFill === "function") {
+        _injectFill({
+          id: fill.execution_id || fill.order_id,
+          order_id: fill.order_id,
+          symbol: fill.symbol,
+          side: fill.side,
+          qty: String(fill.qty),
+          price: String(fill.price),
+          transaction_time: fill.timestamp,
+        });
+      }
+    } catch { /* fill_reconciler not loaded or _injectFill not exported */ }
 
-    // 2. Notify the brain event bus via its public fill hook (if present).
+    // 2. Emit to brain event bus
     try {
-      const busModule = (await import("./brain_event_bus.js")) as Record<string, unknown>;
-      const bus = busModule.brainEventBus as
-        | {
-            onFill?: (payload: {
-              symbol: string;
-              side: string;
-              qty: number;
-              price: number;
-              orderId: string;
-              timestamp: string;
-            }) => void;
-          }
-        | undefined;
-      bus?.onFill?.({
+      const { brainEventBus } = await import("./brain_event_bus.js");
+      brainEventBus.emit("fill", {
         symbol: fill.symbol,
         side: fill.side,
         qty: fill.qty,
@@ -295,9 +292,7 @@ export function wireAccountStreamToReconciler(): void {
         orderId: fill.order_id,
         timestamp: fill.timestamp,
       });
-    } catch {
-      /* bus not loaded */
-    }
+    } catch { /* bus not loaded */ }
 
     // 3. Check if this fill closes a brain position → fire alert
     try {
@@ -315,20 +310,14 @@ export function wireAccountStreamToReconciler(): void {
           // Determine if TP or SL based on fill price proximity
           const distToTP = Math.abs(fill.price - pos.takeProfit);
           const distToSL = Math.abs(fill.price - pos.stopLoss);
-          try {
-            if (distToTP < distToSL) {
-              brainAlerts.tpHit(fill.symbol, pnlR);
-            } else {
-              brainAlerts.slHit(fill.symbol, pnlR);
-            }
-          } catch {
-            /* alert pipeline errored — non-fatal */
+          if (distToTP < distToSL) {
+            brainAlerts.tpHit(fill.symbol, pnlR).catch(() => {});
+          } else {
+            brainAlerts.slHit(fill.symbol, pnlR).catch(() => {});
           }
         }
       }
-    } catch {
-      /* bridge not loaded */
-    }
+    } catch { /* bridge not loaded */ }
   });
 
   logger.info("[AccountStream] Wired to fill_reconciler + brain event bus + alerts");

@@ -182,7 +182,7 @@ export default function Signals() {
               </tr>
             </thead>
             <tbody>
-              {(data?.signals ?? []).map((sig) => {
+              {(data?.signals ?? []).map((sig: any) => {
                 const q = toPct(Number(sig.final_quality));
                 const qColor = q > 75 ? C.primary : q > 50 ? "#fbbf24" : C.tertiary;
                 const statusValue = String(sig.status ?? "");

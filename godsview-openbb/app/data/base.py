@@ -7,8 +7,8 @@ and caching without repeating boilerplate.
 
 from __future__ import annotations
 
-import logging
 import time
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, TypeVar
@@ -20,10 +20,9 @@ logger = logging.getLogger("godsview.data")
 @dataclass
 class CacheEntry:
     """Single cache entry with TTL."""
-
     data: Any
     fetched_at: float  # monotonic clock
-    ttl: float  # seconds
+    ttl: float         # seconds
 
 
 class BaseDataClient:
@@ -92,12 +91,7 @@ class BaseDataClient:
                 backoff = min(2 ** (attempt - 1), 30)
                 logger.warning(
                     "[%s] %s attempt %d/%d failed: %s — retrying in %ds",
-                    self.name,
-                    label,
-                    attempt,
-                    max_attempts,
-                    exc,
-                    backoff,
+                    self.name, label, attempt, max_attempts, exc, backoff,
                 )
                 if attempt < max_attempts:
                     time.sleep(backoff)

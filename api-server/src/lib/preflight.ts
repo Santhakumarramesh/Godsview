@@ -54,8 +54,14 @@ export async function runPreflight(): Promise<PreflightResult> {
     // Try a lightweight API call
     try {
       const { getAccount } = await import("./alpaca");
-      await getAccount();
-      checks.push({ name: "alpaca_connectivity", passed: true, detail: "Account accessible", critical: false });
+      const account = await getAccount() as Record<string, unknown>;
+      // Check for structured error responses (e.g. {error: "broker_key", message: "..."})
+      if (account && typeof account === "object" && "error" in account) {
+        const msg = String((account as any).message ?? (account as any).error ?? "Unknown broker error");
+        checks.push({ name: "alpaca_connectivity", passed: false, detail: msg.substring(0, 100), critical: false });
+      } else {
+        checks.push({ name: "alpaca_connectivity", passed: true, detail: "Account accessible", critical: false });
+      }
     } catch (err: any) {
       checks.push({ name: "alpaca_connectivity", passed: false, detail: err.message?.substring(0, 100) ?? "Unreachable", critical: false });
     }
@@ -92,7 +98,58 @@ export async function runPreflight(): Promise<PreflightResult> {
     });
   }
 
-  // 6. Memory check
+  // 6. Redis connectivity (if configured)
+  const redisUrl = (process.env.REDIS_URL ?? "").trim();
+  if (redisUrl) {
+    try {
+      // Lightweight TCP check — doesn't require ioredis
+      const url = new URL(redisUrl);
+      const net = await import("net");
+      const redisOk = await new Promise<boolean>((resolve) => {
+        const sock = new net.Socket();
+        sock.setTimeout(3000);
+        sock.once("connect", () => { sock.destroy(); resolve(true); });
+        sock.once("error", () => { sock.destroy(); resolve(false); });
+        sock.once("timeout", () => { sock.destroy(); resolve(false); });
+        sock.connect(Number(url.port) || 6379, url.hostname);
+      });
+      checks.push({
+        name: "redis",
+        passed: redisOk,
+        detail: redisOk ? `Connected to ${url.hostname}:${url.port || 6379}` : "TCP connect failed",
+        critical: false,
+      });
+    } catch (err: any) {
+      checks.push({ name: "redis", passed: false, detail: err.message ?? "Invalid REDIS_URL", critical: false });
+    }
+  } else {
+    checks.push({ name: "redis", passed: true, detail: "Not configured — using in-process cache", critical: false });
+  }
+
+  // 7. Memory store path writability
+  const memPath = process.env.MEMORY_STORE_PATH || (
+    process.env.NODE_ENV === "production" ? "/data/memory" : "/tmp/godsview-memory"
+  );
+  try {
+    const fsCheck = await import("fs");
+    if (!fsCheck.existsSync(memPath)) {
+      fsCheck.mkdirSync(memPath, { recursive: true });
+    }
+    // Write and remove a test file
+    const testFile = `${memPath}/.preflight_test_${Date.now()}`;
+    fsCheck.writeFileSync(testFile, "ok");
+    fsCheck.unlinkSync(testFile);
+    checks.push({ name: "memory_store_path", passed: true, detail: `Writable: ${memPath}`, critical: false });
+  } catch (err: any) {
+    checks.push({
+      name: "memory_store_path",
+      passed: false,
+      detail: `${memPath} not writable: ${err.message}`,
+      critical: process.env.NODE_ENV === "production",
+    });
+  }
+
+  // 8. Process memory check
   const rssBytes = process.memoryUsage.rss();
   const rssMB = Math.round(rssBytes / 1024 / 1024);
   checks.push({
@@ -102,7 +159,7 @@ export async function runPreflight(): Promise<PreflightResult> {
     critical: false,
   });
 
-  // 7. Node version check
+  // 9. Node version check
   const nodeVersion = process.version;
   const majorVersion = parseInt(nodeVersion.slice(1), 10);
   checks.push({

@@ -1,0 +1,292 @@
+From 189e3577c656bcc9f88f887c27429f5c8d1914e2 Mon Sep 17 00:00:00 2001
+From: claude-bot <noreply@anthropic.com>
+Date: Sat, 18 Apr 2026 03:33:49 -0400
+Subject: [PATCH] Phase 9: Dashboard SSE push for Alert Center
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Replace the Alert Center's 3s polling with push-based freshness via
+the existing `GET /api/alerts/stream` SSE endpoint. Polling is kept
+as a 30s safety net so the page still self-heals if the SSE channel
+drops or the tab is backgrounded long enough to miss events.
+
+## What changes
+
+1. `artifacts/godsview-dashboard/src/hooks/useEventSource.ts`
+   - New `AlertStreamEvent` type — mirrors backend fireAlert payload
+     (`type`, `severity`, `message`, `details`, `timestamp`) and stays
+     loose (`[key: string]: unknown`) to accommodate Phase 5 scheduler
+     events that pass through the same pipeline.
+   - New `useAlertStream(enabled)` specialized hook — thin wrapper
+     around `useEventSource<AlertStreamEvent>` with `events: ["alert"]`.
+     Inherits the parent hook's exponential-backoff auto-reconnect,
+     `Last-Event-ID` replay, and 100-event client buffer.
+
+2. `artifacts/godsview-dashboard/src/pages/alert-center.tsx`
+   - Top-level page component now calls `useAlertStream(true)` and
+     `useQueryClient()`; on every event (detected via `eventCount`
+     delta in a `useEffect`) it invalidates the six Alert Center
+     React Query caches so they refetch against the Phase 8
+     endpoints immediately.
+   - New `<LiveConnectionBadge>` in the page header renders one of
+     "Live / Connecting… / Offline / Reconnecting" with the running
+     event count — gives operators a glance-level signal of whether
+     the page is receiving push.
+   - Active feed polling backed off from 3s → 30s (push is primary).
+
+3. `docs/ARCHITECTURE.md`
+   - New "Alert Center Live Push (Phase 9)" subsection under the
+     Phase 6 SLO section documenting the end-to-end push path.
+
+## Verification
+
+- `tsc -p artifacts/api-server/tsconfig.json --noEmit` — exit 0
+- `tsc -p artifacts/godsview-dashboard/tsconfig.json --noEmit` — exit 0
+- `tsc --build` — exit 0
+- `vite build --config vite.config.ts` — built in 6.52s, all assets
+  emitted (alert-center-Dp6VKU6H.js 23.64 kB gzip 6.08 kB)
+
+## Rollback
+
+`git revert <this-commit>` — purely additive, no schema changes,
+no new runtime dependencies, no breaking changes to any existing
+endpoint or hook consumer.
+
+Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+---
+ .../src/hooks/useEventSource.ts               | 48 ++++++++++
+ .../src/pages/alert-center.tsx                | 90 ++++++++++++++++++-
+ docs/ARCHITECTURE.md                          | 29 ++++++
+ 3 files changed, 165 insertions(+), 2 deletions(-)
+
+diff --git a/artifacts/godsview-dashboard/src/hooks/useEventSource.ts b/artifacts/godsview-dashboard/src/hooks/useEventSource.ts
+index 3af07e2..69c8b95 100644
+--- a/artifacts/godsview-dashboard/src/hooks/useEventSource.ts
++++ b/artifacts/godsview-dashboard/src/hooks/useEventSource.ts
+@@ -59,6 +59,29 @@ interface BrainGraphEvent {
+   decision: { action: string; grade: string; score: number } | null;
+ }
+ 
++/**
++ * Shape of events delivered via GET /api/alerts/stream.
++ *
++ * Covers every `fireAlert()` invocation AND every Phase 5 scheduler event
++ * that goes through `SignalStreamHub.publishAlert` — which is all of them.
++ * The backend always emits `type` + `severity` + `timestamp`, but `details`
++ * varies by AlertType so we keep it loose.
++ */
++export interface AlertStreamEvent {
++  /** Matches the backend `AlertType` union (kept as string to stay future-proof). */
++  type: string;
++  /** "fatal" | "critical" | "warning" | etc. — routing key on the receiving side. */
++  severity?: string;
++  /** Human-readable message. */
++  message?: string;
++  /** Per-type payload; see lib/alerts.ts. */
++  details?: Record<string, unknown>;
++  /** ISO-8601 emit time from the api-server. */
++  timestamp?: string;
++  /** Some Phase 5 events include extra fields; allow them through. */
++  [key: string]: unknown;
++}
++
+ const MAX_EVENT_BUFFER = 100;
+ const MAX_BACKOFF_DELAY = 30000; // 30 seconds
+ 
+@@ -303,4 +326,29 @@ export function useBrainGraphStream(
+     events: ["signal"],
+     enabled,
+   });
++}
++
++/**
++ * Specialized hook for the Alert Center live stream.
++ *
++ * Subscribes to `GET /api/alerts/stream` — the backend serves `event: alert`
++ * frames for every `fireAlert()` call AND every Phase 5 scheduler event
++ * (promotion eligibility, calibration freshness, governance transitions,
++ * ensemble drift, SLO burn-rate breaches, …) through the same pipeline.
++ *
++ * Pair with `useQueryClient().invalidateQueries(...)` at the call site to
++ * force immediate refetches on the Alert Center page's React Query caches
++ * (`activeAlerts`, `alertsSummary`, `alertAnomalies`). Polling should remain
++ * as a safety net but can be backed off dramatically once push is live.
++ */
++export function useAlertStream(
++  enabled: boolean = true
++): UseEventSourceReturn<AlertStreamEvent> {
++  const apiBase = import.meta.env.VITE_API_URL || "/api";
++
++  return useEventSource<AlertStreamEvent>({
++    url: `${apiBase}/alerts/stream`,
++    events: ["alert"],
++    enabled,
++  });
+ }
+\ No newline at end of file
+diff --git a/artifacts/godsview-dashboard/src/pages/alert-center.tsx b/artifacts/godsview-dashboard/src/pages/alert-center.tsx
+index 1003a11..cbec20e 100644
+--- a/artifacts/godsview-dashboard/src/pages/alert-center.tsx
++++ b/artifacts/godsview-dashboard/src/pages/alert-center.tsx
+@@ -1,5 +1,6 @@
+ import React, { useState, useEffect } from 'react';
+-import { useQuery, useMutation } from '@tanstack/react-query';
++import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
++import { useAlertStream, type SSEStatus } from '../hooks/useEventSource';
+ 
+ const C = {
+   bg: "#0e0e0f",
+@@ -163,7 +164,11 @@ const AlertSummaryBanner = () => {
+ const ActiveAlertsFeed = () => {
+   const [filterPriority, setFilterPriority] = useState('All');
+   const [filterCategory, setFilterCategory] = useState('All');
+-  const [refreshInterval, setRefreshInterval] = useState(3000);
++  // Phase 9: SSE push (useAlertStream in the page wrapper) is the primary
++  // freshness mechanism. The 30s poll is a safety net for the case where
++  // the SSE connection is dropped between events or the browser tab has
++  // been backgrounded long enough to miss events.
++  const [refreshInterval, setRefreshInterval] = useState(30000);
+ 
+   const { data, isLoading, refetch } = useQuery({
+     queryKey: ['activeAlerts'],
+@@ -783,8 +788,81 @@ const EscalationTimeline = () => {
+   );
+ };
+ 
++// ── Phase 9: Live SSE connection status badge ────────────────────────
++// Shown in the page header so operators can tell at a glance whether the
++// page is receiving push updates from the api-server or falling back to
++// the 30s polling safety net.
++const STATUS_COPY: Record<SSEStatus, { label: string; dot: string; text: string }> = {
++  connected:    { label: 'Live',         dot: C.green,    text: C.green    },
++  connecting:   { label: 'Connecting…',  dot: C.yellow,   text: C.yellow   },
++  disconnected: { label: 'Offline',      dot: C.textMuted, text: C.textDim },
++  error:        { label: 'Reconnecting', dot: C.red,      text: C.red     },
++};
++
++function LiveConnectionBadge({ status, eventCount }: { status: SSEStatus; eventCount: number }) {
++  const copy = STATUS_COPY[status];
++  return (
++    <div style={{
++      display: 'inline-flex',
++      alignItems: 'center',
++      gap: '8px',
++      padding: '6px 12px',
++      background: C.card,
++      border: `1px solid ${C.border}`,
++      borderRadius: '999px',
++      fontSize: '12px',
++      fontWeight: 600,
++      color: copy.text,
++    }}>
++      <span style={{
++        width: '8px',
++        height: '8px',
++        borderRadius: '50%',
++        background: copy.dot,
++        boxShadow: status === 'connected' ? `0 0 6px ${C.green}` : 'none',
++        animation: status === 'connected' ? 'gvLivePulse 2s infinite' : 'none',
++      }} />
++      <span>{copy.label}</span>
++      <span style={{ color: C.textMuted, fontWeight: 500 }}>·</span>
++      <span style={{ color: C.textMuted, fontWeight: 500 }}>
++        {eventCount} event{eventCount === 1 ? '' : 's'}
++      </span>
++      <style>{`
++        @keyframes gvLivePulse {
++          0%, 100% { opacity: 1; }
++          50% { opacity: 0.45; }
++        }
++      `}</style>
++    </div>
++  );
++}
++
+ // Main Page Component
+ export default function AlertCenterPage() {
++  // Phase 9: subscribe to the api-server's `/api/alerts/stream` SSE
++  // channel. Every `fireAlert()` on the backend AND every Phase 5
++  // scheduler event (promotion eligibility, calibration freshness,
++  // ensemble drift, SLO burn-rate breach, …) is published through
++  // `SignalStreamHub.publishAlert` → this hook's subscription.
++  //
++  // On each incoming event we invalidate the React Query caches that
++  // back the Alert Center widgets so they refetch immediately instead
++  // of waiting for the 30s safety-net poll. This gives the dashboard
++  // effectively zero-lag updates under normal conditions and a
++  // graceful degradation to 30s polling if the SSE channel drops.
++  const { status, eventCount } = useAlertStream(true);
++  const queryClient = useQueryClient();
++
++  useEffect(() => {
++    if (eventCount === 0) return;
++    queryClient.invalidateQueries({ queryKey: ['activeAlerts'] });
++    queryClient.invalidateQueries({ queryKey: ['alertsSummary'] });
++    queryClient.invalidateQueries({ queryKey: ['alertAnomalies'] });
++    queryClient.invalidateQueries({ queryKey: ['alertRules'] });
++    queryClient.invalidateQueries({ queryKey: ['alertChannels'] });
++    queryClient.invalidateQueries({ queryKey: ['alertEscalation'] });
++  }, [eventCount, queryClient]);
++
+   return (
+     <div style={{
+       background: C.bg,
+@@ -792,6 +870,14 @@ export default function AlertCenterPage() {
+       minHeight: '100vh',
+       overflow: 'auto',
+     }}>
++      <div style={{
++        display: 'flex',
++        justifyContent: 'flex-end',
++        alignItems: 'center',
++        padding: '20px 20px 0 20px',
++      }}>
++        <LiveConnectionBadge status={status} eventCount={eventCount} />
++      </div>
+       <AlertSummaryBanner />
+       <ActiveAlertsFeed />
+       <AlertRulesManager />
+diff --git a/docs/ARCHITECTURE.md b/docs/ARCHITECTURE.md
+index 6e5db68..f429a83 100644
+--- a/docs/ARCHITECTURE.md
++++ b/docs/ARCHITECTURE.md
+@@ -381,6 +381,35 @@ The SSE alert router subscribes to the four Phase 5 SSE event types
+ `production_gate_block_streak` for any SLO with burn ≥ its alert
+ threshold. See `docs/SLOs.md` for the per-SLO breakdown.
+ 
++### Alert Center Live Push (Phase 9)
++
++The Alert Center dashboard page consumes the same alert stream over
++SSE for near-zero-lag UI updates:
++
++- Backend: `GET /api/alerts/stream` — `event: alert` frames served
++  by `SignalStreamHub.addClient(res, ["alert"])` with
++  `Last-Event-ID` replay. Every `fireAlert()` call and every Phase 5
++  scheduler event goes through `publishAlert` → this channel.
++- Frontend hook: `artifacts/godsview-dashboard/src/hooks/useEventSource.ts`
++  exports `useAlertStream(enabled)` — a specialized wrapper around
++  `useEventSource<AlertStreamEvent>` with auto-reconnect (exponential
++  backoff up to 30s, max 10 retries), `Last-Event-ID` replay, and a
++  100-event client buffer.
++- Page wiring: `alert-center.tsx` subscribes in the top-level page
++  component and, on every incoming event, calls
++  `queryClient.invalidateQueries({ queryKey: [...] })` for the six
++  Alert Center React Query caches (`activeAlerts`, `alertsSummary`,
++  `alertAnomalies`, `alertRules`, `alertChannels`,
++  `alertEscalation`). This forces immediate refetches against the
++  Phase 8 `/api/alerts/*` endpoints.
++- Safety net: the Active Alerts Feed retains a poll as a fallback for
++  the case where the SSE stream drops or the browser tab has been
++  backgrounded long enough to miss events. The interval is backed off
++  from 3s to 30s now that push is the primary freshness mechanism.
++- Connection status: a "Live / Connecting… / Offline / Reconnecting"
++  badge with event counter is rendered in the Alert Center header so
++  operators can tell at a glance whether the page is receiving push.
++
+ ## Security & Compliance
+ 
+ ### Authentication
+-- 
+2.34.1
+

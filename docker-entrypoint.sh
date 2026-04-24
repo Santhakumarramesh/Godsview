@@ -47,6 +47,22 @@ if [ -n "$DATABASE_URL" ]; then
   else
     echo "[entrypoint] WARNING: Migration runner failed — server will attempt to start anyway"
   fi
+
+  # ── Step 2b: Run all SQL migration files (IF NOT EXISTS — safe to re-run) ──
+  echo "[entrypoint] Applying supplemental migration SQL files..."
+  for sqlfile in ./lib/db/migrations/*.sql; do
+    if [ -f "$sqlfile" ]; then
+      echo "[entrypoint]   Running $(basename "$sqlfile")..."
+      node -e "
+        const { Pool } = require('pg');
+        const fs = require('fs');
+        const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 1 });
+        pool.query(fs.readFileSync('$sqlfile', 'utf8'))
+          .then(() => { console.log('  OK'); pool.end(); })
+          .catch(e => { console.error('  WARN:', e.message); pool.end(); });
+      " 2>&1 || true
+    fi
+  done
 else
   echo "[entrypoint] No DATABASE_URL — using PGlite (in-process, dev mode)"
 fi

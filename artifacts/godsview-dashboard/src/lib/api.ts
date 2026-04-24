@@ -5,8 +5,68 @@
  */
 import { useQuery, useMutation, useQueryClient, type UseQueryOptions } from "@tanstack/react-query";
 
+// ─── Brain SSE Types ────────────────────────────────────────────────────────
+export interface AgentReportDTO {
+  agentId: string;
+  symbol: string;
+  score: number;
+  confidence: number;
+  direction: "long" | "short" | "neutral";
+  reasoning: string;
+  timestamp: string;
+}
+
+export interface BrainDecisionDTO {
+  symbol: string;
+  action: "buy" | "sell" | "hold" | "close";
+  confidence: number;
+  agents: AgentReportDTO[];
+  reasoning: string;
+  timestamp: string;
+}
+
+export interface BrainSSEEvent {
+  type: "cycle_start" | "agent_start" | "agent_done" | "decision" | "cycle_end" | "error";
+  cycleId?: number;
+  agentId?: string;
+  symbol?: string;
+  report?: AgentReportDTO;
+  decision?: BrainDecisionDTO;
+  payload?: Record<string, unknown>;
+  timestamp: number;
+  [key: string]: unknown;
+}
+
+export interface BrainCycleResponse {
+  cycleId: number;
+  symbols: string[];
+  decisions: BrainDecisionDTO[];
+  latencyMs: number;
+}
+
 // ─── Base Fetch ──────────────────────────────────────────────────────────────
 const API_BASE = import.meta.env.VITE_API_URL || "/api";
+
+/**
+ * Whether the current environment is production.
+ * In production, demo data responses are flagged so the UI can warn users.
+ */
+const IS_PROD = import.meta.env.PROD;
+
+/**
+ * Global flag: set to true when any response returns X-Demo-Data header.
+ * UI components can read this to display a warning banner.
+ */
+export let __hasDemoDataWarning = false;
+export function clearDemoDataWarning() { __hasDemoDataWarning = false; }
+
+/** Listeners notified when demo data is detected */
+type DemoDataListener = (isDemoData: boolean) => void;
+const _demoListeners: DemoDataListener[] = [];
+export function onDemoDataDetected(fn: DemoDataListener) {
+  _demoListeners.push(fn);
+  return () => { const i = _demoListeners.indexOf(fn); if (i >= 0) _demoListeners.splice(i, 1); };
+}
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const url = `${API_BASE}${path}`;
@@ -18,6 +78,17 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     const body = await res.text().catch(() => "");
     throw new Error(`API ${res.status}: ${res.statusText} — ${body}`);
   }
+
+  // ── Demo data detection ───────────────────────────────────────────
+  const isDemoData = res.headers.get("X-Demo-Data") === "true";
+  if (isDemoData) {
+    __hasDemoDataWarning = true;
+    _demoListeners.forEach((fn) => fn(true));
+    if (IS_PROD) {
+      console.warn(`[GodsView] Demo data detected on ${path} — this endpoint is not returning live data`);
+    }
+  }
+
   return res.json();
 }
 

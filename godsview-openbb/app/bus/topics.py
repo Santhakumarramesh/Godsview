@@ -38,3 +38,4 @@ CONSCIOUSNESS_UPDATED = "consciousness.updated"
 # system
 SYSTEM_ALERT = "system.alert"
 SYSTEM_HALT = "system.halt"
+

@@ -23,24 +23,6 @@ const router = Router();
 
 const TIMEFRAMES: Timeframe[] = ["15min", "1H", "4H", "1D", "1W"];
 
-function generateSyntheticBars(count: number, basePrice: number, seed: number): Bar[] {
-  const bars: Bar[] = [];
-  let price = basePrice;
-  for (let i = 0; i < count; i++) {
-    const noise = Math.sin(seed + i * 0.3) * basePrice * 0.015;
-    const trend = Math.sin(seed * 0.1 + i * 0.05) * basePrice * 0.008;
-    const o = price;
-    const c = price + noise + trend;
-    const h = Math.max(o, c) + Math.abs(noise) * 0.5;
-    const l = Math.min(o, c) - Math.abs(noise) * 0.5;
-    const v = 1000 + Math.abs(Math.sin(i * 0.7)) * 5000;
-    const t = new Date(Date.now() - (count - i) * 60000 * (seed % 10 + 1)).toISOString();
-    bars.push({ t, o, h, l, c, v });
-    price = c;
-  }
-  return bars;
-}
-
 async function fetchBarsForSymbol(
   symbol: string,
   timeframe: Timeframe,
@@ -78,18 +60,13 @@ async function fetchBarsForSymbol(
       if (timeframe === "1W") return aggregateBars(bars, 5);
       return bars;
     }
-  } catch {
-    // Fallback to synthetic — GUARDED: blocked in live mode
+  } catch (err) {
+    // NO SYNTHETIC FALLBACK — return empty array, callers must handle gracefully
+    const { logger } = await import("../lib/logger.js");
+    logger.warn({ symbol, timeframe, err }, "Market structure: no real bars available — returning empty");
   }
 
-  const { guardSyntheticData } = await import("../lib/data_safety_guard.js");
-  const seed = symbol.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
-  const basePrice = symbol.includes("BTC") ? 60000 : symbol.includes("ETH") ? 3000 : 450;
-  return guardSyntheticData(
-    `market_structure:${symbol}:${timeframe}`,
-    () => generateSyntheticBars(200, basePrice, seed + TIMEFRAMES.indexOf(timeframe) * 100),
-    `Market structure analysis requires real data for ${symbol}. Synthetic data blocked in live mode.`,
-  );
+  return [];
 }
 
 function aggregateBars(bars: Bar[], period: number): Bar[] {

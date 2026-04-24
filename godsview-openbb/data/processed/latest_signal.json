@@ -1,20 +1,13 @@
 {
   "action": "skip",
   "close_price": 112.81981558125712,
-  "confidence": 0.047778,
-  "generated_at": "2026-04-02T05:38:19.557594+00:00",
+  "confidence": 0.15913,
+  "generated_at": "2026-04-24T12:10:04.806467+00:00",
   "model_meta": {
-    "accuracy": 0.6263736263736264,
-    "error": null,
-    "generated_at": "2026-04-02T05:35:59.550393+00:00",
-    "mode": "trained_model",
-    "roc_auc": 0.6235294117647058,
-    "symbol": "BTCUSD",
-    "test_rows": 91,
-    "timeframe": "1D",
-    "train_rows": 360
+    "error": "model_file_missing",
+    "mode": "heuristic_fallback"
   },
-  "prob_up": 0.523889,
+  "prob_up": 0.579565,
   "symbol": "BTCUSD",
   "threshold_buy": 0.6,
   "threshold_sell": 0.4,

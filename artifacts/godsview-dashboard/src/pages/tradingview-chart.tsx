@@ -17,6 +17,8 @@ import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } fro
 const BookmapHeatmap = lazy(() => import("../components/bookmap-heatmap"));
 import {
   createChart,
+  CandlestickSeries,
+  HistogramSeries,
   type IChartApi,
   type ISeriesApi,
   type CandlestickData,
@@ -137,7 +139,7 @@ export default function TradingViewChart() {
       height: chartContainerRef.current.clientHeight,
     });
 
-    const candleSeries = (chart as any).addCandlestickSeries({
+    const candleSeries = chart.addSeries(CandlestickSeries, {
       upColor: "#22c55e",
       downColor: "#ef4444",
       borderDownColor: "#ef4444",
@@ -146,7 +148,7 @@ export default function TradingViewChart() {
       wickUpColor: "#22c55e",
     });
 
-    const volumeSeries = (chart as any).addHistogramSeries({
+    const volumeSeries = chart.addSeries(HistogramSeries, {
       color: "#3b82f6",
       priceFormat: { type: "volume" },
       priceScaleId: "volume",
@@ -220,11 +222,20 @@ export default function TradingViewChart() {
     candleSeriesRef.current.setData(candleData);
     volumeSeriesRef.current.setData(volumeData);
 
-    if (showSignals) {
-      const signals = generateMockSignals(bars);
-      (candleSeriesRef.current as any).setMarkers(signals);
-    } else {
-      (candleSeriesRef.current as any).setMarkers([]);
+    // lightweight-charts v5 removed series.setMarkers(); use try-catch for compat
+    try {
+      if (showSignals) {
+        const signals = generateMockSignals(bars);
+        if (typeof (candleSeriesRef.current as any).setMarkers === "function") {
+          (candleSeriesRef.current as any).setMarkers(signals);
+        }
+      } else {
+        if (typeof (candleSeriesRef.current as any).setMarkers === "function") {
+          (candleSeriesRef.current as any).setMarkers([]);
+        }
+      }
+    } catch {
+      // Markers not supported in this version — chart still renders
     }
 
     const last = bars[bars.length - 1];

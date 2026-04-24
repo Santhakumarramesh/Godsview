@@ -1,15 +1,3 @@
-// @ts-nocheck
-/**
- * DESIGN SCAFFOLD — not wired into the live runtime.
- * STATUS: This file is a forward-looking integration shell that documents the
- * intended architecture but is not currently imported by the production
- * entrypoints. Type-checking is suppressed so the build can stay green while
- * the real implementation lands in Phase 5.
- *
- * REMOVE the `// @ts-nocheck` directive once Phase 5 is implemented and the
- * file is actually mounted in `src/index.ts` / `src/routes/index.ts`.
- */
-
 import { EventEmitter } from 'events';
 
 /**
@@ -759,122 +747,10 @@ export class ReplayEngine extends EventEmitter {
 }
 
 /**
- * Mock data generator for testing
+ * Mock data generator for testing - DEPRECATED
  */
 export function generateMockReplayResults(count: number = 20): ReplayResult[] {
-  const results: ReplayResult[] = [];
-  const assets = ['BTC/USD', 'ETH/USD', 'SOL/USD'];
-  const modes: Array<'full' | 'what_if' | 'speed' | 'comparative'> = [
-    'full',
-    'what_if',
-    'speed',
-    'comparative',
-  ];
-
-  for (let i = 0; i < count; i++) {
-    const asset = assets[i % assets.length];
-    const mode = modes[i % modes.length];
-    const basePrice = 40000 + Math.random() * 20000;
-
-    const divergences: DivergenceAnalysis[] = [];
-    if (Math.random() > 0.3) {
-      divergences.push({
-        field: 'quantity',
-        originalValue: 1000 + i * 10,
-        replayedValue: 950 + i * 12,
-        divergencePercent: 5 + Math.random() * 8,
-        significance: 'major',
-      });
-    }
-
-    if (Math.random() > 0.5) {
-      divergences.push({
-        field: 'expectedSlippage',
-        originalValue: 0.003,
-        replayedValue: 0.0045,
-        divergencePercent: 50,
-        significance: 'minor',
-      });
-    }
-
-    if (Math.random() > 0.4) {
-      divergences.push({
-        field: 'confidence',
-        originalValue: 0.75,
-        replayedValue: 0.68,
-        divergencePercent: 9.33,
-        significance: 'major',
-      });
-    }
-
-    const sensitivities: SensitivityAnalysis[] = [
-      {
-        inputName: 'midPrice',
-        baselineImpact: 0.65 + Math.random() * 0.3,
-        rangeMin: basePrice * 0.95,
-        rangeMax: basePrice * 1.05,
-        elasticity: -0.8 + Math.random() * 0.4,
-        topContributor: Math.random() > 0.3,
-      },
-      {
-        inputName: 'volatility',
-        baselineImpact: 0.4 + Math.random() * 0.3,
-        rangeMin: 0.2,
-        rangeMax: 0.8,
-        elasticity: 0.3 + Math.random() * 0.4,
-        topContributor: Math.random() > 0.5,
-      },
-      {
-        inputName: 'riskExposure',
-        baselineImpact: 0.55 + Math.random() * 0.35,
-        rangeMin: 0,
-        rangeMax: 10000,
-        elasticity: -0.7 + Math.random() * 0.3,
-        topContributor: Math.random() > 0.4,
-      },
-      {
-        inputName: 'modelConfidence',
-        baselineImpact: 0.7 + Math.random() * 0.25,
-        rangeMin: 0,
-        rangeMax: 1,
-        elasticity: 0.6 + Math.random() * 0.3,
-        topContributor: Math.random() > 0.25,
-      },
-    ];
-
-    const originalP_L = -5000 + Math.random() * 15000;
-    const counterfactualP_L = originalP_L + (-3000 + Math.random() * 6000);
-
-    results.push({
-      replayId: `replay_${i}_${Date.now()}`,
-      decisionPacketId: `packet_${asset}_${i}`,
-      mode,
-      originalDecision: {
-        action: Math.random() > 0.4 ? 'buy' : 'hold',
-        quantity: 1000 + i * 10,
-        expectedSlippage: 0.003 + Math.random() * 0.003,
-        confidence: 0.65 + Math.random() * 0.3,
-        riskAdjustment: 0.8 + Math.random() * 0.2,
-        rationale: `Mode: ${mode}`,
-      },
-      replayedDecision: {
-        action: Math.random() > 0.35 ? 'buy' : 'hold',
-        quantity: 950 + i * 12,
-        expectedSlippage: 0.0035 + Math.random() * 0.003,
-        confidence: 0.70 + Math.random() * 0.25,
-        riskAdjustment: 0.75 + Math.random() * 0.22,
-        rationale: `Replayed: ${mode}`,
-      },
-      divergenceAnalysis: divergences,
-      sensitivityAnalysis: sensitivities,
-      originalP_L,
-      counterfactualP_L,
-      p_LDifference: counterfactualP_L - originalP_L,
-      executionTime: 50 + Math.random() * 200,
-      timestamp: Date.now() - i * 3600000,
-      notes: `${mode} replay for ${asset} - ${divergences.length} divergences detected`,
-    });
-  }
-
-  return results;
+  // Mock replay results generation is disabled for production.
+  // Replays should be created from actual registered decision packets via executeReplay().
+  return [];
 }

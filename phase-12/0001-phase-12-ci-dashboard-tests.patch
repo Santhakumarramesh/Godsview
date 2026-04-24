@@ -1,0 +1,401 @@
+From a1160dc0344525dd47fcd4d4e3788304678a678a Mon Sep 17 00:00:00 2001
+From: claude-bot <noreply@anthropic.com>
+Date: Sat, 18 Apr 2026 04:10:57 -0400
+Subject: [PATCH] Phase 12: CI enforcement for dashboard tests + expanded smoke
+ coverage
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Closes the CI gap from Phase 11. The dashboard vitest suite existed but
+wasn't gated — PRs could land dashboard regressions without the smoke
+tests ever running. Phase 12:
+
+1. Wires `pnpm --filter @workspace/godsview-dashboard test` into the
+   `typecheck-and-test` job in .github/workflows/ci.yml so every push
+   and PR must pass the jsdom/MSW suite.
+2. Adds a dashboard-specific test-count regression gate to the `build`
+   job (floor: 10 passing tests) alongside the existing api-server
+   floor of 3000.
+3. Adds a FakeWebSocket shim to src/test/setup.ts so pages with live
+   WebSocket feeds (news-monitor, watchlist, etc.) can mount under
+   jsdom without throwing.
+4. Expands MSW handler shapes to match three new endpoints consumed by
+   the pages added in this phase: /api/proof/dashboard, /api/system/risk,
+   /api/system/status, /api/alpaca/account.
+5. Adds three new smoke tests, taking the suite from 7 tests / 3 files
+   to 13 tests / 6 files:
+   - checklist.test.tsx — proves the MSW scaffold covers pages whose
+     data loads are user-initiated (no useQuery on mount).
+   - proof.test.tsx — exercises the single-query page pattern against
+     the new /api/proof/dashboard handler; charts render under jsdom
+     via the shimmed IntersectionObserver.
+   - news-monitor.test.tsx — exercises the WebSocket live-feed pattern
+     against the new FakeWebSocket shim.
+
+Verification gate at v1.5.0:
+
+  tsc --build                                            exit 0
+  tsc -p artifacts/godsview-dashboard/tsconfig.json      exit 0
+  api-server vitest (178 files, 3654 passed, 18 skipped)
+  dashboard vitest (6 files, 13 passed)                  2.40 s
+  api-server esbuild (4.9 MB bundle)                     248 ms
+  dashboard vite build (alert-center 23.77 kB gz 6.11)   6.34 s
+
+Additive only — rollback is `git revert <this-sha>`. Production
+readiness remains 100%; this phase hardens the test suite's
+contribution to the CI gate.
+---
+ .github/workflows/ci.yml                      | 24 ++++++-
+ .../src/pages/__tests__/checklist.test.tsx    | 34 +++++++++
+ .../src/pages/__tests__/news-monitor.test.tsx | 32 +++++++++
+ .../src/pages/__tests__/proof.test.tsx        | 40 +++++++++++
+ .../src/test/msw-handlers.ts                  | 69 +++++++++++++++++++
+ .../godsview-dashboard/src/test/setup.ts      | 44 ++++++++++++
+ docs/LAUNCH_CHECKLIST.md                      |  9 +++
+ 7 files changed, 250 insertions(+), 2 deletions(-)
+ create mode 100644 artifacts/godsview-dashboard/src/pages/__tests__/checklist.test.tsx
+ create mode 100644 artifacts/godsview-dashboard/src/pages/__tests__/news-monitor.test.tsx
+ create mode 100644 artifacts/godsview-dashboard/src/pages/__tests__/proof.test.tsx
+
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 053f4af..86772ee 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -50,13 +50,21 @@ jobs:
+         # per-package typechecks above miss.
+         run: pnpm run typecheck
+ 
+-      - name: Run Unit Tests
++      - name: Run Unit Tests (api-server)
+         run: pnpm --filter @workspace/api-server test
+         env:
+           PORT: "3000"
+           GODSVIEW_SYSTEM_MODE: paper
+           NODE_ENV: test
+ 
++      # Dashboard smoke tests — added in Phase 11, hard-gated in CI as of
++      # Phase 12. The vitest suite runs under jsdom with MSW as the fetch
++      # boundary; see artifacts/godsview-dashboard/src/test/ for scaffold.
++      - name: Run Dashboard Smoke Tests
++        run: pnpm --filter @workspace/godsview-dashboard test
++        env:
++          NODE_ENV: test
++
+   # ── 2. Python v2 Microservices ────────────────────────────────────
+   python-v2:
+     name: Python v2 Services (lint + test)
+@@ -230,7 +238,7 @@ jobs:
+       - name: Build Dashboard
+         run: pnpm --filter @workspace/godsview-dashboard build
+ 
+-      - name: Verify test count (regression gate)
++      - name: Verify test count (regression gate — api-server)
+         run: |
+           TEST_COUNT=$(GODSVIEW_DATA_DIR=artifacts/api-server/.runtime pnpm --filter @workspace/api-server exec vitest run --reporter=json 2>/dev/null | grep -o '"numPassedTests":[0-9]*' | grep -o '[0-9]*' || echo "0")
+           echo "Tests passed: $TEST_COUNT"
+@@ -239,6 +247,18 @@ jobs:
+             exit 1
+           fi
+ 
++      - name: Verify test count (regression gate — dashboard)
++        # Phase 11 shipped 7 tests across 3 files; Phase 12 expanded to
++        # 13 tests across 6 files. Floor at 10 so we catch a regression
++        # but don't block legitimate test-suite refactors.
++        run: |
++          DASH_COUNT=$(pnpm --filter @workspace/godsview-dashboard exec vitest run --reporter=json 2>/dev/null | grep -o '"numPassedTests":[0-9]*' | grep -o '[0-9]*' | head -1 || echo "0")
++          echo "Dashboard tests passed: $DASH_COUNT"
++          if [ "$DASH_COUNT" -lt 10 ]; then
++            echo "::error::Dashboard test count regression: $DASH_COUNT < 10 minimum"
++            exit 1
++          fi
++
+       - name: Upload build artifacts
+         uses: actions/upload-artifact@v4
+         with:
+diff --git a/artifacts/godsview-dashboard/src/pages/__tests__/checklist.test.tsx b/artifacts/godsview-dashboard/src/pages/__tests__/checklist.test.tsx
+new file mode 100644
+index 0000000..c1b49d7
+--- /dev/null
++++ b/artifacts/godsview-dashboard/src/pages/__tests__/checklist.test.tsx
+@@ -0,0 +1,34 @@
++/**
++ * Smoke test — Checklist page.
++ *
++ * Exercises a minimal-dependency page:
++ *   - No initial fetch on mount (data is pulled only via the
++ *     "Auto-Evaluate" button click)
++ *   - Local useState for the symbol input + evaluation result
++ *
++ * Proves the MSW scaffold can cover pages whose data loads are
++ * user-initiated, not driven by useQuery at mount time.
++ */
++import { describe, it, expect } from "vitest";
++import { screen } from "@testing-library/react";
++import Checklist from "../checklist";
++import { renderPage } from "../../test/render";
++
++describe("Checklist page", () => {
++  it("renders the page header without throwing", () => {
++    renderPage(<Checklist />, { initialPath: "/checklist" });
++    // The header is rendered synchronously — no data fetch on mount.
++    expect(
++      screen.getByText(/Checklist/i, { selector: "h1, h2, h3" })
++    ).toBeInTheDocument();
++  });
++
++  it("renders the symbol input", () => {
++    renderPage(<Checklist />, { initialPath: "/checklist" });
++    // The auto-evaluate form ships a symbol input that the user fills in
++    // before clicking the evaluate button. The placeholder text may vary,
++    // so we match by role.
++    const inputs = screen.getAllByRole("textbox");
++    expect(inputs.length).toBeGreaterThan(0);
++  });
++});
+diff --git a/artifacts/godsview-dashboard/src/pages/__tests__/news-monitor.test.tsx b/artifacts/godsview-dashboard/src/pages/__tests__/news-monitor.test.tsx
+new file mode 100644
+index 0000000..75b65ee
+--- /dev/null
++++ b/artifacts/godsview-dashboard/src/pages/__tests__/news-monitor.test.tsx
+@@ -0,0 +1,32 @@
++/**
++ * Smoke test — News Monitor page.
++ *
++ * Exercises the WebSocket-backed live-feed pattern:
++ *   - No useQuery at mount time (news items are local-state seeded)
++ *   - `new WebSocket(...)` call in useEffect — relies on the
++ *     FakeWebSocket shim in src/test/setup.ts to not throw under jsdom
++ *
++ * Proves the WebSocket shim lets pages with live-stream integrations
++ * mount cleanly in the smoke harness.
++ */
++import { describe, it, expect } from "vitest";
++import { screen } from "@testing-library/react";
++import NewsMonitor from "../news-monitor";
++import { renderPage } from "../../test/render";
++
++describe("News Monitor page", () => {
++  it("renders the page header without throwing", () => {
++    renderPage(<NewsMonitor />, { initialPath: "/news-monitor" });
++    // The header renders synchronously — no async data needed.
++    expect(
++      screen.getByText(/News Monitor/i, { selector: "h2" })
++    ).toBeInTheDocument();
++  });
++
++  it("renders the headline search input", () => {
++    renderPage(<NewsMonitor />, { initialPath: "/news-monitor" });
++    expect(
++      screen.getByPlaceholderText(/Search headlines/i)
++    ).toBeInTheDocument();
++  });
++});
+diff --git a/artifacts/godsview-dashboard/src/pages/__tests__/proof.test.tsx b/artifacts/godsview-dashboard/src/pages/__tests__/proof.test.tsx
+new file mode 100644
+index 0000000..60143e9
+--- /dev/null
++++ b/artifacts/godsview-dashboard/src/pages/__tests__/proof.test.tsx
+@@ -0,0 +1,40 @@
++/**
++ * Smoke test — Proof Dashboard.
++ *
++ * Exercises the single-query page pattern:
++ *   - One useQuery against `/api/proof/dashboard?days=N`
++ *   - Loading spinner while the query resolves, then the real view
++ *
++ * Proves the MSW handler for `/api/proof/dashboard` returns a shape the
++ * page can consume end-to-end without crashing the chart components
++ * (recharts) under jsdom.
++ */
++import { describe, it, expect } from "vitest";
++import { screen } from "@testing-library/react";
++import Proof from "../proof";
++import { renderPage } from "../../test/render";
++
++describe("Proof Dashboard page", () => {
++  it("renders the page header and loads data without throwing", async () => {
++    renderPage(<Proof />, { initialPath: "/proof" });
++
++    // Header is rendered synchronously alongside the loading spinner.
++    expect(
++      screen.getByText(/Proof Dashboard/i, { selector: "h1" })
++    ).toBeInTheDocument();
++
++    // After the useQuery resolves, the summary cards should appear.
++    // We assert on the "Overall Win Rate" label which is text-only — no
++    // chart rendering required to pass.
++    expect(
++      await screen.findByText(/Overall Win Rate/i)
++    ).toBeInTheDocument();
++  });
++
++  it("renders the day-range toggle buttons", () => {
++    renderPage(<Proof />, { initialPath: "/proof" });
++    // DAY_OPTIONS = [7, 14, 30, 60, 90]; the 30d button is default-selected.
++    expect(screen.getByRole("button", { name: "30d" })).toBeInTheDocument();
++    expect(screen.getByRole("button", { name: "90d" })).toBeInTheDocument();
++  });
++});
+diff --git a/artifacts/godsview-dashboard/src/test/msw-handlers.ts b/artifacts/godsview-dashboard/src/test/msw-handlers.ts
+index 5ac3d9e..e94238d 100644
+--- a/artifacts/godsview-dashboard/src/test/msw-handlers.ts
++++ b/artifacts/godsview-dashboard/src/test/msw-handlers.ts
+@@ -143,6 +143,65 @@ const sloRouterStatusDefault = {
+   },
+ };
+ 
++// ── Proof Dashboard — shape matches proof.tsx `ProofDashboardData` ───────
++const proofDashboardDefault = {
++  summary: {
++    overall_win_rate: 0.68,
++    total_trades: 42,
++    profit_factor: 1.85,
++    sharpe_ratio: 1.42,
++    best_strategy: { name: "Breakout Reversion", win_rate: 0.73 },
++    worst_drawdown: -0.08,
++    equity_curve: [
++      { date: "2026-03-01", cumulative_pnl: 0 },
++      { date: "2026-03-15", cumulative_pnl: 1240 },
++      { date: "2026-04-01", cumulative_pnl: 2180 },
++    ],
++  },
++  trades: [],
++  strategy_comparison: {
++    strategies: [],
++    comparison_data: [],
++  },
++  market_readiness: {
++    status: "green",
++    regime: "trending-bull",
++    recommended_position_size: 0.75,
++  },
++};
++
++// ── System risk config — shape matches RiskConfig from lib/api.ts ────────
++const systemRiskDefault = {
++  kill_switch: false,
++  max_daily_loss: -250,
++  max_exposure_pct: 80,
++  max_concurrent_positions: 3,
++  max_trades_per_session: 8,
++  cooldown_minutes: 15,
++  degraded_data_block: false,
++  session_allowlist: ["NY Morning", "NY Afternoon"],
++  news_lockout: false,
++};
++
++const systemStatusDefault = {
++  status: "healthy",
++  mode: "paper",
++  uptime_seconds: 3600,
++  last_heartbeat: new Date().toISOString(),
++};
++
++const alpacaAccountDefault = {
++  account_number: "TEST-ACCOUNT",
++  status: "ACTIVE",
++  equity: 100_000,
++  buying_power: 50_000,
++  cash: 25_000,
++  portfolio_value: 100_000,
++  pattern_day_trader: false,
++  trading_blocked: false,
++  account_blocked: false,
++};
++
+ // ── Handler registry ────────────────────────────────────────────────────
+ export const handlers = [
+   http.get("/api/alerts/summary", () => HttpResponse.json(alertSummaryDefault)),
+@@ -164,6 +223,16 @@ export const handlers = [
+   http.get("/api/slo/budgets", () => HttpResponse.json(sloBudgetsDefault)),
+   http.get("/api/slo/router/status", () => HttpResponse.json(sloRouterStatusDefault)),
+ 
++  // Proof Dashboard — query string is part of the path; MSW matches on
++  // pathname only by default, so the same handler covers `?days=7`,
++  // `?days=30`, etc.
++  http.get("/api/proof/dashboard", () => HttpResponse.json(proofDashboardDefault)),
++
++  // System config + Alpaca shapes (consumed by settings.tsx and others).
++  http.get("/api/system/risk", () => HttpResponse.json(systemRiskDefault)),
++  http.get("/api/system/status", () => HttpResponse.json(systemStatusDefault)),
++  http.get("/api/alpaca/account", () => HttpResponse.json(alpacaAccountDefault)),
++
+   http.get("/api/healthz", () => HttpResponse.json({ status: "ok" })),
+   http.get("/api/readyz", () => HttpResponse.json({ status: "ok" })),
+ 
+diff --git a/artifacts/godsview-dashboard/src/test/setup.ts b/artifacts/godsview-dashboard/src/test/setup.ts
+index 5b5a57f..c063c14 100644
+--- a/artifacts/godsview-dashboard/src/test/setup.ts
++++ b/artifacts/godsview-dashboard/src/test/setup.ts
+@@ -111,3 +111,47 @@ if (!globalThis.IntersectionObserver) {
+ if (!window.scrollTo) {
+   window.scrollTo = vi.fn() as unknown as typeof window.scrollTo;
+ }
++
++// WebSocket is used by pages that subscribe to live price / news feeds
++// (e.g. news-monitor, watchlist). jsdom doesn't ship a WebSocket
++// implementation; we stub a minimal class that fires `onopen` in a
++// microtask and is otherwise silent. The shim matches the same interface
++// as FakeEventSource so pages that guard `new WebSocket()` with try/catch
++// keep working too.
++class FakeWebSocket {
++  static CONNECTING = 0;
++  static OPEN = 1;
++  static CLOSING = 2;
++  static CLOSED = 3;
++  readyState = FakeWebSocket.CONNECTING;
++  url: string;
++  protocol = "";
++  onopen: ((ev: Event) => void) | null = null;
++  onclose: ((ev: CloseEvent) => void) | null = null;
++  onerror: ((ev: Event) => void) | null = null;
++  onmessage: ((ev: MessageEvent) => void) | null = null;
++  private listeners = new Map<string, Set<(ev: Event) => void>>();
++  constructor(url: string, _protocols?: string | string[]) {
++    this.url = url;
++    queueMicrotask(() => {
++      this.readyState = FakeWebSocket.OPEN;
++      this.onopen?.(new Event("open"));
++    });
++  }
++  addEventListener(type: string, listener: (ev: Event) => void) {
++    if (!this.listeners.has(type)) this.listeners.set(type, new Set());
++    this.listeners.get(type)!.add(listener);
++  }
++  removeEventListener(type: string, listener: (ev: Event) => void) {
++    this.listeners.get(type)?.delete(listener);
++  }
++  send(_data: string) {
++    /* no-op */
++  }
++  close() {
++    this.readyState = FakeWebSocket.CLOSED;
++    this.onclose?.(new CloseEvent("close"));
++  }
++}
++// @ts-expect-error attach to jsdom window
++globalThis.WebSocket = FakeWebSocket;
+diff --git a/docs/LAUNCH_CHECKLIST.md b/docs/LAUNCH_CHECKLIST.md
+index 4204ca9..1edccc6 100644
+--- a/docs/LAUNCH_CHECKLIST.md
++++ b/docs/LAUNCH_CHECKLIST.md
+@@ -54,6 +54,15 @@ dashboard render tree stays healthy under the Phase 8 API shapes and
+ the Phase 9 SSE push hook. Scaffolding is in `src/test/` — add one
+ `__tests__/<page>.test.tsx` per page as coverage grows.
+ 
++Phase 12 wires the dashboard suite into `.github/workflows/ci.yml` so
++every PR runs the jsdom tests in the `typecheck-and-test` job and the
++`build` job enforces a regression floor (≥ 10 passing dashboard tests).
++Phase 12 also adds a `FakeWebSocket` shim to `src/test/setup.ts`, which
++unblocks smoke tests for any page that subscribes to a WebSocket feed.
++Current dashboard suite at `v1.5.0`: 13 tests across 6 files covering
++`not-found`, `alert-center`, `alerts`, `checklist`, `proof`, and
++`news-monitor`.
++
+ ## 3. k6 performance baseline
+ 
+ Run both k6 scripts against a locally-running api-server (paper mode):
+-- 
+2.34.1
+

@@ -28,9 +28,7 @@ def _session_from_label(label: str) -> MarketSession:
 class ContextNode(NodeBase):
     name = "context_node"
 
-    def run(
-        self, brain: StockBrainState, payload: dict[str, Any], store: BrainStore
-    ) -> StockBrainState:
+    def run(self, brain: StockBrainState, payload: dict[str, Any], store: BrainStore) -> StockBrainState:
         data = payload.get("data", payload)
         session = data.get("session", {}) if isinstance(data, dict) else {}
         sentiment = data.get("sentiment", {}) if isinstance(data, dict) else {}
@@ -39,16 +37,11 @@ class ContextNode(NodeBase):
 
         ctx = brain.event_context
         ctx.market_session = _session_from_label(str(session.get("session", "closed")))
-        ctx.session_quality = max(
-            0.0, min(1.0, float(hard_gates.get("pass_ratio", 0.0)))
-        )
-        ctx.news_heat = max(
-            0.0, min(1.0, abs(float(sentiment.get("sentiment_score", 0.0))))
-        )
-        ctx.macro_pressure = (
-            "hostile" if bool(macro.get("blackout", False)) else "neutral"
-        )
+        ctx.session_quality = max(0.0, min(1.0, float(hard_gates.get("pass_ratio", 0.0))))
+        ctx.news_heat = max(0.0, min(1.0, abs(float(sentiment.get("sentiment_score", 0.0)))))
+        ctx.macro_pressure = "hostile" if bool(macro.get("blackout", False)) else "neutral"
         ctx.fed_proximity = bool(macro.get("blackout", False))
         ctx.earnings_near = bool(macro.get("blackout", False))
         self.mark_live(brain)
         return brain
+

@@ -767,6 +767,35 @@ export function runBacktest(req: BacktestRequest): BacktestResult {
 
   const metrics = computeMetrics(symbol, outcomes, confirmations, bars1m, timeframe);
 
+  // ── Bidirectional Learning: feed backtest outcomes into continuous learning ──
+  // Use setTimeout + dynamic import to avoid blocking synchronous return
+  setTimeout(async () => {
+    try {
+      const { ingestBacktestResults } = await import("./continuous_learning.js");
+      const ingestPayload = outcomes.map((o: TradeOutcome) => {
+        const conf = confirmations.find(c => c.id === o.confirmationId);
+        return {
+          symbol: o.symbol,
+          setup_type: conf?.setupType ?? "unknown",
+          direction: o.direction,
+          regime: "backtest",
+          structure_score: conf?.structure?.activeOBCount ? Math.min(1, conf.structure.activeOBCount / 5) : 0.5,
+          order_flow_score: 0.5,
+          recall_score: 0.5,
+          final_quality: Math.max(0, Math.min(1, o.achievedR / 3)),
+          outcome: o.won ? "win" as const : "loss" as const,
+          entry_price: o.entryPrice,
+          stop_loss: o.stopLoss,
+          take_profit: o.takeProfit,
+          realized_pnl: o.pnlR,
+        };
+      });
+      await ingestBacktestResults(ingestPayload);
+    } catch {
+      // continuous_learning may not be loaded yet — non-fatal
+    }
+  }, 0);
+
   return {
     confirmations,
     outcomes,

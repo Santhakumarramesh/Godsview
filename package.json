@@ -1,16 +1,13 @@
 {
-  "name": "godsview",
-  "version": "2.0.0-rc.0",
+  "name": "workspace",
+  "version": "0.0.0",
   "private": true,
   "license": "MIT",
-  "packageManager": "pnpm@9.15.0",
   "scripts": {
     "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
     "setup": "corepack enable && corepack pnpm install && corepack pnpm run db:push && corepack pnpm run seed",
-    "dev": "corepack pnpm -r --parallel --filter @workspace/api-server --filter @workspace/godsview-dashboard run dev",
-    "dev:v2": "turbo run dev --filter=@gv/web --filter=@gv/ui --filter=@gv/api-client",
-    "build": "corepack pnpm run typecheck && corepack pnpm --filter @workspace/api-server --filter @workspace/godsview-dashboard run build && rm -rf artifacts/api-server/public/assets && cp -r artifacts/godsview-dashboard/dist/public/. artifacts/api-server/public",
-    "build:v2": "turbo run build --filter=@gv/*",
+    "dev": "corepack pnpm -r --parallel --filter @workspace/api-server --filter @gv/web run dev",
+    "build": "corepack pnpm run typecheck && corepack pnpm --filter @workspace/api-server run build && corepack pnpm --filter @gv/web run build",
     "clean:generated": "git restore artifacts/api-server/dist artifacts/api-server/public/index.html artifacts/api-server/public/assets && git clean -fd artifacts/api-server/public/assets",
     "clean:runtime": "rm -rf artifacts/api-server/.runtime && rm -f execution_autonomy_guard_state*.json execution_incident_guard_state*.json execution_market_guard_state*.json execution_idempotency_state*.json artifacts/api-server/execution_autonomy_guard_state*.json artifacts/api-server/execution_incident_guard_state*.json artifacts/api-server/execution_market_guard_state*.json artifacts/api-server/execution_idempotency_state*.json",
     "verify:cleanup": "corepack pnpm run clean:generated && corepack pnpm run clean:runtime",
@@ -21,9 +18,7 @@
     "verify:market:live:strict": "sh -c 'status=0; corepack pnpm run typecheck && GODSVIEW_DATA_DIR=artifacts/api-server/.runtime corepack pnpm --filter @workspace/api-server run test && corepack pnpm run build && GODSVIEW_DATA_DIR=artifacts/api-server/.runtime ALPACA_API_KEY=${ALPACA_API_KEY:?ALPACA_API_KEY is required} ALPACA_SECRET_KEY=${ALPACA_SECRET_KEY:?ALPACA_SECRET_KEY is required} GODSVIEW_OPERATOR_TOKEN=${GODSVIEW_OPERATOR_TOKEN:?GODSVIEW_OPERATOR_TOKEN is required} START_SERVER_LOCAL=1 REQUIRE_HTTP=1 DEPLOY_READINESS_EXPECT_SYSTEM_MODE=live_enabled DEPLOY_READINESS_MIN_STATUS=READY RUN_BUILD_CHECKS=0 RUN_SMOKE_TESTS=0 INCLUDE_PREFLIGHT=1 corepack pnpm run deploy:readiness || status=$?; corepack pnpm run verify:cleanup || true; exit $status'",
     "start": "corepack pnpm --filter @workspace/api-server run start",
     "typecheck:libs": "tsc --build",
-    "typecheck:v2": "turbo run typecheck --filter=@gv/*",
-    "typecheck": "corepack pnpm run typecheck:libs && corepack pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
-    "test:v2": "turbo run test --filter=@gv/*",
+    "typecheck": "corepack pnpm run typecheck:libs && corepack pnpm -r --filter \"./artifacts/**\" --filter \"./packages/**\" --filter \"./apps/**\" --filter \"./scripts\" --if-present run typecheck",
     "db:push": "corepack pnpm --filter @workspace/db run push",
     "db:migrate": "corepack pnpm --filter @workspace/db run migrate",
     "health-check": "corepack pnpm --filter @workspace/scripts run health-check",
@@ -33,7 +28,6 @@
   },
   "devDependencies": {
     "prettier": "^3.8.1",
-    "turbo": "^2.3.3",
     "typescript": "~5.9.2"
   },
   "optionalDependencies": {

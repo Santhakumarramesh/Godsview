@@ -817,32 +817,7 @@ export class PostMortemGenerator extends EventEmitter {
   }
 
   private initializeMockData(): void {
-    this.generateForLosingTrade('TRADE-001', 'AAPL', 'MeanReversion', 145.2, 142.8, 100, '5m');
-    this.generateForLosingTrade('TRADE-002', 'MSFT', 'Momentum', 310.5, 305.3, 50, '15m');
-    this.generateForLosingTrade('TRADE-003', 'GOOGL', 'ArbitrageNet', 120.1, 119.2, 75, '1m');
-    this.generateForLosingTrade('TRADE-004', 'TSLA', 'MeanReversion', 238.4, 235.1, 30, '5m');
-    this.generateForLosingTrade('TRADE-005', 'NVDA', 'Momentum', 890.5, 875.3, 10, '15m');
-
-    this.generateForRejectedSignal('SIG-001', 'MeanReversion', 'AAPL', 'Daily loss limit at 3.5%', 0.78);
-    this.generateForRejectedSignal('SIG-002', 'Momentum', 'MSFT', 'Position already at max size', 0.85);
-    this.generateForRejectedSignal('SIG-003', 'ArbitrageNet', 'GOOGL', 'High correlation with existing position (0.92)', 0.72);
-    this.generateForRejectedSignal('SIG-004', 'MeanReversion', 'TSLA', 'Drawdown approaching limit', 0.81);
-
-    this.generateForSlippageEvent('AAPL', 'Momentum', 0.5, 1.25, 1000);
-    this.generateForSlippageEvent('MSFT', 'MeanReversion', 0.4, 0.95, 750);
-    this.generateForSlippageEvent('GOOGL', 'ArbitrageNet', 0.3, 0.72, 2000);
-    this.generateForSlippageEvent('TSLA', 'Momentum', 0.6, 1.5, 500);
-
-    this.generateForDrawdownEvent('MeanReversion', 0.035, 50000, 48250);
-    this.generateForDrawdownEvent('Momentum', 0.047, 100000, 95300);
-    this.generateForDrawdownEvent('ArbitrageNet', 0.025, 75000, 73125);
-
-    this.generateForRiskBreach('AAPL', 'MeanReversion', 'Max Position Size', 10000, 10850);
-    this.generateForRiskBreach('MSFT', 'Momentum', 'Daily Loss', 5000, 5450);
-    this.generateForRiskBreach('GOOGL', 'ArbitrageNet', 'Sector Concentration', 30000, 31200);
-
-    this.generateForModelFailure('MeanReversion', 'AAPL', 'NaN predictions detected, feature scaling mismatch', 4);
-    this.generateForModelFailure('Momentum', 'MSFT', 'Weights file corrupted, rollback required', 3);
+    // Initialize with empty buffer - post-mortems are generated from real trading events
   }
 }
 

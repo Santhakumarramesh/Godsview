@@ -1,15 +1,3 @@
-// @ts-nocheck
-/**
- * DESIGN SCAFFOLD — not wired into the live runtime.
- * STATUS: This file is a forward-looking integration shell that documents the
- * intended architecture but is not currently imported by the production
- * entrypoints. Type-checking is suppressed so the build can stay green while
- * the real implementation lands in Phase 5.
- *
- * REMOVE the `// @ts-nocheck` directive once Phase 5 is implemented and the
- * file is actually mounted in `src/index.ts` / `src/routes/index.ts`.
- */
-
 /**
  * market/index.ts — Phase 2 Market Data Foundation Export Hub
  *
@@ -25,9 +13,9 @@
 // ─── Normalized Schema Module ─────────────────────────────────────────────────
 export {
   DataSource,
-  type NormalizedBar,
-  type NormalizedQuote,
-  type NormalizedTrade,
+  NormalizedBar,
+  NormalizedQuote,
+  NormalizedTrade,
   DataSourceSchema,
   NormalizedBarSchema,
   NormalizedQuoteSchema,
@@ -45,11 +33,11 @@ export {
 
 // ─── Data Quality Module ───────────────────────────────────────────────────────
 export {
-  type QualityIssueSeverity,
-  type QualityIssue,
-  type BarQualityAnalysis,
-  type QualityReport,
-  type QualityConfig,
+  QualityIssueSeverity,
+  QualityIssue,
+  BarQualityAnalysis,
+  QualityReport,
+  QualityConfig,
   analyzeBarQuality,
   analyzeSeriesQuality,
   formatQualityReport,
@@ -59,10 +47,10 @@ export {
 
 // ─── Provider Failover Module ──────────────────────────────────────────────────
 export {
-  type ProviderHealth,
-  type FailoverDecision,
-  type FailoverConfig,
-  type FailoverStatus,
+  ProviderHealth,
+  FailoverDecision,
+  FailoverConfig,
+  FailoverStatus,
   recordSuccess,
   recordFailure,
   getProviderHealth,
@@ -82,9 +70,9 @@ export {
 
 // ─── Timestamp Synchronization Module ──────────────────────────────────────────
 export {
-  type MarketSession,
-  type SyncResult,
-  type BatchSyncResult,
+  MarketSession,
+  SyncResult,
+  BatchSyncResult,
   parseISOTimestamp,
   formatUTCISO,
   normalizeTimestamp,
@@ -103,11 +91,11 @@ export {
 
 // ─── Replay Storage Module ─────────────────────────────────────────────────────
 export {
-  type OrderBookLevel,
-  type OrderBookSnapshot,
-  type StorageMetrics,
-  type CompressionStats,
-  type ReplayStorageConfig,
+  OrderBookLevel,
+  OrderBookSnapshot,
+  StorageMetrics,
+  CompressionStats,
+  ReplayStorageConfig,
   storeBar,
   getBarsInRange,
   getLatestBar,
@@ -132,10 +120,10 @@ export {
 
 // ─── Cache Layer Module ────────────────────────────────────────────────────────
 export {
-  type CacheMetrics,
-  type CacheConfig,
-  type EvictionPolicy,
-  type CacheWarmerFn,
+  CacheMetrics,
+  CacheConfig,
+  EvictionPolicy,
+  CacheWarmerFn,
   get as cacheGet,
   set as cacheSet,
   has as cacheHas,
@@ -159,8 +147,8 @@ export {
 // ─── Data Normalizer Module (Phase 5) ──────────────────────────────────────
 export {
   DataNormalizer,
-  type NormalizedOrderBook,
-  type NormalizedTrade as DataNormalizerTrade,
+  NormalizedOrderBook,
+  NormalizedTrade as DataNormalizerTrade,
   DataIssueType,
   type IssuesSeverity,
   type DataIssue,
@@ -205,12 +193,12 @@ export {
 
 // ─── Existing Market Modules ──────────────────────────────────────────────────
 export {
-  type PriceLevel,
-  type OrderBookSnapshot as OrderBookSnapshotLegacy,
-  type OrderBookUpdate,
-  type LiquidityZone,
-  type MicrostructureSnapshot,
-  type OrderBookListener,
+  PriceLevel,
+  OrderBookSnapshot as OrderBookSnapshotLegacy,
+  OrderBookUpdate,
+  LiquidityZone,
+  MicrostructureSnapshot,
+  OrderBookListener,
 } from "./types";
 
 export { symbols, normalizeMarketSymbol, toAlpacaSlash } from "./symbols";

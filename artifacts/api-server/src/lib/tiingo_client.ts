@@ -243,42 +243,76 @@ async function fetchFinnhubDaily(
   }));
 }
 
-// ── Synthetic Fallback ─────────────────────────────────────────────────────
+// ── Yahoo Finance: Free Real Data (no API key) ───────────────────────────
 
-export function generateSyntheticBars(
+const YF_TF_MAP: Record<DataTimeframe, string> = {
+  "5min": "5m", "15min": "15m", "30min": "30m",
+  "1hour": "1h", "4hour": "1h", "1day": "1d",
+};
+
+// Yahoo Finance crypto tickers use -USD suffix (e.g., BTC-USD)
+function toYFTicker(symbol: string): string {
+  if (isCrypto(symbol)) {
+    // BTCUSD → BTC-USD
+    const base = symbol.replace(/USD$/i, "");
+    return `${base}-USD`;
+  }
+  return symbol;
+}
+
+async function fetchYahooFinance(
   symbol: string,
   tf: DataTimeframe,
-  count: number
-): OHLCVBar[] {
-  const basePrice = symbol.startsWith("BTC") ? 65_000
-    : symbol.startsWith("ETH") ? 3_200
-    : symbol.startsWith("SOL") ? 180
-    : symbol.startsWith("EUR") ? 1.08
-    : symbol.startsWith("GBP") ? 1.26
-    : 175;
+  lookback_days: number
+): Promise<OHLCVBar[]> {
+  const yfTicker = toYFTicker(symbol);
+  const interval = YF_TF_MAP[tf];
+  // Yahoo limits: intraday data only available for last 60 days for 5m/15m/30m
+  // 1h available for last 730 days, 1d unlimited
+  const range = tf === "1day" ? "1y"
+    : tf === "1hour" || tf === "4hour" ? "6mo"
+    : lookback_days <= 7 ? "5d" : "60d";
 
-  const volatility = basePrice * 0.008;
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yfTicker)}`
+    + `?interval=${interval}&range=${range}&includePrePost=false`;
+
+  const resp = await fetch(url, {
+    headers: {
+      "User-Agent": "GodsView/1.0",
+      "Accept": "application/json",
+    },
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!resp.ok) throw new Error(`Yahoo Finance HTTP ${resp.status}: ${yfTicker}`);
+  const data = await resp.json();
+
+  const result = data?.chart?.result?.[0];
+  if (!result || !result.timestamp || !result.indicators?.quote?.[0]) return [];
+
+  const timestamps: number[] = result.timestamp;
+  const quote = result.indicators.quote[0];
   const bars: OHLCVBar[] = [];
-  let price = basePrice;
 
-  const minsPerBar: Record<DataTimeframe, number> = {
-    "5min": 5, "15min": 15, "30min": 30,
-    "1hour": 60, "4hour": 240, "1day": 1440,
-  };
-  const msPerBar = minsPerBar[tf] * 60_000;
-  const now = Date.now();
-
-  for (let i = 0; i < count; i++) {
-    const change = (Math.random() - 0.495) * volatility;
-    const open   = price;
-    const close  = Math.max(price + change, price * 0.95);
-    const high   = Math.max(open, close) + Math.random() * volatility * 0.5;
-    const low    = Math.min(open, close) - Math.random() * volatility * 0.5;
-    const ts     = new Date(now - (count - i) * msPerBar).toISOString();
-    const vol    = Math.floor(Math.random() * 5_000 + 500);
-    bars.push({ timestamp: ts, open, high, low, close, volume: vol, source: "synthetic" });
-    price = close;
+  for (let i = 0; i < timestamps.length; i++) {
+    const o = quote.open?.[i];
+    const h = quote.high?.[i];
+    const l = quote.low?.[i];
+    const c = quote.close?.[i];
+    const v = quote.volume?.[i];
+    if (o == null || h == null || l == null || c == null) continue;
+    bars.push({
+      timestamp: new Date(timestamps[i] * 1000).toISOString(),
+      open: o, high: h, low: l, close: c,
+      volume: v ?? 0,
+      source: "tiingo" as const, // re-use existing source type for DB compat
+    });
   }
+
+  // If 4hour requested, aggregate 1h bars
+  if (tf === "4hour" && bars.length > 0) {
+    return aggregateBars(bars, 4);
+  }
+
   return bars;
 }
 
@@ -372,22 +406,39 @@ export async function getHistoricalBars(
     }
   }
 
-  // ── 4. Synthetic fallback ──────────────────────────────────────────────
-  const minsPerBar: Record<DataTimeframe, number> = {
-    "5min": 5, "15min": 15, "30min": 30,
-    "1hour": 60, "4hour": 240, "1day": 1440,
-  };
-  const count = Math.min(Math.floor((lookback_days * 24 * 60) / minsPerBar[tf]), 10_000);
-  // GUARDED: block synthetic fallback in live mode
-  const { guardSyntheticData } = await import("./data_safety_guard.js");
-  return guardSyntheticData(
-    `tiingo:${symbol}:${tf}`,
-    () => {
-      logger.warn({ symbol, tf, count }, "[tiingo-client] All APIs failed — using synthetic data");
-      return { bars: generateSyntheticBars(symbol, tf, count), source: "synthetic" as const, has_real_data: false };
-    },
-    `All market data APIs failed for ${symbol}/${tf}. Synthetic data blocked in live mode.`,
-  );
+  // ── 4. Yahoo Finance (free, no key needed) ─────────────────────────────
+  try {
+    const yfBars = await fetchYahooFinance(symbol, tf, lookback_days);
+    if (yfBars.length >= 20) {
+      logger.info({ symbol, tf, count: yfBars.length }, "[yahoo-finance] Free real bars fetched");
+      return { bars: yfBars, source: "yahoo", has_real_data: true };
+    }
+  } catch (err) {
+    logger.warn({ err, symbol, tf }, "[yahoo-finance] Fetch failed");
+  }
+
+  // ── 5. Alpaca free crypto fallback (no API key needed) ────────────────
+  if (isCrypto(symbol)) {
+    try {
+      const { getBars } = await import("./alpaca.js");
+      const tfMap: Record<string, string> = { "1day": "1Day", "1hour": "1Hour", "5min": "5Min", "15min": "15Min", "30min": "30Min", "4hour": "4Hour" };
+      const alpacaBars = await getBars(symbol, (tfMap[tf] ?? "1Day") as any, 200);
+      if (alpacaBars.length > 0) {
+        const converted = alpacaBars.map((b: any) => ({
+          Timestamp: b.Timestamp ?? b.t, Open: b.Open ?? b.o, High: b.High ?? b.h,
+          Low: b.Low ?? b.l, Close: b.Close ?? b.c, Volume: b.Volume ?? b.v,
+        }));
+        logger.info({ symbol, tf, count: converted.length }, "[alpaca-crypto] Free fallback bars fetched");
+        return { bars: converted, source: "alpaca" as const, has_real_data: true };
+      }
+    } catch (err) {
+      logger.warn({ err, symbol }, "[alpaca-crypto] Free fallback failed");
+    }
+  }
+
+  // ── NO SYNTHETIC DATA — return empty result ───────────────────────────
+  logger.error({ symbol, tf }, "[tiingo-client] All real data APIs exhausted — returning empty (no synthetic data)");
+  return { bars: [], source: "none" as const, has_real_data: false };
 }
 
 // ── Batch fetch: multiple symbols ─────────────────────────────────────────
@@ -405,15 +456,9 @@ export async function getBarsForSymbols(
       results.set(symbol, result);
       await new Promise(r => setTimeout(r, 300));
     } catch (err) {
-      logger.error({ err, symbol }, "[tiingo-client] Failed to fetch bars");
-      // GUARDED: block synthetic fallback in live mode
-      const { guardSyntheticData } = await import("./data_safety_guard.js");
-      const fallback = guardSyntheticData(
-        `tiingo_batch:${symbol}:${tf}`,
-        () => ({ bars: generateSyntheticBars(symbol, tf, 500), source: "synthetic" as const, has_real_data: false }),
-        `Batch fetch failed for ${symbol}/${tf}. Synthetic data blocked in live mode.`,
-      );
-      results.set(symbol, fallback);
+      logger.error({ err, symbol }, "[tiingo-client] Failed to fetch bars — no synthetic fallback");
+      // NO SYNTHETIC DATA — return empty result for this symbol
+      results.set(symbol, { bars: [], source: "none", has_real_data: false });
     }
   }
 

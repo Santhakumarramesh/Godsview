@@ -109,7 +109,8 @@ for (const eng of ENGINE_LIST) {
   engineHealth.set(eng, {
     engine: eng, status: "HEALTHY",
     lastHeartbeat: new Date().toISOString(),
-    latencyMs: Math.random() * 50, errorRate: 0, details: "Running",
+    latencyMs: 0, // Real values come from actual engine health monitoring
+    errorRate: 0, details: "Running",
   });
 }
 

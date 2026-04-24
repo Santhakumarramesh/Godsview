@@ -78,8 +78,8 @@ router.post("/api/side-by-side/start", (req, res) => {
           const s = getSideBySideSnapshot();
           if (!s || s.status !== "running") break;
           const trades = step * 3;
-          const wins = Math.round(trades * (0.55 + Math.random() * 0.15));
-          const pnl = (wins / trades - 0.5) * step * 2;
+          const wins = 0;
+          const pnl = 0;
           updateBacktestProgress(trades, wins, pnl, trades * 2, (step / totalSteps) * 100);
         }
       } catch {

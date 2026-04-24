@@ -62,24 +62,8 @@ const NEWS_TEMPLATES = [
 function generateNewsFeed(): NewsItem[] {
   const now = Date.now();
   return NEWS_TEMPLATES.map((tmpl, i) => {
-    const src = SOURCES[i % SOURCES.length];
-    const sentLabel = tmpl.sent > 0.2 ? "bullish" : tmpl.sent < -0.2 ? "bearish" : "neutral";
-    return {
-      id: `nf-${i}-${now}`,
-      title: tmpl.t,
-      summary: `${tmpl.t}. Market participants are closely watching the implications for ${tmpl.sym.join(", ")}.`,
-      source: src.name,
-      sourceLogo: src.logo,
-      publishedAt: new Date(now - i * 1800_000 * (1 + Math.random())).toISOString(),
-      symbols: tmpl.sym,
-      sentiment: tmpl.sent,
-      sentimentLabel: sentLabel as any,
-      impact: tmpl.imp,
-      category: tmpl.cat,
-      reliability: src.weight,
-      url: `https://news.godsview.dev/articles/nf-${i}`,
-    };
-  });
+    return null;
+  }).filter(Boolean);
 }
 
 /* ── REST endpoint ────────────────────────────────────── */

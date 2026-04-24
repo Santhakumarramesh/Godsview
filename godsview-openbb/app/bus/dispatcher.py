@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import fnmatch
-import inspect
-import logging
 from collections import defaultdict
 from threading import RLock
 from typing import Any, Callable
+import fnmatch
+import inspect
+import logging
 
 from .events import BrainEvent
 
@@ -32,9 +32,7 @@ class EventDispatcher:
         with self._lock:
             if topic not in self._handlers:
                 return
-            self._handlers[topic] = [
-                h for h in self._handlers[topic] if h is not handler
-            ]
+            self._handlers[topic] = [h for h in self._handlers[topic] if h is not handler]
             if not self._handlers[topic]:
                 del self._handlers[topic]
 
@@ -50,10 +48,7 @@ class EventDispatcher:
                 result = handler(event)
                 if inspect.isawaitable(result):
                     # Keep dispatcher sync and explicit for now.
-                    logger.warning(
-                        "Async handler returned awaitable for topic=%s; ignored await",
-                        event.event_type,
-                    )
+                    logger.warning("Async handler returned awaitable for topic=%s; ignored await", event.event_type)
                 called += 1
             except Exception:  # noqa: BLE001
                 logger.exception("Event handler failed for topic=%s", event.event_type)
@@ -85,3 +80,4 @@ def get_dispatcher() -> EventDispatcher:
     if _DISPATCHER is None:
         _DISPATCHER = EventDispatcher()
     return _DISPATCHER
+

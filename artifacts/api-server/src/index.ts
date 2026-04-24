@@ -12,11 +12,9 @@ import { ScannerScheduler } from "./lib/scanner_scheduler";
 import { startReconciler, stopReconciler } from "./lib/fill_reconciler";
 import { alpacaAccountStream, wireAccountStreamToReconciler } from "./lib/alpaca_account_stream";
 import { startPaperValidationLoop, stopPaperValidationLoop } from "./lib/paper_validation_loop";
+import { startLearningLoop, stopLearningLoop } from "./lib/continuous_learning";
 import { validateOrExit } from "./lib/ops/startup_validator";
 import { initGracefulShutdown } from "./lib/ops/graceful_shutdown";
-import { GovernanceScheduler } from "./lib/governance/governance_scheduler";
-import { CalibrationScheduler } from "./lib/eval/calibration_scheduler";
-import { sseAlertRouter } from "./lib/alerts/sse_alert_router";
 
 // ── Validate environment before anything else ───────────────────
 validateEnv();
@@ -82,54 +80,72 @@ const server = app.listen(port, (err) => {
   const systemMode = process.env.GODSVIEW_SYSTEM_MODE || "paper";
   startSession(systemMode).catch((err) => logger.error({ err }, "Failed to start trading session"));
 
+  // ── Historical data seeder: populate accuracy_results with real market data ──
+  (async () => {
+    try {
+      const { seedHistoricalData } = await import("./lib/historical_seeder.js");
+      const result = await seedHistoricalData();
+      if (result.skipped) {
+        logger.info({ existingRows: result.existingRows }, "Historical seeder: sufficient data exists — skipped");
+      } else {
+        logger.info({ seeded: result.seededRows, symbols: result.symbols_processed, real: result.has_real_data, ms: result.durationMs },
+          "Historical seeder: real data bootstrap complete");
+      }
+    } catch (err: any) {
+      logger.error({ err: err?.message }, "Historical seeder failed (non-fatal)");
+    }
+    // After seeding, also seed brain entities
+    try {
+      const { seedBrainEntities } = await import("./lib/brain_seeder.js");
+      await seedBrainEntities();
+      logger.info("Brain entities seeded");
+    } catch (err: any) {
+      logger.warn({ err: err?.message }, "Brain entity seeder failed (non-fatal)");
+    }
+  })();
+
   // Train ML model from accuracy_results data (non-blocking)
   trainModel().catch((err) => logger.error({ err }, "ML model training failed"));
 
+  // ── Market data mode detection ─────────────────────────────────────────────
+  // Crypto data is FREE (no keys needed) via Alpaca v1beta3/crypto/us
+  // Stock data requires PK/AK-prefixed trading API keys
+  const hasAlpacaKeys = !!(process.env.ALPACA_API_KEY || process.env.ALPACA_KEY_ID);
+  const CRYPTO_SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD", "DOGE/USD", "AVAX/USD", "LINK/USD"];
+  const STOCK_SYMBOLS = ["SPY", "QQQ", "AAPL", "TSLA", "NVDA", "AMZN"];
+
   // Start Alpaca market data stream (non-blocking — feeds candle SSE)
-  if (process.env.ALPACA_API_KEY) {
+  if (hasAlpacaKeys) {
     alpacaStream.start();
-    logger.info("Alpaca market data stream started");
+    logger.info("Alpaca market data stream started (full: stocks + crypto)");
   } else {
-    logger.warn("ALPACA_API_KEY not set — market data stream disabled");
+    logger.info("No Alpaca trading keys — running in CRYPTO-ONLY mode (free data)");
   }
 
-  // Start fill reconciler (Phase 11A) — polls Alpaca for fills every 10s,
-  // matches to brain positions, computes realized PnL, feeds circuit breaker
-  if (process.env.ALPACA_API_KEY || process.env.ALPACA_KEY_ID) {
+  // Start fill reconciler — requires trading keys for order matching
+  if (hasAlpacaKeys) {
     startReconciler();
     logger.info("Fill reconciler started (10s poll interval)");
-
-    // Phase 12A — real-time fill events via account WebSocket (supplements polling)
     wireAccountStreamToReconciler();
     alpacaAccountStream.start();
     logger.info("Alpaca account stream started (real-time trade_updates)");
   } else {
-    logger.warn("Alpaca not configured — fill reconciler disabled");
+    logger.info("Fill reconciler disabled (no trading keys — paper mode only)");
   }
 
-  // Start macro intelligence background refresh (YoungTraderWealth Layer 0 + 0.5)
-  // Only starts if Alpaca is configured (needs market data for feed)
-  if (process.env.ALPACA_API_KEY || process.env.ALPACA_KEY_ID) {
-    MacroContextService.getInstance().start();
-    logger.info("Macro intelligence feed started (5-min refresh)");
-  } else {
-    logger.warn("Alpaca not configured — macro feed running in neutral placeholder mode");
-  }
+  // Start macro intelligence — works in both modes (crypto provides market context)
+  MacroContextService.getInstance().start();
+  logger.info("Macro intelligence feed started (5-min refresh)");
 
-  // Start autonomous watchlist scanner (Phase 19)
-  // Requires Alpaca keys to fetch live bars; skips gracefully otherwise
-  if (process.env.ALPACA_API_KEY || process.env.ALPACA_KEY_ID) {
-    ScannerScheduler.getInstance().start();
-    logger.info("Watchlist scanner started (auto-scan enabled)");
-  } else {
-    logger.warn("Alpaca not configured — watchlist scanner requires market data and is disabled");
-  }
+  // Start watchlist scanner — works with crypto symbols even without stock keys
+  ScannerScheduler.getInstance().start();
+  logger.info("Watchlist scanner started (auto-scan enabled)");
 
-  // ── Phase 10B: Autonomous Brain Auto-Start ────────────────────────────────
-  // Starts the brain automatically if BRAIN_AUTOSTART=true and Alpaca is configured.
-  // Loads symbols from the watchlist; brain will boot all Phase 8 subsystems itself.
-  if ((process.env.ALPACA_API_KEY || process.env.ALPACA_KEY_ID) &&
-      process.env.BRAIN_AUTOSTART === "true") {
+  // ── Autonomous Brain Auto-Start ────────────��──────────────────────────────
+  // Now starts automatically even without Alpaca trading keys.
+  // In crypto-only mode, uses free crypto symbols. With keys, uses full watchlist.
+  const brainAutoStart = (process.env.BRAIN_AUTOSTART ?? "true") !== "false";
+  if (brainAutoStart) {
     setTimeout(async () => {
       try {
         const { listEnabledSymbols } = await import("./lib/watchlist.js");
@@ -147,19 +163,27 @@ const server = app.listen(port, (err) => {
         };
 
         const enabled = listEnabledSymbols().map((e: any) => e.symbol);
-        const symbols = enabled.length > 0 ? enabled : ["SPY", "QQQ", "AAPL", "TSLA", "NVDA", "BTC/USD"];
+        let symbols: string[];
+        if (enabled.length > 0) {
+          symbols = enabled;
+        } else if (hasAlpacaKeys) {
+          symbols = [...STOCK_SYMBOLS, ...CRYPTO_SYMBOLS];
+        } else {
+          // Crypto-only mode — free market data, no API keys needed
+          symbols = CRYPTO_SYMBOLS;
+        }
 
         if (!autonomousBrain.status.running) {
           autonomousBrain.start(symbols, buildInput, runFullBrainCycle, runBacktestAndChartPipeline);
           brainRulebook.start();
-          logger.info({ symbols }, "Autonomous Brain auto-started");
+          logger.info({ symbols, mode: hasAlpacaKeys ? "full" : "crypto-only" }, "Autonomous Brain auto-started");
         }
       } catch (err: any) {
         logger.warn({ err: err?.message }, "Brain auto-start failed — manual start required");
       }
     }, 8_000); // 8s delay — let server fully initialize first
   } else {
-    logger.info("Brain auto-start disabled (set BRAIN_AUTOSTART=true to enable)");
+    logger.info("Brain auto-start disabled (set BRAIN_AUTOSTART=false to disable)");
   }
 
   // Phase 15: paper validation loop (predicted vs realized in paper mode)
@@ -169,41 +193,9 @@ const server = app.listen(port, (err) => {
       .catch((err) => logger.error({ err }, "Paper validation loop failed to start"));
   }
 
-  // Phase 5: governance scheduler (auto promotion + demotion gate evaluator)
-  if ((process.env.GOVERNANCE_AUTOSTART ?? "true") !== "false") {
-    try {
-      GovernanceScheduler.getInstance().start();
-      logger.info("Governance scheduler started (auto promotion + demotion evaluator)");
-    } catch (err: any) {
-      logger.error({ err: err?.message }, "Governance scheduler failed to start");
-    }
-  } else {
-    logger.info("Governance scheduler disabled (GOVERNANCE_AUTOSTART=false)");
-  }
-
-  // Phase 5: calibration scheduler (hourly snapshot + drift detection cron)
-  if ((process.env.CALIBRATION_AUTOSTART ?? "true") !== "false") {
-    try {
-      CalibrationScheduler.getInstance().start();
-      logger.info("Calibration scheduler started (hourly snapshot + drift detection)");
-    } catch (err: any) {
-      logger.error({ err: err?.message }, "Calibration scheduler failed to start");
-    }
-  } else {
-    logger.info("Calibration scheduler disabled (CALIBRATION_AUTOSTART=false)");
-  }
-
-  // Phase 6: SSE alert router (bridges Phase 5 events to webhook + scans SLOs)
-  if ((process.env.SSE_ALERT_ROUTER_AUTOSTART ?? "true") !== "false") {
-    try {
-      sseAlertRouter.start();
-      logger.info("SSE alert router started (Phase 5 events → webhook + SLO burn-rate scanner)");
-    } catch (err: any) {
-      logger.error({ err: err?.message }, "SSE alert router failed to start");
-    }
-  } else {
-    logger.info("SSE alert router disabled (SSE_ALERT_ROUTER_AUTOSTART=false)");
-  }
+  // Continuous Learning Loop — auto-retrain ML model, reconcile trade outcomes,
+  // ingest backtest results, detect drift, promote strategies
+  startLearningLoop();
 });
 
 // ── Graceful shutdown with connection draining ──────────────────
@@ -271,40 +263,16 @@ onShutdown(async () => {
   alpacaAccountStream.stop();
 });
 
+// Register cleanup: stop continuous learning loop
+onShutdown(async () => {
+  logger.info("Stopping continuous learning loop...");
+  stopLearningLoop();
+});
+
 // Register cleanup: stop paper validation loop
 onShutdown(async () => {
   logger.info("Stopping paper validation loop...");
   stopPaperValidationLoop();
-});
-
-// Phase 5: stop governance scheduler
-onShutdown(async () => {
-  try {
-    logger.info("Stopping governance scheduler...");
-    GovernanceScheduler.getInstance().stop();
-  } catch (err: any) {
-    logger.warn({ err: err?.message }, "Governance scheduler stop failed");
-  }
-});
-
-// Phase 5: stop calibration scheduler
-onShutdown(async () => {
-  try {
-    logger.info("Stopping calibration scheduler...");
-    CalibrationScheduler.getInstance().stop();
-  } catch (err: any) {
-    logger.warn({ err: err?.message }, "Calibration scheduler stop failed");
-  }
-});
-
-// Phase 6: stop SSE alert router
-onShutdown(async () => {
-  try {
-    logger.info("Stopping SSE alert router...");
-    sseAlertRouter.stop();
-  } catch (err: any) {
-    logger.warn({ err: err?.message }, "SSE alert router stop failed");
-  }
 });
 
 // Register cleanup: end trading session

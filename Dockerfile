@@ -98,6 +98,9 @@ COPY --from=build /app/lib/api-zod/src ./lib/api-zod/src
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 
+# Create runtime directories (writable by non-root user)
+RUN mkdir -p /app/.runtime/persistent && chown -R godsview:godsview /app/.runtime
+
 # Switch to non-root user
 USER godsview
 

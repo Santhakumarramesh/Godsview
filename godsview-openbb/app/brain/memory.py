@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import json
 from dataclasses import asdict
 from pathlib import Path
+import json
 from typing import Any
 
 from app.brain.schema import (
@@ -26,9 +26,7 @@ class BrainMemoryStore:
     """
 
     def __init__(self, file_path: Path | None = None) -> None:
-        self.file_path = file_path or (
-            ROOT_DIR / "data" / "processed" / "brain_store.json"
-        )
+        self.file_path = file_path or (ROOT_DIR / "data" / "processed" / "brain_store.json")
         self.file_path.parent.mkdir(parents=True, exist_ok=True)
         self._state = self._load_state()
 
@@ -68,9 +66,7 @@ class BrainMemoryStore:
 
     def _atomic_write(self, payload: dict[str, Any]) -> None:
         temp_path = self.file_path.with_suffix(f"{self.file_path.suffix}.tmp")
-        temp_path.write_text(
-            json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8"
-        )
+        temp_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
         temp_path.replace(self.file_path)
 
     def _flush(self) -> None:
@@ -190,9 +186,7 @@ class BrainMemoryStore:
             outcome=str(memory.get("outcome") or "open").lower(),
         )
 
-    def _increment_trade_stats(
-        self, *, setup: str | None, regime: str | None, outcome: str
-    ) -> None:
+    def _increment_trade_stats(self, *, setup: str | None, regime: str | None, outcome: str) -> None:
         stats = self._state["stats"]
         stats["trades_total"] = int(stats.get("trades_total", 0)) + 1
 
@@ -204,12 +198,8 @@ class BrainMemoryStore:
         setup_key = (setup or "unknown").strip().lower()
         regime_key = (regime or "unknown").strip().lower()
 
-        setup_bucket = stats["setups"].setdefault(
-            setup_key, {"total": 0, "wins": 0, "losses": 0}
-        )
-        regime_bucket = stats["regimes"].setdefault(
-            regime_key, {"total": 0, "wins": 0, "losses": 0}
-        )
+        setup_bucket = stats["setups"].setdefault(setup_key, {"total": 0, "wins": 0, "losses": 0})
+        regime_bucket = stats["regimes"].setdefault(regime_key, {"total": 0, "wins": 0, "losses": 0})
 
         setup_bucket["total"] += 1
         regime_bucket["total"] += 1
@@ -220,3 +210,4 @@ class BrainMemoryStore:
         elif outcome == "loss":
             setup_bucket["losses"] += 1
             regime_bucket["losses"] += 1
+

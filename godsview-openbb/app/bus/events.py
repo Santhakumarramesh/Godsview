@@ -46,3 +46,4 @@ class ExecutionEvent(BrainEvent):
 class EvolutionEvent(BrainEvent):
     event_type: str = "evolution.update"
     run_id: str | None = None
+

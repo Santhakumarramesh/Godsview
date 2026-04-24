@@ -152,46 +152,6 @@ export function validateTradeSequenceIntegrity(trades: TradeResult[], expectedCh
   return true;
 }
 
-/**
- * Generate synthetic 1-minute bars for backtesting when real bars aren't available.
- * Uses a random walk around a base price with realistic OHLCV structure.
- */
-function generateSyntheticBars(basePrice: number, count: number, direction: "long" | "short"): AlpacaBar[] {
-  const bars: AlpacaBar[] = [];
-  let price = basePrice || 100;
-  const drift = direction === "long" ? 0.0001 : -0.0001;
-  for (let i = 0; i < count; i++) {
-    const change = (Math.random() - 0.48 + drift) * price * 0.002;
-    const open = price;
-    const close = price + change;
-    const high = Math.max(open, close) + Math.random() * price * 0.001;
-    const low = Math.min(open, close) - Math.random() * price * 0.001;
-    const timestamp = new Date(Date.now() - (count - i) * 60000).toISOString();
-    const volume = Math.floor(Math.random() * 1000 + 100);
-    const tradeCount = Math.floor(Math.random() * 50 + 5);
-    const vwap = (open + close + high + low) / 4;
-    bars.push({
-      t: timestamp,
-      o: open,
-      h: high,
-      l: low,
-      c: close,
-      v: volume,
-      vw: vwap,
-      n: tradeCount,
-      Timestamp: timestamp,
-      Open: open,
-      High: high,
-      Low: low,
-      Close: close,
-      Volume: volume,
-      VWAP: vwap,
-    });
-    price = close;
-  }
-  return bars;
-}
-
 // ── Types ──────────────────────────────────────────────────────────────────
 
 export interface BacktestConfig {
@@ -406,10 +366,8 @@ export async function runBacktest(config: BacktestConfig): Promise<BacktestResul
   const { lookback_days, initial_equity, min_signals = 50 } = config;
 
   // Fetch historical signals from accuracy_results
-  // IMPORTANT: pull operators from @workspace/db so we share a single
-  // drizzle-orm peer-resolution (pnpm hashes peers → multiple drizzle-orm
-  // copies → PgColumn incompatibility with SQLWrapper/AnyColumn).
-  const { db, accuracyResultsTable, and, or, eq, gte, isNotNull } = await import("@workspace/db");
+  const { db, accuracyResultsTable } = await import("@workspace/db");
+  const { and, or, eq, gte, isNotNull } = await import("drizzle-orm");
 
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - lookback_days);
@@ -464,25 +422,15 @@ export async function runBacktest(config: BacktestConfig): Promise<BacktestResul
     if (!barTime) return null;
 
     // ── STRICT REPLAY ────────────────────────────────────────────────────────
-    // Fetch 4 hours of 1m bars starting from signal time
-    // Approximate base prices for synthetic fallback
-    const APPROX_PRICES: Record<string, number> = {
-      BTCUSD: 60000, ETHUSD: 3000, SOLUSD: 150,
-      SPY: 520, QQQ: 440, IWM: 200, AAPL: 180, MSFT: 420,
-      NVDA: 900, TSLA: 250, AMZN: 190, META: 500, GLD: 220, TLT: 95,
-    };
+    // Fetch 4 hours of 1m bars starting from signal time — REAL DATA ONLY
     let bars: Awaited<ReturnType<typeof getBars>>;
     try {
       bars = await getBars(symbol, "1Min", 240, barTime.toISOString());
-    } catch {
-      // No Alpaca key or API error — generate synthetic 1m bars for replay
-      // GUARDED: blocked in live mode to prevent fake data contaminating decisions
-      const { guardSyntheticData } = await import("./data_safety_guard.js");
-      bars = guardSyntheticData(
-        `backtester:${symbol}`,
-        () => generateSyntheticBars(APPROX_PRICES[symbol] ?? 100, 240, direction),
-        `Cannot backtest ${symbol}: real market data unavailable and synthetic data blocked in live mode`,
-      );
+    } catch (err: any) {
+      // NO SYNTHETIC DATA — real market data required for backtesting
+      const { logger } = await import("./logger.js");
+      logger.warn({ symbol, err: err?.message }, "Backtester: no real bars available — skipping signal");
+      return null;
     }
     if (bars.length === 0) return null;
 
@@ -604,6 +552,31 @@ export async function runBacktest(config: BacktestConfig): Promise<BacktestResul
     baseline.wins, baseline.trades_taken,
     si.wins, si.trades_taken,
   );
+
+  // ── Bidirectional Learning: feed backtest results into continuous learning ──
+  try {
+    const { ingestBacktestResults } = await import("./continuous_learning.js");
+    const ingestPayload = validTrades.map(t => ({
+      symbol: t.setup_type.includes("/") ? t.setup_type : config.symbols?.[0] ?? "UNKNOWN",
+      setup_type: t.setup_type,
+      direction: t.direction,
+      regime: t.regime,
+      structure_score: t.baseline_quality,
+      order_flow_score: t.si_edge_score ?? 0.5,
+      recall_score: t.si_win_prob ?? 0.5,
+      final_quality: t.enhanced_quality ?? t.baseline_quality,
+      outcome: t.outcome as "win" | "loss",
+      entry_price: t.entry_price,
+      stop_loss: t.stop_loss,
+      take_profit: t.take_profit,
+      realized_pnl: t.pnl_pct,
+    }));
+    await ingestBacktestResults(ingestPayload);
+  } catch (err: any) {
+    // Non-fatal — learning ingestion should never block backtest results
+    const { logger } = await import("./logger.js");
+    logger.warn({ err: err?.message }, "[backtester] Failed to ingest results into learning loop");
+  }
 
   return {
     config,
@@ -1343,8 +1316,8 @@ export async function runWalkForwardBacktest(config: WalkForwardConfig): Promise
     return cached.result;
   }
 
-  // Pull operators from @workspace/db to keep a single drizzle-orm peer copy.
-  const { db, accuracyResultsTable, and, asc, eq, gte, or } = await import("@workspace/db");
+  const { db, accuracyResultsTable } = await import("@workspace/db");
+  const { and, asc, eq, gte, or } = await import("drizzle-orm");
 
   const cutoff = new Date(Date.now() - normalized.lookback_days * DAY_MS);
   const conditions: any[] = [

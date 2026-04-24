@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { ApiError } from "@gv/api-client";
+import { api } from "@/lib/api";
 
 export default function LoginPage() {
   const { signIn } = useAuth();

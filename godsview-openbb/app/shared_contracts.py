@@ -6,7 +6,6 @@ Each model here corresponds to a Zod schema in:
 
 RULE: Any change in the TypeScript file MUST be mirrored here.
 """
-
 from __future__ import annotations
 
 from datetime import datetime
@@ -16,14 +15,13 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-# ── Signal Contract ──────────────────────────────────────────────────────────
 
+# ── Signal Contract ──────────────────────────────────────────────────────────
 
 class SignalDirection(str, Enum):
     long = "long"
     short = "short"
     flat = "flat"
-
 
 class SourceLayer(str, Enum):
     smc = "smc"
@@ -32,7 +30,6 @@ class SourceLayer(str, Enum):
     regime = "regime"
     composite = "composite"
     manual = "manual"
-
 
 class Signal(BaseModel):
     signal_id: UUID
@@ -52,11 +49,9 @@ class Signal(BaseModel):
 
 # ── Order Contract ───────────────────────────────────────────────────────────
 
-
 class OrderSide(str, Enum):
     buy = "buy"
     sell = "sell"
-
 
 class OrderType(str, Enum):
     market = "market"
@@ -64,13 +59,11 @@ class OrderType(str, Enum):
     stop = "stop"
     stop_limit = "stop_limit"
 
-
 class TimeInForce(str, Enum):
     day = "day"
     gtc = "gtc"
     ioc = "ioc"
     fok = "fok"
-
 
 class OrderStatus(str, Enum):
     pending = "pending"
@@ -79,7 +72,6 @@ class OrderStatus(str, Enum):
     filled = "filled"
     cancelled = "cancelled"
     rejected = "rejected"
-
 
 class Order(BaseModel):
     order_id: UUID
@@ -100,11 +92,9 @@ class Order(BaseModel):
 
 # ── Position Contract ────────────────────────────────────────────────────────
 
-
 class PositionSide(str, Enum):
     long = "long"
     short = "short"
-
 
 class Position(BaseModel):
     position_id: UUID
@@ -123,7 +113,6 @@ class Position(BaseModel):
 
 # ── Risk Assessment Contract ─────────────────────────────────────────────────
 
-
 class RiskAssessment(BaseModel):
     assessment_id: UUID
     timestamp: datetime
@@ -140,7 +129,6 @@ class RiskAssessment(BaseModel):
 
 # ── Market Data Tick Contract ────────────────────────────────────────────────
 
-
 class MarketTick(BaseModel):
     symbol: str = Field(min_length=1)
     timestamp: datetime
@@ -152,7 +140,6 @@ class MarketTick(BaseModel):
 
 
 # ── OHLCV Bar Contract ──────────────────────────────────────────────────────
-
 
 class OHLCVBar(BaseModel):
     symbol: str = Field(min_length=1)
@@ -167,7 +154,6 @@ class OHLCVBar(BaseModel):
 
 # ── Brain Event Contract ────────────────────────────────────────────────────
 
-
 class BrainEventType(str, Enum):
     signal = "signal"
     decision = "decision"
@@ -177,13 +163,11 @@ class BrainEventType(str, Enum):
     status = "status"
     heartbeat = "heartbeat"
 
-
 class Severity(str, Enum):
     info = "info"
     warning = "warning"
     error = "error"
     critical = "critical"
-
 
 class BrainEvent(BaseModel):
     event_id: UUID
@@ -196,7 +180,6 @@ class BrainEvent(BaseModel):
 
 
 # ── Strategy Performance Contract ────────────────────────────────────────────
-
 
 class StrategyPerformance(BaseModel):
     strategy_id: str

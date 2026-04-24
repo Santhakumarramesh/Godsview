@@ -5,7 +5,6 @@ These tests run the entire signal detection → backtest → ML pipeline using
 only in-process calls (no actual HTTP). They verify the pieces fit together
 and the complete data flow produces valid outputs.
 """
-
 from __future__ import annotations
 
 import math
@@ -15,17 +14,17 @@ import pytest
 
 from services.backtest_service.engine import BacktestConfig, run_backtest
 from services.backtest_service.metrics import compute_metrics
-from services.feature_service.builder import FEATURE_NAMES, build_features
-from services.feature_service.signal_detector import batch_detect, detect_signal
+from services.feature_service.builder import build_features, FEATURE_NAMES
+from services.feature_service.signal_detector import detect_signal, batch_detect
 from services.market_data_service.loaders.alpaca_loader import _generate_synthetic
-from services.market_data_service.validator import quick_validate, validate_bars
+from services.market_data_service.validator import validate_bars, quick_validate
 from services.shared.types import BacktestResult, Direction, TradeOutcome
 from services.tests.conftest import make_bars
+
 
 # ---------------------------------------------------------------------------
 # Full pipeline: synthetic bars → validate → features → signal → backtest
 # ---------------------------------------------------------------------------
-
 
 class TestFullPipeline:
     def test_synthetic_bars_pass_validation(self):
@@ -121,7 +120,6 @@ class TestFullPipeline:
 # Feature → metrics end-to-end
 # ---------------------------------------------------------------------------
 
-
 class TestFeatureMetricsIntegration:
     def test_feature_count_matches_names(self):
         bars = make_bars(200)
@@ -146,7 +144,6 @@ class TestFeatureMetricsIntegration:
 # Compute metrics with synthetic trade streams
 # ---------------------------------------------------------------------------
 
-
 class TestComputeMetricsIntegration:
     def _build_equity(self, pnl_list: list[float], start: float = 10_000.0):
         equity = start
@@ -157,21 +154,18 @@ class TestComputeMetricsIntegration:
         return curve
 
     def test_positive_pf_scenario(self):
-        from services.shared.types import Trade
         from services.tests.conftest import make_bar
+        from services.shared.types import Trade, TradeOutcome
+        from datetime import datetime, timezone
 
         pnl_list = [200, -80, 150, -60, 300, -100]
         trades = []
         for pnl in pnl_list:
             outcome = TradeOutcome.WIN if pnl > 0 else TradeOutcome.LOSS
             t = Trade(
-                id="t1",
-                signal_id="s1",
-                symbol="AAPL",
+                id="t1", signal_id="s1", symbol="AAPL",
                 direction=Direction.LONG,
-                entry_price=100.0,
-                stop_price=95.0,
-                target_price=110.0,
+                entry_price=100.0, stop_price=95.0, target_price=110.0,
                 size=1.0,
                 entry_time=datetime.now(timezone.utc),
                 exit_time=datetime.now(timezone.utc),
@@ -194,13 +188,10 @@ class TestComputeMetricsIntegration:
 # Validator edge cases
 # ---------------------------------------------------------------------------
 
-
 class TestValidatorEdgeCases:
     def test_all_invalid_returns_empty(self):
-        import math
-
         from services.tests.conftest import make_bar
-
+        import math
         bad_bars = [make_bar(close=float("nan")) for _ in range(10)]
         cleaned, report = validate_bars(bad_bars)
         assert len(cleaned) == 0

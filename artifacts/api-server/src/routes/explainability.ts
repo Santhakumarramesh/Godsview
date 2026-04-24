@@ -163,7 +163,7 @@ router.get("/post-mortems/aggregate", (_req: Request, res: Response) => {
       },
       hourlyDistribution: Array.from({ length: 24 }, (_, h) => ({
         hour: h,
-        count: h >= 9 && h <= 16 ? Math.floor(Math.random() * 5) + 1 : 0,
+        count: 0,
       })),
     };
 

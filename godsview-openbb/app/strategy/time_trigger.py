@@ -6,9 +6,10 @@ from zoneinfo import ZoneInfo
 
 from app.config import settings
 
+
 SESSION_WINDOWS = {
-    "ASIAN": (0, 4),  # 00:00-03:59
-    "LONDON": (3, 8),  # 03:00-07:59
+    "ASIAN": (0, 4),      # 00:00-03:59
+    "LONDON": (3, 8),     # 03:00-07:59
     "NEW_YORK": (8, 12),  # 08:00-11:59
 }
 
@@ -24,9 +25,7 @@ def evaluate_time_window(now: datetime | None = None) -> dict[str, Any]:
             active_session = name
             break
 
-    allowlist = {
-        s.strip().upper() for s in settings.allowed_sessions.split(",") if s.strip()
-    }
+    allowlist = {s.strip().upper() for s in settings.allowed_sessions.split(",") if s.strip()}
     allowed = active_session in allowlist
     return {
         "timezone": settings.session_timezone,
@@ -35,3 +34,4 @@ def evaluate_time_window(now: datetime | None = None) -> dict[str, Any]:
         "allowed": allowed,
         "allowlist": sorted(list(allowlist)),
     }
+

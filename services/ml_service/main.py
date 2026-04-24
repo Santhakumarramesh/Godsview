@@ -4,7 +4,6 @@ GodsView v2 — ML Service
 FastAPI service for model training (XGBoost), inference, model registry,
 and MLflow experiment tracking.
 """
-
 from __future__ import annotations
 
 import asyncio
@@ -12,16 +11,16 @@ import time
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from services.ml_service.models.registry import ModelEntry, registry
-from services.ml_service.predictor import predict
 from services.shared.config import cfg
 from services.shared.http_client import service_client
 from services.shared.logging import configure_structlog, get_logger
-from services.shared.types import Direction, HealthResponse, Signal, SignalType
+from services.shared.types import HealthResponse, Signal, Direction, SignalType
+from services.ml_service.models.registry import registry, ModelEntry
+from services.ml_service.predictor import predict
 
 log = get_logger(__name__)
 _STARTED_AT = 0.0
@@ -41,22 +40,20 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="GodsView v2 — ML Service", version="2.0.0", lifespan=lifespan)
-app.add_middleware(
-    CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
-)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
 class TrainRequest(BaseModel):
-    symbol: str | None = None
-    timeframe: str = "15min"
-    retrain_days: int = 90
-    stop_pct: float = 0.01
-    target_pct: float = 0.02
+    symbol:         str | None = None
+    timeframe:      str = "15min"
+    retrain_days:   int = 90
+    stop_pct:       float = 0.01
+    target_pct:     float = 0.02
     direction_long: bool = True
 
 
 class PredictRequest(BaseModel):
-    signal: dict[str, Any]
+    signal:   dict[str, Any]
     features: dict[str, float] = {}
 
 
@@ -69,7 +66,7 @@ async def health() -> HealthResponse:
         uptime_s=round(time.time() - _STARTED_AT, 1),
         checks={
             "latest_model": latest.model_id if latest else "none",
-            "model_count": str(len(registry.list_all())),
+            "model_count":  str(len(registry.list_all())),
         },
     )
 
@@ -82,22 +79,21 @@ async def trigger_training(
     """Kick off model training in the background."""
     background_tasks.add_task(_run_training, req)
     return {
-        "status": "training_started",
-        "symbol": req.symbol,
+        "status":    "training_started",
+        "symbol":    req.symbol,
         "timeframe": req.timeframe,
-        "message": "Training running in background. Poll /models for results.",
+        "message":   "Training running in background. Poll /models for results.",
     }
 
 
 async def _run_training(req: TrainRequest) -> None:
     """Background training task."""
     from datetime import datetime, timedelta, timezone
-
-    from services.ml_service.training.trainer import train as train_model
     from services.shared.types import Bar
+    from services.ml_service.training.trainer import train as train_model
 
     symbol = req.symbol or "AAPL"
-    limit = req.retrain_days * 26
+    limit  = req.retrain_days * 26
 
     try:
         async with service_client(cfg.market_data_url) as client:
@@ -118,19 +114,14 @@ async def _run_training(req: TrainRequest) -> None:
 
     bars: list[Bar] = []
     for r in raw:
+        from datetime import datetime
         ts = datetime.fromisoformat(r["t"].replace("Z", "+00:00"))
-        bars.append(
-            Bar(
-                symbol=symbol,
-                timestamp=ts,
-                open=r["o"],
-                high=r["h"],
-                low=r["l"],
-                close=r["c"],
-                volume=r["v"],
-                timeframe=req.timeframe,
-            )
-        )
+        bars.append(Bar(
+            symbol=symbol,
+            timestamp=ts,
+            open=r["o"], high=r["h"], low=r["l"], close=r["c"],
+            volume=r["v"], timeframe=req.timeframe,
+        ))
 
     result = train_model(
         bars=bars,
@@ -167,9 +158,7 @@ async def run_prediction(req: PredictRequest) -> dict[str, Any]:
             id=sig_data.get("id", "unknown"),
             symbol=sig_data.get("symbol", ""),
             timeframe=sig_data.get("timeframe", "15min"),
-            timestamp=__import__("datetime").datetime.now(
-                __import__("datetime").timezone.utc
-            ),
+            timestamp=__import__("datetime").datetime.now(__import__("datetime").timezone.utc),
             direction=Direction(sig_data.get("direction", "long")),
             signal_type=SignalType(sig_data.get("signal_type", "absorption_reversal")),
             entry=float(sig_data.get("entry", 0)),
@@ -194,18 +183,18 @@ async def list_models(
 ) -> dict[str, Any]:
     models = registry.list_all(symbol)
     return {
-        "count": len(models),
+        "count":  len(models),
         "models": [
             {
-                "model_id": m.model_id,
-                "symbol": m.symbol,
-                "timeframe": m.timeframe,
+                "model_id":      m.model_id,
+                "symbol":        m.symbol,
+                "timeframe":     m.timeframe,
                 "test_accuracy": m.test_accuracy,
-                "roc_auc": m.roc_auc,
-                "train_rows": m.train_rows,
-                "test_rows": m.test_rows,
-                "trained_at": m.trained_at,
-                "is_active": m.is_active,
+                "roc_auc":       m.roc_auc,
+                "train_rows":    m.train_rows,
+                "test_rows":     m.test_rows,
+                "trained_at":    m.trained_at,
+                "is_active":     m.is_active,
             }
             for m in models
         ],
@@ -218,15 +207,15 @@ async def latest_model() -> dict[str, Any]:
     if not m:
         raise HTTPException(status_code=404, detail="No models trained yet")
     return {
-        "model_id": m.model_id,
-        "symbol": m.symbol,
-        "timeframe": m.timeframe,
+        "model_id":      m.model_id,
+        "symbol":        m.symbol,
+        "timeframe":     m.timeframe,
         "test_accuracy": m.test_accuracy,
-        "roc_auc": m.roc_auc,
-        "train_rows": m.train_rows,
-        "test_rows": m.test_rows,
-        "trained_at": m.trained_at,
-        "is_active": m.is_active,
+        "roc_auc":       m.roc_auc,
+        "train_rows":    m.train_rows,
+        "test_rows":     m.test_rows,
+        "trained_at":    m.trained_at,
+        "is_active":     m.is_active,
     }
 
 
@@ -236,23 +225,21 @@ async def model_performance(
 ) -> dict[str, Any]:
     m = (
         next((e for e in registry.list_all() if e.model_id == model_id), None)
-        if model_id
-        else registry.get_latest()
+        if model_id else registry.get_latest()
     )
     if not m:
         raise HTTPException(status_code=404, detail="Model not found")
     return {
-        "model_id": m.model_id,
+        "model_id":      m.model_id,
         "test_accuracy": m.test_accuracy,
-        "roc_auc": m.roc_auc,
+        "roc_auc":       m.roc_auc,
         "mlflow_run_id": m.mlflow_run_id,
-        "trained_at": m.trained_at,
+        "trained_at":    m.trained_at,
     }
 
 
 if __name__ == "__main__":
     import uvicorn
-
     uvicorn.run(
         "services.ml_service.main:app",
         host="0.0.0.0",

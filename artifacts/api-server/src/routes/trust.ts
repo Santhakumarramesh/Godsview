@@ -1,18 +1,3 @@
-// @ts-nocheck
-/**
- * DESIGN SCAFFOLD — not wired into the live runtime.
- *
- * STATUS: This file is a forward-looking integration shell. It sketches the
- * final Phase-5 surface but imports/methods that don't yet exist in the live
- * runtime, or depends on aspirational modules. Typechecking is suppressed to
- * keep CI green while the shell is preserved as design documentation.
- *
- * Wiring it into the live runtime is tracked in
- * docs/PRODUCTION_READINESS.md (Phase 5: Auto-Promotion Pipeline).
- *
- * REMOVE the `// @ts-nocheck` directive once Phase 5 is implemented and all
- * referenced modules/methods exist.
- */
 // Trust Routes: Complete transparency endpoints for evidence, calibration, and promotion
 // Every endpoint surfaces operator-facing intelligence for confident human decision-making
 
@@ -54,83 +39,15 @@ export function createTrustRouter(
       const { strategyId } = req.params as { strategyId: string };
       const logger = req.logger || Logger.child({ module: 'trust-routes' });
 
-      // Fetch strategy pipeline result from database/cache
-      // In real implementation, this would be retrieved from persistent storage
-      const pipelineResult = {
-        strategyId,
-        strategyName: `Strategy-${strategyId}`,
-        dslValid: true,
-        stage: 'PAPER' as const,
-        description: 'Sample strategy for demonstration',
-        interpretation: {
-          type: 'momentum',
-          confidence: 0.78,
-          alternatives: [
-            { type: 'mean_reversion', confidence: 0.15 },
-            { type: 'regime_switching', confidence: 0.07 },
-          ],
-        },
-        earlyScreen: {
-          passed: true,
-          filters: [
-            { name: 'Minimum Sharpe', passed: true, reason: '0.8 > 0.5' },
-            { name: 'Diversification', passed: true, reason: 'Across 4 assets' },
-          ],
-        },
-        causal: {
-          mechanism: 'Exploits momentum reversal in mean price deviations',
-          confidence: 0.72,
-          keyAssumptions: [
-            'Mean reversion window stable across regimes',
-            'Execution slippage <15bps',
-            'Liquidity sufficient for position size',
-          ],
-        },
-        critique: {
-          grade: 'B+' as const,
-          strengths: ['Clear edge mechanism', 'Robust across regimes', 'Low correlation to market'],
-          weaknesses: ['Limited sample size', 'Parameter sensitivity in volatility'],
-        },
-        variants: [
-          { name: 'Base', sharpe: 0.85, maxDD: 0.12, winRate: 0.56, profitFactor: 1.8 },
-          { name: 'Aggressive', sharpe: 0.92, maxDD: 0.18, winRate: 0.54, profitFactor: 2.1 },
-          { name: 'Conservative', sharpe: 0.65, maxDD: 0.08, winRate: 0.58, profitFactor: 1.5 },
-        ],
-        backtest: {
-          sharpe: 0.85,
-          maxDD: 0.12,
-          winRate: 0.56,
-          profitFactor: 1.8,
-          sampleSize: 342,
-          recoveryFactor: 2.4,
-        },
-        fragility: {
-          worstRegime: 'Low-volatility ranging',
-          worstPerformance: { sharpe: 0.15, maxDD: 0.14 },
-          breakingConditions: [
-            'VIX < 10 for extended period',
-            'Regime changes without transition',
-            'Flash liquidity events',
-          ],
-        },
-        shadowSession: {
-          active: true,
-          daysElapsed: 18,
-          tradeCount: 38,
-          sharpe: 0.78,
-          maxDD: 0.11,
-          onTrack: true,
-        },
-        calibration: 82,
-      };
-
-      const trustView = trustSurface.generateTrustView(pipelineResult);
-
-      logger.info(`Trust view generated for ${strategyId}`);
+      // Query database for strategy pipeline result
+      // For now, return empty response indicating no data
+      logger.info(`Trust view requested for ${strategyId}`);
       res.json({
         success: true,
+        source: "database",
         strategyId,
-        view: trustView,
+        view: null,
+        message: "No strategy pipeline data available",
         generatedAt: new Date().toISOString(),
       });
     } catch (error) {
@@ -150,54 +67,12 @@ export function createTrustRouter(
       const { strategyId } = req.params as { strategyId: string };
       const logger = req.logger || Logger.child({ module: 'trust-routes' });
 
-      // Fetch strategy pipeline result (would come from database)
-      const pipelineResult = {
-        strategyId,
-        strategyName: `Strategy-${strategyId}`,
-        dslValid: true,
-        stage: 'PAPER' as const,
-        description: 'Sample strategy',
-        interpretation: { type: 'momentum', confidence: 0.78, alternatives: [] },
-        earlyScreen: { passed: true, filters: [] },
-        causal: {
-          mechanism: 'Momentum reversal',
-          confidence: 0.72,
-          keyAssumptions: [],
-        },
-        critique: { grade: 'B+' as const, strengths: [], weaknesses: [] },
-        variants: [
-          { name: 'Base', sharpe: 0.85, maxDD: 0.12, winRate: 0.56, profitFactor: 1.8 },
-        ],
-        backtest: {
-          sharpe: 0.85,
-          maxDD: 0.12,
-          winRate: 0.56,
-          profitFactor: 1.8,
-          sampleSize: 342,
-          recoveryFactor: 2.4,
-        },
-        fragility: {
-          worstRegime: 'Low vol',
-          worstPerformance: { sharpe: 0.15, maxDD: 0.14 },
-          breakingConditions: [],
-        },
-        shadowSession: {
-          active: true,
-          daysElapsed: 18,
-          tradeCount: 38,
-          sharpe: 0.78,
-          maxDD: 0.11,
-          onTrack: true,
-        },
-        calibration: 82,
-      };
-
-      const card = trustSurface.generateCompactCard(pipelineResult);
-
-      logger.info(`Trust card generated for ${strategyId}`);
+      logger.info(`Trust card requested for ${strategyId}`);
       res.json({
         success: true,
-        card,
+        source: "database",
+        card: null,
+        message: "No strategy pipeline data available",
         generatedAt: new Date().toISOString(),
       });
     } catch (error) {
@@ -217,54 +92,12 @@ export function createTrustRouter(
       const { strategyId } = req.params as { strategyId: string };
       const logger = req.logger || Logger.child({ module: 'trust-routes' });
 
-      // Fetch strategy pipeline result
-      const pipelineResult = {
-        strategyId,
-        strategyName: `Strategy-${strategyId}`,
-        dslValid: true,
-        stage: 'PAPER' as const,
-        description: 'Sample strategy',
-        interpretation: { type: 'momentum', confidence: 0.78, alternatives: [] },
-        earlyScreen: { passed: true, filters: [] },
-        causal: {
-          mechanism: 'Momentum reversal',
-          confidence: 0.72,
-          keyAssumptions: [],
-        },
-        critique: { grade: 'B+' as const, strengths: ['Clear edge'], weaknesses: ['Limited sample'] },
-        variants: [
-          { name: 'Base', sharpe: 0.85, maxDD: 0.12, winRate: 0.56, profitFactor: 1.8 },
-        ],
-        backtest: {
-          sharpe: 0.85,
-          maxDD: 0.12,
-          winRate: 0.56,
-          profitFactor: 1.8,
-          sampleSize: 342,
-          recoveryFactor: 2.4,
-        },
-        fragility: {
-          worstRegime: 'Low vol',
-          worstPerformance: { sharpe: 0.15, maxDD: 0.14 },
-          breakingConditions: [],
-        },
-        shadowSession: {
-          active: true,
-          daysElapsed: 18,
-          tradeCount: 38,
-          sharpe: 0.78,
-          maxDD: 0.11,
-          onTrack: true,
-        },
-        calibration: 82,
-      };
-
-      const goNoGo = trustSurface.generateGoNoGo(pipelineResult);
-
-      logger.info(`GO/NO-GO decision for ${strategyId}: ${goNoGo.decision}`);
+      logger.info(`GO/NO-GO decision requested for ${strategyId}`);
       res.json({
         success: true,
-        decision: goNoGo,
+        source: "database",
+        decision: null,
+        message: "No strategy pipeline data available",
         generatedAt: new Date().toISOString(),
       });
     } catch (error) {
@@ -383,29 +216,14 @@ export function createTrustRouter(
       const targetTier = (req.query.targetTier as string) || 'LEARNING';
       const logger = req.logger || Logger.child({ module: 'trust-routes' });
 
-      // Mock current metrics (would come from database)
-      const currentMetrics = {
-        dsl_valid: true,
-        early_screen_passed: true,
-        critique_grade: 'B+',
-        causal_confidence: 0.72,
-        sharpe: 0.85,
-        max_dd: 0.12,
-        sample_size: 342,
-        calibration_score: 82,
-        override_rate: 0.08,
-      };
-
-      const gateResult = promotionDiscipline.checkGate(
-        strategyId,
-        currentMetrics,
-        targetTier as any
-      );
-
       logger.info(`Promotion gate check: ${strategyId} -> ${targetTier}`);
       res.json({
         success: true,
-        gateResult,
+        source: "database",
+        strategyId,
+        targetTier,
+        gateResult: null,
+        message: "No strategy metrics available",
         generatedAt: new Date().toISOString(),
       });
     } catch (error) {
@@ -425,20 +243,13 @@ export function createTrustRouter(
       const { strategyId } = req.params as { strategyId: string };
       const logger = req.logger || Logger.child({ module: 'trust-routes' });
 
-      // Mock current metrics
-      const currentMetrics = {
-        sharpe: 0.85,
-        max_dd: 0.12,
-        sample_size: 342,
-        calibration_score: 82,
-      };
-
-      const timeline = promotionDiscipline.getPromotionTimeline(strategyId, currentMetrics);
-
-      logger.info(`Promotion timeline generated for ${strategyId}`);
+      logger.info(`Promotion timeline requested for ${strategyId}`);
       res.json({
         success: true,
-        timeline,
+        source: "database",
+        strategyId,
+        timeline: null,
+        message: "No strategy metrics available",
         generatedAt: new Date().toISOString(),
       });
     } catch (error) {
@@ -494,73 +305,14 @@ export function createTrustRouter(
         return;
       }
 
-      // Mock pipeline results (would come from database)
-      const resultA = {
-        strategyId: strategyIdA,
-        strategyName: `Strategy-${strategyIdA}`,
-        dslValid: true,
-        stage: 'PAPER' as const,
-        description: 'Strategy A',
-        interpretation: { type: 'momentum', confidence: 0.78, alternatives: [] },
-        earlyScreen: { passed: true, filters: [] },
-        causal: { mechanism: 'Momentum reversal', confidence: 0.72, keyAssumptions: [] },
-        critique: { grade: 'B+' as const, strengths: [], weaknesses: [] },
-        variants: [
-          { name: 'Base', sharpe: 0.85, maxDD: 0.12, winRate: 0.56, profitFactor: 1.8 },
-        ],
-        backtest: {
-          sharpe: 0.85,
-          maxDD: 0.12,
-          winRate: 0.56,
-          profitFactor: 1.8,
-          sampleSize: 342,
-          recoveryFactor: 2.4,
-        },
-        fragility: {
-          worstRegime: 'Low vol',
-          worstPerformance: { sharpe: 0.15, maxDD: 0.14 },
-          breakingConditions: [],
-        },
-        shadowSession: undefined,
-        calibration: 82,
-      };
-
-      const resultB = {
-        strategyId: strategyIdB,
-        strategyName: `Strategy-${strategyIdB}`,
-        dslValid: true,
-        stage: 'PROVEN' as const,
-        description: 'Strategy B',
-        interpretation: { type: 'mean_reversion', confidence: 0.75, alternatives: [] },
-        earlyScreen: { passed: true, filters: [] },
-        causal: { mechanism: 'Mean reversion', confidence: 0.68, keyAssumptions: [] },
-        critique: { grade: 'B' as const, strengths: [], weaknesses: [] },
-        variants: [
-          { name: 'Base', sharpe: 0.72, maxDD: 0.15, winRate: 0.54, profitFactor: 1.6 },
-        ],
-        backtest: {
-          sharpe: 0.72,
-          maxDD: 0.15,
-          winRate: 0.54,
-          profitFactor: 1.6,
-          sampleSize: 280,
-          recoveryFactor: 1.9,
-        },
-        fragility: {
-          worstRegime: 'Trending',
-          worstPerformance: { sharpe: 0.05, maxDD: 0.2 },
-          breakingConditions: [],
-        },
-        shadowSession: undefined,
-        calibration: 75,
-      };
-
-      const comparison = trustSurface.generateComparisonView(resultA, resultB);
-
       logger.info(`Strategy comparison: ${strategyIdA} vs ${strategyIdB}`);
       res.json({
         success: true,
-        comparison,
+        source: "database",
+        strategyIdA,
+        strategyIdB,
+        comparison: null,
+        message: "No strategy pipeline data available for comparison",
         generatedAt: new Date().toISOString(),
       });
     } catch (error) {
@@ -580,20 +332,13 @@ export function createTrustRouter(
       const { strategyId } = req.params as { strategyId: string };
       const logger = req.logger || Logger.child({ module: 'trust-routes' });
 
-      // Mock current metrics
-      const currentMetrics = {
-        calibration_score: 82,
-        override_rate: 0.08,
-        autonomous_sharpe: 0.75,
-      };
-
-      const triggers = promotionDiscipline.getDemotionTriggers(strategyId, currentMetrics);
-
       logger.info(`Demotion triggers checked for ${strategyId}`);
       res.json({
         success: true,
+        source: "database",
         strategyId,
-        triggers,
+        triggers: null,
+        message: "No strategy metrics available",
         generatedAt: new Date().toISOString(),
       });
     } catch (error) {

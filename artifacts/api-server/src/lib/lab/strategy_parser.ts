@@ -5,7 +5,6 @@ import {
   ExitSpec,
   SizingSpec,
   FilterSpec,
-  createEmptyStrategy,
 } from './strategy_dsl';
 
 /**
@@ -315,21 +314,20 @@ export class NaturalLanguageStrategyParser {
     const sizingSpec = this.buildSizingSpec(riskParams);
     const filters = this.buildFilters(marketStructure, indicators, timeframe);
 
-    const base = createEmptyStrategy(this.extractStrategyName(description));
-    const asset = this.extractAsset(description);
     return {
-      ...base,
+      name: this.extractStrategyName(description),
       description,
       marketContext: {
-        ...base.marketContext,
+        asset: this.extractAsset(description),
+        timeframe: timeframe || 'daily',
         minDataPoints: 100,
       },
       entry: entrySpec,
       exit: exitSpec,
       sizing: sizingSpec,
       filters,
-      timeframes: [timeframe || 'daily'],
-      symbols: asset ? [asset] : base.symbols,
+      tags: ['nlp_parsed'],
+      createdAt: new Date().toISOString(),
     };
   }
 
@@ -496,12 +494,10 @@ export class NaturalLanguageStrategyParser {
     });
 
     return {
-      type: 'market',
-      conditions, // string-form, accepted by widened EntrySpec.conditions
-      confirmations: [],
-      minConfirmationsRequired: 1,
+      trigger: conditions.length > 0 ? `(${conditions.join(' AND ')})` : 'manual',
+      conditions,
       confirmationBars: 1,
-      aggressiveness: 'moderate',
+      entryMethod: 'market',
     };
   }
 
@@ -526,20 +522,19 @@ export class NaturalLanguageStrategyParser {
       exits.push('rsi_overbought');
     }
 
-    const tpRatio = Number(riskParams.take_profit?.value ?? 2);
-    const slValue = Number(riskParams.stop_loss?.value ?? 1);
     return {
-      stopLoss: { type: 'percentage', value: slValue },
-      takeProfit: {
-        type: 'fixed_rr',
-        targets: riskParams.take_profit
-          ? [{ ratio: tpRatio, closePercent: 1.0 }]
-          : [{ ratio: 2.0, closePercent: 1.0 }],
-        minRR: 1.5,
-      },
       profitTargets: riskParams.take_profit
-        ? [{ ratio: tpRatio, closePercent: 1.0 }]
+        ? [
+            {
+              threshold: riskParams.take_profit.value,
+              percentPosition: 1.0,
+            },
+          ]
         : [],
+      stopLoss: riskParams.stop_loss
+        ? { type: 'fixed', value: riskParams.stop_loss.value }
+        : undefined,
+      timeBasedExit: undefined,
       exitMethods: exits.length > 0 ? exits : ['manual'],
     };
   }
@@ -548,18 +543,17 @@ export class NaturalLanguageStrategyParser {
    * Build SizingSpec from risk parameters
    */
   private buildSizingSpec(riskParams: Record<string, any>): SizingSpec {
-    const maxPctRaw = riskParams.max_loss
-      ? Math.min(Number(riskParams.max_loss.value) / 100, 0.1)
-      : 0.02;
     return {
-      method: 'fixed_percent',
-      maxRiskPercent:
-        riskParams.risk_reward && riskParams.risk_reward.value
-          ? Number(riskParams.risk_reward.value)
-          : 1.0,
-      maxPositionPercent: maxPctRaw * 100,
+      method: 'fixed',
       baseSize: 1.0,
-      maxSize: maxPctRaw,
+      maxSize: riskParams.max_loss
+        ? Math.min(riskParams.max_loss.value / 100, 0.1)
+        : 0.02,
+      scalingFactor: 1.0,
+      riskPerTrade:
+        riskParams.risk_reward && riskParams.risk_reward.value
+          ? riskParams.risk_reward.value
+          : 1.0,
     };
   }
 

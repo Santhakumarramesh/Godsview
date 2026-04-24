@@ -708,6 +708,23 @@ executionRouter.get("/execution-status", async (_req: Request, res: Response) =>
   }
 });
 
+// ── GET /status — Alias for /execution-status (frontend compat) ──
+executionRouter.get("/status", async (_req: Request, res: Response) => {
+  try {
+    const mode = getExecutionMode();
+    const breaker = getBreakerSnapshot();
+    res.json({
+      mode,
+      kill_switch: isKillSwitchActive(),
+      breaker,
+      status: "operational",
+    });
+  } catch (err) {
+    logger.error({ err }, "Execution status error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
 // ── GET /risk-guard — Portfolio drawdown/VAR/correlation state ──
 
 executionRouter.get("/risk-guard", async (req: Request, res: Response) => {

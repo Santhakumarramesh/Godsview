@@ -1,18 +1,3 @@
-// @ts-nocheck
-/**
- * DESIGN SCAFFOLD — not wired into the live runtime.
- *
- * STATUS: This file is a forward-looking integration shell. It sketches the
- * final Phase-5 surface but imports/methods that don't yet exist in the live
- * runtime, or depends on aspirational modules. Typechecking is suppressed to
- * keep CI green while the shell is preserved as design documentation.
- *
- * Wiring it into the live runtime is tracked in
- * docs/PRODUCTION_READINESS.md (Phase 5: Auto-Promotion Pipeline).
- *
- * REMOVE the `// @ts-nocheck` directive once Phase 5 is implemented and all
- * referenced modules/methods exist.
- */
 import { Router, type IRouter } from "express";
 import {
   startProgram,
@@ -59,12 +44,12 @@ function parseArray(value: unknown): string[] {
  * GET /paper-program/status
  * Get current program status
  */
-router.get("/paper-program/status", (_req, res) => {
+router.get("/status", (_req, res) => {
   try {
     const status = getProgramStatus();
     res.json(status);
   } catch (err) {
-    req.log.error({ err }, "Failed to get program status");
+    console.error("Failed to get program status", err);
     res.status(500).json({ error: "status_failed", message: String(err) });
   }
 });
@@ -73,7 +58,7 @@ router.get("/paper-program/status", (_req, res) => {
  * POST /paper-program/start
  * Start a new validation program
  */
-router.post("/paper-program/start", (req, res) => {
+router.post("/start", (req, res) => {
   try {
     const { strategies, symbols, capitalAllocation } = req.body;
 
@@ -114,7 +99,7 @@ router.post("/paper-program/start", (req, res) => {
  * POST /paper-program/advance
  * Advance program by one day
  */
-router.post("/paper-program/advance", (_req, res) => {
+router.post("/advance", (_req, res) => {
   try {
     const result = advanceDay();
     res.json(result);
@@ -128,7 +113,7 @@ router.post("/paper-program/advance", (_req, res) => {
  * POST /paper-program/pause
  * Pause the program
  */
-router.post("/paper-program/pause", (_req, res) => {
+router.post("/pause", (_req, res) => {
   try {
     const result = pauseProgram();
     if (result.success) {
@@ -146,7 +131,7 @@ router.post("/paper-program/pause", (_req, res) => {
  * POST /paper-program/resume
  * Resume a paused program
  */
-router.post("/paper-program/resume", (_req, res) => {
+router.post("/resume", (_req, res) => {
   try {
     const result = resumeProgram();
     if (result.success) {
@@ -164,7 +149,7 @@ router.post("/paper-program/resume", (_req, res) => {
  * GET /paper-program/phase/:phase
  * Get report for a specific phase (1-4)
  */
-router.get("/paper-program/phase/:phase", (req, res) => {
+router.get("/phase/:phase", (req, res) => {
   try {
     const phase = parseInt(req.params.phase, 10) as 1 | 2 | 3 | 4;
 
@@ -185,7 +170,7 @@ router.get("/paper-program/phase/:phase", (req, res) => {
  * GET /paper-program/signals
  * Get signal verification log
  */
-router.get("/paper-program/signals", (req, res) => {
+router.get("/signals", (req, res) => {
   try {
     const limit = parseNum(req.query.limit) ?? 50;
     const signals = getSignalLog(Math.min(500, Math.max(1, limit)));
@@ -200,7 +185,7 @@ router.get("/paper-program/signals", (req, res) => {
  * GET /paper-program/executions
  * Get execution simulation log
  */
-router.get("/paper-program/executions", (req, res) => {
+router.get("/executions", (req, res) => {
   try {
     const limit = parseNum(req.query.limit) ?? 50;
     const executions = getExecutionLog(Math.min(500, Math.max(1, limit)));
@@ -215,7 +200,7 @@ router.get("/paper-program/executions", (req, res) => {
  * GET /paper-program/risk-compliance
  * Get risk compliance test results
  */
-router.get("/paper-program/risk-compliance", (_req, res) => {
+router.get("/risk-compliance", (_req, res) => {
   try {
     const report = getRiskComplianceReport();
     res.json(report);
@@ -229,7 +214,7 @@ router.get("/paper-program/risk-compliance", (_req, res) => {
  * GET /paper-program/strategy-comparison
  * Get paper vs backtest strategy comparison
  */
-router.get("/paper-program/strategy-comparison", (_req, res) => {
+router.get("/strategy-comparison", (_req, res) => {
   try {
     const report = getStrategyComparisonReport();
     res.json(report);
@@ -243,7 +228,7 @@ router.get("/paper-program/strategy-comparison", (_req, res) => {
  * GET /paper-program/certification
  * Get current certification status
  */
-router.get("/paper-program/certification", (_req, res) => {
+router.get("/certification", (_req, res) => {
   try {
     const status = getCertificationStatus();
     res.json(status);
@@ -257,7 +242,7 @@ router.get("/paper-program/certification", (_req, res) => {
  * POST /paper-program/certify
  * Generate a certificate if all phases pass
  */
-router.post("/paper-program/certify", (_req, res) => {
+router.post("/certify", (_req, res) => {
   try {
     const result = generateCertificate();
     if (result.success) {
@@ -275,7 +260,7 @@ router.post("/paper-program/certify", (_req, res) => {
  * GET /paper-program/report
  * Get complete program report
  */
-router.get("/paper-program/report", (_req, res) => {
+router.get("/report", (_req, res) => {
   try {
     const report = getFullReport();
     res.json(report);

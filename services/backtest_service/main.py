@@ -4,7 +4,6 @@ GodsView v2 — Backtest Service
 FastAPI service wrapping the full backtest engine.
 Results are cached in memory (LRU) for fast retrieval.
 """
-
 from __future__ import annotations
 
 import time
@@ -16,15 +15,13 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from services.backtest_service.engine import (
-    SUPPORTED_TIMEFRAMES,
-    BacktestConfig,
-    run_backtest,
-)
 from services.shared.config import cfg
 from services.shared.http_client import service_client
 from services.shared.logging import configure_structlog, get_logger
-from services.shared.types import Bar, HealthResponse
+from services.shared.types import HealthResponse, Bar
+from services.backtest_service.engine import (
+    BacktestConfig, SUPPORTED_TIMEFRAMES, run_backtest,
+)
 
 log = get_logger(__name__)
 _STARTED_AT = 0.0
@@ -42,21 +39,17 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     yield
 
 
-app = FastAPI(
-    title="GodsView v2 — Backtest Service", version="2.0.0", lifespan=lifespan
-)
-app.add_middleware(
-    CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
-)
+app = FastAPI(title="GodsView v2 — Backtest Service", version="2.0.0", lifespan=lifespan)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
 class RunRequest(BaseModel):
-    symbol: str
-    timeframe: str = "15min"
-    lookback_days: int = 30
+    symbol:         str
+    timeframe:      str   = "15min"
+    lookback_days:  int   = 30
     initial_equity: float = 10_000.0
-    use_si_filter: bool = True
-    strategy: str = "sk_setup"
+    use_si_filter:  bool  = True
+    strategy:       str   = "sk_setup"
     commission_pct: float = 0.0005
 
 
@@ -81,7 +74,7 @@ async def run(req: RunRequest) -> dict[str, Any]:
     from datetime import datetime, timedelta, timezone
 
     # Fetch bars from market data service
-    limit = int(req.lookback_days * 26)  # approximate bars count
+    limit = int(req.lookback_days * 26)   # approximate bars count
     try:
         async with service_client(cfg.market_data_url) as client:
             resp = await client.get(
@@ -103,18 +96,12 @@ async def run(req: RunRequest) -> dict[str, Any]:
     bars: list[Bar] = []
     for r in raw:
         ts = datetime.fromisoformat(r["t"].replace("Z", "+00:00"))
-        bars.append(
-            Bar(
-                symbol=req.symbol,
-                timestamp=ts,
-                open=r["o"],
-                high=r["h"],
-                low=r["l"],
-                close=r["c"],
-                volume=r["v"],
-                timeframe=req.timeframe,
-            )
-        )
+        bars.append(Bar(
+            symbol=req.symbol,
+            timestamp=ts,
+            open=r["o"], high=r["h"], low=r["l"], close=r["c"],
+            volume=r["v"], timeframe=req.timeframe,
+        ))
 
     config = BacktestConfig(
         symbol=req.symbol,
@@ -137,7 +124,7 @@ async def run(req: RunRequest) -> dict[str, Any]:
 @app.get("/results")
 async def list_results(
     symbol: str | None = Query(default=None),
-    limit: int = Query(default=20, ge=1, le=100),
+    limit:  int = Query(default=20, ge=1, le=100),
 ) -> dict[str, Any]:
     items = list(_results.values())
     if symbol:
@@ -158,7 +145,6 @@ async def get_result(run_id: str) -> dict[str, Any]:
 
 if __name__ == "__main__":
     import uvicorn
-
     uvicorn.run(
         "services.backtest_service.main:app",
         host="0.0.0.0",

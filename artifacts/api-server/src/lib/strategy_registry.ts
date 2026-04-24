@@ -82,9 +82,22 @@ export interface StrategyRegistrySnapshot {
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
+/**
+ * PRODUCTION: Replace with database persistence (e.g., PostgreSQL or MongoDB)
+ * This in-memory registry is lost on process restart and not suitable for production.
+ * Demo mode: Log warning if GODSVIEW_DATA_PERSISTENCE is not set to 'database'.
+ */
 const registry = new Map<string, StrategyEntry>();
 const promotionLog: { id: string; name: string; from: StrategyState; to: StrategyState; at: string }[] = [];
 const retirementLog: { id: string; name: string; at: string }[] = [];
+
+// Demo/Production boundary check
+if (!process.env.GODSVIEW_DATA_PERSISTENCE || process.env.GODSVIEW_DATA_PERSISTENCE !== "database") {
+  logger.warn(
+    { persistence: process.env.GODSVIEW_DATA_PERSISTENCE ?? "fallback-in-memory" },
+    "[strategy_registry] Using in-memory fallback; strategy data will be lost on restart. Set GODSVIEW_DATA_PERSISTENCE=database for production.",
+  );
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

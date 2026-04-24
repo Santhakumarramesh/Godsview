@@ -8,7 +8,6 @@ Autonomous background loops:
   • Position monitor: every minute, check open positions vs current price
   • Health ticker   : every 30s, ping all sibling services
 """
-
 from __future__ import annotations
 
 import asyncio
@@ -33,7 +32,6 @@ settings = get_settings()
 # State
 # ---------------------------------------------------------------------------
 
-
 class SchedulerState:
     def __init__(self) -> None:
         self.running: bool = False
@@ -52,12 +50,8 @@ class SchedulerState:
             "running": self.running,
             "scan_interval_seconds": self.scan_interval_seconds,
             "last_scan": self.last_scan.isoformat() if self.last_scan else None,
-            "last_retrain": self.last_retrain.isoformat()
-            if self.last_retrain
-            else None,
-            "last_position_check": self.last_position_check.isoformat()
-            if self.last_position_check
-            else None,
+            "last_retrain": self.last_retrain.isoformat() if self.last_retrain else None,
+            "last_position_check": self.last_position_check.isoformat() if self.last_position_check else None,
             "scan_count": self.scan_count,
             "signals_found": self.signals_found,
             "retrain_count": self.retrain_count,
@@ -73,18 +67,9 @@ state = SchedulerState()
 # ---------------------------------------------------------------------------
 
 WATCHLIST: list[str] = [
-    "AAPL",
-    "MSFT",
-    "TSLA",
-    "NVDA",
-    "META",
-    "GOOGL",
-    "AMZN",
-    "SPY",
-    "QQQ",
-    "AMD",
-    "BTCUSD",
-    "ETHUSD",
+    "AAPL", "MSFT", "TSLA", "NVDA", "META",
+    "GOOGL", "AMZN", "SPY", "QQQ", "AMD",
+    "BTCUSD", "ETHUSD",
 ]
 
 TIMEFRAMES: list[str] = ["15min", "1hour"]
@@ -93,33 +78,31 @@ TIMEFRAMES: list[str] = ["15min", "1hour"]
 # Service URLs
 # ---------------------------------------------------------------------------
 
-
 def _url(port: int, path: str) -> str:
     return f"http://localhost:{port}{path}"
 
 
-GATEWAY = settings.api_gateway_port
-MARKET = settings.market_data_port
-FEATURE = settings.feature_port
-ML = settings.ml_port
-EXECUTION = settings.execution_port
-RISK = settings.risk_port
-MEMORY = settings.memory_port
+GATEWAY    = settings.api_gateway_port
+MARKET     = settings.market_data_port
+FEATURE    = settings.feature_port
+ML         = settings.ml_port
+EXECUTION  = settings.execution_port
+RISK       = settings.risk_port
+MEMORY     = settings.memory_port
 
 SERVICE_URLS: dict[str, str] = {
-    "api_gateway": _url(GATEWAY, "/health"),
-    "market_data": _url(MARKET, "/health"),
-    "feature": _url(FEATURE, "/health"),
-    "ml": _url(ML, "/health"),
-    "execution": _url(EXECUTION, "/health"),
-    "risk": _url(RISK, "/health"),
-    "memory": _url(MEMORY, "/health"),
+    "api_gateway":     _url(GATEWAY, "/health"),
+    "market_data":     _url(MARKET,  "/health"),
+    "feature":         _url(FEATURE, "/health"),
+    "ml":              _url(ML,      "/health"),
+    "execution":       _url(EXECUTION, "/health"),
+    "risk":            _url(RISK,    "/health"),
+    "memory":          _url(MEMORY,  "/health"),
 }
 
 # ---------------------------------------------------------------------------
 # Background tasks
 # ---------------------------------------------------------------------------
-
 
 async def _ping_services() -> None:
     """Check health of all sibling services."""
@@ -194,9 +177,7 @@ async def _scan_loop() -> None:
                 state.scan_count += 1
                 state.signals_found += found
                 state.last_scan = datetime.now(timezone.utc)
-                log.info(
-                    "scan.complete", signals_found=found, total_scan=state.scan_count
-                )
+                log.info("scan.complete", signals_found=found, total_scan=state.scan_count)
         except Exception as exc:
             state.errors.append(f"scan_loop: {exc}")
 
@@ -221,11 +202,7 @@ async def _retrain_loop() -> None:
         await asyncio.sleep(min(secs_until, 300))  # wake every 5 min max
 
         now = datetime.now(timezone.utc)
-        if (
-            now.hour == target_hour
-            and now.minute >= target_min
-            and now.minute < target_min + 5
-        ):
+        if now.hour == target_hour and now.minute >= target_min and now.minute < target_min + 5:
             try:
                 async with httpx.AsyncClient(timeout=30.0) as client:
                     for sym in WATCHLIST[:5]:  # retrain top-5 symbols
@@ -258,7 +235,7 @@ async def _position_monitor_loop() -> None:
                         symbol = pos.get("symbol", "")
                         entry = pos.get("entry_price", 0)
                         stop = pos.get("stop_price", 0)
-                        # size is available in pos but not used by the price-fetch loop below
+                        size = pos.get("size", 0)
                         direction = pos.get("direction", "LONG")
 
                         # Fetch current price
@@ -270,8 +247,7 @@ async def _position_monitor_loop() -> None:
                             if pr.status_code == 200:
                                 current = pr.json().get("price", entry)
                                 distance_to_sl = (
-                                    (current - stop)
-                                    if direction == "LONG"
+                                    (current - stop) if direction == "LONG"
                                     else (stop - current)
                                 )
                                 if distance_to_sl < 0:
@@ -307,14 +283,12 @@ _tasks: list[asyncio.Task] = []
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     state.running = True
-    _tasks.extend(
-        [
-            asyncio.create_task(_scan_loop(), name="scan"),
-            asyncio.create_task(_retrain_loop(), name="retrain"),
-            asyncio.create_task(_position_monitor_loop(), name="position_monitor"),
-            asyncio.create_task(_health_ticker_loop(), name="health_ticker"),
-        ]
-    )
+    _tasks.extend([
+        asyncio.create_task(_scan_loop(),             name="scan"),
+        asyncio.create_task(_retrain_loop(),          name="retrain"),
+        asyncio.create_task(_position_monitor_loop(), name="position_monitor"),
+        asyncio.create_task(_health_ticker_loop(),    name="health_ticker"),
+    ])
     log.info("scheduler.started", tasks=len(_tasks))
     yield
     state.running = False
@@ -346,7 +320,6 @@ app.add_middleware(
 # Routes
 # ---------------------------------------------------------------------------
 
-
 @app.get("/health")
 async def health():
     return {
@@ -376,7 +349,9 @@ async def trigger_scan(req: ScanTriggerRequest = ScanTriggerRequest()):
     async def _run():
         async with httpx.AsyncClient() as client:
             tasks = [
-                _scan_symbol(client, sym, tf) for sym in symbols for tf in timeframes
+                _scan_symbol(client, sym, tf)
+                for sym in symbols
+                for tf in timeframes
             ]
             results = await asyncio.gather(*tasks, return_exceptions=True)
             found = sum(r for r in results if isinstance(r, int))
@@ -396,7 +371,6 @@ async def trigger_scan(req: ScanTriggerRequest = ScanTriggerRequest()):
 @app.post("/scheduler/retrain/trigger")
 async def trigger_retrain():
     """Manually trigger an immediate retrain for all watchlist symbols."""
-
     async def _run():
         async with httpx.AsyncClient(timeout=120.0) as client:
             for sym in WATCHLIST[:5]:
@@ -457,7 +431,6 @@ async def clear_errors():
 
 if __name__ == "__main__":
     import uvicorn
-
     uvicorn.run(
         "services.scheduler_service.main:app",
         host="0.0.0.0",

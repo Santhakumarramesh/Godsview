@@ -14,13 +14,13 @@ Free tier: 60 calls/min → generous for our use case.
 
 from __future__ import annotations
 
-import logging
 import os
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
-import pandas as pd
 import requests
+import pandas as pd
 
 from app.data.base import BaseDataClient
 
@@ -30,12 +30,11 @@ logger = logging.getLogger("godsview.data.finnhub")
 @dataclass
 class InsiderSignal:
     """Aggregated insider trading signal."""
-
     symbol: str
     buy_count: int = 0
     sell_count: int = 0
     net_shares: int = 0
-    net_sentiment: float = 0.0  # -1 to +1
+    net_sentiment: float = 0.0            # -1 to +1
     largest_buy: float = 0.0
     largest_sell: float = 0.0
     recent_transactions: list = field(default_factory=list)
@@ -50,14 +49,13 @@ class InsiderSignal:
 @dataclass
 class AnalystConsensus:
     """Analyst recommendation consensus."""
-
     symbol: str
     buy: int = 0
     hold: int = 0
     sell: int = 0
     strong_buy: int = 0
     strong_sell: int = 0
-    consensus: str = "neutral"  # "strong_buy" | "buy" | "hold" | "sell" | "strong_sell"
+    consensus: str = "neutral"           # "strong_buy" | "buy" | "hold" | "sell" | "strong_sell"
     period: str = ""
     fetched_at: str = ""
 
@@ -68,10 +66,9 @@ class AnalystConsensus:
 @dataclass
 class SocialSentiment:
     """Social media sentiment aggregation."""
-
     symbol: str
     reddit_mentions: int = 0
-    reddit_sentiment: float = 0.0  # -1 to +1
+    reddit_sentiment: float = 0.0        # -1 to +1
     twitter_mentions: int = 0
     twitter_sentiment: float = 0.0
     composite_sentiment: float = 0.0
@@ -84,15 +81,14 @@ class SocialSentiment:
 @dataclass
 class AltDataSnapshot:
     """Complete alternative data snapshot — replaces Quiver."""
-
     symbol: str
     insider: InsiderSignal | None = None
     analyst: AnalystConsensus | None = None
     social: SocialSentiment | None = None
     news_sentiment: float = 0.0
     news_count: int = 0
-    composite_score: float = 0.0  # -1 to +1 overall alt-data signal
-    confidence_adjustment: float = 0.0  # how much to adjust signal confidence
+    composite_score: float = 0.0         # -1 to +1 overall alt-data signal
+    confidence_adjustment: float = 0.0   # how much to adjust signal confidence
     fetched_at: str = ""
 
     def to_dict(self) -> dict:
@@ -130,9 +126,7 @@ class FinnhubClient(BaseDataClient):
     BASE_URL = "https://finnhub.io/api/v1"
 
     def __init__(self):
-        super().__init__(
-            name="Finnhub", default_ttl=1800.0, max_retries=2
-        )  # 30min cache
+        super().__init__(name="Finnhub", default_ttl=1800.0, max_retries=2)  # 30min cache
         self.api_key = os.getenv("FINNHUB_API_KEY", "")
         if not self.api_key:
             logger.warning("[Finnhub] No FINNHUB_API_KEY — alt-data layer unavailable")
@@ -183,9 +177,7 @@ class FinnhubClient(BaseDataClient):
 
         # Filter to last 90 days
         if "transactionDate" in df.columns:
-            df["transactionDate"] = pd.to_datetime(
-                df["transactionDate"], errors="coerce"
-            )
+            df["transactionDate"] = pd.to_datetime(df["transactionDate"], errors="coerce")
             cutoff = datetime.now(timezone.utc) - timedelta(days=90)
             df = df[df["transactionDate"] >= cutoff]
 
@@ -265,20 +257,12 @@ class FinnhubClient(BaseDataClient):
         result.period = latest.get("period", "")
 
         # Derive consensus
-        total = (
-            result.strong_buy
-            + result.buy
-            + result.hold
-            + result.sell
-            + result.strong_sell
-        )
+        total = result.strong_buy + result.buy + result.hold + result.sell + result.strong_sell
         if total > 0:
             weighted = (
-                result.strong_buy * 2
-                + result.buy * 1
-                + result.hold * 0
-                + result.sell * -1
-                + result.strong_sell * -2
+                result.strong_buy * 2 + result.buy * 1 +
+                result.hold * 0 +
+                result.sell * -1 + result.strong_sell * -2
             ) / total
             if weighted > 1.0:
                 result.consensus = "strong_buy"
@@ -307,14 +291,11 @@ class FinnhubClient(BaseDataClient):
         start = (now - timedelta(days=lookback_days)).strftime("%Y-%m-%d")
         end = now.strftime("%Y-%m-%d")
 
-        data = self._request(
-            "company-news",
-            {
-                "symbol": symbol,
-                "from": start,
-                "to": end,
-            },
-        )
+        data = self._request("company-news", {
+            "symbol": symbol,
+            "from": start,
+            "to": end,
+        })
         if not data or not isinstance(data, list):
             return []
 
@@ -420,11 +401,8 @@ class FinnhubClient(BaseDataClient):
 
         if snap.analyst:
             consensus_map = {
-                "strong_buy": 1.0,
-                "buy": 0.5,
-                "hold": 0.0,
-                "sell": -0.5,
-                "strong_sell": -1.0,
+                "strong_buy": 1.0, "buy": 0.5, "hold": 0.0,
+                "sell": -0.5, "strong_sell": -1.0,
             }
             score += consensus_map.get(snap.analyst.consensus, 0.0) * 0.30
 

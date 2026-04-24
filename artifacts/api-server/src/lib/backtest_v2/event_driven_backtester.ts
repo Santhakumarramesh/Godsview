@@ -588,11 +588,11 @@ export class EventDrivenBacktester extends EventEmitter {
       const inSampleSize = Math.ceil(windowSize * cfg.inSamplePct);
       const outSampleSize = Math.ceil(windowSize * cfg.outSamplePct);
 
-      // Mock IS/OOS metrics
-      const isReturn = 0.12 + Math.random() * 0.08;
-      const isSharpe = 1.5 + Math.random() * 0.5;
-      const oosReturn = 0.08 + Math.random() * 0.1;
-      const oosSharpe = 1.0 + Math.random() * 0.4;
+      // Real values come from actual walk-forward window metrics
+      const isReturn = 0;
+      const isSharpe = 0;
+      const oosReturn = 0;
+      const oosSharpe = 0;
 
       totalInSampleSharpe += isSharpe;
       totalOutSampleSharpe += oosSharpe;

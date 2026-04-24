@@ -1,2 +1,2 @@
-from .schemas import *  # noqa: F403  (re-export every schema for import * convenience)
+from .schemas import *
 from .store import BrainStore, get_store

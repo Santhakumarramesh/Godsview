@@ -4,7 +4,6 @@ GodsView v2 — Execution Service
 Handles order lifecycle: submit, fill, close, P&L tracking.
 Supports paper mode (Alpaca Paper) and live mode.
 """
-
 from __future__ import annotations
 
 import time
@@ -39,23 +38,19 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     yield
 
 
-app = FastAPI(
-    title="GodsView v2 — Execution Service", version="2.0.0", lifespan=lifespan
-)
-app.add_middleware(
-    CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
-)
+app = FastAPI(title="GodsView v2 — Execution Service", version="2.0.0", lifespan=lifespan)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
 class OrderRequest(BaseModel):
-    signal_id: str
-    symbol: str
-    side: str  # buy | sell
-    qty: float
+    signal_id:   str
+    symbol:      str
+    side:        str    # buy | sell
+    qty:         float
     entry_price: float
-    stop_price: float
+    stop_price:  float
     target_price: float
-    dry_run: bool = True
+    dry_run:     bool = True
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -80,23 +75,21 @@ async def submit_order(req: OrderRequest) -> dict[str, Any]:
 
     if req.dry_run or not cfg.live_trading_enabled:
         order = {
-            "id": order_id,
-            "signal_id": req.signal_id,
-            "symbol": req.symbol.upper(),
-            "side": req.side,
-            "qty": req.qty,
-            "entry_price": req.entry_price,
-            "stop_price": req.stop_price,
+            "id":           order_id,
+            "signal_id":    req.signal_id,
+            "symbol":       req.symbol.upper(),
+            "side":         req.side,
+            "qty":          req.qty,
+            "entry_price":  req.entry_price,
+            "stop_price":   req.stop_price,
             "target_price": req.target_price,
-            "status": "open",
-            "fill_price": req.entry_price,
+            "status":       "open",
+            "fill_price":   req.entry_price,
             "submitted_at": datetime.now(timezone.utc).isoformat(),
-            "mode": "paper",
+            "mode":         "paper",
         }
         _orders[order_id] = order
-        log.info(
-            "paper_order_opened", order_id=order_id, symbol=req.symbol, qty=req.qty
-        )
+        log.info("paper_order_opened", order_id=order_id, symbol=req.symbol, qty=req.qty)
         return order
 
     # Live: submit to Alpaca
@@ -106,19 +99,19 @@ async def submit_order(req: OrderRequest) -> dict[str, Any]:
 async def _submit_alpaca(req: OrderRequest, order_id: str) -> dict[str, Any]:
     """Submit a bracket order to Alpaca."""
     headers = {
-        "APCA-API-KEY-ID": cfg.alpaca_key_id,
+        "APCA-API-KEY-ID":     cfg.alpaca_key_id,
         "APCA-API-SECRET-KEY": cfg.alpaca_secret_key,
-        "Content-Type": "application/json",
+        "Content-Type":        "application/json",
     }
     payload = {
-        "symbol": req.symbol,
-        "qty": str(req.qty),
-        "side": req.side,
-        "type": "market",
+        "symbol":        req.symbol,
+        "qty":           str(req.qty),
+        "side":          req.side,
+        "type":          "market",
         "time_in_force": "day",
-        "order_class": "bracket",
-        "stop_loss": {"stop_price": str(req.stop_price)},
-        "take_profit": {"limit_price": str(req.target_price)},
+        "order_class":   "bracket",
+        "stop_loss":     {"stop_price": str(req.stop_price)},
+        "take_profit":   {"limit_price": str(req.target_price)},
     }
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -133,18 +126,18 @@ async def _submit_alpaca(req: OrderRequest, order_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=502, detail=f"Alpaca order failed: {exc}")
 
     order = {
-        "id": order_id,
-        "alpaca_id": data.get("id"),
-        "signal_id": req.signal_id,
-        "symbol": req.symbol.upper(),
-        "side": req.side,
-        "qty": req.qty,
-        "entry_price": req.entry_price,
-        "stop_price": req.stop_price,
+        "id":           order_id,
+        "alpaca_id":    data.get("id"),
+        "signal_id":    req.signal_id,
+        "symbol":       req.symbol.upper(),
+        "side":         req.side,
+        "qty":          req.qty,
+        "entry_price":  req.entry_price,
+        "stop_price":   req.stop_price,
         "target_price": req.target_price,
-        "status": "pending",
+        "status":       "pending",
         "submitted_at": datetime.now(timezone.utc).isoformat(),
-        "mode": "live",
+        "mode":         "live",
     }
     _orders[order_id] = order
     log.info("live_order_submitted", order_id=order_id, alpaca_id=data.get("id"))
@@ -157,7 +150,7 @@ async def close_order(order_id: str, reason: str = "manual") -> dict[str, Any]:
         raise HTTPException(status_code=404, detail=f"Order {order_id} not found")
 
     order = _orders[order_id]
-    order["status"] = "closed"
+    order["status"]   = "closed"
     order["closed_at"] = datetime.now(timezone.utc).isoformat()
     order["close_reason"] = reason
 
@@ -168,7 +161,7 @@ async def close_order(order_id: str, reason: str = "manual") -> dict[str, Any]:
 @app.get("/orders")
 async def list_orders(
     status: str = Query(default="open"),
-    limit: int = Query(default=50),
+    limit:  int = Query(default=50),
 ) -> dict[str, Any]:
     items = [o for o in _orders.values() if o["status"] == status]
     items.sort(key=lambda o: o.get("submitted_at", ""), reverse=True)
@@ -185,7 +178,7 @@ async def get_pnl() -> dict[str, Any]:
         for o in closed
     )
     return {
-        "total_pnl": round(total_pnl, 2),
+        "total_pnl":    round(total_pnl, 2),
         "closed_trades": len(closed),
         "open_positions": sum(1 for o in _orders.values() if o["status"] == "open"),
     }
@@ -193,7 +186,6 @@ async def get_pnl() -> dict[str, Any]:
 
 if __name__ == "__main__":
     import uvicorn
-
     uvicorn.run(
         "services.execution_service.main:app",
         host="0.0.0.0",

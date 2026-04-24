@@ -305,36 +305,133 @@ function useLiveTicker() {
   return { tickerBySymbol, setupBySymbol, lastUpdated, feedMode };
 }
 
-const navItems = [
-  { href: "/", label: "Mission Control", icon: "dashboard", sub: "Overview" },
-  { href: "/brain", label: "Brain", icon: "neurology", sub: "Intelligence" },
-  { href: "/alpaca", label: "Live Intelligence", icon: "psychology", sub: "Analysis" },
-  { href: "/infinity", label: "Infinity Screen", icon: "grid_view", sub: "Multi-Chart" },
-  { href: "/pipeline", label: "Pipeline Engine", icon: "hub", sub: "6-Layer AI" },
-  { href: "/candle-xray", label: "Candle X-Ray", icon: "radiology", sub: "Microstructure" },
-  { href: "/signals", label: "Signal Feed", icon: "sensors", sub: "Pipeline" },
-  { href: "/setup-explorer", label: "Setup Explorer", icon: "explore", sub: "Strategy Matrix" },
-  { href: "/trades", label: "Trade Journal", icon: "receipt_long", sub: "Execution" },
-  { href: "/war-room", label: "War Room", icon: "groups", sub: "Consensus" },
-  { href: "/proof", label: "Proof", icon: "check_circle", sub: "Performance" },
-  { href: "/checklist", label: "Checklist", icon: "task_alt", sub: "Validation" },
-  { href: "/ops", label: "Ops Monitor", icon: "monitor_heart", sub: "Health" },
-  { href: "/quant-lab", label: "Quant Lab", icon: "science", sub: "Backtest" },
-  { href: "/portfolio", label: "Portfolio", icon: "account_balance", sub: "Allocation" },
-  { href: "/execution", label: "Execution", icon: "bolt", sub: "Live Orders" },
-  { href: "/audit", label: "Audit Trail", icon: "history", sub: "Event Log" },
-  { href: "/alerts", label: "Alerts", icon: "bell", sub: "Live Alerts" },
-  { href: "/reports", label: "Session Reports", icon: "summarize", sub: "Intelligence" },
-  { href: "/risk", label: "Risk Command", icon: "shield", sub: "Safety Rails" },
-  { href: "/super-intelligence", label: "Super Intelligence", icon: "auto_awesome", sub: "AI Engine" },
-  { href: "/institutional-intelligence", label: "Inst. Intelligence", icon: "trending_up", sub: "Macro · Sentiment" },
-  { href: "/trade-journal", label: "Trade Journal", icon: "book", sub: "PnL Attribution" },
-  { href: "/watchlist", label: "Watchlist Scanner", icon: "radar", sub: "Auto-Scan" },
-  { href: "/analytics", label: "Equity Analytics", icon: "show_chart", sub: "Equity · Circuit Breaker" },
-  { href: "/performance", label: "Analytics", icon: "analytics", sub: "Performance" },
-  { href: "/system", label: "System Core", icon: "memory", sub: "Diagnostics" },
-  { href: "/stitch-lab", label: "Stitch Vault", icon: "palette", sub: "Design Pack" },
-  { href: "/settings", label: "Settings", icon: "settings", sub: "Configuration" },
+type NavSection = { section: string; items: { href: string; label: string; icon: string }[] };
+
+const navSections: NavSection[] = [
+  {
+    section: "God Brain",
+    items: [
+      { href: "/", label: "God Brain Home", icon: "dashboard" },
+      { href: "/brain", label: "Brain Hologram", icon: "neurology" },
+      { href: "/system", label: "System Health", icon: "memory" },
+      { href: "/command-center", label: "Mission Control", icon: "rocket_launch" },
+      { href: "/alerts", label: "Alerts Hub", icon: "notifications_active" },
+      { href: "/daily-briefing", label: "Daily Briefing", icon: "today" },
+      { href: "/session-control", label: "Session Control", icon: "schedule" },
+      { href: "/setup-explorer", label: "Strategy Radar", icon: "explore" },
+    ],
+  },
+  {
+    section: "Market Discovery",
+    items: [
+      { href: "/market-scanner", label: "Market Scanner", icon: "radar" },
+      { href: "/watchlist", label: "Watchlist Manager", icon: "bookmark" },
+      { href: "/pipeline", label: "Opportunity Queue", icon: "hub" },
+      { href: "/regime-detection", label: "Regime Detection", icon: "thermostat" },
+      { href: "/liquidity-environment", label: "Liquidity Env", icon: "water_drop" },
+      { href: "/news-sentiment", label: "News & Sentiment", icon: "newspaper" },
+      { href: "/heat-board", label: "Heat Board", icon: "local_fire_department" },
+      { href: "/infinity", label: "Cross-Asset Pulse", icon: "grid_view" },
+    ],
+  },
+  {
+    section: "Chart Intelligence",
+    items: [
+      { href: "/tradingview-chart", label: "TradingView Chart", icon: "candlestick_chart" },
+      { href: "/multi-timeframe", label: "Multi-Timeframe", icon: "view_column" },
+      { href: "/order-blocks", label: "Order Blocks", icon: "view_agenda" },
+      { href: "/bos-choch", label: "BOS / CHOCH", icon: "swap_vert" },
+      { href: "/liquidity-sweep", label: "Liquidity Sweep", icon: "waves" },
+      { href: "/premium-discount", label: "Premium / Discount", icon: "price_change" },
+      { href: "/entry-planner", label: "Entry Planner", icon: "my_location" },
+      { href: "/chart-annotations", label: "Annotations", icon: "draw" },
+    ],
+  },
+  {
+    section: "TradingView MCP",
+    items: [
+      { href: "/tradingview-mcp", label: "MCP Control", icon: "settings_remote" },
+      { href: "/pine-scripts", label: "Pine Scripts", icon: "code" },
+      { href: "/webhook-router", label: "Webhook Router", icon: "webhook" },
+      { href: "/tv-strategy-sync", label: "Strategy Sync", icon: "sync" },
+      { href: "/chart-action-bridge", label: "Action Bridge", icon: "link" },
+      { href: "/tv-replay", label: "TV Replay", icon: "replay" },
+    ],
+  },
+  {
+    section: "Order Flow",
+    items: [
+      { href: "/order-flow", label: "Order Flow", icon: "bar_chart" },
+      { href: "/heatmap-liquidity", label: "Heatmap Liquidity", icon: "grid_on" },
+      { href: "/dom-depth", label: "DOM / Depth", icon: "align_vertical_bottom" },
+      { href: "/footprint-delta", label: "Footprint / Delta", icon: "stacked_bar_chart" },
+      { href: "/absorption-detector", label: "Absorption", icon: "filter_drama" },
+      { href: "/imbalance-engine", label: "Imbalance Engine", icon: "balance" },
+      { href: "/execution-pressure", label: "Exec Pressure", icon: "speed" },
+      { href: "/flow-confluence", label: "Flow Confluence", icon: "merge" },
+    ],
+  },
+  {
+    section: "Quant Lab",
+    items: [
+      { href: "/quant-lab", label: "Quant Lab Home", icon: "science" },
+      { href: "/backtester", label: "Backtesting", icon: "history" },
+      { href: "/strategy-builder", label: "Strategy Builder", icon: "construction" },
+      { href: "/walk-forward", label: "Walk-Forward", icon: "trending_flat" },
+      { href: "/performance", label: "Performance", icon: "analytics" },
+      { href: "/regime-matrix", label: "Regime Matrix", icon: "grid_3x3" },
+      { href: "/experiment-tracker", label: "Experiments", icon: "biotech" },
+      { href: "/promotion-pipeline", label: "Promotion Pipeline", icon: "moving" },
+    ],
+  },
+  {
+    section: "Memory & Learning",
+    items: [
+      { href: "/recall-engine", label: "Recall Engine", icon: "psychology_alt" },
+      { href: "/case-library", label: "Case Library", icon: "library_books" },
+      { href: "/screenshot-vault", label: "Screenshot Vault", icon: "photo_library" },
+      { href: "/setup-similarity", label: "Setup Similarity", icon: "compare" },
+      { href: "/trade-journal", label: "Trade Journal AI", icon: "book" },
+      { href: "/learning-loop", label: "Learning Loop", icon: "loop" },
+    ],
+  },
+  {
+    section: "Portfolio & Risk",
+    items: [
+      { href: "/portfolio", label: "Portfolio Command", icon: "account_balance" },
+      { href: "/position-monitor", label: "Position Monitor", icon: "monitor" },
+      { href: "/allocation-engine", label: "Allocation Engine", icon: "pie_chart" },
+      { href: "/correlation-risk", label: "Correlation Risk", icon: "bubble_chart" },
+      { href: "/drawdown-protection", label: "Drawdown Shield", icon: "shield" },
+      { href: "/risk-policies", label: "Risk Policies", icon: "policy" },
+      { href: "/pretrade-gate", label: "Pre-Trade Gate", icon: "security" },
+      { href: "/capital-efficiency", label: "Capital Efficiency", icon: "savings" },
+    ],
+  },
+  {
+    section: "Execution",
+    items: [
+      { href: "/execution", label: "Execution Center", icon: "bolt" },
+      { href: "/paper-trading", label: "Paper Trading", icon: "description" },
+      { href: "/assisted-trading", label: "Assisted Live", icon: "handshake" },
+      { href: "/semi-autonomous", label: "Semi-Autonomous", icon: "smart_toy" },
+      { href: "/autonomous-mode", label: "Autonomous Mode", icon: "precision_manufacturing" },
+      { href: "/alpaca", label: "Broker Connector", icon: "cable" },
+      { href: "/slippage-quality", label: "Slippage & Fills", icon: "query_stats" },
+      { href: "/emergency-controls", label: "Emergency / Kill", icon: "emergency" },
+    ],
+  },
+  {
+    section: "Governance",
+    items: [
+      { href: "/audit", label: "Audit Trail", icon: "fact_check" },
+      { href: "/ops", label: "Ops Monitor", icon: "monitor_heart" },
+      { href: "/decision-replay", label: "Decision Replay", icon: "replay_circle_filled" },
+      { href: "/intelligence-center", label: "Intelligence Hub", icon: "auto_awesome" },
+      { href: "/war-room", label: "War Room", icon: "groups" },
+      { href: "/settings", label: "Settings", icon: "settings" },
+    ],
+  },
 ];
 
 export function Shell({ children }: { children: React.ReactNode }) {
@@ -405,38 +502,42 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          <div style={{ fontSize: "8px", color: "#484849", letterSpacing: "0.25em", textTransform: "uppercase", fontFamily: "Space Grotesk", fontWeight: 700, padding: "0 8px 12px" }}>
-            Pipeline Control
-          </div>
-          {navItems.map((item) => {
-            const isActive = location === item.href;
-            return (
-              <Link key={item.href} href={item.href} onClick={() => setMobileMenuOpen(false)}>
-                <div className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded cursor-pointer group transition-all",
-                  isActive ? "bg-[rgba(156,255,147,0.08)] border border-[rgba(156,255,147,0.15)]" : "border border-transparent hover:bg-[rgba(255,255,255,0.03)]"
-                )}>
-                  <span
-                    className="material-symbols-outlined transition-colors"
-                    style={{
-                      fontSize: "18px",
-                      color: isActive ? "#9cff93" : "#767576",
-                    }}
-                  >
-                    {item.icon}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <div className={cn("text-xs font-medium font-headline truncate", isActive ? "text-white" : "text-[#adaaab]")}>
-                      {item.label}
+          {navSections.map((section) => (
+            <div key={section.section} className="mb-2">
+              <div style={{ fontSize: "8px", color: "#484849", letterSpacing: "0.25em", textTransform: "uppercase", fontFamily: "Space Grotesk", fontWeight: 700, padding: "4px 8px 6px" }}>
+                {section.section}
+              </div>
+              {section.items.map((item) => {
+                const isActive = location === item.href;
+                return (
+                  <Link key={item.href} href={item.href} onClick={() => setMobileMenuOpen(false)}>
+                    <div className={cn(
+                      "flex items-center gap-3 px-3 py-1.5 rounded cursor-pointer group transition-all",
+                      isActive ? "bg-[rgba(156,255,147,0.08)] border border-[rgba(156,255,147,0.15)]" : "border border-transparent hover:bg-[rgba(255,255,255,0.03)]"
+                    )}>
+                      <span
+                        className="material-symbols-outlined transition-colors"
+                        style={{
+                          fontSize: "16px",
+                          color: isActive ? "#9cff93" : "#767576",
+                        }}
+                      >
+                        {item.icon}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className={cn("text-[11px] font-medium font-headline truncate", isActive ? "text-white" : "text-[#adaaab]")}>
+                          {item.label}
+                        </div>
+                      </div>
+                      {isActive && (
+                        <div className="w-1 h-1 rounded-full" style={{ backgroundColor: "#9cff93" }} />
+                      )}
                     </div>
-                  </div>
-                  {isActive && (
-                    <div className="w-1 h-1 rounded-full" style={{ backgroundColor: "#9cff93" }} />
-                  )}
-                </div>
-              </Link>
-            );
-          })}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
 
           {/* Grouped Live Movers */}
           <div className="pt-3 mt-3 border-t" style={{ borderColor: "rgba(72,72,73,0.15)" }}>

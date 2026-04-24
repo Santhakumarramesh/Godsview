@@ -227,23 +227,19 @@ class BrainJobQueue {
     this._moveToCompleted(job);
     this._emit("completed", job);
 
-    // Persist to DB (fire-and-forget). JobHistoryRow has an open index
-    // signature so extra job_* columns are fine, but `id`, `type`,
-    // `status` are required.
+    // Persist to DB (fire-and-forget)
     saveJobHistory({
-      id: job.id,
-      type: job.type,
-      status: "completed",
       job_id: job.id,
       job_type: job.type,
       symbol: job.symbol,
       priority: job.priority,
+      status: "completed",
       payload: JSON.stringify(job.payload),
       result: JSON.stringify(result),
-      queued_at: new Date(job.createdAt).toISOString(),
-      started_at: job.startedAt ? new Date(job.startedAt).toISOString() : undefined,
-      completed_at: new Date(job.finishedAt).toISOString(),
-      latencyMs: job.finishedAt - (job.startedAt ?? job.createdAt),
+      queued_at: new Date(job.createdAt),
+      started_at: job.startedAt ? new Date(job.startedAt) : undefined,
+      completed_at: new Date(job.finishedAt),
+      latency_ms: job.finishedAt - (job.startedAt ?? job.createdAt),
     }).catch(() => {/* logged */});
 
     // Auto-create follow-up jobs
@@ -292,19 +288,17 @@ class BrainJobQueue {
 
       // Persist failure to DB
       saveJobHistory({
-        id: job.id,
-        type: job.type,
-        status: "failed",
         job_id: job.id,
         job_type: job.type,
         symbol: job.symbol,
         priority: job.priority,
+        status: "failed",
         payload: JSON.stringify(job.payload),
         error,
-        queued_at: new Date(job.createdAt).toISOString(),
-        started_at: job.startedAt ? new Date(job.startedAt).toISOString() : undefined,
-        completed_at: new Date(job.finishedAt).toISOString(),
-        latencyMs: job.finishedAt - (job.startedAt ?? job.createdAt),
+        queued_at: new Date(job.createdAt),
+        started_at: job.startedAt ? new Date(job.startedAt) : undefined,
+        completed_at: new Date(job.finishedAt),
+        latency_ms: job.finishedAt - (job.startedAt ?? job.createdAt),
       }).catch(() => {/* logged */});
     }
   }

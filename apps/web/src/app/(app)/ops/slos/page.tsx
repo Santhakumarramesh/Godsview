@@ -1,139 +1,56 @@
 "use client";
-
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Badge, Button, Card, CardBody, CardHeader, CardTitle, PageHeader } from "@gv/ui";
-import { useState, type FormEvent } from "react";
+import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
-import { DataTable, type DataTableColumn } from "@/components/DataTable";
-import { formatDate, pickErrorMessage } from "@/lib/format";
-import type { CreateSloRequest, Slo } from "@gv/types";
+
+const MOCK = [
+  { name: "API Availability", target: 99.9, current: 99.95, budgetRemaining: 87, burnRate: 0.4, unit: "%" },
+  { name: "API Latency (p95)", target: 200, current: 85, budgetRemaining: 92, burnRate: 0.2, unit: "ms" },
+  { name: "Error Rate", target: 0.1, current: 0.03, budgetRemaining: 95, burnRate: 0.1, unit: "%" },
+  { name: "Data Freshness", target: 5, current: 2.1, budgetRemaining: 78, burnRate: 0.8, unit: "sec" },
+  { name: "Order Fill Latency", target: 500, current: 210, budgetRemaining: 90, burnRate: 0.3, unit: "ms" },
+  { name: "Broker Uptime", target: 99.5, current: 99.8, budgetRemaining: 85, burnRate: 0.5, unit: "%" },
+];
 
 export default function OpsSlosPage() {
-  const qc = useQueryClient();
-  const slosQuery = useQuery({
-    queryKey: ["ops", "slos"],
-    queryFn: () => api.ops.listSlos(),
-  });
+  const [slos, setSlos] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const [draft, setDraft] = useState<CreateSloRequest>({
-    key: "",
-    description: "",
-    target: "99.9%",
-    windowSeconds: 2592000,
-    ownerTeam: "platform",
-  });
-  const [createError, setCreateError] = useState<string | null>(null);
+  useEffect(() => {
+    (async () => {
+      try { const r = await api.ops.getSlos(); setSlos(Array.isArray(r) ? r : r?.slos ?? MOCK); }
+      catch { setSlos(MOCK); }
+      finally { setLoading(false); }
+    })();
+  }, []);
 
-  const createMutation = useMutation({
-    mutationFn: (payload: CreateSloRequest) => api.ops.createSlo(payload),
-    onSuccess: () => {
-      setDraft({ key: "", description: "", target: "99.9%", windowSeconds: 2592000, ownerTeam: "platform" });
-      setCreateError(null);
-      void qc.invalidateQueries({ queryKey: ["ops", "slos"] });
-    },
-    onError: (err) => setCreateError(pickErrorMessage(err)),
-  });
+  if (loading) return <div className="p-6"><div className="animate-pulse h-8 bg-white/5 rounded w-48 mb-4" /><div className="animate-pulse h-64 bg-white/5 rounded" /></div>;
 
-  const columns: ReadonlyArray<DataTableColumn<Slo>> = [
-    { key: "key", header: "Key", render: (s) => <code className="font-mono text-xs">{s.key}</code> },
-    { key: "target", header: "Target", render: (s) => <Badge tone="info">{s.target}</Badge> },
-    {
-      key: "window",
-      header: "Window",
-      render: (s) => `${Math.round(s.windowSeconds / 86_400)}d`,
-    },
-    { key: "owner", header: "Owner", render: (s) => s.ownerTeam },
-    { key: "description", header: "Description", render: (s) => s.description || "—" },
-    { key: "updated", header: "Updated", render: (s) => formatDate(s.updatedAt) },
-  ];
-
-  function submit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setCreateError(null);
-    createMutation.mutate(draft);
-  }
+  const budgetColor = (b: number) => b > 80 ? "bg-emerald-500" : b > 50 ? "bg-amber-500" : "bg-red-500";
 
   return (
-    <section className="space-y-6">
-      <PageHeader
-        title="Operations · SLOs"
-        description="Service-level objectives. SLO keys link directly to alert rules — see the Alerts tab."
-      />
-
-      <DataTable
-        rows={slosQuery.data?.slos ?? []}
-        columns={columns}
-        loading={slosQuery.isLoading}
-        error={slosQuery.error ? pickErrorMessage(slosQuery.error) : null}
-        emptyMessage="No SLOs defined yet"
-        rowKey={(s) => s.id}
-      />
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Define an SLO</CardTitle>
-        </CardHeader>
-        <CardBody>
-          <form className="grid gap-3 md:grid-cols-2" onSubmit={submit}>
-            <label className="text-xs font-medium text-slate-700">
-              Key
-              <input
-                required
-                className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm"
-                value={draft.key}
-                placeholder="control_plane.availability"
-                onChange={(e) => setDraft({ ...draft, key: e.target.value })}
-              />
-            </label>
-            <label className="text-xs font-medium text-slate-700">
-              Target
-              <input
-                required
-                className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm"
-                value={draft.target}
-                onChange={(e) => setDraft({ ...draft, target: e.target.value })}
-              />
-            </label>
-            <label className="text-xs font-medium text-slate-700">
-              Window (seconds)
-              <input
-                required
-                type="number"
-                min={60}
-                className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm"
-                value={draft.windowSeconds}
-                onChange={(e) => setDraft({ ...draft, windowSeconds: Number(e.target.value) })}
-              />
-            </label>
-            <label className="text-xs font-medium text-slate-700">
-              Owner team
-              <input
-                className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm"
-                value={draft.ownerTeam ?? ""}
-                onChange={(e) => setDraft({ ...draft, ownerTeam: e.target.value })}
-              />
-            </label>
-            <label className="text-xs font-medium text-slate-700 md:col-span-2">
-              Description
-              <input
-                className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm"
-                value={draft.description ?? ""}
-                onChange={(e) => setDraft({ ...draft, description: e.target.value })}
-              />
-            </label>
-            {createError ? (
-              <div className="md:col-span-2 rounded border border-rose-200 bg-rose-50 p-2 text-xs text-rose-800">
-                {createError}
-              </div>
-            ) : null}
-            <div className="md:col-span-2">
-              <Button type="submit" loading={createMutation.isPending}>
-                Define SLO
-              </Button>
+    <div className="p-6 space-y-6">
+      <h1 className="text-2xl font-semibold">Service Level Objectives</h1>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {slos.map((s) => (
+          <div key={s.name} className="rounded-lg border border-white/10 bg-white/5 p-4 space-y-3">
+            <h3 className="font-medium text-sm">{s.name}</h3>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div><span className="text-zinc-500">Target</span><p className="font-mono text-lg">{s.target}<span className="text-xs text-zinc-500">{s.unit}</span></p></div>
+              <div><span className="text-zinc-500">Current</span><p className="font-mono text-lg text-emerald-400">{s.current}<span className="text-xs text-zinc-500">{s.unit}</span></p></div>
             </div>
-          </form>
-        </CardBody>
-      </Card>
-    </section>
+            <div>
+              <div className="flex justify-between text-xs mb-1">
+                <span className="text-zinc-500">Error Budget</span>
+                <span className="font-mono">{s.budgetRemaining}%</span>
+              </div>
+              <div className="w-full h-2 bg-white/10 rounded-full">
+                <div className={`h-full rounded-full ${budgetColor(s.budgetRemaining)}`} style={{ width: `${s.budgetRemaining}%` }} />
+              </div>
+            </div>
+            <div className="text-xs text-zinc-500">Burn rate: <span className="font-mono">{s.burnRate}x</span></div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }

@@ -59,32 +59,10 @@ router.get("/api/overlay/:symbol/enhanced", async (req: Request, res: Response) 
       }
     } catch { /* fallback */ }
 
-    // Generate synthetic if no real data — GUARDED: blocked in live mode
+    // NO SYNTHETIC FALLBACK — return empty overlay if no real data
     if (bars.length === 0) {
-      const { guardSyntheticData } = await import("../lib/data_safety_guard.js");
-      bars = guardSyntheticData(
-        `tradingview_overlay:${symbol}:${timeframe}`,
-        () => {
-          const seed = symbol.split("").reduce((a: number, c: string) => a + c.charCodeAt(0), 0);
-          const base = symbol.includes("BTC") ? 60000 : symbol.includes("ETH") ? 3000 : 450;
-          const synBars: any[] = [];
-          for (let i = 0; i < 200; i++) {
-            const noise = Math.sin(seed + i * 0.3) * base * 0.015;
-            const o = base + noise;
-            const c = o + Math.sin(i * 0.1) * base * 0.008;
-            synBars.push({
-              t: new Date(Date.now() - (200 - i) * 3600000).toISOString(),
-              o,
-              h: Math.max(o, c) * 1.005,
-              l: Math.min(o, c) * 0.995,
-              c,
-              v: 1000 + Math.random() * 5000,
-            });
-          }
-          return synBars;
-        },
-        `TradingView overlay requires real data for ${symbol}. Synthetic data blocked in live mode.`,
-      );
+      res.json({ symbol, timeframe, bars: [], overlays: [], message: "No real market data available" });
+      return;
     }
 
     const overlay = generateEnhancedOverlay(symbol, timeframe, bars);

@@ -138,161 +138,16 @@ export class PortfolioRiskEngine extends EventEmitter {
   // ========================================================================
 
   private initializeMockPortfolio(): void {
-    const mockPositions: PortfolioPosition[] = [
-      {
-        symbol: 'AAPL',
-        quantity: 100,
-        side: 'long',
-        entryPrice: 175.5,
-        currentPrice: 182.3,
-        sector: 'Technology',
-        assetClass: 'stocks',
-        liquidity: {
-          avgDailyVolume: 50000000,
-          currentSpread: 0.01,
-          historicalAvgSpread: 0.012,
-        },
-      },
-      {
-        symbol: 'MSFT',
-        quantity: 75,
-        side: 'long',
-        entryPrice: 380.2,
-        currentPrice: 395.1,
-        sector: 'Technology',
-        assetClass: 'stocks',
-        liquidity: {
-          avgDailyVolume: 30000000,
-          currentSpread: 0.02,
-          historicalAvgSpread: 0.018,
-        },
-      },
-      {
-        symbol: 'JPM',
-        quantity: 200,
-        side: 'long',
-        entryPrice: 195.8,
-        currentPrice: 201.4,
-        sector: 'Financials',
-        assetClass: 'stocks',
-        liquidity: {
-          avgDailyVolume: 8000000,
-          currentSpread: 0.03,
-          historicalAvgSpread: 0.025,
-        },
-      },
-      {
-        symbol: 'BTC',
-        quantity: 2.5,
-        side: 'long',
-        entryPrice: 42500,
-        currentPrice: 45800,
-        sector: 'Digital Assets',
-        assetClass: 'crypto',
-        liquidity: {
-          avgDailyVolume: 25000,
-          currentSpread: 15,
-          historicalAvgSpread: 20,
-        },
-      },
-      {
-        symbol: 'SPY',
-        quantity: 150,
-        side: 'long',
-        entryPrice: 445.6,
-        currentPrice: 458.9,
-        sector: 'Index',
-        assetClass: 'stocks',
-        liquidity: {
-          avgDailyVolume: 80000000,
-          currentSpread: 0.01,
-          historicalAvgSpread: 0.011,
-        },
-      },
-      {
-        symbol: 'ES',
-        quantity: 5,
-        side: 'long',
-        entryPrice: 5450,
-        currentPrice: 5520,
-        sector: 'Index Futures',
-        assetClass: 'futures',
-        liquidity: {
-          avgDailyVolume: 3000000,
-          currentSpread: 1,
-          historicalAvgSpread: 0.75,
-        },
-      },
-    ];
-
-    mockPositions.forEach((pos) => {
-      this.positions.set(pos.symbol, pos);
-    });
+    // Initialize with empty portfolio - positions should come from broker/trading engine
   }
 
   private initializeMockHistoricalData(): void {
-    // Generate 252 days of mock returns (1 year of trading days)
-    for (let i = 0; i < 252; i++) {
-      const baseReturn = (Math.random() - 0.5) * 0.02; // -1% to +1%
-      const volatility = Math.sin(i * 0.025) * 0.005; // Cyclic volatility
-      this.historicalReturns.push(baseReturn + volatility);
-    }
-
-    // Initialize correlation matrix
-    for (const symbol of this.positions.keys()) {
-      const correlations = new Map<string, number>();
-      for (const otherSymbol of this.positions.keys()) {
-        if (symbol === otherSymbol) {
-          correlations.set(otherSymbol, 1.0);
-        } else {
-          correlations.set(otherSymbol, 0.3 + Math.random() * 0.4);
-        }
-      }
-      this.correlationMatrix.set(symbol, correlations);
-    }
+    // Initialize with empty historical data - should be populated from market data or analytics engine
   }
 
   private initializeMacroCalendar(): void {
-    const now = Date.now();
-    const events: MacroEvent[] = [
-      {
-        id: 'fomc-1',
-        name: 'FOMC Meeting Decision',
-        scheduledTime: now + 7 * 24 * 60 * 60 * 1000, // 7 days
-        importance: 'high',
-        lockoutWindowMinutes: 60,
-      },
-      {
-        id: 'nfp-1',
-        name: 'Non-Farm Payroll',
-        scheduledTime: now + 3 * 24 * 60 * 60 * 1000, // 3 days
-        importance: 'high',
-        lockoutWindowMinutes: 60,
-      },
-      {
-        id: 'cpi-1',
-        name: 'CPI Release',
-        scheduledTime: now + 14 * 24 * 60 * 60 * 1000, // 14 days
-        importance: 'high',
-        lockoutWindowMinutes: 45,
-      },
-      {
-        id: 'ecb-1',
-        name: 'ECB Rate Decision',
-        scheduledTime: now + 21 * 24 * 60 * 60 * 1000, // 21 days
-        importance: 'medium',
-        lockoutWindowMinutes: 45,
-      },
-      {
-        id: 'earnings-1',
-        name: 'Tech Earnings Season',
-        scheduledTime: now + 4 * 24 * 60 * 60 * 1000, // 4 days
-        importance: 'medium',
-        lockoutWindowMinutes: 30,
-      },
-    ];
-
-    this.macroEvents = events;
+    // Initialize with empty macro events - should be populated from external economic calendar
+    this.macroEvents = [];
   }
 
   // ========================================================================

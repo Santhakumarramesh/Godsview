@@ -169,13 +169,13 @@ router.post("/signal", (req: Request, res: Response) => {
 
   // Mock MCP decision
   const decision: MCPDecision = {
-    accepted: Math.random() > 0.38, // 62% approval rate
+    accepted: false,
     reasoning:
       "Signal meets risk and correlation thresholds for " +
       (pipelineMode === "live" ? "live" : "paper") +
       " execution",
-    riskScore: Math.random() * 100,
-    expectedReturn: Math.random() * 5 - 1,
+    riskScore: 0,
+    expectedReturn: 0,
   };
 
   res.json({

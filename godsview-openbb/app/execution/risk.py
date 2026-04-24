@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.risk import RiskDecision, allowed_to_trade, apply_risk_checks, position_size
+from app.risk import RiskDecision, apply_risk_checks, position_size, allowed_to_trade
 
 __all__ = [
     "RiskDecision",
@@ -8,3 +8,4 @@ __all__ = [
     "position_size",
     "allowed_to_trade",
 ]
+

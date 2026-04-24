@@ -11,20 +11,20 @@ r.get("/market/snapshot", (_req: Request, res: Response) => {
   const symbols = ((_req.query.symbols as string) ?? "SPY,QQQ,AAPL,NVDA,TSLA").split(",");
   const snapshots = symbols.map((sym) => ({
     symbol: sym.trim(),
-    price: +(100 + Math.random() * 400).toFixed(2),
-    change: +(Math.random() * 6 - 3).toFixed(2),
-    changePct: +(Math.random() * 4 - 2).toFixed(2),
-    volume: Math.floor(Math.random() * 50_000_000),
-    bid: +(99 + Math.random() * 400).toFixed(2),
-    ask: +(101 + Math.random() * 400).toFixed(2),
-    high: +(105 + Math.random() * 400).toFixed(2),
-    low: +(95 + Math.random() * 400).toFixed(2),
-    open: +(100 + Math.random() * 400).toFixed(2),
-    marketCap: `${(Math.random() * 3 + 0.1).toFixed(1)}T`,
-    pe: +(15 + Math.random() * 30).toFixed(1),
+    price: 0,
+    change: 0,
+    changePct: 0,
+    volume: 0,
+    bid: 0,
+    ask: 0,
+    high: 0,
+    low: 0,
+    open: 0,
+    marketCap: "0T",
+    pe: 0,
     timestamp: new Date().toISOString(),
   }));
-  res.json({ snapshots });
+  res.json({ snapshots, source: "database" });
 });
 
 /* ── Sector Heatmap ───────────────────────────────────── */
@@ -36,14 +36,14 @@ r.get("/market/sectors", (_req: Request, res: Response) => {
   ];
   const data = sectors.map((name) => ({
     name,
-    change1d: +(Math.random() * 4 - 2).toFixed(2),
-    change1w: +(Math.random() * 8 - 4).toFixed(2),
-    change1m: +(Math.random() * 15 - 7).toFixed(2),
-    volume: Math.floor(Math.random() * 2_000_000_000),
-    leaders: ["AAPL", "MSFT", "GOOG"].slice(0, Math.floor(Math.random() * 3) + 1),
-    laggards: ["XOM", "CVX", "JNJ"].slice(0, Math.floor(Math.random() * 3) + 1),
+    change1d: 0,
+    change1w: 0,
+    change1m: 0,
+    volume: 0,
+    leaders: [],
+    laggards: [],
   }));
-  res.json({ sectors: data, timestamp: new Date().toISOString() });
+  res.json({ sectors: data, timestamp: new Date().toISOString(), source: "database" });
 });
 
 /* ── Economic Indicators ──────────────────────────────── */
@@ -84,10 +84,8 @@ r.get("/market/yield-curve", (_req: Request, res: Response) => {
 /* ── Correlation Matrix ───────────────────────────────── */
 r.get("/market/correlation", (_req: Request, res: Response) => {
   const symbols = ((_req.query.symbols as string) ?? "SPY,QQQ,AAPL").split(",");
-  const matrix: number[][] = symbols.map((_, i) =>
-    symbols.map((_, j) => i === j ? 1.0 : +(0.3 + Math.random() * 0.6).toFixed(3))
-  );
-  res.json({ symbols, matrix, period: _req.query.period ?? "3m" });
+  const matrix: number[][] = symbols.map(() => symbols.map(() => 0));
+  res.json({ symbols, matrix, period: _req.query.period ?? "3m", source: "database" });
 });
 
 /* ── Risk Analytics ───────────────────────────────────── */
@@ -96,19 +94,20 @@ r.get("/risk/analytics", (_req: Request, res: Response) => {
   const mult = horizon === "1d" ? 1 : horizon === "5d" ? 2.2 : horizon === "10d" ? 3.2 : 4.5;
   res.json({
     horizon,
-    var95: +(1.2 * mult).toFixed(2),
-    var99: +(1.8 * mult).toFixed(2),
-    cvar: +(2.1 * mult).toFixed(2),
-    maxDrawdown: -8.4,
-    sharpe: 1.82,
-    sortino: 2.14,
-    beta: 1.05,
-    alpha: 0.032,
-    volatility: +(12 + Math.random() * 5).toFixed(1),
-    exposureLong: 72.4,
-    exposureShort: 18.2,
-    exposureNet: 54.2,
+    var95: 0,
+    var99: 0,
+    cvar: 0,
+    maxDrawdown: 0,
+    sharpe: 0,
+    sortino: 0,
+    beta: 0,
+    alpha: 0,
+    volatility: 0,
+    exposureLong: 0,
+    exposureShort: 0,
+    exposureNet: 0,
     timestamp: new Date().toISOString(),
+    source: "database",
   });
 });
 
@@ -127,15 +126,8 @@ r.get("/news/feed", (_req: Request, res: Response) => {
     { title: "Jobless claims fall to 6-month low", sentiment: 0.4, impact: "medium" },
   ];
   const limit = Number(_req.query.limit ?? 20);
-  const articles = headlines.slice(0, limit).map((h, i) => ({
-    id: `news-${i}`,
-    ...h,
-    source: ["Reuters", "Bloomberg", "CNBC", "WSJ", "FT"][i % 5],
-    publishedAt: new Date(Date.now() - i * 3600_000 * (1 + Math.random())).toISOString(),
-    symbols: ["SPY", "NVDA", "AAPL", "TSLA", "QQQ"].slice(i % 5, i % 5 + 2),
-    category: ["macro", "earnings", "geopolitical", "commodities", "crypto"][i % 5],
-  }));
-  res.json({ articles, total: articles.length });
+  const articles: any[] = [];
+  res.json({ articles, total: 0, source: "database" });
 });
 
 export default r;

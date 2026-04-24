@@ -1,18 +1,3 @@
-// @ts-nocheck
-/**
- * DESIGN SCAFFOLD — not wired into the live runtime.
- *
- * STATUS: This file is a forward-looking integration shell. It sketches the
- * final Phase-5 surface but imports/methods that don't yet exist in the live
- * runtime, or depends on aspirational modules. Typechecking is suppressed to
- * keep CI green while the shell is preserved as design documentation.
- *
- * Wiring it into the live runtime is tracked in
- * docs/PRODUCTION_READINESS.md (Phase 5: Auto-Promotion Pipeline).
- *
- * REMOVE the `// @ts-nocheck` directive once Phase 5 is implemented and all
- * referenced modules/methods exist.
- */
 // super_intelligence_v4.ts - Extends V3 with full quant intelligence layer
 // Integrates memory, causal reasoning, self-refusal, calibration, and bounded authority
 
@@ -309,7 +294,7 @@ export class SuperIntelligenceV4 {
       // Store outcome for analysis
       await this.logOutcomeRecord(outcome);
     } catch (error) {
-      logger.error({ err: error }, 'Failed to record outcome:');
+      logger.error('Failed to record outcome:', error);
     }
   }
 
@@ -361,7 +346,7 @@ export class SuperIntelligenceV4 {
         regimeContext: await this.memory.getRegimeContext()
       };
     } catch (error) {
-      logger.error({ err: error }, 'Memory consultation failed:');
+      logger.error('Memory consultation failed:', error);
       return this.getDefaultMemoryContext();
     }
   }
@@ -393,7 +378,7 @@ export class SuperIntelligenceV4 {
         isStructural: edge.is_structural
       };
     } catch (error) {
-      logger.error({ err: error }, 'Causal edge scoring failed:');
+      logger.error('Causal edge scoring failed:', error);
       return this.getDefaultCausalEdge();
     }
   }
@@ -422,7 +407,7 @@ export class SuperIntelligenceV4 {
         conditions: this.autonomous.getConditionSummary(reasons)
       };
     } catch (error) {
-      logger.error({ err: error }, 'Self-refusal check failed:');
+      logger.error('Self-refusal check failed:', error);
       return this.getDefaultRefusalCheck();
     }
   }
@@ -450,7 +435,7 @@ export class SuperIntelligenceV4 {
         backTestVsLiveDeviation: metrics.backtest_vs_live_deviation
       };
     } catch (error) {
-      logger.error({ err: error }, 'Calibration adjustment failed:');
+      logger.error('Calibration adjustment failed:', error);
       return this.getDefaultCalibrationAdj(v3Pred);
     }
   }
@@ -474,7 +459,7 @@ export class SuperIntelligenceV4 {
         violations
       };
     } catch (error) {
-      logger.error({ err: error }, 'Authority check failed:');
+      logger.error('Authority check failed:', error);
       return this.getDefaultAuthorityCheck();
     }
   }

@@ -376,7 +376,7 @@ export default function Dashboard() {
   const avgOrderflowScore = rankedBoard.length > 0 ? rankedBoard.reduce((sum, row) => sum + row.orderflow_score, 0) / rankedBoard.length : 0;
   const bullishBiasCount = rankedBoard.filter((row) => row.direction === "long").length;
   const bearishBiasCount = rankedBoard.filter((row) => row.direction === "short").length;
-  const sentimentQuality = sigs.length > 0 ? sigs.reduce((sum, row) => sum + row.final_quality, 0) / sigs.length : avgAttention * 100;
+  const sentimentQuality = sigs.length > 0 ? sigs.reduce((sum: number, row: any) => sum + row.final_quality, 0) / sigs.length : avgAttention * 100;
   const sentimentSign = winRate >= 0.5 ? "+" : "";
   const sentimentLabel = bullishBiasCount > bearishBiasCount ? "Bullish" : bearishBiasCount > bullishBiasCount ? "Bearish" : "Balanced";
   const setupAlerts = sigs.slice(0, 4);
@@ -670,7 +670,7 @@ export default function Dashboard() {
             <div className="rounded p-3" style={{ backgroundColor: "#111726", border: `1px solid ${C.border}` }}>
               <MicroLabel>Setup Alerts</MicroLabel>
               <div className="mt-2 space-y-1.5">
-                {setupAlerts.length > 0 ? setupAlerts.map((sig, idx) => (
+                {setupAlerts.length > 0 ? setupAlerts.map((sig: any, idx: number) => (
                   <div key={sig.id} className="rounded px-2 py-1.5 flex items-center justify-between" style={{ border: `1px solid ${C.border}`, backgroundColor: "#0f131e" }}>
                     <span style={{ fontSize: "10px", color: "#fff", fontFamily: "Space Grotesk" }}>{idx + 1}. {sig.instrument} {sig.setup_type.replace(/_/g, " ")}</span>
                     <span style={{ fontSize: "9px", fontFamily: "JetBrains Mono, monospace", color: sig.final_quality > 70 ? C.primary : sig.final_quality > 50 ? "#fbbf24" : C.tertiary }}>
@@ -912,7 +912,7 @@ export default function Dashboard() {
         </div>
 
         <div className="flex gap-2 overflow-x-auto pb-1 md:grid md:grid-cols-4 md:overflow-visible">
-          {setupAlerts.length > 0 ? setupAlerts.map((sig) => (
+          {setupAlerts.length > 0 ? setupAlerts.map((sig: any) => (
             <div key={`strip-${sig.id}`} className="rounded px-3 py-2 min-w-[220px] md:min-w-0" style={{ backgroundColor: "#111726", border: `1px solid ${C.border}` }}>
               <div style={{ fontSize: "10px", color: "#fff", fontWeight: 700, fontFamily: "Space Grotesk" }}>{sig.instrument} {sig.setup_type.replace(/_/g, " ")}</div>
               <div style={{ fontSize: "9px", marginTop: "3px", color: sig.final_quality > 65 ? C.primary : sig.final_quality > 50 ? "#fbbf24" : C.tertiary }}>
@@ -1543,7 +1543,7 @@ export default function Dashboard() {
           </span>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
-          {layers.map((layer, i) => {
+          {layers.map((layer: any, i: number) => {
             const isActive = layer.status === "active";
             const isWarn = layer.status === "warning";
             const color = isActive ? C.primary : isWarn ? "#fbbf24" : C.tertiary;
@@ -1589,7 +1589,7 @@ export default function Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {sigs.map((sig) => {
+              {sigs.map((sig: any) => {
                 const q = sig.final_quality;
                 const qColor = q > 75 ? C.primary : q > 50 ? "#fbbf24" : C.tertiary;
                 const isActiveSignal = sig.status === "approved" || sig.status === "executed";

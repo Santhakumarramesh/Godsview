@@ -68,53 +68,24 @@ function nextSignalId(): string {
  */
 function generateBrainGraphEvent(): BrainGraphEvent {
   const signalId = nextSignalId();
-  const flowStep = Math.floor(Math.random() * FLOW_STEPS.length);
-  const progress = (flowStep + Math.random()) / FLOW_STEPS.length;
-
   const nodes: Record<string, BrainNodeState> = {};
 
-  // Simulate node activation as signal flows through pipeline
   for (const nodeName of BRAIN_NODES) {
-    const nodeIdx = BRAIN_NODES.indexOf(nodeName);
-
-    // Nodes activate in sequence as signal flows
-    const activationThreshold = (flowStep / FLOW_STEPS.length) * 0.8;
-    const isActive = nodeIdx / BRAIN_NODES.length < activationThreshold;
-
-    if (isActive) {
-      // Generate realistic score based on node position
-      const baseScore = 0.6 + Math.random() * 0.35;
-      nodes[nodeName] = {
-        active: true,
-        score: Math.min(0.99, baseScore),
-        data: {
-          processed: Math.floor(Math.random() * 1000),
-          latency: Math.floor(Math.random() * 15),
-          confidence: 0.7 + Math.random() * 0.25,
-        },
-      };
-    } else {
-      nodes[nodeName] = {
-        active: false,
-        score: null,
-      };
-    }
+    nodes[nodeName] = {
+      active: false,
+      score: null,
+    };
   }
-
-  const latency = Math.floor(Math.random() * 20 + 2);
 
   return {
     signalId,
     nodes,
     flow: {
-      currentStep: FLOW_STEPS[flowStep],
-      progress: Math.min(0.99, progress),
-      latencyMs: latency,
+      currentStep: "ingestion",
+      progress: 0,
+      latencyMs: 0,
     },
-    decision: flowStep === FLOW_STEPS.length - 1 ? {
-      action: ["APPLY", "VETO", "REVIEW"][Math.floor(Math.random() * 3)],
-      confidence: 0.7 + Math.random() * 0.25,
-    } : null,
+    decision: null,
   };
 }
 
@@ -150,7 +121,7 @@ function startBrainGraphSimulator(): void {
       },
       timestamp: new Date().toISOString(),
     });
-  }, 2000 + Math.random() * 1000);
+  }, 2000);
 
   if (brainGraphSimulator?.unref) brainGraphSimulator.unref();
 }

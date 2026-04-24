@@ -1,14 +1,3 @@
-/**
- * DESIGN SCAFFOLD — not wired into the live runtime.
- * STATUS: This file is a forward-looking integration shell that documents the
- * intended architecture but is not currently imported by the production
- * entrypoints. Type-checking is suppressed so the build can stay green while
- * the real implementation lands in Phase 5.
- *
- * REMOVE the `// @ts-nocheck` directive once Phase 5 is implemented and the
- * file is actually mounted in `src/index.ts` / `src/routes/index.ts`.
- */
-
 // TrustSurface: Unified transparency view for operator decision-making
 // Single source of truth for WHAT, WHY, and WHAT_NEXT across entire strategy lifecycle
 // Generates plain-English briefs that enable confident human approval
@@ -115,7 +104,7 @@ export interface DetailedBrief {
   risks: {
     topRisks: Array<{
       risk: string;
-      likelihood: string;
+      probability: string;
       impact: string;
       mitigation: string;
     }>;
@@ -715,7 +704,7 @@ export class TrustSurface {
   ): {
     topRisks: Array<{
       risk: string;
-      likelihood: string;
+      probability: string;
       impact: string;
       mitigation: string;
     }>;

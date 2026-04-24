@@ -109,30 +109,6 @@ export class DataQualityScorer {
 
   scoreCandles(symbol: string, timeframe: string, candles: Candle[]): DataQualityReport {
     const now = new Date();
-
-    // Empty candle arrays mean we have no data at all — the data feed is
-    // either down, lagging, or returning nothing. Treat that as low quality
-    // so downstream consumers (live execution, paper validation, the data
-    // truth gate) refuse to act on it. We deliberately do not return 0
-    // because a strict zero would crash dashboards that compare scores; a
-    // low non-zero value also lets graphs render the dip cleanly.
-    if (candles.length === 0) {
-      return {
-        symbol,
-        timeframe,
-        qualityScore: 0,
-        freshnessScore: 0,
-        completenessScore: 0,
-        consistencyScore: 0,
-        gapCount: 0,
-        staleBarCount: 0,
-        totalBars: 0,
-        gaps: [],
-        staleIndices: [],
-        scoredAt: now,
-      };
-    }
-
     const gapCount = this.detectGaps(candles, timeframe);
     const gaps = this.findGapDetails(candles, timeframe);
     const staleIndices = this.findStaleCandles(candles, now);

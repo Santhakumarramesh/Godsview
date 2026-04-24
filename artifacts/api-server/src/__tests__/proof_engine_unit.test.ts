@@ -68,32 +68,6 @@ vi.mock("@workspace/db", () => {
   const fromMock = vi.fn(() => ({ where: whereMock }));
   const selectMock = vi.fn(() => ({ from: fromMock }));
   return {
-    // drizzle-orm re-exports (now provided by @workspace/db)
-    and:       (...args: unknown[]) => args,
-    or:        (...args: unknown[]) => args,
-    eq:        () => null,
-    ne:        () => null,
-    gt:        () => null,
-    gte:       () => null,
-    lt:        () => null,
-    lte:       () => null,
-    isNotNull: () => null,
-    isNull:    () => null,
-    desc:      () => null,
-    asc:       () => null,
-    inArray:   () => null,
-    notInArray:() => null,
-    count:     () => 0,
-    sum:       () => 0,
-    max:       () => null,
-    min:       () => null,
-    between:   () => null,
-    like:      () => null,
-    ilike:     () => null,
-    exists:    () => null,
-    not:       () => null,
-    sql:       Object.assign(() => "", { raw: (s: string) => s }) as unknown as never,
-
     db: { select: selectMock },
     siDecisionsTable: new Proxy({} as any, { get: (_t, p) => String(p) }),
   };

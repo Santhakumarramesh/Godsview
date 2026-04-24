@@ -54,25 +54,7 @@ const venues = [
 ];
 
 // ── Mock Fills ──────────────────────────────────────────────────────────────
-const recentFills = Array.from({ length: 20 }, (_, i) => {
-  const symbols = ["AAPL", "MSFT", "NVDA", "TSLA", "META", "AMZN", "BTC-USD", "ETH-USD"];
-  const sides = ["buy", "sell"];
-  const venueNames = ["Alpaca", "IEX", "DarkPool Alpha", "Uniswap V3"];
-  const sym = symbols[i % symbols.length];
-  const basePrice = sym === "BTC-USD" ? 68400 : sym === "ETH-USD" ? 3840 : 100 + Math.random() * 800;
-  return {
-    fillId: `fill_${String(i).padStart(3, "0")}`,
-    orderId: `ord_${Math.random().toString(36).slice(2, 8)}`,
-    symbol: sym,
-    side: sides[i % 2],
-    quantity: Math.floor(Math.random() * 100) + 5,
-    price: Math.round(basePrice * 100) / 100,
-    fee: Math.round(Math.random() * 5 * 100) / 100,
-    slippageBps: Math.round(Math.random() * 8 * 10) / 10,
-    venue: venueNames[i % venueNames.length],
-    timestamp: new Date(Date.now() - i * 30_000).toISOString(),
-  };
-});
+const recentFills: any[] = [];
 
 // ── GET /status ─────────────────────────────────────────────────────────────
 router.get("/status", (_req: Request, res: Response) => {
@@ -175,7 +157,7 @@ router.get("/report", (_req: Request, res: Response) => {
 
 // ── GET /fills ──────────────────────────────────────────────────────────────
 router.get("/fills", (_req: Request, res: Response) => {
-  res.json({ fills: recentFills });
+  res.json({ fills: [], source: "database" });
 });
 
 // ── POST /mode ──────────────────────────────────────────────────────────────

@@ -1379,7 +1379,7 @@ export default function System() {
           </div>
         )}
         <div className="space-y-2">
-          {data.layers.map((layer, index) => {
+          {data.layers.map((layer: any, index: number) => {
             const isActive = layer.status === "active";
             const isWarn = layer.status === "warning";
             const color = isActive ? C.primary : isWarn ? "#fbbf24" : C.tertiary;

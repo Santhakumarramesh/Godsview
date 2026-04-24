@@ -4,15 +4,14 @@ GodsView v2 — ML predictor (inference).
 Loads the active model and returns win_probability + approved flag
 for a given signal + feature vector.
 """
-
 from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
 
-from services.ml_service.models.registry import registry
 from services.shared.logging import get_logger
 from services.shared.types import MLPrediction, Signal
+from services.ml_service.models.registry import registry
 
 log = get_logger(__name__)
 
@@ -30,8 +29,8 @@ def predict(signal: Signal, features: dict[str, float]) -> MLPrediction:
 
     if model_entry is None:
         # Rule-based fallback: approve if confidence + structure are strong
-        win_prob = _rule_based_probability(signal, features)
-        approved = win_prob >= _APPROVAL_THRESHOLD
+        win_prob   = _rule_based_probability(signal, features)
+        approved   = win_prob >= _APPROVAL_THRESHOLD
         return MLPrediction(
             signal_id=signal.id,
             symbol=signal.symbol,
@@ -65,7 +64,7 @@ def predict(signal: Signal, features: dict[str, float]) -> MLPrediction:
     X = [[features.get(k, 0.0) for k in feat_keys]]
 
     try:
-        proba = model.predict_proba(X)[0][1]  # P(TP-hit)
+        proba = model.predict_proba(X)[0][1]   # P(TP-hit)
     except Exception as exc:
         log.error("inference_failed", signal_id=signal.id, err=str(exc))
         proba = _rule_based_probability(signal, features)
@@ -78,12 +77,8 @@ def predict(signal: Signal, features: dict[str, float]) -> MLPrediction:
     try:
         raw_model = model.calibrated_classifiers_[0].estimator
         importances = raw_model.feature_importances_
-        fi = {
-            feat_keys[i]: round(
-                float(importances[i]) * features.get(feat_keys[i], 0.0), 5
-            )
-            for i in range(len(feat_keys))
-        }
+        fi = {feat_keys[i]: round(float(importances[i]) * features.get(feat_keys[i], 0.0), 5)
+              for i in range(len(feat_keys))}
     except Exception:
         pass
 
@@ -98,9 +93,9 @@ def predict(signal: Signal, features: dict[str, float]) -> MLPrediction:
         model_accuracy=model_entry.test_accuracy,
         shap_values=fi,
         meta={
-            "roc_auc": model_entry.roc_auc,
+            "roc_auc":    model_entry.roc_auc,
             "train_rows": model_entry.train_rows,
-            "test_rows": model_entry.test_rows,
+            "test_rows":  model_entry.test_rows,
         },
     )
 
@@ -111,9 +106,9 @@ def _rule_based_probability(signal: Signal, features: dict[str, float]) -> float
     Used when no ML model is trained yet.
     """
     score = 0.0
-    score += signal.structure_score * 0.30
-    score += signal.volume_score * 0.20
-    score += signal.order_flow_score * 0.20
-    score += signal.confidence * 0.20
+    score += signal.structure_score       * 0.30
+    score += signal.volume_score          * 0.20
+    score += signal.order_flow_score      * 0.20
+    score += signal.confidence            * 0.20
     score += min(signal.risk_reward / 3.0, 1.0) * 0.10
     return min(max(score, 0.0), 1.0)

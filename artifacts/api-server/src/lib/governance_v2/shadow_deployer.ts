@@ -88,9 +88,10 @@ export class ShadowDeployer extends EventEmitter {
       const symbol = symbols[i % symbols.length];
 
       // Challenger slightly outperforms champion
-      const championPred = Math.random() * 0.1 - 0.05; // -5% to +5%
-      const challengerPred = championPred + (Math.random() * 0.03); // +0.3% better on average
-      const actual = Math.random() * 0.12 - 0.06;
+      // Real values come from live market predictions
+      const championPred = 0;
+      const challengerPred = 0;
+      const actual = 0;
 
       activePredictions.push({
         timestamp,
@@ -136,9 +137,10 @@ export class ShadowDeployer extends EventEmitter {
       const symbol = symbols[i % symbols.length];
 
       // Challenger significantly outperforms champion
-      const championPred = Math.random() * 0.1 - 0.05;
-      const challengerPred = championPred + (Math.random() * 0.08 + 0.02); // +2-10% better
-      const actual = Math.random() * 0.12 - 0.06;
+      // Real values come from live market predictions
+      const championPred = 0;
+      const challengerPred = 0;
+      const actual = 0;
 
       completedPredictions.push({
         timestamp,
@@ -288,7 +290,7 @@ export class ShadowDeployer extends EventEmitter {
       modelVersion: this.getModelVersion(modelId),
       featuresUsed: features,
       prediction,
-      confidence: 0.7 + Math.random() * 0.25,
+      confidence: 0, // Real values come from model prediction confidence
       derivedFrom: this.getDerivedFromFeatures(features),
     };
 
@@ -627,7 +629,7 @@ export class ShadowDeployer extends EventEmitter {
         modelVersion: this.getModelVersion(championId),
         featuresUsed: features,
         prediction: pred.championPrediction,
-        confidence: 0.75 + Math.random() * 0.2,
+        confidence: 0, // Real values come from model prediction confidence
         derivedFrom: this.getDerivedFromFeatures(features),
       });
 
@@ -639,7 +641,7 @@ export class ShadowDeployer extends EventEmitter {
         modelVersion: this.getModelVersion(challengerId),
         featuresUsed: challengerFeatures,
         prediction: pred.challengerPrediction,
-        confidence: 0.78 + Math.random() * 0.2,
+        confidence: 0, // Real values come from model prediction confidence
         derivedFrom: this.getDerivedFromFeatures(challengerFeatures),
       });
     });

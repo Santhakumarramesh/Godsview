@@ -7,7 +7,7 @@ import {
   type SlippageDistribution,
   type ExecutionDriftEvent,
 } from "../schema/execution_validation.js";
-import { eq, and, gte, lte, desc, sql } from "@workspace/db";
+import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
 
 // ============================================================================
 // Types

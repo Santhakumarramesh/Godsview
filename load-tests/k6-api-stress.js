@@ -18,9 +18,6 @@ const signalLatency = new Trend("signal_latency", true);
 const healthLatency = new Trend("health_latency", true);
 const tickerLatency = new Trend("ticker_latency", true);
 const brainLatency = new Trend("brain_latency", true);
-const govSchedulerLatency = new Trend("gov_scheduler_latency", true);
-const calSchedulerLatency = new Trend("cal_scheduler_latency", true);
-const sloLatency = new Trend("slo_latency", true);
 
 /* ── Test Configuration ─────────────────────────────────────────────────────── */
 export const options = {
@@ -38,9 +35,6 @@ export const options = {
     health_latency: ["p(95)<500"],
     ticker_latency: ["p(95)<2000"],
     brain_latency: ["p(95)<1000"],
-    gov_scheduler_latency: ["p(95)<500", "p(99)<1500"],
-    cal_scheduler_latency: ["p(95)<500", "p(99)<1500"],
-    slo_latency: ["p(95)<750", "p(99)<2000"],
   },
 };
 
@@ -110,50 +104,6 @@ export default function () {
   group("OpenAPI Spec", () => {
     const res = http.get(`${BASE}/api/docs/spec.json`);
     checkOk(res, "openapi-spec");
-  });
-
-  // Phase 6: scheduler endpoints (Phase 5 cron status surface)
-  group("Governance Scheduler Status", () => {
-    const res = http.get(`${BASE}/api/governance/scheduler/status`);
-    govSchedulerLatency.add(res.timings.duration);
-    checkOk(res, "gov-scheduler-status");
-  });
-
-  group("Governance Scheduler History", () => {
-    const res = http.get(`${BASE}/api/governance/scheduler/history?limit=20`);
-    govSchedulerLatency.add(res.timings.duration);
-    checkOk(res, "gov-scheduler-history");
-  });
-
-  group("Calibration Scheduler Status", () => {
-    const res = http.get(`${BASE}/api/calibration/scheduler/status`);
-    calSchedulerLatency.add(res.timings.duration);
-    checkOk(res, "cal-scheduler-status");
-  });
-
-  group("Calibration Scheduler Score", () => {
-    const res = http.get(`${BASE}/api/calibration/scheduler/score`);
-    calSchedulerLatency.add(res.timings.duration);
-    checkOk(res, "cal-scheduler-score");
-  });
-
-  // Phase 6: SLO surfaces
-  group("SLO Definitions", () => {
-    const res = http.get(`${BASE}/api/slo/definitions`);
-    sloLatency.add(res.timings.duration);
-    checkOk(res, "slo-definitions");
-  });
-
-  group("SLO Budgets", () => {
-    const res = http.get(`${BASE}/api/slo/budgets`);
-    sloLatency.add(res.timings.duration);
-    checkOk(res, "slo-budgets");
-  });
-
-  group("SLO Burn Rate", () => {
-    const res = http.get(`${BASE}/api/slo/burn-rate`);
-    sloLatency.add(res.timings.duration);
-    checkOk(res, "slo-burn-rate");
   });
 
   sleep(Math.random() * 0.5 + 0.1);

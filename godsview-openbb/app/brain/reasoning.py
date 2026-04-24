@@ -25,9 +25,7 @@ def compose_reasoning_decision(
 
     if setup_candidate is None or not setup_candidate.get("valid", False):
         approved = False
-        reasons.append(
-            f"setup_invalid:{(setup_candidate or {}).get('reason', 'missing')}"
-        )
+        reasons.append(f"setup_invalid:{(setup_candidate or {}).get('reason', 'missing')}")
 
     if macro and bool(macro.get("blackout", False)):
         approved = False
@@ -60,15 +58,10 @@ def compose_reasoning_decision(
     setup_rows = [
         row
         for row in memory_tail
-        if str(row.get("setup", row.get("title", ""))).lower().find(setup_name.lower())
-        >= 0
+        if str(row.get("setup", row.get("title", ""))).lower().find(setup_name.lower()) >= 0
     ]
-    setup_wins = len(
-        [row for row in setup_rows if str(row.get("outcome", "")).lower() == "win"]
-    )
-    setup_losses = len(
-        [row for row in setup_rows if str(row.get("outcome", "")).lower() == "loss"]
-    )
+    setup_wins = len([row for row in setup_rows if str(row.get("outcome", "")).lower() == "win"])
+    setup_losses = len([row for row in setup_rows if str(row.get("outcome", "")).lower() == "loss"])
     setup_samples = setup_wins + setup_losses
     setup_win_rate = (setup_wins / setup_samples) if setup_samples > 0 else 0.0
     if setup_samples >= 8 and setup_win_rate < 0.35:

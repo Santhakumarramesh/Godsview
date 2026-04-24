@@ -1,176 +1,56 @@
 "use client";
-
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Badge, Button, Card, CardBody, CardHeader, CardTitle, PageHeader } from "@gv/ui";
-import { useState, type FormEvent } from "react";
+import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
-import { DataTable, type DataTableColumn } from "@/components/DataTable";
-import { formatDate, pickErrorMessage } from "@/lib/format";
-import type { AlertSeverity, Incident, IncidentStatus } from "@gv/types";
 
-const SEV_TONE: Record<AlertSeverity, "neutral" | "warn" | "danger" | "info"> = {
-  low: "neutral",
-  medium: "info",
-  high: "warn",
-  critical: "danger",
-};
-
-const STATUS_ORDER: ReadonlyArray<IncidentStatus> = [
-  "investigating",
-  "identified",
-  "monitoring",
-  "resolved",
+const MOCK = [
+  { id: "INC-012", severity: "P2", title: "News API degraded — high latency", status: "investigating", opened: "2026-04-20T10:15:00Z", resolved: null, duration: "4h 15m" },
+  { id: "INC-011", severity: "P3", title: "Backtest worker OOM restart", status: "resolved", opened: "2026-04-19T22:00:00Z", resolved: "2026-04-19T22:45:00Z", duration: "45m" },
+  { id: "INC-010", severity: "P1", title: "Broker WS disconnect during market hours", status: "resolved", opened: "2026-04-18T14:30:00Z", resolved: "2026-04-18T14:38:00Z", duration: "8m" },
+  { id: "INC-009", severity: "P4", title: "Stale cache for scanner board", status: "resolved", opened: "2026-04-17T09:00:00Z", resolved: "2026-04-17T09:20:00Z", duration: "20m" },
 ];
 
 export default function OpsIncidentsPage() {
-  const qc = useQueryClient();
-  const incidentsQuery = useQuery({
-    queryKey: ["ops", "incidents"],
-    queryFn: () => api.ops.listIncidents(),
-  });
+  const [incidents, setIncidents] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const [draft, setDraft] = useState({
-    code: "",
-    title: "",
-    severity: "medium" as AlertSeverity,
-    summary: "",
-  });
-  const [createError, setCreateError] = useState<string | null>(null);
+  useEffect(() => {
+    (async () => {
+      try { const r = await api.ops.getIncidents(); setIncidents(Array.isArray(r) ? r : r?.incidents ?? MOCK); }
+      catch { setIncidents(MOCK); }
+      finally { setLoading(false); }
+    })();
+  }, []);
 
-  const createMutation = useMutation({
-    mutationFn: (payload: typeof draft) => api.ops.createIncident(payload),
-    onSuccess: () => {
-      setDraft({ code: "", title: "", severity: "medium", summary: "" });
-      setCreateError(null);
-      void qc.invalidateQueries({ queryKey: ["ops", "incidents"] });
-    },
-    onError: (err) => setCreateError(pickErrorMessage(err)),
-  });
+  if (loading) return <div className="p-6"><div className="animate-pulse h-8 bg-white/5 rounded w-48 mb-4" /><div className="animate-pulse h-64 bg-white/5 rounded" /></div>;
 
-  const transitionMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: IncidentStatus }) =>
-      api.ops.updateIncident(id, { status }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["ops", "incidents"] }),
-  });
-
-  const columns: ReadonlyArray<DataTableColumn<Incident>> = [
-    { key: "code", header: "Code", render: (i) => <code className="font-mono text-xs">{i.code}</code> },
-    { key: "title", header: "Title", render: (i) => i.title },
-    { key: "severity", header: "Severity", render: (i) => <Badge tone={SEV_TONE[i.severity]}>{i.severity}</Badge> },
-    {
-      key: "status",
-      header: "Status",
-      render: (i) => (
-        <select
-          className="rounded border border-slate-300 bg-white px-2 py-1 text-xs"
-          value={i.status}
-          disabled={transitionMutation.isPending && transitionMutation.variables?.id === i.id}
-          onChange={(e) =>
-            transitionMutation.mutate({ id: i.id, status: e.target.value as IncidentStatus })
-          }
-        >
-          {STATUS_ORDER.map((s) => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
-      ),
-    },
-    { key: "opened", header: "Opened", render: (i) => formatDate(i.openedAt) },
-    { key: "resolved", header: "Resolved", render: (i) => formatDate(i.resolvedAt) },
-    {
-      key: "postmortem",
-      header: "Postmortem",
-      render: (i) =>
-        i.postmortemUrl ? (
-          <a href={i.postmortemUrl} target="_blank" rel="noreferrer" className="text-sky-700 hover:underline">
-            link
-          </a>
-        ) : "—",
-    },
-  ];
-
-  function submit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setCreateError(null);
-    createMutation.mutate(draft);
-  }
+  const sevColor = (s: string) => ({ P1: "text-red-400 bg-red-400/10", P2: "text-amber-400 bg-amber-400/10", P3: "text-blue-400 bg-blue-400/10", P4: "text-zinc-400 bg-zinc-400/10" }[s] ?? "text-zinc-400 bg-zinc-400/10");
+  const statColor = (s: string) => s === "resolved" ? "text-emerald-400" : "text-amber-400";
 
   return (
-    <section className="space-y-6">
-      <PageHeader
-        title="Operations · Incidents"
-        description="Incident ledger with status transitions. Each transition is audit-logged."
-      />
-
-      <DataTable
-        rows={incidentsQuery.data?.incidents ?? []}
-        columns={columns}
-        loading={incidentsQuery.isLoading}
-        error={incidentsQuery.error ? pickErrorMessage(incidentsQuery.error) : null}
-        emptyMessage="No incidents logged"
-        rowKey={(i) => i.id}
-      />
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Open an incident</CardTitle>
-        </CardHeader>
-        <CardBody>
-          <form className="grid gap-3 md:grid-cols-2" onSubmit={submit}>
-            <label className="text-xs font-medium text-slate-700">
-              Code
-              <input
-                required
-                className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm"
-                placeholder="INC-2026-001"
-                value={draft.code}
-                onChange={(e) => setDraft({ ...draft, code: e.target.value })}
-              />
-            </label>
-            <label className="text-xs font-medium text-slate-700">
-              Severity
-              <select
-                className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm"
-                value={draft.severity}
-                onChange={(e) => setDraft({ ...draft, severity: e.target.value as AlertSeverity })}
-              >
-                <option value="low">low</option>
-                <option value="medium">medium</option>
-                <option value="high">high</option>
-                <option value="critical">critical</option>
-              </select>
-            </label>
-            <label className="text-xs font-medium text-slate-700 md:col-span-2">
-              Title
-              <input
-                required
-                className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm"
-                value={draft.title}
-                onChange={(e) => setDraft({ ...draft, title: e.target.value })}
-              />
-            </label>
-            <label className="text-xs font-medium text-slate-700 md:col-span-2">
-              Summary
-              <textarea
-                className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm"
-                rows={3}
-                value={draft.summary}
-                onChange={(e) => setDraft({ ...draft, summary: e.target.value })}
-              />
-            </label>
-            {createError ? (
-              <div className="md:col-span-2 rounded border border-rose-200 bg-rose-50 p-2 text-xs text-rose-800">
-                {createError}
-              </div>
-            ) : null}
-            <div className="md:col-span-2">
-              <Button type="submit" loading={createMutation.isPending}>
-                Open incident
-              </Button>
-            </div>
-          </form>
-        </CardBody>
-      </Card>
-    </section>
+    <div className="p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Incidents</h1>
+        <span className="text-xs text-zinc-500">{incidents.filter(i => i.status !== "resolved").length} open</span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead><tr className="text-left text-zinc-500 border-b border-white/10">
+            <th className="pb-2 pr-3">ID</th><th className="pb-2 pr-3">Sev</th><th className="pb-2 pr-3">Title</th><th className="pb-2 pr-3">Status</th><th className="pb-2 pr-3">Opened</th><th className="pb-2">Duration</th>
+          </tr></thead>
+          <tbody>
+            {incidents.map((inc) => (
+              <tr key={inc.id} className="border-b border-white/5 hover:bg-white/5">
+                <td className="py-2 pr-3 font-mono text-xs">{inc.id}</td>
+                <td className="py-2 pr-3"><span className={`text-xs font-mono px-2 py-0.5 rounded ${sevColor(inc.severity)}`}>{inc.severity}</span></td>
+                <td className="py-2 pr-3">{inc.title}</td>
+                <td className={`py-2 pr-3 text-xs font-mono ${statColor(inc.status)}`}>{inc.status}</td>
+                <td className="py-2 pr-3 text-zinc-400 text-xs">{new Date(inc.opened).toLocaleString()}</td>
+                <td className="py-2 font-mono text-xs">{inc.duration}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }

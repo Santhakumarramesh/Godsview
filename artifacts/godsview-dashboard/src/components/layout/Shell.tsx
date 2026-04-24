@@ -2,6 +2,7 @@ import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { useEffect, useMemo, useState, lazy, Suspense } from "react";
 const BrainFloatingPanel = lazy(() => import("@/components/brain-floating-panel"));
+const DemoDataBanner = lazy(() => import("@/components/DemoDataBanner"));
 import {
   SIDEBAR_SECTION_ORDER,
   SIDEBAR_WATCHLIST,
@@ -9,7 +10,6 @@ import {
   normalizeMarketSymbol,
   toAlpacaSymbol,
 } from "@/lib/market/symbols";
-import { RoleSwitcher } from "@/auth/role-switcher";
 
 type FeedMode = "sse" | "poll" | "hybrid";
 
@@ -321,6 +321,8 @@ const navSections: NavSection[] = [
       { href: "/brain-graph", label: "God Brain", icon: "neurology", sub: "Live Neural Graph" },
       { href: "/brain-nodes", label: "Brain Nodes", icon: "hub", sub: "Subsystem Map" },
       { href: "/infinity", label: "Infinity Screen", icon: "grid_view", sub: "Multi-Chart" },
+      { href: "/daily-briefing", label: "Daily Briefing", icon: "today", sub: "Start-of-Day" },
+      { href: "/session-control", label: "Session Control", icon: "schedule", sub: "Trading Sessions" },
     ],
   },
   {
@@ -338,21 +340,68 @@ const navSections: NavSection[] = [
     ],
   },
   {
-    section: "Signals & Data",
+    section: "Market Discovery",
+    items: [
+      { href: "/market-scanner", label: "Market Scanner", icon: "radar", sub: "Symbol Ranking" },
+      { href: "/watchlist", label: "Watchlist Scanner", icon: "radar", sub: "Auto-Scan" },
+      { href: "/pipeline", label: "Opportunity Queue", icon: "hub", sub: "6-Layer AI" },
+      { href: "/regime-detection", label: "Regime Detection", icon: "thermostat", sub: "Market Regime" },
+      { href: "/liquidity-environment", label: "Liquidity Env", icon: "water_drop", sub: "Tradability" },
+      { href: "/news-sentiment", label: "News & Sentiment", icon: "newspaper", sub: "Headlines" },
+      { href: "/heat-board", label: "Heat Board", icon: "local_fire_department", sub: "Hottest Setups" },
+      { href: "/infinity", label: "Cross-Asset Pulse", icon: "grid_view", sub: "Multi-Chart" },
+      { href: "/news-monitor", label: "News Monitor", icon: "newspaper", sub: "Sentiment Stream" },
+      { href: "/economic-calendar", label: "Economic Calendar", icon: "event", sub: "Macro Events" },
+    ],
+  },
+  {
+    section: "Chart Intelligence",
+    items: [
+      { href: "/tradingview-chart", label: "TradingView Chart", icon: "show_chart", sub: "Advanced Charting" },
+      { href: "/multi-timeframe", label: "Multi-Timeframe", icon: "view_column", sub: "HTF/MTF/LTF" },
+      { href: "/order-blocks", label: "Order Blocks", icon: "view_agenda", sub: "OB Detection" },
+      { href: "/bos-choch", label: "BOS / CHOCH", icon: "swap_vert", sub: "Structure Breaks" },
+      { href: "/liquidity-sweep", label: "Liquidity Sweep", icon: "waves", sub: "Trap Detection" },
+      { href: "/premium-discount", label: "Premium / Discount", icon: "balance", sub: "Value Zones" },
+      { href: "/entry-planner", label: "Entry Planner", icon: "place", sub: "Trade Planning" },
+      { href: "/chart-annotations", label: "Chart Annotations", icon: "draw", sub: "Notes & Labels" },
+      { href: "/candle-xray", label: "Candle X-Ray", icon: "radiology", sub: "Microstructure" },
+      { href: "/market-structure", label: "Market Structure", icon: "bar_chart", sub: "Market Analysis" },
+      { href: "/setup-explorer", label: "Setup Explorer", icon: "explore", sub: "Strategy Matrix" },
+    ],
+  },
+  {
+    section: "TradingView MCP",
+    items: [
+      { href: "/tradingview-mcp", label: "MCP Control", icon: "settings_input_component", sub: "Action Bridge" },
+      { href: "/pine-scripts", label: "Pine Scripts", icon: "code", sub: "Signal Registry" },
+      { href: "/webhook-router", label: "Webhook Router", icon: "webhook", sub: "Event Routing" },
+      { href: "/tv-strategy-sync", label: "TV Strategy Sync", icon: "sync", sub: "Param Mapping" },
+      { href: "/chart-action-bridge", label: "Chart Actions", icon: "touch_app", sub: "Click → Context" },
+      { href: "/tv-replay", label: "TV Replay", icon: "replay", sub: "Training Connector" },
+    ],
+  },
+  {
+    section: "Order Flow",
+    items: [
+      { href: "/order-flow", label: "Order Flow", icon: "waterfall_chart", sub: "Flow Dashboard" },
+      { href: "/heatmap-liquidity", label: "Heatmap Liquidity", icon: "grid_on", sub: "Bookmap View" },
+      { href: "/dom-depth", label: "DOM / Depth", icon: "view_list", sub: "Order Book" },
+      { href: "/footprint-delta", label: "Footprint Delta", icon: "bar_chart", sub: "Aggression" },
+      { href: "/absorption-detector", label: "Absorption", icon: "shield", sub: "Defended Levels" },
+      { href: "/imbalance-engine", label: "Imbalance Engine", icon: "trending_flat", sub: "Flow Asymmetry" },
+      { href: "/execution-pressure", label: "Exec Pressure", icon: "speed", sub: "Control Map" },
+      { href: "/flow-confluence", label: "Flow Confluence", icon: "merge_type", sub: "Structure + Flow" },
+      { href: "/microstructure", label: "Microstructure", icon: "candlestick_chart", sub: "Order Flow & Depth" },
+    ],
+  },
+  {
+    section: "Signals & Intelligence",
     items: [
       { href: "/signals", label: "Signal Feed", icon: "sensors", sub: "Pipeline" },
       { href: "/mcp-signals", label: "MCP Signals", icon: "swap_vert", sub: "Signal Flow" },
-      { href: "/pipeline", label: "Pipeline Engine", icon: "hub", sub: "6-Layer AI" },
       { href: "/pipeline-status", label: "Pipeline Status", icon: "hub", sub: "Live Pipeline" },
-      { href: "/candle-xray", label: "Candle X-Ray", icon: "radiology", sub: "Microstructure" },
-      { href: "/tradingview-chart", label: "TradingView Chart", icon: "show_chart", sub: "Advanced Charting" },
-      { href: "/news-monitor", label: "News Monitor", icon: "newspaper", sub: "Sentiment Stream" },
-      { href: "/economic-calendar", label: "Economic Calendar", icon: "event", sub: "Macro Events" },
       { href: "/autonomous-brain", label: "Autonomous Brain", icon: "psychology", sub: "Per-Symbol AI" },
-      { href: "/microstructure", label: "Microstructure", icon: "candlestick_chart", sub: "Order Flow & Depth" },
-      { href: "/market-structure", label: "Market Structure", icon: "bar_chart", sub: "Market Analysis" },
-      { href: "/setup-explorer", label: "Setup Explorer", icon: "explore", sub: "Strategy Matrix" },
-      { href: "/watchlist", label: "Watchlist Scanner", icon: "radar", sub: "Auto-Scan" },
       { href: "/correlation-lab", label: "Correlation Lab", icon: "grid_view", sub: "Portfolio Risk Map" },
       { href: "/data-integrity", label: "Data Integrity", icon: "fact_check", sub: "Feed & Tick Health" },
     ],
@@ -360,27 +409,55 @@ const navSections: NavSection[] = [
   {
     section: "Execution",
     items: [
-      { href: "/execution", label: "Execution", icon: "bolt", sub: "Live Orders" },
+      { href: "/execution", label: "Execution Center", icon: "bolt", sub: "Live Orders" },
       { href: "/execution-control", label: "Exec Control", icon: "tune", sub: "Orders & Venues" },
       { href: "/exec-reliability", label: "Exec Reliability", icon: "security", sub: "Failsafe & Recon" },
+      { href: "/paper-trading", label: "Paper Trading", icon: "description", sub: "Safe Testing" },
+      { href: "/assisted-trading", label: "Assisted Trading", icon: "handshake", sub: "Human-in-Loop" },
+      { href: "/semi-autonomous", label: "Semi-Autonomous", icon: "auto_mode", sub: "Mixed Exec" },
+      { href: "/autonomous-mode", label: "Autonomous Mode", icon: "smart_toy", sub: "Trusted Strategies" },
       { href: "/trades", label: "Trade Log", icon: "receipt_long", sub: "Order History" },
       { href: "/trade-journal", label: "Trade Journal", icon: "book", sub: "PnL Attribution" },
-      { href: "/portfolio", label: "Portfolio", icon: "account_balance", sub: "Allocation" },
+      { href: "/slippage-quality", label: "Slippage Quality", icon: "speed", sub: "Fill Analysis" },
+      { href: "/emergency-controls", label: "Emergency Controls", icon: "emergency", sub: "Kill Switch" },
     ],
   },
   {
-    section: "Backtesting",
+    section: "Quant Lab & Backtesting",
     items: [
+      { href: "/quant-lab", label: "Quant Lab Home", icon: "science", sub: "Research Hub" },
       { href: "/backtester", label: "Backtester", icon: "bar_chart_4_bars", sub: "Multi-TF Replay" },
+      { href: "/strategy-builder", label: "Strategy Builder", icon: "build", sub: "Build Strategies" },
+      { href: "/walk-forward", label: "Walk-Forward", icon: "fast_forward", sub: "OOS Validation" },
+      { href: "/regime-matrix", label: "Regime Matrix", icon: "grid_on", sub: "Context Performance" },
+      { href: "/experiment-tracker", label: "Experiments", icon: "science", sub: "Track Runs" },
+      { href: "/promotion-pipeline", label: "Promotion Pipeline", icon: "arrow_upward", sub: "Lab → Live" },
       { href: "/mcp-backtester", label: "MCP Backtester", icon: "compare", sub: "MCP vs Raw" },
       { href: "/backtest-credibility", label: "Backtest Lab", icon: "biotech", sub: "Credibility & Overfit" },
-      { href: "/quant-lab", label: "Quant Lab", icon: "science", sub: "Experiments" },
       { href: "/side-by-side", label: "Side-by-Side", icon: "compare_arrows", sub: "Comparison Tool" },
     ],
   },
   {
-    section: "Risk & Safety",
+    section: "Memory & Recall",
     items: [
+      { href: "/recall-engine", label: "Recall Engine", icon: "history_edu", sub: "Past Setups" },
+      { href: "/case-library", label: "Case Library", icon: "library_books", sub: "Trade Cases" },
+      { href: "/screenshot-vault", label: "Screenshot Vault", icon: "photo_library", sub: "Visual Memory" },
+      { href: "/setup-similarity", label: "Setup Similarity", icon: "compare", sub: "Pattern Match" },
+      { href: "/learning-loop", label: "Learning Loop", icon: "loop", sub: "Continuous Learning" },
+    ],
+  },
+  {
+    section: "Portfolio & Risk",
+    items: [
+      { href: "/portfolio", label: "Portfolio Command", icon: "account_balance", sub: "Allocation" },
+      { href: "/position-monitor", label: "Position Monitor", icon: "monitor", sub: "Live Positions" },
+      { href: "/allocation-engine", label: "Allocation Engine", icon: "pie_chart", sub: "Capital Split" },
+      { href: "/correlation-risk", label: "Correlation Risk", icon: "grain", sub: "Hidden Risk" },
+      { href: "/drawdown-protection", label: "Drawdown Protect", icon: "trending_down", sub: "Loss Limits" },
+      { href: "/risk-policies", label: "Risk Policies", icon: "policy", sub: "Guardrails" },
+      { href: "/pretrade-gate", label: "Pre-Trade Gate", icon: "verified", sub: "Final Check" },
+      { href: "/capital-efficiency", label: "Capital Efficiency", icon: "savings", sub: "Usage Analytics" },
       { href: "/risk", label: "Risk Command", icon: "shield", sub: "Safety Rails" },
       { href: "/risk-command-v2", label: "Risk v2", icon: "shield", sub: "VaR & Capital Guard" },
       { href: "/alerts", label: "Alerts", icon: "bell", sub: "Live Alerts" },
@@ -466,6 +543,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row" style={{ backgroundColor: "#0e0e0f", color: "#ffffff" }}>
+      {/* Demo Data Warning Banner */}
+      <Suspense fallback={null}><DemoDataBanner /></Suspense>
       {/* Mobile Header */}
       <div className="md:hidden flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: "rgba(72,72,73,0.3)", backgroundColor: "#1a191b" }}>
         <div className="flex items-center gap-2">
@@ -627,7 +706,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
               Crypto · 6-Layer Pipeline
             </div>
           </div>
-          <RoleSwitcher />
         </div>
       </aside>
 

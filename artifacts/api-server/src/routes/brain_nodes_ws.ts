@@ -49,22 +49,16 @@ interface BrainNodeState {
 
 /* ── Generate live state ──────────────────────────────── */
 function generateNodeStates(): BrainNodeState[] {
-  const startTime = Date.now() - 3600_000 * (2 + Math.random() * 10);
   return BRAIN_SUBSYSTEMS.map((sub) => {
-    const r = Math.random();
-    const status: NodeStatus = r > 0.12 ? "active" : r > 0.05 ? "degraded" : r > 0.02 ? "idle" : "error";
     return {
       ...sub,
-      status,
-      latencyMs: Math.floor(Math.random() * 80 + 2),
-      throughputPerSec: Math.floor(Math.random() * 1200 + 10),
-      errorRate: status === "error" ? +(Math.random() * 5).toFixed(2) : +(Math.random() * 0.3).toFixed(2),
+      status: "idle" as const,
+      latencyMs: 0,
+      throughputPerSec: 0,
+      errorRate: 0,
       lastCycleAt: new Date().toISOString(),
-      uptime: Math.floor((Date.now() - startTime) / 1000),
-      connections: BRAIN_SUBSYSTEMS
-        .filter((o) => o.id !== sub.id && Math.random() > 0.6)
-        .slice(0, 3)
-        .map((o) => o.id),
+      uptime: 0,
+      connections: [],
     };
   });
 }

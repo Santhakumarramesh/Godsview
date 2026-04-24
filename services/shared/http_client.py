@@ -6,7 +6,6 @@ Usage:
     async with service_client(cfg.ml_url) as client:
         resp = await client.post("/predict", json=payload)
 """
-
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
@@ -16,8 +15,8 @@ import httpx
 
 # Default timeouts
 _CONNECT_TIMEOUT = 5.0
-_READ_TIMEOUT = 30.0
-_WRITE_TIMEOUT = 10.0
+_READ_TIMEOUT    = 30.0
+_WRITE_TIMEOUT   = 10.0
 
 
 @asynccontextmanager
@@ -25,9 +24,9 @@ async def service_client(
     base_url: str,
     *,
     connect_timeout: float = _CONNECT_TIMEOUT,
-    read_timeout: float = _READ_TIMEOUT,
-    write_timeout: float = _WRITE_TIMEOUT,
-    headers: dict[str, str] | None = None,
+    read_timeout:    float = _READ_TIMEOUT,
+    write_timeout:   float = _WRITE_TIMEOUT,
+    headers:         dict[str, str] | None = None,
 ) -> AsyncIterator[httpx.AsyncClient]:
     """Yield a configured async HTTP client for inter-service calls."""
     timeout = httpx.Timeout(

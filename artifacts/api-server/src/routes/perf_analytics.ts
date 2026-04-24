@@ -1,18 +1,3 @@
-// @ts-nocheck
-/**
- * DESIGN SCAFFOLD — not wired into the live runtime.
- *
- * STATUS: This file is a forward-looking integration shell. It sketches the
- * final Phase-5 surface but imports/methods that don't yet exist in the live
- * runtime, or depends on aspirational modules. Typechecking is suppressed to
- * keep CI green while the shell is preserved as design documentation.
- *
- * Wiring it into the live runtime is tracked in
- * docs/PRODUCTION_READINESS.md (Phase 5: Auto-Promotion Pipeline).
- *
- * REMOVE the `// @ts-nocheck` directive once Phase 5 is implemented and all
- * referenced modules/methods exist.
- */
 /**
  * Phase 105 — Performance Analytics API
  *
@@ -32,20 +17,8 @@ const router = Router();
 
 // ── Mock Equity Curve ───────────────────────────────────────────────────────
 const equityCurve: { date: string; equity: number; drawdown: number }[] = [];
-let eq = 100000;
-let hwm = eq;
-for (let i = 90; i >= 0; i--) {
-  eq += (Math.random() - 0.42) * 950;
-  hwm = Math.max(hwm, eq);
-  const dd = (hwm - eq) / hwm;
-  equityCurve.push({
-    date: new Date(Date.now() - i * 86400_000).toISOString().slice(0, 10),
-    equity: Math.round(eq * 100) / 100,
-    drawdown: Math.round(dd * 10000) / 10000,
-  });
-}
-const finalEq = equityCurve[equityCurve.length - 1].equity;
-const totalPnl = finalEq - 100000;
+const finalEq = 100000;
+const totalPnl = 0;
 
 // ── Mock Strategies ─────────────────────────────────────────────────────────
 const strategies = [
@@ -60,20 +33,7 @@ const strategies = [
 ];
 
 // ── Mock Daily PnL ──────────────────────────────────────────────────────────
-const dailyPnl = Array.from({ length: 30 }, (_, i) => {
-  const pnl = Math.round((Math.random() - 0.42) * 3000);
-  const trades = Math.floor(Math.random() * 15) + 3;
-  const wins = Math.floor(trades * (0.45 + Math.random() * 0.3));
-  return {
-    date: new Date(Date.now() - (29 - i) * 86400_000).toISOString().slice(0, 10),
-    trades,
-    pnl,
-    cumPnl: 0,
-    winRate: Math.round((wins / trades) * 1000) / 1000,
-  };
-});
-let cum = 0;
-for (const d of dailyPnl) { cum += d.pnl; d.cumPnl = cum; }
+const dailyPnl: any[] = [];
 
 // ── Mock Attribution ────────────────────────────────────────────────────────
 const attributionData: Record<string, { label: string; trades: number; totalPnl: number; avgPnl: number; winRate: number; profitFactor: number; avgHoldTime: number; bestTrade: number; worstTrade: number }[]> = {
@@ -104,13 +64,7 @@ const attributionData: Record<string, { label: string; trades: number; totalPnl:
 };
 
 // ── Mock Return Distribution ────────────────────────────────────────────────
-const returnBins = Array.from({ length: 30 }, (_, i) => {
-  const binStart = -3 + i * 0.2;
-  const binEnd = binStart + 0.2;
-  const center = (binStart + binEnd) / 2;
-  const freq = Math.round(80 * Math.exp(-0.5 * center * center / 1.2) + Math.random() * 10);
-  return { binStart: Math.round(binStart * 100) / 100, binEnd: Math.round(binEnd * 100) / 100, frequency: freq };
-});
+const returnBins: any[] = [];
 
 // ── GET /summary ────────────────────────────────────────────────────────────
 router.get("/summary", (_req: Request, res: Response) => {

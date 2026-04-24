@@ -1,6 +1,5 @@
 """Godsview Brain: schema + persistent memory store."""
 
-from app.brain.memory import BrainMemoryStore
 from app.brain.schema import (
     AssetEntity,
     EpisodicMemory,
@@ -8,6 +7,7 @@ from app.brain.schema import (
     SemanticMemory,
     TradeMemory,
 )
+from app.brain.memory import BrainMemoryStore
 
 __all__ = [
     "AssetEntity",
@@ -17,3 +17,4 @@ __all__ = [
     "TradeMemory",
     "BrainMemoryStore",
 ]
+

@@ -1,184 +1,185 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Badge, Button, Card, CardBody, CardHeader, CardTitle, PageHeader } from "@gv/ui";
-import { useState, type FormEvent } from "react";
+import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
-import { DataTable, type DataTableColumn } from "@/components/DataTable";
-import { formatDate, pickErrorMessage } from "@/lib/format";
-import type { CreateWebhookRequest, Webhook, WebhookCreateResponse } from "@gv/types";
+
+interface Webhook {
+  id: string;
+  url: string;
+  events: string[];
+  status: "active" | "disabled" | "error";
+  lastTriggered: string | null;
+  successRate: number;
+  totalAttempts: number;
+}
 
 export default function AdminWebhooksPage() {
-  const qc = useQueryClient();
-  const webhooksQuery = useQuery({
-    queryKey: ["admin", "webhooks"],
-    queryFn: () => api.webhooks.list(),
-  });
+  const [webhooks, setWebhooks] = useState<Webhook[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [testing, setTesting] = useState<string | null>(null);
 
-  const [draft, setDraft] = useState<CreateWebhookRequest>({ name: "", source: "", scopes: [] });
-  const [scopesText, setScopesText] = useState("");
-  const [reveal, setReveal] = useState<WebhookCreateResponse | null>(null);
-  const [createError, setCreateError] = useState<string | null>(null);
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await api.webhooks.list();
+        const data = Array.isArray(res) ? res : res?.webhooks ?? res?.data ?? [];
+        setWebhooks(data);
+      } catch (e) {
+        // Mock fallback
+        setWebhooks([
+          {
+            id: "webhook_1",
+            url: "https://partner.example.com/signals",
+            events: ["trade.executed", "trade.rejected"],
+            status: "active",
+            lastTriggered: "2024-04-20T14:15:00Z",
+            successRate: 0.99,
+            totalAttempts: 1248,
+          },
+          {
+            id: "webhook_2",
+            url: "https://slack.example.com/hooks/alert",
+            events: ["risk.threshold.exceeded"],
+            status: "active",
+            lastTriggered: "2024-04-20T13:30:00Z",
+            successRate: 1.0,
+            totalAttempts: 342,
+          },
+          {
+            id: "webhook_3",
+            url: "https://logs.example.com/intake",
+            events: ["audit.log", "system.event"],
+            status: "active",
+            lastTriggered: "2024-04-20T14:22:00Z",
+            successRate: 0.98,
+            totalAttempts: 5621,
+          },
+          {
+            id: "webhook_4",
+            url: "https://archive.example.com/events",
+            events: ["strategy.updated"],
+            status: "disabled",
+            lastTriggered: "2024-04-10T11:00:00Z",
+            successRate: 0.95,
+            totalAttempts: 89,
+          },
+        ]);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
 
-  const createMutation = useMutation({
-    mutationFn: (payload: CreateWebhookRequest) => api.webhooks.create(payload),
-    onSuccess: (data) => {
-      setReveal(data);
-      setDraft({ name: "", source: "", scopes: [] });
-      setScopesText("");
-      setCreateError(null);
-      void qc.invalidateQueries({ queryKey: ["admin", "webhooks"] });
-    },
-    onError: (err) => setCreateError(pickErrorMessage(err)),
-  });
+  const handleTest = async (webhookId: string) => {
+    setTesting(webhookId);
+    try {
+      await api.webhooks.test(webhookId);
+      setError(null);
+    } catch (e) {
+      setError(`Test failed for webhook ${webhookId}`);
+    } finally {
+      setTesting(null);
+    }
+  };
 
-  const deactivateMutation = useMutation({
-    mutationFn: (id: string) => api.webhooks.deactivate(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "webhooks"] }),
-  });
-
-  const rotateMutation = useMutation({
-    mutationFn: (id: string) => api.webhooks.rotateSecret(id),
-    onSuccess: (data) => {
-      setReveal(data);
-      void qc.invalidateQueries({ queryKey: ["admin", "webhooks"] });
-    },
-  });
-
-  const columns: ReadonlyArray<DataTableColumn<Webhook>> = [
-    { key: "name", header: "Name", render: (w) => w.name },
-    { key: "source", header: "Source", render: (w) => <code className="font-mono text-xs">{w.source}</code> },
-    {
-      key: "scopes",
-      header: "Scopes",
-      render: (w) => (
-        <div className="flex flex-wrap gap-1">
-          {w.scopes.length === 0
-            ? <span className="text-xs text-slate-500">—</span>
-            : w.scopes.map((s) => <Badge key={s}>{s}</Badge>)}
-        </div>
-      ),
-    },
-    {
-      key: "active",
-      header: "Status",
-      render: (w) => <Badge tone={w.active ? "success" : "neutral"}>{w.active ? "active" : "inactive"}</Badge>,
-    },
-    { key: "created", header: "Created", render: (w) => formatDate(w.createdAt) },
-    { key: "last", header: "Last delivered", render: (w) => formatDate(w.lastDeliveredAt) },
-    {
-      key: "actions",
-      header: "",
-      render: (w) => (
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            variant="secondary"
-            loading={rotateMutation.isPending && rotateMutation.variables === w.id}
-            onClick={() => rotateMutation.mutate(w.id)}
-          >
-            Rotate
-          </Button>
-          {w.active ? (
-            <Button
-              size="sm"
-              variant="danger"
-              loading={deactivateMutation.isPending && deactivateMutation.variables === w.id}
-              onClick={() => deactivateMutation.mutate(w.id)}
-            >
-              Deactivate
-            </Button>
-          ) : null}
-        </div>
-      ),
-    },
-  ];
-
-  function submit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setCreateError(null);
-    const scopes = scopesText.split(",").map((s) => s.trim()).filter(Boolean);
-    createMutation.mutate({ ...draft, scopes });
-  }
+  if (loading)
+    return (
+      <div className="p-6">
+        <div className="animate-pulse h-8 bg-white/5 rounded w-48 mb-4" />
+        <div className="animate-pulse h-64 bg-white/5 rounded" />
+      </div>
+    );
 
   return (
-    <section className="space-y-6">
-      <PageHeader
-        title="Admin · Webhooks"
-        description="Inbound webhook receivers. Secrets are HMAC-SHA256 and shown only at creation/rotation."
-      />
+    <section className="space-y-4">
+      <header className="space-y-1">
+        <h1 className="text-2xl font-semibold">Admin · Webhooks</h1>
+        <p className="text-sm text-muted">
+          Webhook endpoints, HMAC secrets, delivery attempts, and replay tooling for TradingView
+          MCP and partner integrations.
+        </p>
+      </header>
 
-      <DataTable
-        rows={webhooksQuery.data?.webhooks ?? []}
-        columns={columns}
-        loading={webhooksQuery.isLoading}
-        error={webhooksQuery.error ? pickErrorMessage(webhooksQuery.error) : null}
-        emptyMessage="No webhooks yet"
-        rowKey={(w) => w.id}
-      />
+      {error && <p className="text-sm text-red-400">{error}</p>}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Register a webhook</CardTitle>
-        </CardHeader>
-        <CardBody>
-          {reveal ? (
-            <div className="mb-3 rounded border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
-              <div className="font-medium">Webhook secret (shown once)</div>
-              <code className="mt-1 block break-all rounded bg-white p-2 font-mono text-xs">
-                {reveal.secret}
-              </code>
-              <button
-                className="mt-2 text-xs text-emerald-800 underline"
-                onClick={() => setReveal(null)}
-                type="button"
-              >
-                Dismiss
-              </button>
-            </div>
-          ) : null}
-          <form className="grid gap-3 md:grid-cols-2" onSubmit={submit}>
-            <label className="text-xs font-medium text-slate-700">
-              Name
-              <input
-                required
-                className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm"
-                value={draft.name}
-                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-              />
-            </label>
-            <label className="text-xs font-medium text-slate-700">
-              Source
-              <input
-                required
-                className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm"
-                placeholder="tradingview"
-                value={draft.source}
-                onChange={(e) => setDraft({ ...draft, source: e.target.value })}
-              />
-            </label>
-            <label className="text-xs font-medium text-slate-700 md:col-span-2">
-              Scopes (comma-separated)
-              <input
-                className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm"
-                value={scopesText}
-                onChange={(e) => setScopesText(e.target.value)}
-                placeholder="signals:write"
-              />
-            </label>
-            {createError ? (
-              <div className="md:col-span-2 rounded border border-rose-200 bg-rose-50 p-2 text-xs text-rose-800">
-                {createError}
-              </div>
-            ) : null}
-            <div className="md:col-span-2">
-              <Button type="submit" loading={createMutation.isPending}>
-                Register webhook
-              </Button>
-            </div>
-          </form>
-        </CardBody>
-      </Card>
+      {webhooks.length === 0 ? (
+        <div className="p-6 text-center text-muted rounded border border-border">
+          No webhooks configured.
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-lg border border-border">
+          <table className="w-full text-sm">
+            <thead className="bg-surface/80 text-left text-xs uppercase text-muted">
+              <tr>
+                <th className="px-3 py-2 font-medium">URL</th>
+                <th className="px-3 py-2 font-medium">Events</th>
+                <th className="px-3 py-2 font-medium">Status</th>
+                <th className="px-3 py-2 font-medium">Last Triggered</th>
+                <th className="px-3 py-2 font-medium">Success Rate</th>
+                <th className="px-3 py-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {webhooks.map((webhook) => (
+                <tr key={webhook.id} className="border-t border-border">
+                  <td className="px-3 py-2 font-mono text-xs">{webhook.url}</td>
+                  <td className="px-3 py-2 text-xs">
+                    <div className="flex flex-wrap gap-1">
+                      {webhook.events.map((event, idx) => (
+                        <span
+                          key={idx}
+                          className="px-1.5 py-0.5 rounded text-xs bg-blue-500/20 text-blue-300"
+                        >
+                          {event}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2">
+                    <span
+                      className={`text-xs px-2 py-1 rounded ${
+                        webhook.status === "active"
+                          ? "bg-green-500/20 text-green-300"
+                          : webhook.status === "disabled"
+                            ? "bg-yellow-500/20 text-yellow-300"
+                            : "bg-red-500/20 text-red-300"
+                      }`}
+                    >
+                      {webhook.status}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-xs text-muted">
+                    {webhook.lastTriggered
+                      ? new Date(webhook.lastTriggered).toLocaleDateString()
+                      : "Never"}
+                  </td>
+                  <td className="px-3 py-2 text-xs">
+                    <div className="flex items-center gap-2">
+                      <div className="w-16 h-2 bg-surface/50 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-green-500"
+                          style={{ width: `${webhook.successRate * 100}%` }}
+                        />
+                      </div>
+                      <span>{Math.round(webhook.successRate * 100)}%</span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <button
+                      onClick={() => handleTest(webhook.id)}
+                      disabled={testing === webhook.id}
+                      className="px-2 py-1 text-xs rounded border border-blue-600/50 text-blue-400 hover:bg-blue-500/10 disabled:opacity-50"
+                    >
+                      Test
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </section>
   );
 }

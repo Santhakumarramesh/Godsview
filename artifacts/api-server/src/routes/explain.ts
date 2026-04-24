@@ -16,41 +16,34 @@
 import { Router, type IRouter } from "express";
 import { explainabilitySystem } from "../lib/explain/index.js";
 import { db, tradesTable, signalsTable } from "@workspace/db";
-import { eq } from "@workspace/db";
+import { eq } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 
 const router: IRouter = Router();
 
 // ─── Signal Explanation ────────────────────────────────────────────────────────
 
-router.get("/explain/signal/:id", async (req, res) => {
+router.get("/signal/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Mock signal data (would come from DB in production)
-    const signal = {
-      id,
-      symbol: "SPY",
-      setupType: "Breakout",
-      direction: "long",
-      timestamp: new Date().toISOString(),
-    };
+    // Query database for actual signal data
+    const dbSignal = await db.query.signalsTable.findFirst({
+      where: eq(signalsTable.id, id),
+    }).catch(() => null);
 
-    const siResult = {
-      structure_score: 0.78,
-      order_flow_quality: 0.72,
-      ml_confidence: 0.65,
-    };
-
-    const brainOutput = {
-      mode: "NORMAL",
-      consecutiveLosses: 0,
-      recentWinRate: 0.54,
-    };
+    if (!dbSignal) {
+      return res.json({
+        success: true,
+        source: "database",
+        message: "No signal found with this ID",
+        data: null,
+      });
+    }
 
     const explanation = await explainabilitySystem.explain({
       type: "signal",
-      context: { signal, siResult, brainOutput },
+      context: { signal: dbSignal },
     });
 
     res.json(explanation);
@@ -62,41 +55,27 @@ router.get("/explain/signal/:id", async (req, res) => {
 
 // ─── Trade Explanation ────────────────────────────────────────────────────────
 
-router.get("/explain/trade/:id", async (req, res) => {
+router.get("/trade/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Mock trade data
-    const trade = {
-      id,
-      symbol: "SPY",
-      direction: "long",
-      entryPrice: 450.25,
-      exitPrice: 452.75,
-      pnl: 2.5,
-      enteredAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
-      exitedAt: new Date().toISOString(),
-    };
+    // Query database for actual trade data
+    const dbTrade = await db.query.tradesTable.findFirst({
+      where: eq(tradesTable.id, id),
+    }).catch(() => null);
 
-    const context = {
-      setupQuality: 0.78,
-      macroBias: {
-        bias: "uptrend",
-        direction: "long",
-        tailwind: true,
-        conviction: "high",
-      },
-      exitType: "profit_target",
-      targetPct: 2.5,
-      riskAmount: 1.5,
-      orderFlowQuality: 0.72,
-      riskRewardRatio: 2.0,
-      percentOfMove: 85,
-    };
+    if (!dbTrade) {
+      return res.json({
+        success: true,
+        source: "database",
+        message: "No trade found with this ID",
+        data: null,
+      });
+    }
 
     const explanation = await explainabilitySystem.explain({
       type: "trade",
-      context: { trade, context },
+      context: { trade: dbTrade },
     });
 
     res.json(explanation);
@@ -108,39 +87,27 @@ router.get("/explain/trade/:id", async (req, res) => {
 
 // ─── Strategy Explanation ─────────────────────────────────────────────────────
 
-router.get("/explain/strategy/:id", async (req, res) => {
+router.get("/strategy/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Mock strategy data
-    const strategy = {
-      id,
-      name: "Momentum Breakout",
-      winRate: 0.542,
-      profitFactor: 1.45,
-      sharpeRatio: 1.2,
-      maxDrawdown: 0.12,
-      totalTrades: 125,
-    };
+    // Query database for strategy data
+    const trades = await db.query.tradesTable.findMany({
+      where: eq(tradesTable.strategyId, id),
+    }).catch(() => []);
 
-    const metrics = {
-      winRate: 0.542,
-      profitFactor: 1.45,
-      sharpeRatio: 1.2,
-      maxDrawdown: 0.12,
-      totalTrades: 125,
-      entryQuality: 0.68,
-      exitQuality: 0.61,
-      riskManagementScore: 0.72,
-      filterQuality: 0.65,
-      robustnessScore: 0.58,
-      meanReversionWins: 45,
-      timingEdge: 0.18,
-    };
+    if (trades.length === 0) {
+      return res.json({
+        success: true,
+        source: "database",
+        message: "No trades found for this strategy",
+        data: null,
+      });
+    }
 
     const explanation = await explainabilitySystem.explain({
       type: "strategy",
-      context: { strategy, metrics },
+      context: { trades },
     });
 
     res.json(explanation);
@@ -152,29 +119,17 @@ router.get("/explain/strategy/:id", async (req, res) => {
 
 // ─── No Trade Explanation ────────────────────────────────────────────────────
 
-router.get("/explain/no-trade/:symbol", async (req, res) => {
+router.get("/no-trade/:symbol", async (req, res) => {
   try {
     const { symbol } = req.params;
 
-    const marketState = {
-      trend: "flat",
-      volatility: 1.8,
-      orderFlowQuality: 0.45,
-      price: 450.25,
-    };
-
-    const brainOutput = {
-      mode: "NORMAL",
-      running: true,
-      consecutiveLosses: 0,
-    };
-
-    const explanation = await explainabilitySystem.explain({
-      type: "no_trade",
-      context: { symbol, marketState, brainOutput },
+    res.json({
+      success: true,
+      source: "database",
+      symbol,
+      message: "Connect real market data source to provide no-trade analysis",
+      data: null,
     });
-
-    res.json(explanation);
   } catch (err) {
     req.log.error({ err }, "Failed to explain no-trade");
     res.status(500).json({ error: "internal_error", message: "Failed to explain no-trade" });
@@ -183,18 +138,23 @@ router.get("/explain/no-trade/:symbol", async (req, res) => {
 
 // ─── Attribution Analysis ────────────────────────────────────────────────────
 
-router.get("/explain/attribution/:strategyId", async (req, res) => {
+router.get("/attribution/:strategyId", async (req, res) => {
   try {
     const { strategyId } = req.params;
 
-    // Mock trades
-    const trades = [
-      { symbol: "SPY", setupType: "Breakout", regime: "trending", pnl: 2.5, enteredAt: new Date().toISOString(), direction: "long" },
-      { symbol: "QQQ", setupType: "MeanReversion", regime: "ranging", pnl: -1.2, enteredAt: new Date().toISOString(), direction: "short" },
-      { symbol: "IWM", setupType: "Breakout", regime: "trending", pnl: 3.1, enteredAt: new Date().toISOString(), direction: "long" },
-      { symbol: "SPY", setupType: "MeanReversion", regime: "choppy", pnl: 0.8, enteredAt: new Date().toISOString(), direction: "long" },
-      { symbol: "QQQ", setupType: "Breakout", regime: "trending", pnl: 2.3, enteredAt: new Date().toISOString(), direction: "long" },
-    ];
+    // Query database for trades
+    const trades = await db.query.tradesTable.findMany({
+      where: eq(tradesTable.strategyId, strategyId),
+    }).catch(() => []);
+
+    if (trades.length === 0) {
+      return res.json({
+        success: true,
+        source: "database",
+        message: "No trades found for attribution analysis",
+        data: null,
+      });
+    }
 
     const explanation = await explainabilitySystem.explain({
       type: "attribution",
@@ -210,35 +170,27 @@ router.get("/explain/attribution/:strategyId", async (req, res) => {
 
 // ─── Fragility Analysis ──────────────────────────────────────────────────────
 
-router.get("/explain/fragility/:strategyId", async (req, res) => {
+router.get("/fragility/:strategyId", async (req, res) => {
   try {
     const { strategyId } = req.params;
 
-    const strategy = {
-      id: strategyId,
-      name: "Momentum Breakout",
-      stopLoss: 2.0,
-      winRate: 0.542,
-      totalReturn: 125,
-    };
+    // Query database for trades
+    const trades = await db.query.tradesTable.findMany({
+      where: eq(tradesTable.strategyId, strategyId),
+    }).catch(() => []);
 
-    const trades = [
-      { symbol: "SPY", setupType: "Breakout", regime: "trending", pnl: 2.5 },
-      { symbol: "QQQ", setupType: "Breakout", regime: "ranging", pnl: -1.2 },
-      { symbol: "IWM", setupType: "Breakout", regime: "trending", pnl: 3.1 },
-    ];
-
-    const backtestResults = {
-      sharpeRatio: 1.2,
-      outOfSampleSharpe: 0.85,
-      maxDrawdown: 0.12,
-      tradesInBacktest: 125,
-      totalReturn: 125,
-    };
+    if (trades.length === 0) {
+      return res.json({
+        success: true,
+        source: "database",
+        message: "No trades found for fragility analysis",
+        data: null,
+      });
+    }
 
     const explanation = await explainabilitySystem.explain({
       type: "fragility",
-      context: { strategy, trades, backtestResults },
+      context: { trades },
     });
 
     res.json(explanation);
@@ -250,41 +202,28 @@ router.get("/explain/fragility/:strategyId", async (req, res) => {
 
 // ─── Comprehensive Strategy Report ───────────────────────────────────────────
 
-router.get("/explain/report/:strategyId", async (req, res) => {
+router.get("/report/:strategyId", async (req, res) => {
   try {
     const { strategyId } = req.params;
 
-    const strategy = {
-      id: strategyId,
-      name: "Momentum Breakout",
-      period: "Full History",
-    };
+    // Query database for trades
+    const trades = await db.query.tradesTable.findMany({
+      where: eq(tradesTable.strategyId, strategyId),
+    }).catch(() => []);
 
-    const results = {
-      totalTrades: 125,
-      wins: 68,
-      losses: 57,
-      winRate: 0.542,
-      totalReturn: 125.5,
-      avgWin: 2.45,
-      avgLoss: 1.8,
-      profitFactor: 1.45,
-      sharpeRatio: 1.2,
-      maxDrawdown: 0.12,
-      calmarRatio: 10.4,
-      sortinoRatio: 1.65,
-      bestSetup: "Breakout",
-      bestRegime: "Trending",
-      skillComponent: 85,
-      luckComponent: 40.5,
-      fragilityScore: 35,
-      topRisk: "Concentration in 3 symbols",
-    };
+    if (trades.length === 0) {
+      return res.json({
+        success: true,
+        source: "database",
+        message: "No trades found for comprehensive report",
+        data: null,
+      });
+    }
 
     const explanation = await explainabilitySystem.generateComprehensiveReport(
-      strategy,
-      [],
-      results,
+      { id: strategyId },
+      trades,
+      {},
     );
 
     res.json(explanation);
@@ -296,15 +235,24 @@ router.get("/explain/report/:strategyId", async (req, res) => {
 
 // ─── Daily Report ────────────────────────────────────────────────────────────
 
-router.get("/explain/daily", async (req, res) => {
+router.get("/daily", async (req, res) => {
   try {
     const date = new Date().toISOString().split("T")[0];
 
-    const trades = [
-      { symbol: "SPY", direction: "long", entryPrice: 450.25, exitPrice: 452.75, pnl: 2.5, enteredAt: new Date().toISOString(), setupType: "Breakout", outcome: "win" },
-      { symbol: "QQQ", direction: "short", entryPrice: 380.5, exitPrice: 379.8, pnl: 0.7, enteredAt: new Date().toISOString(), setupType: "MeanReversion", outcome: "win" },
-      { symbol: "IWM", direction: "long", entryPrice: 205.25, exitPrice: 204.1, pnl: -1.15, enteredAt: new Date().toISOString(), setupType: "Breakout", outcome: "loss" },
-    ];
+    // Query database for today's trades
+    const trades = await db.query.tradesTable.findMany({
+      limit: 100,
+    }).catch(() => []);
+
+    if (trades.length === 0) {
+      return res.json({
+        success: true,
+        source: "database",
+        message: "No trades found for daily report",
+        date,
+        data: null,
+      });
+    }
 
     const explanation = await explainabilitySystem.generateDailyReport(trades, date);
 
@@ -317,7 +265,7 @@ router.get("/explain/daily", async (req, res) => {
 
 // ─── Performance Review ──────────────────────────────────────────────────────
 
-router.get("/explain/performance", async (req, res) => {
+router.get("/performance", async (req, res) => {
   try {
     const period = req.query.period as string || "Q1 2025";
 
@@ -332,7 +280,7 @@ router.get("/explain/performance", async (req, res) => {
 
 // ─── Executive Summary ───────────────────────────────────────────────────────
 
-router.get("/explain/executive", async (req, res) => {
+router.get("/executive", async (req, res) => {
   try {
     const explanation = await explainabilitySystem.generateExecutiveSummary();
 
@@ -345,7 +293,7 @@ router.get("/explain/executive", async (req, res) => {
 
 // ─── Skill vs Luck Decomposition ────────────────────────────────────────────
 
-router.get("/explain/skill-luck", async (req, res) => {
+router.get("/skill-luck", async (req, res) => {
   try {
     const trades = [
       { symbol: "SPY", pnl: 2.5, direction: "long", outcome: "win" },
@@ -369,7 +317,7 @@ router.get("/explain/skill-luck", async (req, res) => {
 
 // ─── Regime Attribution ──────────────────────────────────────────────────────
 
-router.get("/explain/regime-attribution", async (req, res) => {
+router.get("/regime-attribution", async (req, res) => {
   try {
     const trades = [
       { symbol: "SPY", pnl: 2.5, regime: "trending", setupType: "Breakout", outcome: "win" },
@@ -390,7 +338,7 @@ router.get("/explain/regime-attribution", async (req, res) => {
 
 // ─── Temporal Patterns ───────────────────────────────────────────────────────
 
-router.get("/explain/temporal-patterns", async (req, res) => {
+router.get("/temporal-patterns", async (req, res) => {
   try {
     const trades = [
       { symbol: "SPY", pnl: 2.5, enteredAt: new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString(), outcome: "win" },
@@ -410,7 +358,7 @@ router.get("/explain/temporal-patterns", async (req, res) => {
 
 // ─── Entry/Exit Quality ─────────────────────────────────────────────────────
 
-router.get("/explain/entry-exit-quality", async (req, res) => {
+router.get("/entry-exit-quality", async (req, res) => {
   try {
     const trades = [
       { symbol: "SPY", pnl: 2.5, entryType: "BreakoutAbove", exitType: "ProfitTarget", entryQualityScore: 0.8, exitQualityScore: 0.75, barsToProfit: 5, percentOfMoveCapured: 0.85 },
@@ -429,7 +377,7 @@ router.get("/explain/entry-exit-quality", async (req, res) => {
 
 // ─── Factor Analysis ────────────────────────────────────────────────────────
 
-router.get("/explain/factor-analysis", async (req, res) => {
+router.get("/factor-analysis", async (req, res) => {
   try {
     const trades = [
       { symbol: "SPY", pnl: 2.5, volatility: 0.18, trend: 1.5, momentum: 0.85 },

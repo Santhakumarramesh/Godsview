@@ -610,56 +610,7 @@ export class ReplayEventStore extends EventEmitter {
   // ============================================================================
 
   private initializeMockData(): void {
-    const symbols = [
-      'BTC/USD',
-      'ETH/USD',
-      'SOL/USD',
-      'XRP/USD',
-      'ADA/USD',
-      'AAPL',
-      'MSFT',
-      'GOOGL',
-      'AMZN',
-      'TSLA',
-    ];
-    const sources = ['binance', 'coinbase', 'kraken', 'nyse', 'nasdaq'];
-
-    const now = Date.now();
-    const oneHourAgo = now - 3600000;
-    let sequence = 1;
-
-    // Generate ~200 mock events
-    for (let i = 0; i < 200; i++) {
-      const symbol = symbols[Math.floor(Math.random() * symbols.length)];
-      const timestamp = oneHourAgo + Math.random() * 3600000;
-      const source = sources[Math.floor(Math.random() * sources.length)];
-
-      const basePrice = 100 + Math.random() * 50000;
-      const spread = basePrice * 0.0005;
-
-      const event: RawMarketEvent = {
-        id: this.generateId(),
-        type: ['tick', 'trade', 'quote'][Math.floor(Math.random() * 3)] as any,
-        symbol,
-        timestamp: Math.floor(timestamp),
-        receivedAt: now,
-        source,
-        sequence: sequence++,
-        payload: {
-          lastPrice: basePrice,
-          bid: basePrice - spread,
-          ask: basePrice + spread,
-          volume24h: Math.random() * 1000000,
-          lastTradeTime: timestamp,
-        },
-        checksum: '',
-        compressed: false,
-      };
-
-      event.checksum = this.calculateChecksum(event);
-      this.store(event);
-    }
-
+    // Initialize with empty state - events should be populated via store() method from real market data feeds
     this.eventCountSinceLastStats = 0;
     this.lastStatsTime = Date.now();
   }

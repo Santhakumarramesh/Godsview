@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, accuracyResultsTable, auditEventsTable, signalsTable, tradesTable, siDecisionsTable } from "@workspace/db";
-import { and, desc, eq, gte, isNotNull, or, sql } from "@workspace/db";
+import { and, desc, eq, gte, isNotNull, or, sql } from "drizzle-orm";
 import { readFile } from "node:fs/promises";
 import * as path from "node:path";
 import { StockBrainStateSchema, type StockBrainState } from "@workspace/common-types";
@@ -558,6 +558,39 @@ router.post("/system/retrain", requireOperator, async (req, res) => {
     res.json(result);
   } catch (err) {
     res.status(500).json({ success: false, message: String(err) });
+  }
+});
+
+// ─── GET /api/system/learning — continuous learning loop state ───────────────
+router.get("/system/learning", async (_req, res) => {
+  try {
+    const { getLearningState } = await import("../lib/continuous_learning");
+    res.json(getLearningState());
+  } catch (err) {
+    res.status(500).json({ error: "learning_state_failed", message: String(err) });
+  }
+});
+
+// ─── POST /api/system/learning/retrain — force learning retrain ─────────────
+router.post("/system/learning/retrain", requireOperator, async (req, res) => {
+  try {
+    const { forceRetrain } = await import("../lib/continuous_learning");
+    const reason = String(req.body?.reason ?? "manual");
+    const result = await forceRetrain(reason);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, message: String(err) });
+  }
+});
+
+// ─── GET /api/system/learning/promotions — strategy promotion candidates ────
+router.get("/system/learning/promotions", async (_req, res) => {
+  try {
+    const { evaluatePromotions } = await import("../lib/continuous_learning");
+    const candidates = await evaluatePromotions();
+    res.json({ candidates, evaluatedAt: new Date().toISOString() });
+  } catch (err) {
+    res.status(500).json({ error: "promotion_eval_failed", message: String(err) });
   }
 });
 

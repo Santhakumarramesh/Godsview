@@ -14,10 +14,7 @@
  */
 
 import { logger } from "../logger";
-// Trade analytics operates on replay-engine trades which carry explicit bar
-// indices and sizes. The backtest-engine variant is a richer strategy-level
-// outcome (no bar index, no size) that would not satisfy the math below.
-import type { TradeOutcome } from "./replay_engine";
+import { TradeOutcome } from "../backtest_engine";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 

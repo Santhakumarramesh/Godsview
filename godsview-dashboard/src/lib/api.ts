@@ -5,6 +5,45 @@
  */
 import { useQuery, useMutation, useQueryClient, type UseQueryOptions } from "@tanstack/react-query";
 
+// ─── Brain Cycle SSE Types ──────────────────────────────────────────────────
+export interface AgentReportDTO {
+  agentId: string;
+  symbol: string;
+  score: number;
+  confidence: number;
+  direction: "long" | "short" | "neutral";
+  reasoning: string;
+  timestamp: string;
+}
+
+export interface BrainDecisionDTO {
+  symbol: string;
+  action: "buy" | "sell" | "hold" | "close";
+  confidence: number;
+  agents: AgentReportDTO[];
+  reasoning: string;
+  timestamp: string;
+}
+
+export interface BrainSSEEvent {
+  type: "cycle_start" | "agent_start" | "agent_done" | "decision" | "cycle_end" | "error";
+  cycleId?: number;
+  agentId?: string;
+  symbol?: string;
+  report?: AgentReportDTO;
+  decision?: BrainDecisionDTO;
+  payload?: Record<string, unknown>;
+  timestamp: number;
+  [key: string]: unknown;
+}
+
+export interface BrainCycleResponse {
+  cycleId: number;
+  symbols: string[];
+  decisions: BrainDecisionDTO[];
+  latencyMs: number;
+}
+
 // ─── Base Fetch ──────────────────────────────────────────────────────────────
 const API_BASE = import.meta.env.VITE_API_URL || "/api";
 
@@ -2958,6 +2997,7 @@ export interface ExecutionPlan {
 export interface ExecutionQualityReport {
   tradeId: string;
   symbol: string;
+  direction: "long" | "short";
   expectedEntry: number;
   actualEntry: number;
   entrySlippageBps: number;
@@ -3185,7 +3225,7 @@ export interface WalkForwardWindow {
   passed: boolean;
 }
 
-export interface WalkForwardResult {
+export interface WalkForwardSummary {
   strategyId: string;
   totalWindows: number;
   passedWindows: number;
@@ -3214,7 +3254,7 @@ export interface StressTestSuite {
 
 export interface ValidationGateResult {
   strategyId: string;
-  walkForward: WalkForwardResult;
+  walkForward: WalkForwardSummary;
   stressTest: StressTestSuite;
   overallVerdict: "APPROVED" | "REJECTED" | "NEEDS_REVIEW";
   reasons: string[];

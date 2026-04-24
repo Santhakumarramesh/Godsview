@@ -73,7 +73,7 @@ const PROXY_PREFIXES = [
 ] as const;
 
 for (const prefix of PROXY_PREFIXES) {
-  router.all(`/${prefix}/*`, async (req: Request, res: Response) => {
+  router.all(`/${prefix}/{*rest}`, async (req: Request, res: Response) => {
     const targetPath = req.originalUrl.replace(/^\/api\/v2/, "");
     const targetUrl = `${PY_GATEWAY_URL}${targetPath}`;
 

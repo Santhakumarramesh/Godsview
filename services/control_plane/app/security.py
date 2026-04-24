@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 
 from argon2 import PasswordHasher
@@ -43,7 +43,7 @@ def issue_token(
     roles: list[str],
     token_type: TokenType,
 ) -> tuple[str, datetime]:
-    now = datetime.now(UTC)
+    now = datetime.now(timezone.utc)
     ttl = (
         settings.jwt_access_ttl_seconds
         if token_type == "access"

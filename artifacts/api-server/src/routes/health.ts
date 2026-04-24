@@ -12,25 +12,6 @@ import { checkDbHealth } from "@workspace/db";
 import { getDegradationSnapshot } from "../lib/degradation";
 
 const router: IRouter = Router();
-const DEFAULT_HEALTH_MEMORY_WARN_MB = 1024;
-const parsedHealthMemoryWarnMb = Number.parseInt(
-  process.env.HEALTH_MEMORY_WARN_MB ?? String(DEFAULT_HEALTH_MEMORY_WARN_MB),
-  10,
-);
-const HEALTH_MEMORY_WARN_MB =
-  Number.isFinite(parsedHealthMemoryWarnMb) && parsedHealthMemoryWarnMb > 0
-    ? parsedHealthMemoryWarnMb
-    : DEFAULT_HEALTH_MEMORY_WARN_MB;
-
-function extractPayloadError(payload: unknown): string | null {
-  if (!payload || typeof payload !== "object") return null;
-  const rec = payload as Record<string, unknown>;
-  const error = typeof rec.error === "string" ? rec.error.trim() : "";
-  const message = typeof rec.message === "string" ? rec.message.trim() : "";
-  if (!error && !message) return null;
-  if (error && message) return `${error}: ${message}`;
-  return error || message;
-}
 
 /* ── Startup timestamp ────────────────────────────────────────────── */
 const startedAt = new Date().toISOString();
@@ -71,32 +52,63 @@ router.get("/readyz", async (_req, res) => {
     allHealthy = false;
   }
 
-  // Check 2: Alpaca API connectivity
+  // Check 2: Redis connectivity
+  const redisUrl = (process.env.REDIS_URL ?? "").trim();
+  if (redisUrl) {
+    try {
+      const redisStart = Date.now();
+      const url = new URL(redisUrl);
+      const net = await import("net");
+      const redisOk = await new Promise<boolean>((resolve) => {
+        const sock = new net.Socket();
+        sock.setTimeout(3000);
+        sock.once("connect", () => { sock.destroy(); resolve(true); });
+        sock.once("error", () => { sock.destroy(); resolve(false); });
+        sock.once("timeout", () => { sock.destroy(); resolve(false); });
+        sock.connect(Number(url.port) || 6379, url.hostname);
+      });
+      if (redisOk) {
+        checks["redis"] = { status: "ok", latencyMs: Date.now() - redisStart };
+      } else {
+        checks["redis"] = { status: "error", error: "TCP connect failed" };
+        allHealthy = false;
+      }
+    } catch (err: any) {
+      checks["redis"] = { status: "error", error: err.message };
+      allHealthy = false;
+    }
+  } else {
+    checks["redis"] = { status: "skipped", error: "REDIS_URL not configured" };
+  }
+
+  // Check 3: Alpaca API connectivity
   try {
     const alpacaStart = Date.now();
     const { getAccount, getAlpacaCredentialStatus } = await import("../lib/alpaca");
-    const creds = getAlpacaCredentialStatus();
-    if (!creds.keyConfigured || !creds.secretConfigured) {
-      checks["alpaca"] = { status: "skipped", error: "ALPACA_API_KEY/ALPACA_SECRET_KEY not configured" };
-    } else if (!creds.hasValidTradingKey) {
-      checks["alpaca"] = {
-        status: "degraded",
-        error: `Unsupported key type: ${creds.keyKind} (${creds.keyPrefix ?? "unknown"})`,
-      };
-    } else {
-      const account = await getAccount();
-      const payloadError = extractPayloadError(account);
-      if (payloadError) {
-        checks["alpaca"] = { status: "degraded", error: payloadError };
+    const credStatus = getAlpacaCredentialStatus();
+    if (credStatus.keyConfigured && credStatus.secretConfigured) {
+      if (!credStatus.hasValidTradingKey) {
+        // Key present but not a valid trading key (e.g. broker key)
+        checks["alpaca"] = { status: "degraded", error: `Key kind '${credStatus.keyKind}' — broker keys require trading account access` };
       } else {
-        checks["alpaca"] = { status: "ok", latencyMs: Date.now() - alpacaStart };
+        // Try a real connectivity check
+        const account = await getAccount() as Record<string, unknown>;
+        if (account && typeof account === "object" && "error" in account) {
+          const errKey = String((account as any).error ?? "");
+          const errMsg = String((account as any).message ?? "");
+          checks["alpaca"] = { status: "degraded", error: errMsg ? `${errKey}: ${errMsg}` : errKey };
+        } else {
+          checks["alpaca"] = { status: "ok", latencyMs: Date.now() - alpacaStart };
+        }
       }
+    } else {
+      checks["alpaca"] = { status: "skipped", error: "ALPACA_API_KEY not configured" };
     }
   } catch (err: any) {
     checks["alpaca"] = { status: "degraded", error: err.message };
   }
 
-  // Check 3: Claude API availability
+  // Check 4: Claude API availability
   try {
     const hasAnthropicKey = !!process.env["ANTHROPIC_API_KEY"];
     checks["claude"] = hasAnthropicKey
@@ -106,18 +118,16 @@ router.get("/readyz", async (_req, res) => {
     checks["claude"] = { status: "degraded", error: err.message };
   }
 
-  // Check 4: Memory pressure
+  // Check 5: Memory pressure
   const memMB = Math.round(process.memoryUsage.rss() / 1024 / 1024);
-  if (memMB > HEALTH_MEMORY_WARN_MB) {
-    checks["memory"] = {
-      status: "warning",
-      error: `RSS ${memMB}MB exceeds ${HEALTH_MEMORY_WARN_MB}MB threshold`,
-    };
+  const memThresholdMB = 512;
+  if (memMB > memThresholdMB) {
+    checks["memory"] = { status: "warning", error: `RSS ${memMB}MB exceeds ${memThresholdMB}MB threshold` };
   } else {
     checks["memory"] = { status: "ok", latencyMs: 0 };
   }
 
-  // Check 5: Event loop lag (detect blocking)
+  // Check 6: Event loop lag (detect blocking)
   const lagStart = Date.now();
   await new Promise((resolve) => setImmediate(resolve));
   const lagMs = Date.now() - lagStart;
@@ -164,16 +174,11 @@ router.get("/degradation", (_req, res) => {
 /* ── Auth Failure State ───────────────────────────────────────────── */
 router.get("/auth-failures", async (_req, res) => {
   try {
-    const { getAlpacaCredentialStatus, getAlpacaAuthFailureState } = await import("../lib/alpaca");
+    const { getAlpacaAuthFailureState } = await import("../lib/alpaca");
     const { getOrderbookAuthFailureState } = await import("../lib/market/orderbook");
     res.json({
-      alpaca: {
-        credentials: getAlpacaCredentialStatus(),
-        authFailure: getAlpacaAuthFailureState(),
-      },
-      orderbook: {
-        authFailure: getOrderbookAuthFailureState(),
-      },
+      alpaca: { authFailure: getAlpacaAuthFailureState() },
+      orderbook: { authFailure: getOrderbookAuthFailureState() },
       generatedAt: new Date().toISOString(),
     });
   } catch (err: any) {
@@ -182,13 +187,14 @@ router.get("/auth-failures", async (_req, res) => {
   }
 });
 
-/* ── Reasoning Fallback State ─────────────────────────────────────── */
+/* ── Reasoning Fallback State ────────────────────────────────────── */
 router.get("/reasoning-fallback", async (_req, res) => {
   try {
     const { getReasoningFallbackState } = await import("../lib/reasoning_engine");
+    const fallbackState = getReasoningFallbackState();
     res.json({
-      claudeConfigured: Boolean(process.env.ANTHROPIC_API_KEY),
-      reasoningFallback: getReasoningFallbackState(),
+      claudeConfigured: !!process.env.ANTHROPIC_API_KEY,
+      reasoningFallback: fallbackState,
       generatedAt: new Date().toISOString(),
     });
   } catch (err: any) {

@@ -47,8 +47,21 @@ const DEFAULT_SYMBOLS: AddWatchlistParams[] = [
 
 // ─── Store ────────────────────────────────────────────────────────────────────
 
+/**
+ * PRODUCTION: Replace with database persistence (e.g., PostgreSQL or MongoDB)
+ * This in-memory watchlist is lost on process restart and not suitable for production.
+ * Demo mode: Log warning if GODSVIEW_DATA_PERSISTENCE is not set to 'database'.
+ */
 /** symbol → WatchlistEntry */
 const _store = new Map<string, WatchlistEntry>();
+
+// Demo/Production boundary check
+if (!process.env.GODSVIEW_DATA_PERSISTENCE || process.env.GODSVIEW_DATA_PERSISTENCE !== "database") {
+  logger.warn(
+    { persistence: process.env.GODSVIEW_DATA_PERSISTENCE ?? "fallback-in-memory" },
+    "[watchlist] Using in-memory fallback; watchlist data will be lost on restart. Set GODSVIEW_DATA_PERSISTENCE=database for production.",
+  );
+}
 
 function _initDefaults() {
   for (const p of DEFAULT_SYMBOLS) {

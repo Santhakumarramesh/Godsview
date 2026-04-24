@@ -1,9 +1,4 @@
-"""Canonical error envelope matching docs/blueprint/04-api-surface.md.
-
-The envelope is BOTH a runtime contract (every exception handler emits it)
-and a schema contract (every non-2xx response in the OpenAPI spec references
-``ErrorEnvelope`` below). ``contract-validation.yml`` enforces the latter.
-"""
+"""Canonical error envelope matching docs/blueprint/reference/API_SURFACE.md."""
 
 from __future__ import annotations
 
@@ -12,56 +7,7 @@ from typing import Any
 from fastapi import Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
-
-
-class ErrorDetail(BaseModel):
-    """Structured detail for multi-error responses (e.g. validation failures)."""
-
-    path: str = Field(..., description="Dotted path to the offending field.")
-    issue: str = Field(..., description="Human-readable problem statement.")
-
-
-class ErrorBody(BaseModel):
-    """Inner ``error`` object — see blueprint 04-api-surface.md."""
-
-    code: str = Field(..., description="Stable machine-readable error code.")
-    message: str = Field(..., description="Human-readable error description.")
-    correlation_id: str = Field(
-        ...,
-        description="X-Correlation-ID echoed back so logs can be joined.",
-    )
-    details: list[ErrorDetail] | None = Field(
-        default=None,
-        description="Per-field detail, present for validation_error and friends.",
-    )
-    hint: str | None = Field(default=None, description="Recovery hint for the caller.")
-    docs: str | None = Field(default=None, description="Link to runbook / docs.")
-
-
-class ErrorEnvelope(BaseModel):
-    """Outer envelope — every 4xx / 5xx response body conforms to this model."""
-
-    error: ErrorBody
-
-
-# Responses map consumed by ``app.include_router`` / endpoint decorators. We
-# attach these to the canonical auth-gated endpoints so the OpenAPI spec
-# advertises 401/403 consistently.
-AUTH_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
-    401: {"model": ErrorEnvelope, "description": "Missing or invalid credentials."},
-    403: {"model": ErrorEnvelope, "description": "Insufficient role for this operation."},
-}
-
-COMMON_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
-    400: {"model": ErrorEnvelope, "description": "Malformed request."},
-    404: {"model": ErrorEnvelope, "description": "Resource not found."},
-    409: {"model": ErrorEnvelope, "description": "State conflict."},
-    422: {"model": ErrorEnvelope, "description": "Request validation failed."},
-    429: {"model": ErrorEnvelope, "description": "Rate limit exceeded."},
-    500: {"model": ErrorEnvelope, "description": "Internal server error."},
-}
 
 
 class ApiError(Exception):
@@ -148,7 +94,9 @@ def install_exception_handlers(app: Any) -> None:
         )
 
     @app.exception_handler(RequestValidationError)
-    async def _handle_validation(request: Request, exc: RequestValidationError) -> JSONResponse:
+    async def _handle_validation(
+        request: Request, exc: RequestValidationError
+    ) -> JSONResponse:
         cid = getattr(request.state, "correlation_id", "unknown")
         details = [
             {"path": ".".join(str(p) for p in err["loc"]), "issue": err["msg"]}

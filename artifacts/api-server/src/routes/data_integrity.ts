@@ -80,17 +80,7 @@ const HOLIDAYS = [
 
 // ── Mock: Snapshots ─────────────────────────────────────────────────────────
 
-const SNAPSHOTS = Array.from({ length: 15 }, (_, i) => ({
-  id: `snap_${String(i + 1).padStart(4, "0")}`,
-  timestamp: now - i * 300000,
-  eventCount: 2400 + Math.floor(Math.random() * 800),
-  symbolCount: 12,
-  symbols: [
-    { symbol: "BTC/USD", lastPrice: 67432.50 - i * 12.5, bid: 67430.00 - i * 12.5, ask: 67435.00 - i * 12.5, volume24h: 24500000, source: "alpaca" },
-    { symbol: "ETH/USD", lastPrice: 3456.78 - i * 3.2, bid: 3455.50 - i * 3.2, ask: 3458.00 - i * 3.2, volume24h: 12800000, source: "alpaca" },
-    { symbol: "AAPL", lastPrice: 198.45 + i * 0.15, bid: 198.40 + i * 0.15, ask: 198.50 + i * 0.15, volume24h: 45200000, source: "alpaca" },
-  ],
-}));
+const SNAPSHOTS: any[] = [];
 
 // ── Mock: Store Stats ───────────────────────────────────────────────────────
 

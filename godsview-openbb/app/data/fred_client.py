@@ -81,3 +81,4 @@ def get_fred_macro_snapshot() -> dict[str, Any]:
         }
 
     return cached("fred:snapshot", ttl_seconds=900, loader=_load)
+

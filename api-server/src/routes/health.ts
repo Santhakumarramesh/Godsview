@@ -52,14 +52,55 @@ router.get("/readyz", async (_req, res) => {
     allHealthy = false;
   }
 
-  // Check 2: Alpaca API connectivity
+  // Check 2: Redis connectivity
+  const redisUrl = (process.env.REDIS_URL ?? "").trim();
+  if (redisUrl) {
+    try {
+      const redisStart = Date.now();
+      const url = new URL(redisUrl);
+      const net = await import("net");
+      const redisOk = await new Promise<boolean>((resolve) => {
+        const sock = new net.Socket();
+        sock.setTimeout(3000);
+        sock.once("connect", () => { sock.destroy(); resolve(true); });
+        sock.once("error", () => { sock.destroy(); resolve(false); });
+        sock.once("timeout", () => { sock.destroy(); resolve(false); });
+        sock.connect(Number(url.port) || 6379, url.hostname);
+      });
+      if (redisOk) {
+        checks["redis"] = { status: "ok", latencyMs: Date.now() - redisStart };
+      } else {
+        checks["redis"] = { status: "error", error: "TCP connect failed" };
+        allHealthy = false;
+      }
+    } catch (err: any) {
+      checks["redis"] = { status: "error", error: err.message };
+      allHealthy = false;
+    }
+  } else {
+    checks["redis"] = { status: "skipped", error: "REDIS_URL not configured" };
+  }
+
+  // Check 3: Alpaca API connectivity
   try {
     const alpacaStart = Date.now();
-    const hasAlpacaKey = !!process.env["ALPACA_API_KEY"];
-    if (hasAlpacaKey) {
-      const { getAccount } = await import("../lib/alpaca");
-      await getAccount();
-      checks["alpaca"] = { status: "ok", latencyMs: Date.now() - alpacaStart };
+    const { getAccount, getAlpacaCredentialStatus } = await import("../lib/alpaca");
+    const credStatus = getAlpacaCredentialStatus();
+    if (credStatus.keyConfigured && credStatus.secretConfigured) {
+      if (!credStatus.hasValidTradingKey) {
+        // Key present but not a valid trading key (e.g. broker key)
+        checks["alpaca"] = { status: "degraded", error: `Key kind '${credStatus.keyKind}' — broker keys require trading account access` };
+      } else {
+        // Try a real connectivity check
+        const account = await getAccount() as Record<string, unknown>;
+        if (account && typeof account === "object" && "error" in account) {
+          const errKey = String((account as any).error ?? "");
+          const errMsg = String((account as any).message ?? "");
+          checks["alpaca"] = { status: "degraded", error: errMsg ? `${errKey}: ${errMsg}` : errKey };
+        } else {
+          checks["alpaca"] = { status: "ok", latencyMs: Date.now() - alpacaStart };
+        }
+      }
     } else {
       checks["alpaca"] = { status: "skipped", error: "ALPACA_API_KEY not configured" };
     }
@@ -67,7 +108,7 @@ router.get("/readyz", async (_req, res) => {
     checks["alpaca"] = { status: "degraded", error: err.message };
   }
 
-  // Check 3: Claude API availability
+  // Check 4: Claude API availability
   try {
     const hasAnthropicKey = !!process.env["ANTHROPIC_API_KEY"];
     checks["claude"] = hasAnthropicKey
@@ -77,7 +118,7 @@ router.get("/readyz", async (_req, res) => {
     checks["claude"] = { status: "degraded", error: err.message };
   }
 
-  // Check 4: Memory pressure
+  // Check 5: Memory pressure
   const memMB = Math.round(process.memoryUsage.rss() / 1024 / 1024);
   const memThresholdMB = 512;
   if (memMB > memThresholdMB) {
@@ -86,7 +127,7 @@ router.get("/readyz", async (_req, res) => {
     checks["memory"] = { status: "ok", latencyMs: 0 };
   }
 
-  // Check 5: Event loop lag (detect blocking)
+  // Check 6: Event loop lag (detect blocking)
   const lagStart = Date.now();
   await new Promise((resolve) => setImmediate(resolve));
   const lagMs = Date.now() - lagStart;
@@ -127,6 +168,38 @@ router.get("/degradation", (_req, res) => {
   } catch (err: any) {
     logger.error({ err }, "Failed to get degradation snapshot");
     res.status(500).json({ error: "Failed to get degradation snapshot" });
+  }
+});
+
+/* ── Auth Failure State ───────────────────────────────────────────── */
+router.get("/auth-failures", async (_req, res) => {
+  try {
+    const { getAlpacaAuthFailureState } = await import("../lib/alpaca");
+    const { getOrderbookAuthFailureState } = await import("../lib/market/orderbook");
+    res.json({
+      alpaca: { authFailure: getAlpacaAuthFailureState() },
+      orderbook: { authFailure: getOrderbookAuthFailureState() },
+      generatedAt: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    logger.error({ err }, "Failed to get auth failure state");
+    res.status(500).json({ error: "Failed to get auth failure state" });
+  }
+});
+
+/* ── Reasoning Fallback State ────────────────────────────────────── */
+router.get("/reasoning-fallback", async (_req, res) => {
+  try {
+    const { getReasoningFallbackState } = await import("../lib/reasoning_engine");
+    const fallbackState = getReasoningFallbackState();
+    res.json({
+      claudeConfigured: !!process.env.ANTHROPIC_API_KEY,
+      reasoningFallback: fallbackState,
+      generatedAt: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    logger.error({ err }, "Failed to get reasoning fallback state");
+    res.status(500).json({ error: "Failed to get reasoning fallback state" });
   }
 });
 

@@ -22,7 +22,7 @@ interface SessionReport {
   emotionalState: "Disciplined" | "FOMO" | "Revenge" | "Patient" | "Hesitant";
   riskCompliance: number;
 }
-// ─── Mock Data ───────────────────────────────────────────────────────────────
+// ─── Fallback Demo Data (shown when /api/reports returns empty; replace with live data) ─
 const REPORTS: SessionReport[] = [
   {
     id: "RPT-20260330-NY",

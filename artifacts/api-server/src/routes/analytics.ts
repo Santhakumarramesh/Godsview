@@ -106,4 +106,32 @@ router.get("/analytics/circuit-breaker/history", (_req, res) => {
   res.json({ history, count: history.totalTrips });
 });
 
+// ─── Aliases for frontend compatibility ──────────────────────────────────────
+
+/** GET /api/analytics/summary — alias for /api/analytics/metrics */
+router.get("/analytics/summary", (req, res) => {
+  const { symbol, from, to } = req.query as Record<string, string | undefined>;
+  const report = generateEquityReport({ symbol, from, to });
+  res.json({ summary: report.metrics, generatedAt: report.generatedAt });
+});
+
+/** GET /api/analytics/equity-curve — alias for /api/analytics/equity/curve */
+router.get("/analytics/equity-curve", (req, res) => {
+  const { symbol, from, to } = req.query as Record<string, string | undefined>;
+  const report = generateEquityReport({ symbol, from, to });
+  res.json({ curve: report.equityCurve, count: report.equityCurve.length, generatedAt: report.generatedAt });
+});
+
+/** GET /api/analytics/daily-pnl — derived from equity curve */
+router.get("/analytics/daily-pnl", (req, res) => {
+  const { symbol, from, to } = req.query as Record<string, string | undefined>;
+  const report = generateEquityReport({ symbol, from, to });
+  const dailyPnl = report.equityCurve.map((pt: { date: string; value: number }, i: number, arr: { date: string; value: number }[]) => ({
+    date: pt.date,
+    pnl: i === 0 ? 0 : pt.value - arr[i - 1].value,
+    cumulative: pt.value,
+  }));
+  res.json({ dailyPnl, count: dailyPnl.length, generatedAt: report.generatedAt });
+});
+
 export default router;

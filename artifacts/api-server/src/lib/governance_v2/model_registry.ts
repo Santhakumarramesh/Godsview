@@ -379,7 +379,7 @@ export class ModelRegistry extends EventEmitter {
       this.registerFeature({
         ...feat,
         version: '1.0.0',
-        computeLatencyMs: Math.random() * 50 + 5,
+        computeLatencyMs: 0, // Real values come from feature computation performance monitoring
         usedByModels: [],
         status: 'active' as FeatureStatus,
         createdAt: Date.now(),

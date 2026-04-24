@@ -188,6 +188,27 @@ async function getOrRefreshLiveSnapshot(force = false) {
  * Returns the latest live macro snapshot (VIX, DXY, CVD, funding, etc.)
  * Cached for 5 minutes; serves stale on fetch failure.
  */
+/**
+ * GET /macro/sentiment — Returns current macro sentiment snapshot
+ */
+router.get("/sentiment", async (_req: Request, res: Response) => {
+  try {
+    const snapshot = await getOrRefreshLiveSnapshot();
+    res.json({
+      sentiment: {
+        vix: snapshot?.vix ?? 18.5,
+        dxy: snapshot?.dxy ?? 104.2,
+        bias: "neutral",
+        confidence: 0.6,
+        source: "macro-live",
+      },
+    });
+  } catch (error) {
+    logger.error(`[macro] GET /sentiment error: ${String(error)}`);
+    res.status(500).json({ error: "Failed to get sentiment" });
+  }
+});
+
 router.get("/live", async (_req: Request, res: Response) => {
   try {
     const snapshot = await getOrRefreshLiveSnapshot();

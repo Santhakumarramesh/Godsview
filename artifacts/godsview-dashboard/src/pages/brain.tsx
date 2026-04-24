@@ -12,7 +12,7 @@
  *   Setup Memory, Claude Reasoning, Risk Gate
  */
 
-import { useState, useRef, useMemo, useCallback, useEffect, Suspense } from "react";
+import React, { useState, useRef, useMemo, useCallback, useEffect, Suspense } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Float, Billboard, Text, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
@@ -237,6 +237,74 @@ function useSIStream(maxEvents = 30) {
   }, [maxEvents]);
 
   return { decisions, connected };
+}
+
+// ─── WebGL Detection & Error Boundary ───────────────────────────────────────
+
+function detectWebGL(): boolean {
+  try {
+    const c = document.createElement("canvas");
+    return !!(c.getContext("webgl2") || c.getContext("webgl") || c.getContext("experimental-webgl"));
+  } catch {
+    return false;
+  }
+}
+
+class Canvas3DErrorBoundary extends React.Component<
+  { children: React.ReactNode; fallback: React.ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { children: React.ReactNode; fallback: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error: unknown) {
+    console.warn("[GodsView Brain] 3D render failed, using 2D fallback:", error);
+  }
+  render() {
+    if (this.state.hasError) return this.props.fallback;
+    return this.props.children;
+  }
+}
+
+/** 2D fallback when WebGL is unavailable */
+function Brain2DFallback({ stocks, onSelect }: { stocks: Array<{ symbol: string; score: number; confidence: number }>; onSelect: (s: string) => void }) {
+  return (
+    <div style={{
+      position: "absolute", inset: 0,
+      background: "radial-gradient(ellipse at center, #081a14 0%, #0a0a0b 60%, #050506 100%)",
+      display: "flex", alignItems: "center", justifyContent: "center", flexWrap: "wrap", gap: "12px", padding: "60px",
+    }}>
+      <div style={{
+        width: "100px", height: "100px", borderRadius: "50%",
+        background: "radial-gradient(circle, rgba(0,255,170,0.3), transparent 70%)",
+        border: "1px solid rgba(0,255,204,0.2)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        animation: "glowPulse 2s ease-in-out infinite",
+        fontSize: "11px", color: "#00ffcc", fontWeight: 600, fontFamily: "JetBrains Mono",
+      }}>
+        BRAIN
+      </div>
+      {stocks.slice(0, 20).map((s) => (
+        <button
+          key={s.symbol}
+          onClick={() => onSelect(s.symbol)}
+          style={{
+            padding: "8px 14px", borderRadius: "8px",
+            background: `rgba(0, 255, 170, ${0.05 + s.confidence * 0.15})`,
+            border: `1px solid rgba(0, 255, 204, ${0.1 + s.confidence * 0.3})`,
+            color: "#e0e0e0", fontSize: "11px", fontFamily: "JetBrains Mono",
+            cursor: "pointer", transition: "all 0.2s",
+          }}
+        >
+          {s.symbol} <span style={{ color: "#00ffcc", marginLeft: "4px" }}>{Math.round(s.score * 100)}%</span>
+        </button>
+      ))}
+    </div>
+  );
 }
 
 // ─── 3D Components ──────────────────────────────────────────────────────────
@@ -3020,30 +3088,44 @@ function BrainPageComponent() {
         }
       `}</style>
 
-      {/* 3D Canvas with error boundary and fallback */}
+      {/* 3D Canvas with error boundary and WebGL detection fallback */}
       <div style={{ position: "absolute", inset: 0 }} className="brain-canvas-container">
-        <Canvas
-          camera={{ position: [0, 1.5, 9], fov: 52 }}
-          style={{ background: "radial-gradient(ellipse at center, #081a14 0%, #0a0a0b 60%, #050506 100%)" }}
-          gl={{ antialias: true, alpha: true, failIfMajorPerformanceCaveat: false }}
-          dpr={[1, 1.5]}
-          onCreated={(state) => {
-            try {
-              state.gl.capabilities;
-            } catch (e) {
-              console.warn("WebGL not fully supported, using fallback rendering");
-            }
-          }}
-        >
-          <Suspense fallback={null}>
-            <BrainScene
-              stocks={stocks}
-              selectedSymbol={selectedStock?.symbol ?? null}
-              onSelectStock={handleSelectStock}
-              recentDecisions={siDecisions}
+        <Canvas3DErrorBoundary fallback={
+          <Brain2DFallback
+            stocks={stocks.map((s) => ({ symbol: s.symbol, score: s.siScore ?? 0, confidence: s.confidence ?? 0 }))}
+            onSelect={(sym) => handleSelectStock(stocks.find((s) => s.symbol === sym) ?? null)}
+          />
+        }>
+          {detectWebGL() ? (
+            <Canvas
+              camera={{ position: [0, 1.5, 9], fov: 52 }}
+              style={{ background: "radial-gradient(ellipse at center, #081a14 0%, #0a0a0b 60%, #050506 100%)" }}
+              gl={{ antialias: true, alpha: true, failIfMajorPerformanceCaveat: false }}
+              dpr={[1, 1.5]}
+              onCreated={(state) => {
+                try {
+                  state.gl.capabilities;
+                } catch (e) {
+                  console.warn("WebGL not fully supported, using fallback rendering");
+                }
+              }}
+            >
+              <Suspense fallback={null}>
+                <BrainScene
+                  stocks={stocks}
+                  selectedSymbol={selectedStock?.symbol ?? null}
+                  onSelectStock={handleSelectStock}
+                  recentDecisions={siDecisions}
+                />
+              </Suspense>
+            </Canvas>
+          ) : (
+            <Brain2DFallback
+              stocks={stocks.map((s) => ({ symbol: s.symbol, score: s.siScore ?? 0, confidence: s.confidence ?? 0 }))}
+              onSelect={(sym) => handleSelectStock(stocks.find((s) => s.symbol === sym) ?? null)}
             />
-          </Suspense>
-        </Canvas>
+          )}
+        </Canvas3DErrorBoundary>
 
         {/* Neural network CSS fallback overlay */}
         <div className="neural-network-overlay" />
