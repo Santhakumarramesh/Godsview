@@ -130,20 +130,20 @@ for (const prefix of PROXY_PREFIXES) {
 // ── Service status endpoint ─────────────────────────────────────
 router.get("/status", async (_req, res) => {
   const services = [
-    { name: "gateway", port: 8000 },
-    { name: "market-data", port: 8001 },
-    { name: "feature", port: 8002 },
-    { name: "backtest", port: 8003 },
-    { name: "ml", port: 8004 },
-    { name: "execution", port: 8005 },
-    { name: "risk", port: 8006 },
-    { name: "memory", port: 8007 },
-    { name: "scheduler", port: 8008 },
+    { name: "gateway", host: "py-gateway", port: 8000 },
+    { name: "market-data", host: "py-market-data", port: 8001 },
+    { name: "feature", host: "py-feature", port: 8002 },
+    { name: "backtest", host: "py-backtest", port: 8003 },
+    { name: "ml", host: "py-ml", port: 8004 },
+    { name: "execution", host: "py-execution", port: 8005 },
+    { name: "risk", host: "py-risk", port: 8006 },
+    { name: "memory", host: "py-memory", port: 8007 },
+    { name: "scheduler", host: "py-scheduler", port: 8008 },
   ];
 
   const results = await Promise.allSettled(
     services.map(async (svc) => {
-      const url = `${PY_GATEWAY_URL.replace(":8000", `:${svc.port}`)}/health`;
+      const url = `http://${svc.host}:${svc.port}/health`;
       try {
         const resp = await fetch(url, { signal: AbortSignal.timeout(3000) });
         return { ...svc, status: resp.ok ? "healthy" : "degraded", code: resp.status };
