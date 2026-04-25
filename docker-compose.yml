@@ -160,9 +160,11 @@ services:
       - api
     ports:
       - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
     volumes:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
       - ./artifacts/godsview-dashboard/dist/public:/usr/share/nginx/html:ro
+      - /etc/nginx/ssl:/etc/nginx/ssl:ro
     networks:
       - godsview-net
 

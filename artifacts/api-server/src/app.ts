@@ -14,6 +14,7 @@ import router from "./routes";
 import { logger } from "./lib/logger";
 import { runtimeConfig } from "./lib/runtime_config";
 import { createRateLimiter, securityHeadersMiddleware } from "./lib/request_guards";
+import { extractAuth, requireAuth } from "./middlewares/auth_guard";
 import {
   httpRequestsTotal,
   httpRequestDuration,
@@ -105,6 +106,19 @@ app.use(express.json({ limit: runtimeConfig.requestBodyLimit }));
 app.use(express.urlencoded({ extended: true, limit: runtimeConfig.requestBodyLimit }));
 
 app.use("/api", createRateLimiter({ windowMs: runtimeConfig.rateLimitWindowMs, max: runtimeConfig.rateLimitMax }));
+
+// ── Authentication layer ──────────────────────────────────────────────
+// Extract auth context on all requests (populates req.auth)
+app.use(extractAuth);
+// Require valid token on mutating/sensitive API routes (skip health/public)
+app.use("/api/execution", requireAuth);
+app.use("/api/paper-trading", requireAuth);
+app.use("/api/ops", requireAuth);
+app.use("/api/settings", requireAuth);
+app.use("/api/audit", requireAuth);
+app.use("/api/super-intelligence", requireAuth);
+app.use("/api/si", requireAuth);
+
 app.use("/api", router);
 // Also mount non-prefixed routes (backtest, health)
 app.use(router);
