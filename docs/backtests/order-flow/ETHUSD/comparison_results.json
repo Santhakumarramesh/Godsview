@@ -1,0 +1,62 @@
+{
+  "symbol": "ETHUSD",
+  "timeframe": "1h",
+  "candles": 500,
+  "date_range": "2026-04-04 21:00:00 \u2192 2026-04-25 16:00:00",
+  "structure": {
+    "swings": 67,
+    "bos_events": 32,
+    "order_blocks": 119
+  },
+  "mode_A_BOS_only": {
+    "trades": 32,
+    "wins": 8,
+    "losses": 24,
+    "win_rate": 25.0,
+    "profit_factor": 0.47,
+    "total_pnl": -421.81,
+    "total_pnl_pct": -0.42,
+    "avg_r": -0.39,
+    "max_drawdown_pct": 0.45,
+    "expectancy": -13.18,
+    "avg_win": 46.12,
+    "avg_loss": 32.95,
+    "sharpe": -5.58,
+    "trade_count": 32
+  },
+  "mode_B_BOS_OB": {
+    "trades": 17,
+    "wins": 3,
+    "losses": 14,
+    "win_rate": 17.6,
+    "profit_factor": 0.16,
+    "total_pnl": -831.29,
+    "total_pnl_pct": -0.83,
+    "avg_r": -1.45,
+    "max_drawdown_pct": 0.86,
+    "expectancy": -48.9,
+    "avg_win": 52.68,
+    "avg_loss": 70.67,
+    "sharpe": -15.02,
+    "trade_count": 17
+  },
+  "mode_C_BOS_OB_OF": {
+    "trades": 8,
+    "wins": 1,
+    "losses": 7,
+    "win_rate": 12.5,
+    "profit_factor": 0.13,
+    "total_pnl": -448.17,
+    "total_pnl_pct": -0.45,
+    "avg_r": -1.66,
+    "max_drawdown_pct": 0.45,
+    "expectancy": -56.02,
+    "avg_win": 66.25,
+    "avg_loss": 73.49,
+    "sharpe": -16.5,
+    "trade_count": 8
+  },
+  "order_flow_threshold": 60,
+  "data_type": "OHLCV_PROXY",
+  "generated_at": "2026-04-25T16:28:22.726886"
+}
