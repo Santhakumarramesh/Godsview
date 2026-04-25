@@ -434,6 +434,7 @@ const navSections: NavSection[] = [
       { href: "/promotion-pipeline", label: "Promotion Pipeline", icon: "arrow_upward", sub: "Lab → Live" },
       { href: "/mcp-backtester", label: "MCP Backtester", icon: "compare", sub: "MCP vs Raw" },
       { href: "/backtest-credibility", label: "Backtest Lab", icon: "biotech", sub: "Credibility & Overfit" },
+      { href: "/crypto-backtests", label: "Crypto Backtests", icon: "currency_bitcoin", sub: "BTC/ETH/SOL Results" },
       { href: "/side-by-side", label: "Side-by-Side", icon: "compare_arrows", sub: "Comparison Tool" },
     ],
   },

@@ -94,9 +94,11 @@ services:
         condition: service_healthy
     volumes:
       - api-memory:/data/memory
+      - ./docs/backtests:/app/docs/backtests:ro
     environment:
       NODE_ENV: production
       PORT: "3001"
+      BACKTEST_DIR: "/app/docs/backtests"
       DATABASE_URL: postgresql://godsview:${POSTGRES_PASSWORD:-godsview_secret}@postgres:5432/godsview
       REDIS_URL: "redis://redis:6379"
       MEMORY_STORE_PATH: "/data/memory"

@@ -1,3 +1,5 @@
+import * as fs from "fs";
+import * as path from "path";
 import { Router, type IRouter, type Request, type Response } from "express";
 import {
   runBacktest,
@@ -392,3 +394,119 @@ router.get("/jobs", (_req: Request, res: Response): void => {
 });
 
 export default router;
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CRYPTO BACKTEST RESULTS — serves pre-computed results from docs/backtests/
+// ══════════════════════════════════════════════════════════════════════════════
+
+
+const BACKTEST_DIR = process.env.BACKTEST_DIR || path.resolve(__dirname, "../../../../docs/backtests");
+
+// ── GET /backtest/crypto/summary ────────────────────────────────────────────
+// Returns master summary of all crypto backtests
+router.get("/backtest/crypto/summary", (_req: Request, res: Response): void => {
+  try {
+    const summaryPath = path.join(BACKTEST_DIR, "master_summary.json");
+    if (!fs.existsSync(summaryPath)) {
+      res.status(404).json({ ok: false, error: "No crypto backtest results found" });
+      return;
+    }
+    const data = JSON.parse(fs.readFileSync(summaryPath, "utf-8"));
+    res.json({ ok: true, ...data });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err) });
+  }
+});
+
+// ── GET /backtest/crypto/:symbol/:timeframe/metrics ─────────────────────────
+router.get("/backtest/crypto/:symbol/:timeframe/metrics", (req: Request, res: Response): void => {
+  try {
+    const { symbol, timeframe } = req.params;
+    const metricsPath = path.join(BACKTEST_DIR, symbol, timeframe, "metrics.json");
+    if (!fs.existsSync(metricsPath)) {
+      res.status(404).json({ ok: false, error: `No metrics for ${symbol}/${timeframe}` });
+      return;
+    }
+    const data = JSON.parse(fs.readFileSync(metricsPath, "utf-8"));
+    res.json({ ok: true, symbol, timeframe, ...data });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err) });
+  }
+});
+
+// ── GET /backtest/crypto/:symbol/:timeframe/trades ──────────────────────────
+router.get("/backtest/crypto/:symbol/:timeframe/trades", (req: Request, res: Response): void => {
+  try {
+    const { symbol, timeframe } = req.params;
+    const tradesPath = path.join(BACKTEST_DIR, symbol, timeframe, "trades.json");
+    if (!fs.existsSync(tradesPath)) {
+      res.status(404).json({ ok: false, error: `No trades for ${symbol}/${timeframe}` });
+      return;
+    }
+    const data = JSON.parse(fs.readFileSync(tradesPath, "utf-8"));
+    res.json({ ok: true, symbol, timeframe, trades: data });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err) });
+  }
+});
+
+// ── GET /backtest/crypto/:symbol/:timeframe/report ──────────────────────────
+router.get("/backtest/crypto/:symbol/:timeframe/report", (req: Request, res: Response): void => {
+  try {
+    const { symbol, timeframe } = req.params;
+    const reportPath = path.join(BACKTEST_DIR, symbol, timeframe, "report.md");
+    if (!fs.existsSync(reportPath)) {
+      res.status(404).json({ ok: false, error: `No report for ${symbol}/${timeframe}` });
+      return;
+    }
+    const markdown = fs.readFileSync(reportPath, "utf-8");
+    res.json({ ok: true, symbol, timeframe, report: markdown });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err) });
+  }
+});
+
+// ── GET /backtest/crypto/:symbol/:timeframe/plot/:name ──────────────────────
+// Serves plot images (price_chart, order_flow, equity_curve, trade_distribution, summary)
+router.get("/backtest/crypto/:symbol/:timeframe/plot/:name", (req: Request, res: Response): void => {
+  try {
+    const { symbol, timeframe, name } = req.params;
+    const allowed = ["price_chart", "order_flow", "equity_curve", "trade_distribution", "summary"];
+    if (!allowed.includes(name)) {
+      res.status(400).json({ ok: false, error: `Invalid plot name. Use: ${allowed.join(", ")}` });
+      return;
+    }
+    const plotPath = path.join(BACKTEST_DIR, symbol, timeframe, `${name}.png`);
+    if (!fs.existsSync(plotPath)) {
+      res.status(404).json({ ok: false, error: `No plot ${name} for ${symbol}/${timeframe}` });
+      return;
+    }
+    res.setHeader("Content-Type", "image/png");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    fs.createReadStream(plotPath).pipe(res);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err) });
+  }
+});
+
+// ── GET /backtest/crypto/symbols ────────────────────────────────────────────
+// List available symbols and timeframes
+router.get("/backtest/crypto/symbols", (_req: Request, res: Response): void => {
+  try {
+    if (!fs.existsSync(BACKTEST_DIR)) {
+      res.json({ ok: true, symbols: [] });
+      return;
+    }
+    const symbols = fs.readdirSync(BACKTEST_DIR)
+      .filter(d => fs.statSync(path.join(BACKTEST_DIR, d)).isDirectory());
+    const result = symbols.map(sym => {
+      const tfDir = path.join(BACKTEST_DIR, sym);
+      const timeframes = fs.readdirSync(tfDir)
+        .filter(d => fs.statSync(path.join(tfDir, d)).isDirectory());
+      return { symbol: sym, timeframes };
+    });
+    res.json({ ok: true, symbols: result });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err) });
+  }
+});

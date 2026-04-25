@@ -131,6 +131,7 @@ const SemiAutonomousPage          = React.lazy(() => import("@/pages/semi-autono
 const AutonomousModePage          = React.lazy(() => import("@/pages/autonomous-mode"));
 const SlippageQualityPage         = React.lazy(() => import("@/pages/slippage-quality"));
 const EmergencyControlsPage       = React.lazy(() => import("@/pages/emergency-controls"));
+const CryptoBacktestsPage = React.lazy(() => import("@/pages/crypto-backtests"));
 
 const NotFound           = React.lazy(() => import("@/pages/not-found"));
 
@@ -287,6 +288,7 @@ function Router() {
         <RoutedPage path="/system-audit" component={SystemAuditPage} scope="page:system-audit" />
         <RoutedPage path="/data-integrity" component={DataIntegrityPage} scope="page:data-integrity" />
         <RoutedPage path="/backtest-credibility" component={BacktestCredibilityPage} scope="page:backtest-credibility" />
+        <RoutedPage path="/crypto-backtests" component={CryptoBacktestsPage} scope="page:crypto-backtests" />
         <RoutedPage path="/exec-reliability" component={ExecReliabilityPage} scope="page:exec-reliability" />
         <RoutedPage path="/risk-command-v2" component={RiskCommandV2Page} scope="page:risk-command-v2" />
         <RoutedPage path="/model-governance" component={ModelGovernancePage} scope="page:model-governance" />
