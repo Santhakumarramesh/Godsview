@@ -76,13 +76,19 @@ router.get("/api/portfolio/allocation", (_req: Request, res: Response) => {
 
 // ── Journal alias ─────────────────────────────────────────────────────────
 // Dashboard expects: /api/journal/trades
-// Actual: /api/journal/ (GET /)
-// The journal router is mounted at /api/journal, so GET /api/journal/ is the trades list.
-// This alias handles the explicit /trades path.
+// Actual: /api/journal/ (GET /) — redirect won't work because /:id catches "trades"
+import { listJournalEntries } from "../lib/trade_journal";
+
 router.get("/api/journal/trades", (req: Request, res: Response) => {
-  // Forward to the journal root which lists trades
-  // Import is circular-safe because we just redirect the response
-  res.redirect(307, `/api/journal/${req.url.includes("?") ? "?" + req.url.split("?")[1] : ""}`);
+  try {
+    const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : 50;
+    const offset = req.query.offset ? parseInt(String(req.query.offset), 10) : 0;
+    const symbol = req.query.symbol ? String(req.query.symbol).toUpperCase() : undefined;
+    const entries = listJournalEntries({ symbol, limit, offset });
+    res.json({ entries, count: entries.length });
+  } catch {
+    res.status(503).json({ error: "Failed to list journal entries" });
+  }
 });
 
 // ── Alpaca status alias ───────────────────────────────────────────────────
