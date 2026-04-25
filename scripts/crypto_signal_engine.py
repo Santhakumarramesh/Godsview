@@ -1216,7 +1216,61 @@ def create_flask_app(trading_engine: PaperTradingEngine, signal_history: deque):
         logger.warning("PAPER MODE - Emergency stop initiated")
         # In production, this would signal the main loop to shut down
         return jsonify({'status': 'emergency_stop'})
-    
+
+    @app.route('/inject', methods=['POST'])
+    def inject_position():
+        """Inject a forced paper position for pipeline validation."""
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({'error': 'No JSON payload'}), 400
+
+            required = ['symbol', 'direction', 'entry_price', 'stop_loss', 'take_profit']
+            missing = [f for f in required if f not in data]
+            if missing:
+                return jsonify({'error': f'Missing fields: {missing}'}), 400
+
+            import uuid
+            pos_id = f"FORCE-{uuid.uuid4().hex[:8]}"
+            now = datetime.utcnow()
+            price = float(data['entry_price'])
+            sl = float(data['stop_loss'])
+
+            position = PaperPosition(
+                position_id=pos_id,
+                symbol=data['symbol'],
+                timeframe=data.get('timeframe', '4h'),
+                strategy_name=data.get('strategy_name', 'forced_validation'),
+                direction=data['direction'],
+                entry_price=price,
+                entry_time=now,
+                stop_loss=sl,
+                take_profit=float(data['take_profit']),
+                position_size=float(data.get('position_size', 1000.0)),
+                risk_amount=abs(price - sl) * float(data.get('position_size', 1000.0)) / price,
+                pnl=0.0,
+                pnl_pct=0.0,
+                status='open',
+                close_time=None,
+                close_price=None,
+                close_reason='',
+                candles_held=0
+            )
+
+            trading_engine.positions.append(position)
+            logger.info(f"PAPER MODE - Injected forced position: {pos_id} {data['symbol']} {data['direction']}")
+
+            return jsonify({
+                'status': 'injected',
+                'position_id': pos_id,
+                'symbol': data['symbol'],
+                'direction': data['direction'],
+                'entry_price': price
+            })
+        except Exception as e:
+            logger.error(f"Inject error: {e}")
+            return jsonify({'error': str(e)}), 500
+
     return app
 
 # ============================================================================
