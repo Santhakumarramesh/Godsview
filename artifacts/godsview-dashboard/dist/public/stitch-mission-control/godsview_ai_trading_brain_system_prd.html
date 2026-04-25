@@ -1,0 +1,32 @@
+# GodsView: AI Trading Brain System Architecture
+
+## 1. The Brain (Knowledge Graph Memory)
+The "Brain" is a persistent knowledge graph where every stock is an entity (Node) with evolving relationships.
+
+### 1.1 Node Properties (e.g., AAPL)
+- **Market Data:** Price history, Volatility regime, Volume profile.
+- **Contextual State:** Macro exposure, Sentiment score, Correlation matrix (e.g., AAPL ↔ NVDA).
+- **Episodic Memory:** "Last breakout failed at $192", "High success rate in NY Open".
+- **Semantic Memory:** "Sensitive to 10Y Yield spikes", "Leading indicator for Tech sector".
+
+## 2. Multi-Agent System (The Intelligence Layer)
+Instead of a monolithic script, GodsView operates as a swarm of specialized agents.
+
+### 2.1 Agent Definitions
+- **Data Agent:** Real-time ingestion via OpenBB. Fetches price, macro, and news.
+- **Signal Agent:** Pattern recognition engine. Detects SK structures, sweeps, and ML probabilities (XGBoost/RF).
+- **Reason Agent (The 'Claude' Layer):** The validation brain. Asks: "Does this setup align with current memory? What are the contradictions?"
+- **Risk Agent:** The gatekeeper. Position sizing, drawdown limits, and news lockout enforcement. Can VETO trades.
+- **Execution Agent:** The bridge to Alpaca/Exchanges. Handles order flow, slippage, and retries.
+- **Monitoring Agent:** Real-time PnL and health tracking. Sends alerts and feedback to the Brain.
+
+## 3. The Learning Loop (Feedback & Adaptation)
+1. **Trade Execution:** Trade is placed based on Multi-Agent consensus.
+2. **Result Capture:** Outcome (Win/Loss/Breakeven) is recorded with full context.
+3. **Memory Update:** Result is fed back into the Brain Node.
+4. **Adaptation:** Signal Agent adjusts thresholds based on Brain feedback for specific regimes.
+
+## 4. UI Visualization Strategy
+- **Graph View:** Visualize the "Brain" and current active nodes.
+- **Agent Pulse:** Real-time status of each agent (Thinking, Detecting, Gating, Executing).
+- **Decision Provenance:** Clicking a trade shows the full "Reasoning Path" through the agents.

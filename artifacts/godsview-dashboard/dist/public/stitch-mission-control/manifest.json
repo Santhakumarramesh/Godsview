@@ -1,0 +1,689 @@
+{
+  "count": 95,
+  "categories": [
+    "Brain",
+    "Candle X-Ray",
+    "Design Systems",
+    "Live Intelligence",
+    "Mission Control",
+    "Other",
+    "PRD",
+    "Performance",
+    "Pipeline",
+    "Reports",
+    "Risk",
+    "Setup Explorer",
+    "Signal Intelligence"
+  ],
+  "templates": [
+    {
+      "id": "aetherius_institutional",
+      "title": "Aetherius Institutional",
+      "category": "Design Systems",
+      "hasScreen": false,
+      "hasHtml": false,
+      "hasDesign": true
+    },
+    {
+      "id": "agents_neural_swarm_status",
+      "title": "Agents Neural Swarm Status",
+      "category": "Other",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "brain_focus_mode_candle_x_ray_v1",
+      "title": "Brain Focus Mode Candle X Ray V1",
+      "category": "Candle X-Ray",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "brain_view_intelligence_graph",
+      "title": "Brain View Intelligence Graph",
+      "category": "Brain",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "brain_view_intelligence_graph_v5",
+      "title": "Brain View Intelligence Graph V5",
+      "category": "Brain",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "candle_x_ray_master_desktop_thinking_chart",
+      "title": "Candle X Ray Master Desktop Thinking Chart",
+      "category": "Candle X-Ray",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "candle_x_ray_master_desktop_v2_production_ready",
+      "title": "Candle X Ray Master Desktop V2 Production Ready",
+      "category": "Candle X-Ray",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "candle_x_ray_master_v1",
+      "title": "Candle X Ray Master V1",
+      "category": "Candle X-Ray",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "candle_x_ray_master_v2_production_ready_1",
+      "title": "Candle X Ray Master V2 Production Ready 1",
+      "category": "Candle X-Ray",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "candle_x_ray_master_v2_production_ready_2",
+      "title": "Candle X Ray Master V2 Production Ready 2",
+      "category": "Candle X-Ray",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "godsview_ai_trading_brain_system_prd",
+      "title": "GodsView AI Trading Brain System PRD",
+      "category": "PRD",
+      "hasScreen": false,
+      "hasHtml": true,
+      "hasDesign": false
+    },
+    {
+      "id": "godsview_brain_master_dashboard",
+      "title": "Godsview Brain Master Dashboard",
+      "category": "Brain",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "godsview_massive_brain_board_v6",
+      "title": "Godsview Massive Brain Board V6",
+      "category": "Brain",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "godsview_massive_brain_board_v7",
+      "title": "Godsview Massive Brain Board V7",
+      "category": "Brain",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "godsview_massive_brain_board_v8_1",
+      "title": "Godsview Massive Brain Board V8 1",
+      "category": "Brain",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "godsview_massive_brain_board_v8_2",
+      "title": "Godsview Massive Brain Board V8 2",
+      "category": "Brain",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "godsview_massive_brain_console",
+      "title": "Godsview Massive Brain Console",
+      "category": "Brain",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "godsview_massive_brain_console_master",
+      "title": "Godsview Massive Brain Console Master",
+      "category": "Brain",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "godsview_master_session_report_v5",
+      "title": "Godsview Master Session Report V5",
+      "category": "Reports",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "godsview_sovereign_intelligence_terminal",
+      "title": "Godsview Sovereign Intelligence Terminal",
+      "category": "Other",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "live_analysis",
+      "title": "Live Analysis",
+      "category": "Live Intelligence",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "live_analysis_v2",
+      "title": "Live Analysis V2",
+      "category": "Live Intelligence",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "live_intelligence_master_desktop_thinking_chart",
+      "title": "Live Intelligence Master Desktop Thinking Chart",
+      "category": "Live Intelligence",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "live_intelligence_master_final_mobile_thinking_chart",
+      "title": "Live Intelligence Master Final Mobile Thinking Chart",
+      "category": "Live Intelligence",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "live_intelligence_master_mobile_thinking_chart",
+      "title": "Live Intelligence Master Mobile Thinking Chart",
+      "category": "Live Intelligence",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "live_intelligence_master_mobile_thinking_chart_v5",
+      "title": "Live Intelligence Master Mobile Thinking Chart V5",
+      "category": "Live Intelligence",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "live_intelligence_master_overlay_v2",
+      "title": "Live Intelligence Master Overlay V2",
+      "category": "Live Intelligence",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "live_intelligence_master_overlay_v3",
+      "title": "Live Intelligence Master Overlay V3",
+      "category": "Live Intelligence",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "live_intelligence_master_overlay_v4",
+      "title": "Live Intelligence Master Overlay V4",
+      "category": "Live Intelligence",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "live_intelligence_master_the_thinking_chart",
+      "title": "Live Intelligence Master The Thinking Chart",
+      "category": "Live Intelligence",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "live_intelligence_master_the_thinking_chart_final",
+      "title": "Live Intelligence Master The Thinking Chart Final",
+      "category": "Live Intelligence",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "live_intelligence_master_v6_1",
+      "title": "Live Intelligence Master V6 1",
+      "category": "Live Intelligence",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "live_intelligence_master_v6_2",
+      "title": "Live Intelligence Master V6 2",
+      "category": "Live Intelligence",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "live_intelligence_master_v8_thinking_chart_1",
+      "title": "Live Intelligence Master V8 Thinking Chart 1",
+      "category": "Live Intelligence",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "live_intelligence_master_v8_thinking_chart_2",
+      "title": "Live Intelligence Master V8 Thinking Chart 2",
+      "category": "Live Intelligence",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "live_intelligence_master_v9_decision_engine",
+      "title": "Live Intelligence Master V9 Decision Engine",
+      "category": "Live Intelligence",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "live_signal_intelligence",
+      "title": "Live Signal Intelligence",
+      "category": "Signal Intelligence",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "live_signal_intelligence_master_1",
+      "title": "Live Signal Intelligence Master 1",
+      "category": "Signal Intelligence",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "live_signal_intelligence_master_2",
+      "title": "Live Signal Intelligence Master 2",
+      "category": "Signal Intelligence",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "live_signal_intelligence_master_overlay_v1",
+      "title": "Live Signal Intelligence Master Overlay V1",
+      "category": "Signal Intelligence",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "live_signals_feed",
+      "title": "Live Signals Feed",
+      "category": "Signal Intelligence",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "live_signals_feed_v2",
+      "title": "Live Signals Feed V2",
+      "category": "Signal Intelligence",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "master_session_report_v5",
+      "title": "Master Session Report V5",
+      "category": "Reports",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "mission_control",
+      "title": "Mission Control",
+      "category": "Mission Control",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "mission_control_v2",
+      "title": "Mission Control V2",
+      "category": "Mission Control",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "obsidian_quant",
+      "title": "Obsidian Quant",
+      "category": "Design Systems",
+      "hasScreen": false,
+      "hasHtml": false,
+      "hasDesign": true
+    },
+    {
+      "id": "obsidian_terminal",
+      "title": "Obsidian Terminal",
+      "category": "Design Systems",
+      "hasScreen": false,
+      "hasHtml": false,
+      "hasDesign": true
+    },
+    {
+      "id": "overview_dashboard",
+      "title": "Overview Dashboard",
+      "category": "Mission Control",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "overview_dashboard_master_1",
+      "title": "Overview Dashboard Master 1",
+      "category": "Mission Control",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "overview_dashboard_master_2",
+      "title": "Overview Dashboard Master 2",
+      "category": "Mission Control",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "overview_dashboard_master_desktop_mission_control",
+      "title": "Overview Dashboard Master Desktop Mission Control",
+      "category": "Mission Control",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "overview_dashboard_master_v3",
+      "title": "Overview Dashboard Master V3",
+      "category": "Mission Control",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "overview_dashboard_master_v4",
+      "title": "Overview Dashboard Master V4",
+      "category": "Mission Control",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "overview_dashboard_master_v5",
+      "title": "Overview Dashboard Master V5",
+      "category": "Mission Control",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "performance_analytics",
+      "title": "Performance Analytics",
+      "category": "Performance",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "performance_analytics_master_1",
+      "title": "Performance Analytics Master 1",
+      "category": "Performance",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "performance_analytics_master_2",
+      "title": "Performance Analytics Master 2",
+      "category": "Performance",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "performance_analytics_master_3",
+      "title": "Performance Analytics Master 3",
+      "category": "Performance",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "performance_analytics_master_desktop_dashboard",
+      "title": "Performance Analytics Master Desktop Dashboard",
+      "category": "Performance",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "performance_analytics_master_v3",
+      "title": "Performance Analytics Master V3",
+      "category": "Performance",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "performance_analytics_master_v4",
+      "title": "Performance Analytics Master V4",
+      "category": "Performance",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "performance_analytics_master_v5",
+      "title": "Performance Analytics Master V5",
+      "category": "Performance",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "performance_analytics_master_v8_1",
+      "title": "Performance Analytics Master V8 1",
+      "category": "Performance",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "performance_analytics_master_v8_2",
+      "title": "Performance Analytics Master V8 2",
+      "category": "Performance",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "pipeline_engine",
+      "title": "Pipeline Engine",
+      "category": "Pipeline",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "pipeline_engine_v2",
+      "title": "Pipeline Engine V2",
+      "category": "Pipeline",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "risk_command_center",
+      "title": "Risk Command Center",
+      "category": "Risk",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "risk_command_center_master_1",
+      "title": "Risk Command Center Master 1",
+      "category": "Risk",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "risk_command_center_master_2",
+      "title": "Risk Command Center Master 2",
+      "category": "Risk",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "risk_command_center_master_3",
+      "title": "Risk Command Center Master 3",
+      "category": "Risk",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "risk_command_center_master_desktop_tactical_control",
+      "title": "Risk Command Center Master Desktop Tactical Control",
+      "category": "Risk",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "risk_command_center_master_v3",
+      "title": "Risk Command Center Master V3",
+      "category": "Risk",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "risk_command_center_master_v4",
+      "title": "Risk Command Center Master V4",
+      "category": "Risk",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "risk_command_center_master_v8_1",
+      "title": "Risk Command Center Master V8 1",
+      "category": "Risk",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "risk_command_center_master_v8_2",
+      "title": "Risk Command Center Master V8 2",
+      "category": "Risk",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "risk_engine_market_context",
+      "title": "Risk Engine Market Context",
+      "category": "Risk",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "session_report_master_v3",
+      "title": "Session Report Master V3",
+      "category": "Reports",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "session_report_master_v4_1",
+      "title": "Session Report Master V4 1",
+      "category": "Reports",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "session_report_master_v4_2",
+      "title": "Session Report Master V4 2",
+      "category": "Reports",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "session_report_master_v4_3",
+      "title": "Session Report Master V4 3",
+      "category": "Reports",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "session_report_master_v8_final_summary_1",
+      "title": "Session Report Master V8 Final Summary 1",
+      "category": "Reports",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "session_report_master_v8_final_summary_2",
+      "title": "Session Report Master V8 Final Summary 2",
+      "category": "Reports",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "session_report_view",
+      "title": "Session Report View",
+      "category": "Reports",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "session_report_view_master",
+      "title": "Session Report View Master",
+      "category": "Reports",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "setup_explorer",
+      "title": "Setup Explorer",
+      "category": "Setup Explorer",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "setup_explorer_master_1",
+      "title": "Setup Explorer Master 1",
+      "category": "Setup Explorer",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "setup_explorer_master_2",
+      "title": "Setup Explorer Master 2",
+      "category": "Setup Explorer",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "setup_explorer_master_desktop_matrix",
+      "title": "Setup Explorer Master Desktop Matrix",
+      "category": "Setup Explorer",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "setup_explorer_master_final_v5",
+      "title": "Setup Explorer Master Final V5",
+      "category": "Setup Explorer",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "setup_explorer_master_v3",
+      "title": "Setup Explorer Master V3",
+      "category": "Setup Explorer",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "setup_explorer_master_v4",
+      "title": "Setup Explorer Master V4",
+      "category": "Setup Explorer",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "trades_execution_queue",
+      "title": "Trades Execution Queue",
+      "category": "Other",
+      "hasScreen": true,
+      "hasHtml": true
+    },
+    {
+      "id": "chatgpt_image_mar_30_2026_at_02_47_04_am.png",
+      "title": "ChatGPT Image Mar 30 2026 At 02 47 04 AM",
+      "category": "Other",
+      "hasScreen": true,
+      "hasHtml": false
+    },
+    {
+      "id": "chatgpt_image_mar_30_2026_at_02_47_13_am.png",
+      "title": "ChatGPT Image Mar 30 2026 At 02 47 13 AM",
+      "category": "Other",
+      "hasScreen": true,
+      "hasHtml": false
+    },
+    {
+      "id": "screenshot_2026_03_29_at_3.55.53_pm.png",
+      "title": "Screenshot 2026 03 29 At 3 55 53 PM",
+      "category": "Other",
+      "hasScreen": true,
+      "hasHtml": false
+    }
+  ]
+}

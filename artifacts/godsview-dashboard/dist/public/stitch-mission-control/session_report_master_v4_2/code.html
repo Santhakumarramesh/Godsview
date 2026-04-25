@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Obsidian Elite - Session Report 042</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "surface": "#0e0e0f",
+                        "on-secondary-fixed": "#00326f",
+                        "on-primary": "#006413",
+                        "surface-bright": "#2c2c2d",
+                        "secondary-dim": "#0070ea",
+                        "inverse-surface": "#fcf8f9",
+                        "tertiary-container": "#f9362c",
+                        "on-primary-container": "#005a10",
+                        "on-background": "#ffffff",
+                        "surface-container-highest": "#262627",
+                        "outline": "#767576",
+                        "on-error-container": "#ffd2c8",
+                        "secondary-fixed": "#bed2ff",
+                        "surface-container": "#1a191b",
+                        "on-surface-variant": "#adaaab",
+                        "on-tertiary-fixed": "#3a0001",
+                        "error-dim": "#d53d18",
+                        "on-error": "#450900",
+                        "error": "#ff7351",
+                        "on-tertiary-fixed-variant": "#7a0004",
+                        "outline-variant": "#484849",
+                        "tertiary-dim": "#e2241f",
+                        "surface-container-lowest": "#000000",
+                        "primary-container": "#00fc40",
+                        "primary-fixed": "#00fc40",
+                        "tertiary": "#ff7162",
+                        "primary": "#9cff93",
+                        "on-secondary-container": "#f7f7ff",
+                        "on-tertiary": "#4a0001",
+                        "surface-container-low": "#131314",
+                        "tertiary-fixed": "#ff9385",
+                        "surface-tint": "#9cff93",
+                        "secondary": "#669dff",
+                        "on-secondary": "#001f49",
+                        "primary-fixed-dim": "#00ec3b",
+                        "on-tertiary-container": "#000000",
+                        "background": "#0e0e0f",
+                        "surface-variant": "#262627",
+                        "inverse-on-surface": "#565556",
+                        "on-surface": "#ffffff",
+                        "surface-dim": "#0e0e0f",
+                        "secondary-container": "#005bc0",
+                        "primary-dim": "#00ec3b",
+                        "on-secondary-fixed-variant": "#004ea5",
+                        "on-primary-fixed-variant": "#006513",
+                        "on-primary-fixed": "#00440a",
+                        "inverse-primary": "#006f16",
+                        "error-container": "#b92902",
+                        "surface-container-high": "#201f21",
+                        "tertiary-fixed-dim": "#ff7c6c",
+                        "secondary-fixed-dim": "#a8c4ff"
+                    },
+                    fontFamily: {
+                        "headline": ["Space Grotesk"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3, .font-headline { font-family: 'Space Grotesk', sans-serif; }
+        .glass-panel { background: rgba(44, 44, 45, 0.4); backdrop-filter: blur(20px); }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface min-h-screen pb-24">
+<!-- TopAppBar -->
+<nav class="fixed top-0 w-full z-50 bg-[#0e0e0f]/80 backdrop-blur-xl border-b border-[#484849]/15 flex items-center justify-between px-6 h-16 w-full">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-[#9cff93] scale-95 active:scale-90 transition-transform cursor-pointer">menu</span>
+<h1 class="font-['Space_Grotesk'] uppercase tracking-[0.2em] text-xs font-bold text-[#9cff93]">SESSION_REPORT_042</h1>
+</div>
+<div class="flex items-center gap-3">
+<div class="text-right hidden sm:block">
+<p class="text-[10px] text-on-surface-variant font-headline tracking-tighter uppercase leading-none">Status</p>
+<p class="text-[10px] text-primary font-bold uppercase tracking-widest">Secured</p>
+</div>
+<div class="h-8 w-8 rounded-full overflow-hidden border border-outline-variant/30">
+<img alt="Profile" class="w-full h-full object-cover" data-alt="close-up portrait of a tech professional in a dark environment with blue and green ambient screen lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCvzzavjWpGehXKzO-7RCu-Vg5qDJK4j2LIXX9Uh_krLwp8k6WF4tzD2onUFsSAMykSiLxSq6E3dxSZrlj12jV-t7HFwlw7QOmfN-QRLu0xDWgNbUvD0YD-tvQo3M3ZfoNRLPr60ggnWxq-qJ97shifdCaDvxcRYThEyFH2-Ak6OiPM4tvQ9Hy6L1vy2HbyrQ9v71NquOtPXtyyTWMm4d1IRGaM9_6mitzGs1mNRQwz59XRP5Qkzm2DYlTHIAg9vy9bvAIj77VZRAI"/>
+</div>
+</div>
+</nav>
+<main class="pt-20 px-4 max-w-lg mx-auto space-y-6">
+<!-- Header Section -->
+<header class="py-4">
+<div class="flex justify-between items-end mb-2">
+<div>
+<span class="text-secondary text-[10px] font-headline font-bold tracking-widest uppercase">NY Morning Session</span>
+<h2 class="text-3xl font-headline font-bold tracking-tighter">+$1,240.20</h2>
+</div>
+<div class="text-right">
+<span class="text-primary text-sm font-headline font-bold">+1.24%</span>
+</div>
+</div>
+<div class="h-1 w-full bg-surface-container-highest overflow-hidden rounded-full">
+<div class="h-full bg-primary w-[68%] shadow-[0_0_8px_rgba(156,255,147,0.5)]"></div>
+</div>
+</header>
+<!-- Metrics Matrix 4x4 -->
+<section class="grid grid-cols-2 gap-px bg-outline-variant/10 rounded-lg overflow-hidden">
+<div class="bg-surface-container-low p-4 flex flex-col justify-between h-24">
+<span class="text-[10px] text-on-surface-variant font-headline uppercase tracking-widest">Total Trades</span>
+<span class="text-2xl font-headline font-bold">12</span>
+</div>
+<div class="bg-surface-container-low p-4 flex flex-col justify-between h-24">
+<span class="text-[10px] text-on-surface-variant font-headline uppercase tracking-widest">Win Rate</span>
+<span class="text-2xl font-headline font-bold text-primary">68%</span>
+</div>
+<div class="bg-surface-container-low p-4 flex flex-col justify-between h-24">
+<span class="text-[10px] text-on-surface-variant font-headline uppercase tracking-widest">Profit Factor</span>
+<span class="text-2xl font-headline font-bold">2.4</span>
+</div>
+<div class="bg-surface-container-low p-4 flex flex-col justify-between h-24">
+<span class="text-[10px] text-on-surface-variant font-headline uppercase tracking-widest">Sharpe Ratio</span>
+<span class="text-2xl font-headline font-bold text-secondary">3.1</span>
+</div>
+</section>
+<!-- Top Trades prominent cards -->
+<section class="grid grid-cols-1 gap-3">
+<div class="bg-surface-container p-4 rounded-lg flex justify-between items-center border-l-2 border-primary">
+<div>
+<div class="flex items-center gap-2 mb-1">
+<span class="material-symbols-outlined text-primary text-lg">trending_up</span>
+<span class="text-xs font-headline font-bold text-on-surface uppercase tracking-wider">Best Trade</span>
+</div>
+<p class="text-xs text-on-surface-variant">Sweep Reclaim Setup</p>
+</div>
+<span class="text-lg font-headline font-bold text-primary">+4.2R</span>
+</div>
+<div class="bg-surface-container p-4 rounded-lg flex justify-between items-center border-l-2 border-tertiary">
+<div>
+<div class="flex items-center gap-2 mb-1">
+<span class="material-symbols-outlined text-tertiary text-lg">trending_down</span>
+<span class="text-xs font-headline font-bold text-on-surface uppercase tracking-wider">Worst Trade</span>
+</div>
+<p class="text-xs text-on-surface-variant">Risk Stopped Out</p>
+</div>
+<span class="text-lg font-headline font-bold text-tertiary">-1.0R</span>
+</div>
+</section>
+<!-- Decision Timeline -->
+<section class="space-y-4">
+<h3 class="text-[10px] font-headline font-bold text-on-surface-variant uppercase tracking-widest mb-4">Decision Timeline</h3>
+<div class="relative pl-6 space-y-8 before:content-[''] before:absolute before:left-[7px] before:top-2 before:bottom-2 before:w-[1px] before:bg-outline-variant/30">
+<!-- Entry 1 -->
+<div class="relative">
+<div class="absolute -left-[23px] top-1.5 h-3 w-3 rounded-full bg-primary ring-4 ring-surface"></div>
+<div class="flex justify-between items-start mb-1">
+<span class="text-[10px] font-headline font-bold text-on-surface-variant">09:32 • NY OPEN</span>
+<span class="text-[10px] px-1.5 py-0.5 rounded bg-primary-container/20 text-primary font-bold">APPROVED</span>
+</div>
+<div class="bg-surface-container-low p-3 rounded">
+<div class="flex justify-between items-center mb-1">
+<p class="text-xs font-medium">Setup: SR (Support Reclaim)</p>
+<p class="text-xs font-bold text-primary">+2.1R</p>
+</div>
+</div>
+</div>
+<!-- Entry 2 -->
+<div class="relative">
+<div class="absolute -left-[23px] top-1.5 h-3 w-3 rounded-full bg-secondary ring-4 ring-surface"></div>
+<div class="flex justify-between items-start mb-1">
+<span class="text-[10px] font-headline font-bold text-on-surface-variant">10:15 • MID-MORNING</span>
+<span class="text-[10px] px-1.5 py-0.5 rounded bg-secondary-container/20 text-secondary font-bold uppercase tracking-tighter">CLAUDE VETO</span>
+</div>
+<div class="bg-surface-container-low p-3 rounded">
+<p class="text-xs font-medium mb-1">Setup: AR (Auto Rotation)</p>
+<p class="text-[10px] text-on-surface-variant italic">Reason: Delta Divergence Mismatch</p>
+</div>
+</div>
+<!-- Entry 3 -->
+<div class="relative">
+<div class="absolute -left-[23px] top-1.5 h-3 w-3 rounded-full bg-tertiary ring-4 ring-surface"></div>
+<div class="flex justify-between items-start mb-1">
+<span class="text-[10px] font-headline font-bold text-on-surface-variant">11:05 • LUNCH</span>
+<span class="text-[10px] px-1.5 py-0.5 rounded bg-error-container/20 text-tertiary font-bold uppercase tracking-tighter">RISK REJECTED</span>
+</div>
+<div class="bg-surface-container-low p-3 rounded">
+<p class="text-xs font-medium mb-1">Setup: CT (Counter Trend)</p>
+<p class="text-[10px] text-on-surface-variant italic">Reason: Spread Threshold Exceeded</p>
+</div>
+</div>
+</div>
+</section>
+<!-- Rejection Analytics -->
+<section class="bg-surface-container rounded-lg p-5">
+<h3 class="text-[10px] font-headline font-bold text-on-surface-variant uppercase tracking-widest mb-4">Rejection Analytics (8)</h3>
+<div class="flex items-center gap-1 h-2 mb-4">
+<div class="h-full bg-secondary w-1/2 rounded-l-full" title="Vetoed"></div>
+<div class="h-full bg-tertiary w-1/4" title="Risk"></div>
+<div class="h-full bg-outline w-1/4 rounded-r-full" title="Pipeline"></div>
+</div>
+<div class="grid grid-cols-3 gap-2">
+<div class="text-center">
+<p class="text-lg font-headline font-bold text-secondary">4</p>
+<p class="text-[8px] text-on-surface-variant uppercase tracking-widest">Vetoed</p>
+</div>
+<div class="text-center">
+<p class="text-lg font-headline font-bold text-tertiary">2</p>
+<p class="text-[8px] text-on-surface-variant uppercase tracking-widest">Risk</p>
+</div>
+<div class="text-center">
+<p class="text-lg font-headline font-bold text-outline">2</p>
+<p class="text-[8px] text-on-surface-variant uppercase tracking-widest">Pipeline</p>
+</div>
+</div>
+</section>
+<!-- AI Insights -->
+<section class="bg-primary/5 border border-primary/10 rounded-lg p-5">
+<div class="flex items-center gap-2 mb-3">
+<span class="material-symbols-outlined text-primary text-lg" style="font-variation-settings: 'FILL' 1;">psychology</span>
+<h3 class="text-[10px] font-headline font-bold text-primary uppercase tracking-widest">AI Insights</h3>
+</div>
+<p class="text-sm text-on-surface leading-relaxed font-light">
+                System effectively avoided <span class="text-primary font-medium">NY Open whipsaw</span> via Claude Veto. Focus on <span class="text-secondary font-medium">SR setup alignment</span> in Rotational regimes for next session.
+            </p>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 w-full z-50 bg-[#0e0e0f]/90 backdrop-blur-lg border-t border-[#484849]/10 shadow-[0_-10px_30px_rgba(0,0,0,0.5)] flex justify-around items-center h-20 pb-safe w-full">
+<button class="flex flex-col items-center justify-center text-[#484849] hover:text-[#669dff]">
+<span class="material-symbols-outlined">terminal</span>
+<span class="font-['Space_Grotesk'] text-[10px] tracking-widest font-medium uppercase">TERMINAL</span>
+</button>
+<button class="flex flex-col items-center justify-center text-[#9cff93] drop-shadow-[0_0_5px_rgba(156,255,147,0.4)] border-t-2 border-[#9cff93] pt-1">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">analytics</span>
+<span class="font-['Space_Grotesk'] text-[10px] tracking-widest font-medium uppercase">REPORTS</span>
+</button>
+<button class="flex flex-col items-center justify-center text-[#484849] hover:text-[#669dff]">
+<span class="material-symbols-outlined">memory</span>
+<span class="font-['Space_Grotesk'] text-[10px] tracking-widest font-medium uppercase">ENGINES</span>
+</button>
+<button class="flex flex-col items-center justify-center text-[#484849] hover:text-[#669dff]">
+<span class="material-symbols-outlined">security</span>
+<span class="font-['Space_Grotesk'] text-[10px] tracking-widest font-medium uppercase">SHIELD</span>
+</button>
+</nav>
+</body></html>

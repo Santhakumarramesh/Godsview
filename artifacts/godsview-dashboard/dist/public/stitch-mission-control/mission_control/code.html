@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "surface-container-low": "#131314",
+              "surface-container-highest": "#262627",
+              "secondary-container": "#005bc0",
+              "on-primary-fixed-variant": "#006513",
+              "primary-dim": "#00ec3b",
+              "primary-fixed": "#00fc40",
+              "tertiary-fixed-dim": "#ff7c6c",
+              "tertiary-fixed": "#ff9385",
+              "on-error": "#450900",
+              "tertiary-container": "#f9362c",
+              "inverse-surface": "#fcf8f9",
+              "error-dim": "#d53d18",
+              "primary-fixed-dim": "#00ec3b",
+              "on-secondary-container": "#f7f7ff",
+              "on-tertiary-fixed-variant": "#7a0004",
+              "outline-variant": "#484849",
+              "on-secondary-fixed": "#00326f",
+              "surface": "#0e0e0f",
+              "on-tertiary": "#4a0001",
+              "error": "#ff7351",
+              "outline": "#767576",
+              "on-tertiary-fixed": "#3a0001",
+              "on-surface": "#ffffff",
+              "surface-bright": "#2c2c2d",
+              "background": "#0e0e0f",
+              "primary": "#9cff93",
+              "on-secondary": "#001f49",
+              "on-error-container": "#ffd2c8",
+              "primary-container": "#00fc40",
+              "surface-tint": "#9cff93",
+              "on-secondary-fixed-variant": "#004ea5",
+              "secondary-fixed": "#bed2ff",
+              "surface-container": "#1a191b",
+              "secondary-dim": "#0070ea",
+              "surface-dim": "#0e0e0f",
+              "inverse-primary": "#006f16",
+              "surface-container-lowest": "#000000",
+              "on-tertiary-container": "#000000",
+              "on-surface-variant": "#adaaab",
+              "inverse-on-surface": "#565556",
+              "on-primary-container": "#005a10",
+              "surface-variant": "#262627",
+              "on-background": "#ffffff",
+              "surface-container-high": "#201f21",
+              "tertiary-dim": "#e2241f",
+              "error-container": "#b92902",
+              "secondary": "#669dff",
+              "on-primary-fixed": "#00440a",
+              "secondary-fixed-dim": "#a8c4ff",
+              "tertiary": "#ff7162",
+              "on-primary": "#006413"
+            },
+            fontFamily: {
+              "headline": ["Space Grotesk"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            background-color: #0e0e0f;
+            color: #ffffff;
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+        .obsidian-glass {
+            background: rgba(26, 25, 27, 0.6);
+            backdrop-filter: blur(20px);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background min-h-screen pb-24">
+<!-- TopAppBar -->
+<header class="bg-[#0e0e0f]/80 backdrop-blur-xl docked full-width top-0 sticky z-50 flex justify-between items-center px-6 h-16 w-full">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[#9cff93]" data-icon="monitoring">monitoring</span>
+<h1 class="font-['Space_Grotesk'] uppercase tracking-widest text-sm text-[#9cff93] font-bold tracking-tighter">MISSION CONTROL</h1>
+</div>
+<div class="active:scale-95 duration-100 hover:opacity-80 transition-opacity">
+<div class="w-8 h-8 rounded-full bg-surface-container-high border border-outline-variant/15 flex items-center justify-center overflow-hidden">
+<img alt="User Profile" class="w-full h-full object-cover" data-alt="Close-up professional portrait of a tech executive with blue ambient lighting and digital HUD overlays" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAlrXQlBMaKdpk9c83tcKn7tRii1MSK0nINIWGQSxD3FRuUrNjKqaq4X4bNddlyQvjZ8IU5h3lTWXwl8Yd1i9NvhY1cg4GapABoDPb-knhyzksnCYAG05w_m2Wllp4jaJ7qC7_8MUKUWlMovZjAqWjCJ7e5Z8QKnh2Saz_TiCpjP2GDRHClDGV04sW4IQJspK6O7QVDgp8etY_A_-huCaKbCkb2S5B54BCXj6nLAAIFi0M2q6eUZgZGk6OvWakwHytsrTexwQ2vdPs"/>
+</div>
+</div>
+</header>
+<main class="px-6 pt-4 space-y-6">
+<!-- P&L Hero Card -->
+<section class="relative overflow-hidden rounded-xl bg-surface-container-low p-6 border border-outline-variant/5">
+<div class="absolute top-0 right-0 p-4">
+<span class="material-symbols-outlined text-primary/20 text-6xl" data-icon="account_balance_wallet">account_balance_wallet</span>
+</div>
+<div class="relative z-10">
+<p class="font-label text-[10px] uppercase tracking-[0.2em] text-on-surface-variant mb-1">Total Net Profit</p>
+<h2 class="font-headline text-5xl font-bold text-primary tracking-tighter leading-none mb-4">$155.61</h2>
+<div class="flex items-center gap-2">
+<span class="inline-flex items-center px-2 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-bold tracking-wide uppercase">
+                        Active Session
+                    </span>
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse shadow-[0_0_8px_rgba(156,255,147,0.6)]"></span>
+</div>
+</div>
+</section>
+<!-- Metrics Bento Grid -->
+<div class="grid grid-cols-2 gap-4">
+<!-- Win Rate Card -->
+<div class="bg-surface-container p-4 rounded-lg border border-outline-variant/10">
+<div class="flex justify-between items-start mb-6">
+<p class="font-label text-[10px] uppercase tracking-wider text-on-surface-variant">Win Rate</p>
+<span class="material-symbols-outlined text-tertiary text-lg" data-icon="target">target</span>
+</div>
+<div class="space-y-1">
+<p class="font-headline text-2xl font-semibold text-on-surface">1.0%</p>
+<p class="font-label text-[10px] text-tertiary">Target &gt;60%</p>
+</div>
+<div class="mt-4 h-1 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-tertiary w-[1%] shadow-[0_0_8px_rgba(255,113,98,0.4)]"></div>
+</div>
+</div>
+<!-- Expectancy Card -->
+<div class="bg-surface-container p-4 rounded-lg border border-outline-variant/10">
+<div class="flex justify-between items-start mb-6">
+<p class="font-label text-[10px] uppercase tracking-wider text-on-surface-variant">Expectancy</p>
+<span class="material-symbols-outlined text-secondary text-lg" data-icon="insights">insights</span>
+</div>
+<div class="space-y-1">
+<p class="font-headline text-2xl font-semibold text-on-surface">1.42</p>
+<p class="font-label text-[10px] text-secondary">R-Multiple Avg</p>
+</div>
+<div class="mt-4 flex gap-1">
+<div class="h-4 w-1 bg-secondary opacity-40 rounded-sm"></div>
+<div class="h-6 w-1 bg-secondary opacity-60 rounded-sm"></div>
+<div class="h-3 w-1 bg-secondary opacity-30 rounded-sm"></div>
+<div class="h-8 w-1 bg-secondary rounded-sm"></div>
+<div class="h-5 w-1 bg-secondary opacity-50 rounded-sm"></div>
+</div>
+</div>
+</div>
+<!-- Today's Signals -->
+<section class="space-y-4">
+<div class="flex justify-between items-end">
+<h3 class="font-headline text-lg font-bold tracking-tight text-on-surface">Today's Signals</h3>
+<button class="text-[10px] font-bold uppercase tracking-widest text-primary hover:opacity-80">View Pipeline</button>
+</div>
+<div class="space-y-3">
+<!-- Signal 1 -->
+<div class="bg-surface-container-high p-4 rounded-lg flex items-center justify-between group active:scale-[0.98] transition-all">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded bg-secondary/10 flex items-center justify-center border border-secondary/20">
+<span class="material-symbols-outlined text-secondary" data-icon="currency_bitcoin">currency_bitcoin</span>
+</div>
+<div>
+<p class="font-headline text-sm font-bold text-on-surface">BTC/USDT</p>
+<p class="font-label text-[10px] text-on-surface-variant uppercase tracking-tighter">Execution Blue • Scalp</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-headline text-sm font-bold text-primary">+2.4%</p>
+<p class="font-label text-[10px] text-on-surface-variant">Active</p>
+</div>
+</div>
+<!-- Signal 2 -->
+<div class="bg-surface-container-high p-4 rounded-lg flex items-center justify-between group active:scale-[0.98] transition-all">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded bg-tertiary/10 flex items-center justify-center border border-tertiary/20">
+<span class="material-symbols-outlined text-tertiary" data-icon="eth">eco</span>
+</div>
+<div>
+<p class="font-headline text-sm font-bold text-on-surface">ETH/USDT</p>
+<p class="font-label text-[10px] text-on-surface-variant uppercase tracking-tighter">Alert State • Short</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-headline text-sm font-bold text-tertiary">-0.8%</p>
+<p class="font-label text-[10px] text-on-surface-variant">Pending</p>
+</div>
+</div>
+<!-- Signal 3 -->
+<div class="bg-surface-container-high p-4 rounded-lg flex items-center justify-between group active:scale-[0.98] transition-all opacity-80">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded bg-surface-container-highest flex items-center justify-center border border-outline-variant/10">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="toll">toll</span>
+</div>
+<div>
+<p class="font-headline text-sm font-bold text-on-surface">SOL/USDT</p>
+<p class="font-label text-[10px] text-on-surface-variant uppercase tracking-tighter">Neutral • Watching</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-headline text-sm font-bold text-on-surface-variant">0.0%</p>
+<p class="font-label text-[10px] text-on-surface-variant">Standby</p>
+</div>
+</div>
+</div>
+</section>
+<!-- Pipeline Engine Status -->
+<section class="bg-surface-container-lowest p-5 rounded-xl border border-primary/5">
+<h4 class="font-label text-[10px] uppercase tracking-[0.2em] text-on-surface-variant mb-4">Pipeline Systems</h4>
+<div class="flex justify-between items-center px-2">
+<div class="flex flex-col items-center gap-2">
+<div class="w-12 h-12 bg-surface-container-high rounded flex items-center justify-center border border-primary/20 shadow-[0_0_10px_rgba(156,255,147,0.1)]">
+<span class="material-symbols-outlined text-primary-dim text-xl" data-icon="memory">memory</span>
+</div>
+<span class="font-label text-[8px] uppercase font-bold text-primary">ML-CORE</span>
+</div>
+<div class="w-8 h-[1px] bg-outline-variant/20"></div>
+<div class="flex flex-col items-center gap-2">
+<div class="w-12 h-12 bg-surface-container-high rounded flex items-center justify-center border border-primary/20">
+<span class="material-symbols-outlined text-primary-dim text-xl" data-icon="data_exploration">data_exploration</span>
+</div>
+<span class="font-label text-[8px] uppercase font-bold text-primary">SIGNAL</span>
+</div>
+<div class="w-8 h-[1px] bg-outline-variant/20"></div>
+<div class="flex flex-col items-center gap-2">
+<div class="w-12 h-12 bg-surface-container-high rounded flex items-center justify-center border border-outline-variant/20 grayscale opacity-40">
+<span class="material-symbols-outlined text-on-surface-variant text-xl" data-icon="robot_2">robot_2</span>
+</div>
+<span class="font-label text-[8px] uppercase font-bold text-on-surface-variant">AUTO</span>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center px-4 pb-6 pt-3 bg-[#131314]/90 backdrop-blur-2xl border-t border-[#484849]/15 shadow-[0_-4px_20px_rgba(156,255,147,0.05)] z-50">
+<a class="flex flex-col items-center justify-center text-[#9cff93] bg-[#9cff93]/10 rounded-xl px-3 py-1 active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard" style="font-variation-settings: 'FILL' 1;">dashboard</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-tight mt-1">Control</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#2c2c2d] opacity-60 hover:text-[#9cff93] transition-colors active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="account_tree">account_tree</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-tight mt-1">Pipeline</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#2c2c2d] opacity-60 hover:text-[#9cff93] transition-colors active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="Settings_Input_Antenna">settings_input_antenna</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-tight mt-1">Signals</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#2c2c2d] opacity-60 hover:text-[#9cff93] transition-colors active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="query_stats">query_stats</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-tight mt-1">Analysis</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#2c2c2d] opacity-60 hover:text-[#9cff93] transition-colors active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="auto_stories">auto_stories</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-tight mt-1">Journal</span>
+</a>
+</nav>
+</body></html>

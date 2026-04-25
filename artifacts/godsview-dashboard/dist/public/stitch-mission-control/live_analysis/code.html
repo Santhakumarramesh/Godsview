@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Godsview Mobile Live Analysis</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "surface-container-low": "#131314",
+              "surface-container-highest": "#262627",
+              "secondary-container": "#005bc0",
+              "on-primary-fixed-variant": "#006513",
+              "primary-dim": "#00ec3b",
+              "primary-fixed": "#00fc40",
+              "tertiary-fixed-dim": "#ff7c6c",
+              "tertiary-fixed": "#ff9385",
+              "on-error": "#450900",
+              "tertiary-container": "#f9362c",
+              "inverse-surface": "#fcf8f9",
+              "error-dim": "#d53d18",
+              "primary-fixed-dim": "#00ec3b",
+              "on-secondary-container": "#f7f7ff",
+              "on-tertiary-fixed-variant": "#7a0004",
+              "outline-variant": "#484849",
+              "on-secondary-fixed": "#00326f",
+              "surface": "#0e0e0f",
+              "on-tertiary": "#4a0001",
+              "error": "#ff7351",
+              "outline": "#767576",
+              "on-tertiary-fixed": "#3a0001",
+              "on-surface": "#ffffff",
+              "surface-bright": "#2c2c2d",
+              "background": "#0e0e0f",
+              "primary": "#9cff93",
+              "on-secondary": "#001f49",
+              "on-error-container": "#ffd2c8",
+              "primary-container": "#00fc40",
+              "surface-tint": "#9cff93",
+              "on-secondary-fixed-variant": "#004ea5",
+              "secondary-fixed": "#bed2ff",
+              "surface-container": "#1a191b",
+              "secondary-dim": "#0070ea",
+              "surface-dim": "#0e0e0f",
+              "inverse-primary": "#006f16",
+              "surface-container-lowest": "#000000",
+              "on-tertiary-container": "#000000",
+              "on-surface-variant": "#adaaab",
+              "inverse-on-surface": "#565556",
+              "on-primary-container": "#005a10",
+              "surface-variant": "#262627",
+              "on-background": "#ffffff",
+              "surface-container-high": "#201f21",
+              "tertiary-dim": "#e2241f",
+              "error-container": "#b92902",
+              "secondary": "#669dff",
+              "on-primary-fixed": "#00440a",
+              "secondary-fixed-dim": "#a8c4ff",
+              "tertiary": "#ff7162",
+              "on-primary": "#006413"
+            },
+            fontFamily: {
+              "headline": ["Space Grotesk"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+      .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        display: inline-block;
+        line-height: 1;
+        text-transform: none;
+        letter-spacing: normal;
+        word-wrap: normal;
+        white-space: nowrap;
+        direction: ltr;
+      }
+      .glass-panel {
+        background: rgba(26, 25, 27, 0.6);
+        backdrop-filter: blur(12px);
+      }
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface font-body selection:bg-primary selection:text-on-primary">
+<!-- TopAppBar -->
+<header class="bg-[#0e0e0f]/80 backdrop-blur-xl text-[#9cff93] font-['Space_Grotesk'] uppercase tracking-widest text-sm docked full-width top-0 sticky z-50 flex justify-between items-center px-6 h-16 w-full">
+<div class="flex items-center gap-3 active:scale-95 duration-100 cursor-pointer">
+<span class="material-symbols-outlined text-xl">monitoring</span>
+<span class="font-bold tracking-tighter text-lg">MISSION CONTROL</span>
+</div>
+<div class="flex items-center gap-4">
+<div class="h-8 w-8 rounded-full bg-surface-container-high border border-outline-variant/15 flex items-center justify-center overflow-hidden">
+<img class="h-full w-full object-cover" data-alt="User profile avatar of a professional technical analyst with a serious expression" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDi-UxA3W_cnqTF29jbSEGDds3dw4qgQ7wWnFcIYudUghwhsFxFj09heX9ikSU2NwSuY8mN1ZILA53Qrmz_Y9cSP_uBBnpi2v-Nq-PSLO9AjiY72Hv1QRSGtG86WerGSFwrtjAF3E2AlmWoFZy3q84W9quU6in6zu10LBHsKWSxzZvZOuxb0NdF9LkXfTYEN6UzEgjEHa2GyAAeruWHoHfmvzwsOE6VH06qnUQquq6unzBoHJVL-lkKgOb59ATeAj3hM9ozMK531pw"/>
+</div>
+</div>
+</header>
+<main class="pb-32 pt-4 px-4 space-y-4">
+<!-- Instrument Header & Primary Signal -->
+<section class="space-y-1">
+<div class="flex justify-between items-end">
+<div>
+<h1 class="font-headline text-3xl font-bold tracking-tight text-white">BTC/USDT</h1>
+<p class="font-label text-xs text-on-surface-variant uppercase tracking-widest">Perpetual Cluster 09</p>
+</div>
+<div class="text-right">
+<span class="font-headline text-2xl font-bold text-primary tracking-tighter">$64,821.40</span>
+<div class="flex items-center justify-end text-primary text-[10px] font-bold">
+<span class="material-symbols-outlined text-xs mr-1">arrow_drop_up</span>
+                        +2.41% (24H)
+                    </div>
+</div>
+</div>
+</section>
+<!-- Dynamic Mini Chart Area -->
+<div class="w-full h-48 bg-surface-container-low rounded border border-outline-variant/10 relative overflow-hidden">
+<div class="absolute inset-0 opacity-20 pointer-events-none" style="background-image: radial-gradient(circle at 2px 2px, #484849 1px, transparent 0); background-size: 24px 24px;"></div>
+<!-- Mock Chart SVG -->
+<svg class="absolute inset-0 w-full h-full" preserveaspectratio="none" viewbox="0 0 400 200">
+<defs>
+<lineargradient id="chartGradient" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#9cff93" stop-opacity="0.2"></stop>
+<stop offset="100%" stop-color="#9cff93" stop-opacity="0"></stop>
+</lineargradient>
+</defs>
+<path d="M0 160 Q 50 140, 100 150 T 200 100 T 300 120 T 400 40 L 400 200 L 0 200 Z" fill="url(#chartGradient)"></path>
+<path d="M0 160 Q 50 140, 100 150 T 200 100 T 300 120 T 400 40" fill="none" stroke="#9cff93" stroke-width="2"></path>
+<!-- Threshold Line -->
+<line opacity="0.5" stroke="#669dff" stroke-dasharray="4,4" stroke-width="1" x1="0" x2="400" y1="120" y2="120"></line>
+</svg>
+<div class="absolute top-2 left-2 flex gap-2">
+<span class="px-2 py-0.5 bg-surface-container-high text-[10px] font-bold text-on-surface-variant rounded border border-outline-variant/20 uppercase">1m Live</span>
+<span class="px-2 py-0.5 bg-primary/10 text-[10px] font-bold text-primary rounded border border-primary/20 uppercase flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span> Streaming
+                </span>
+</div>
+</div>
+<!-- Bento Grid: Core Metrics -->
+<div class="grid grid-cols-2 gap-3">
+<div class="bg-surface-container rounded p-4 flex flex-col justify-between h-28 border-l-2 border-primary">
+<span class="font-label text-[10px] text-on-surface-variant uppercase tracking-wider">Confidence Score</span>
+<div class="flex items-baseline gap-1">
+<span class="font-headline text-3xl font-bold text-white">94</span>
+<span class="font-label text-sm text-on-surface-variant">/100</span>
+</div>
+<div class="w-full bg-surface-container-highest h-1 rounded-full overflow-hidden">
+<div class="bg-primary h-full w-[94%] shadow-[0_0_8px_rgba(156,255,147,0.5)]"></div>
+</div>
+</div>
+<div class="bg-surface-container rounded p-4 flex flex-col justify-between h-28 border-l-2 border-secondary">
+<span class="font-label text-[10px] text-on-surface-variant uppercase tracking-wider">Liquidity Depth</span>
+<div class="flex items-baseline gap-1">
+<span class="font-headline text-3xl font-bold text-white">8.2M</span>
+</div>
+<span class="text-[10px] text-secondary font-medium">+12% vs 5m avg</span>
+</div>
+</div>
+<!-- Engine Reasoning Section -->
+<section class="space-y-3">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-sm">account_tree</span>
+<h2 class="font-headline text-sm font-bold tracking-widest uppercase">Engine Reasoning Pipeline</h2>
+</div>
+<div class="space-y-2">
+<!-- Claude Analysis Block -->
+<div class="bg-surface-container rounded-lg p-4 border border-outline-variant/10 relative overflow-hidden">
+<div class="flex items-center gap-3 mb-3">
+<div class="w-8 h-8 rounded bg-secondary/10 flex items-center justify-center border border-secondary/20">
+<span class="material-symbols-outlined text-secondary text-lg">psychology</span>
+</div>
+<div>
+<p class="font-headline text-xs font-bold text-white uppercase tracking-tight">Claude 3.5 Sonnet</p>
+<p class="font-label text-[9px] text-on-surface-variant uppercase">Strategic Inference</p>
+</div>
+</div>
+<p class="text-xs leading-relaxed text-on-surface-variant font-medium">
+                        Pattern match identified: <span class="text-white">Bullish Pennant</span> formation on 5m timeframe. Volume divergence suggests an imminent liquidity sweep above <span class="text-secondary">$65.2k</span>. Macro sentiment remains "Risk-On" following the latest CPI print.
+                    </p>
+</div>
+<!-- ML Model Analysis Block -->
+<div class="bg-surface-container rounded-lg p-4 border border-outline-variant/10 relative overflow-hidden">
+<div class="flex items-center gap-3 mb-3">
+<div class="w-8 h-8 rounded bg-primary/10 flex items-center justify-center border border-primary/20">
+<span class="material-symbols-outlined text-primary text-lg">hub</span>
+</div>
+<div>
+<p class="font-headline text-xs font-bold text-white uppercase tracking-tight">X-Alpha ML Model</p>
+<p class="font-label text-[9px] text-on-surface-variant uppercase">Quantitative Validation</p>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div class="space-y-1">
+<p class="text-[9px] text-on-surface-variant uppercase">Volatility Index</p>
+<div class="flex items-center gap-2">
+<span class="text-xs font-headline font-bold text-white">LOW (0.12)</span>
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+</div>
+</div>
+<div class="space-y-1">
+<p class="text-[9px] text-on-surface-variant uppercase">Signal Decay</p>
+<p class="text-xs font-headline font-bold text-white">42 MIN</p>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Execution Action Section -->
+<section class="space-y-3">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-sm">bolt</span>
+<h2 class="font-headline text-sm font-bold tracking-widest uppercase">Quick Execution</h2>
+</div>
+<div class="flex gap-2">
+<button class="flex-1 bg-gradient-to-r from-secondary to-secondary-dim h-14 rounded-md flex items-center justify-center gap-2 active:scale-95 transition-transform">
+<span class="font-headline font-bold text-white tracking-widest text-sm uppercase">EXECUTE LONG</span>
+<span class="material-symbols-outlined text-white">trending_up</span>
+</button>
+<button class="w-14 bg-surface-container-high rounded-md flex items-center justify-center border border-outline-variant/20 active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-on-surface-variant">tune</span>
+</button>
+</div>
+</section>
+<!-- Technical Pipeline Log -->
+<section class="space-y-2">
+<div class="bg-surface-container-lowest rounded border border-outline-variant/10 overflow-hidden">
+<div class="bg-surface-container-high px-4 py-2 border-b border-outline-variant/10 flex justify-between items-center">
+<span class="text-[10px] font-headline font-bold tracking-widest text-on-surface-variant uppercase">Live Pipeline Stream</span>
+<span class="text-[10px] font-mono text-primary">0.002s latency</span>
+</div>
+<div class="p-3 space-y-2 font-mono text-[9px]">
+<div class="flex gap-2">
+<span class="text-on-surface-variant">[14:22:01]</span>
+<span class="text-secondary">SYS_SCAN:</span>
+<span class="text-on-surface-variant">Fetching liquidity clusters... OK</span>
+</div>
+<div class="flex gap-2">
+<span class="text-on-surface-variant">[14:22:04]</span>
+<span class="text-primary">CLAUDE_INF:</span>
+<span class="text-on-surface-variant">Pattern recognized at 0.88 weight</span>
+</div>
+<div class="flex gap-2">
+<span class="text-on-surface-variant">[14:22:05]</span>
+<span class="text-tertiary">ALERT:</span>
+<span class="text-on-surface-variant">Orderbook skew detected in Binance-Perp</span>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="bg-[#131314]/90 backdrop-blur-2xl border-t border-[#484849]/15 shadow-[0_-4px_20px_rgba(156,255,147,0.05)] fixed bottom-0 left-0 w-full flex justify-around items-center px-4 pb-6 pt-3 z-50">
+<div class="flex flex-col items-center justify-center text-[#2c2c2d] opacity-60 hover:text-[#9cff93] transition-colors active:scale-90 duration-200 cursor-pointer">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-tight">Control</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#2c2c2d] opacity-60 hover:text-[#9cff93] transition-colors active:scale-90 duration-200 cursor-pointer">
+<span class="material-symbols-outlined">account_tree</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-tight">Pipeline</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#9cff93] bg-[#9cff93]/10 rounded-xl px-3 py-1 active:scale-90 duration-200 cursor-pointer">
+<span class="material-symbols-outlined">settings_input_antenna</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-tight">Signals</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#2c2c2d] opacity-60 hover:text-[#9cff93] transition-colors active:scale-90 duration-200 cursor-pointer">
+<span class="material-symbols-outlined">query_stats</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-tight">Analysis</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#2c2c2d] opacity-60 hover:text-[#9cff93] transition-colors active:scale-90 duration-200 cursor-pointer">
+<span class="material-symbols-outlined">auto_stories</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-tight">Journal</span>
+</div>
+</nav>
+</body></html>
