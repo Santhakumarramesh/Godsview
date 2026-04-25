@@ -94,6 +94,35 @@ jobs:
           done
           echo "Health check failed"; exit 1
 
+  deploy-ec2:
+    needs: docker
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Deploy via SSM
+        run: |
+          aws ssm send-command \
+            --instance-ids "${{ secrets.EC2_INSTANCE_ID }}" \
+            --document-name "AWS-RunShellScript" \
+            --parameters 'commands=["cd /home/ubuntu/Godsview && git pull origin main && docker compose build api && docker compose up -d api nginx && curl -sf http://localhost/healthz || exit 1"]' \
+            --region $AWS_REGION \
+            --output text
+      - name: Verify EC2 health
+        run: |
+          EC2_IP="${{ secrets.EC2_PUBLIC_IP }}"
+          for i in $(seq 1 5); do
+            STATUS=$(curl -sk -o /dev/null -w "%{http_code}" "https://$EC2_IP/healthz" 2>/dev/null || echo "000")
+            if [ "$STATUS" = "200" ]; then echo "EC2 health check passed"; exit 0; fi
+            echo "Attempt $i: HTTP $STATUS — retrying..."; sleep 15
+          done
+          echo "EC2 health check failed"; exit 1
+
   deploy-dashboard:
     needs: lint
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
