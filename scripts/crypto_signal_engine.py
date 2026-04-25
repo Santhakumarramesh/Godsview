@@ -32,7 +32,12 @@ from dataclasses import dataclass, asdict
 
 # Import advanced order flow engine
 try:
-    from order_flow_engine import OrderFlowScorer, OrderFlowScore, FlowStrength
+    from order_flow_engine import (
+        OrderFlowScorer, OrderFlowScore, FlowStrength,
+        VWAPEngine, ClimaxDetector, AccDistClassifier,
+        ExitSignalEngine, VolumeExhaustionDetector,
+        StackedImbalanceDetector, UnfinishedAuctionDetector
+    )
     ADVANCED_ORDER_FLOW = True
 except ImportError:
     ADVANCED_ORDER_FLOW = False
@@ -966,6 +971,13 @@ class PaperTradingEngine:
             'max_drawdown': 0,
             'total_pnl': 0
         })
+        # Priority 1 upgrade: exit signal engine
+        if ADVANCED_ORDER_FLOW:
+            self.exit_engine = ExitSignalEngine()
+            self.of_scorer = OrderFlowScorer()
+        else:
+            self.exit_engine = None
+            self.of_scorer = None
     
     def execute_signal(self, signal: Signal) -> Optional[PaperPosition]:
         """
@@ -1033,12 +1045,17 @@ class PaperTradingEngine:
         
         return position
     
-    def update_positions(self, price_updates: Dict[str, float]) -> List[PaperPosition]:
+    def update_positions(
+        self,
+        price_updates: Dict[str, float],
+        ohlcv_data: Optional[Dict[str, pd.DataFrame]] = None
+    ) -> List[PaperPosition]:
         """
         Update open positions with latest prices.
-        Check for SL/TP hits.
-        
+        Check for SL/TP hits and order-flow-based exits.
+
         price_updates: {symbol: current_price}
+        ohlcv_data: {symbol: DataFrame} for order flow exit checks
         """
         closed_positions = []
         
@@ -1074,6 +1091,37 @@ class PaperTradingEngine:
                 closed_positions.append(position)
                 continue
             
+            # ── Priority 1: Order-flow-based exits ──
+            if self.exit_engine and ADVANCED_ORDER_FLOW:
+                symbol_df = ohlcv_data.get(position.symbol) if ohlcv_data else None
+                if symbol_df is not None and len(symbol_df) >= 20:
+                    try:
+                        long_s = self.of_scorer.score(symbol_df, 'long', lookback=20)
+                        short_s = self.of_scorer.score(symbol_df, 'short', lookback=20)
+                        target_dist = abs(position.take_profit - position.entry_price)
+                        current_dist = (current_price - position.entry_price) if position.direction == 'LONG' else (position.entry_price - current_price)
+                        unrealized_pct = (current_dist / position.entry_price * 100) if position.entry_price > 0 else 0
+                        target_pct = (target_dist / position.entry_price * 100) if position.entry_price > 0 else 2.0
+
+                        exit_sig = self.exit_engine.full_exit_check(
+                            df=symbol_df,
+                            direction=position.direction,
+                            long_score=long_s.total_score,
+                            short_score=short_s.total_score,
+                            bars_in_trade=position.candles_held,
+                            unrealized_pnl_pct=unrealized_pct,
+                            target_pct=target_pct,
+                            max_bars=30
+                        )
+                        if exit_sig.should_exit and exit_sig.urgency in ('immediate', 'next_bar'):
+                            reason = f'OF_EXIT:{exit_sig.reason}'
+                            self._close_position(position, current_price, reason, 'closed_of_exit')
+                            closed_positions.append(position)
+                            logger.info(f"OF-EXIT {position.position_id} {position.symbol}: {exit_sig.reason}")
+                            continue
+                    except Exception as e:
+                        logger.debug(f"OF exit check error for {position.symbol}: {e}")
+
             # Time stop: close after N candles
             time_stop_candles = 50
             if position.candles_held >= time_stop_candles:
@@ -1738,9 +1786,9 @@ class CryptoSignalEngine:
                                       f"{strategy_name} {best_signal.symbol} {best_signal.direction} "
                                       f"conf={best_signal.confidence_score:.1f}")
             
-            # Update positions with current prices
+            # Update positions with current prices + OHLCV data for OF exits
             price_updates = {symbol: df['close'].iloc[-1] for symbol, df in data.items()}
-            closed_positions = self.trading_engine.update_positions(price_updates)
+            closed_positions = self.trading_engine.update_positions(price_updates, ohlcv_data=data)
             
             for pos in closed_positions:
                 logger.info(f"PAPER MODE - Position closed: {pos.position_id}")

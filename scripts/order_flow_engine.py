@@ -28,6 +28,7 @@ import pandas as pd
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple, Any
 from enum import Enum
+from datetime import datetime
 
 
 # ============================================================================
@@ -110,6 +111,82 @@ class VolumeProfileResult:
     hvn_levels: List[float]    # High Volume Nodes
     lvn_levels: List[float]    # Low Volume Nodes
     current_position: str      # 'above_va', 'in_va', 'below_va'
+    data_type: str = "OHLCV_PROXY"
+
+
+@dataclass
+class VWAPResult:
+    """VWAP calculation result."""
+    vwap: float                # Current VWAP value
+    upper_band: float          # VWAP + 1 std dev
+    lower_band: float          # VWAP - 1 std dev
+    price_vs_vwap: str         # 'above', 'below', 'at'
+    distance_pct: float        # % distance from VWAP
+    data_type: str = "OHLCV_PROXY"
+
+
+@dataclass
+class ClimaxEvent:
+    """Buying or selling climax detection."""
+    index: int
+    climax_type: str           # 'buying_climax' or 'selling_climax'
+    volume_ratio: float        # how many times avg volume
+    reversal_size: float       # body vs range reversal
+    strength: float            # 0-100
+    data_type: str = "OHLCV_PROXY"
+
+
+@dataclass
+class StackedImbalanceEvent:
+    """Stacked imbalance (consecutive strong directional CLV candles)."""
+    start_index: int
+    end_index: int
+    direction: str             # 'bullish' or 'bearish'
+    count: int                 # consecutive candles
+    avg_clv: float             # average CLV magnitude
+    strength: float            # 0-100
+    data_type: str = "OHLCV_PROXY"
+
+
+@dataclass
+class AccumulationDistribution:
+    """CVD-based accumulation/distribution classification."""
+    classification: str        # 'accumulation', 'distribution', 'confirmed_uptrend',
+                               # 'confirmed_downtrend', 'bullish_divergence', 'bearish_divergence'
+    cvd_slope: float           # CVD slope direction
+    price_slope: float         # Price slope direction
+    strength: float            # 0-100
+    data_type: str = "OHLCV_PROXY"
+
+
+@dataclass
+class VolumeExhaustionEvent:
+    """Volume exhaustion (declining volume in a trend)."""
+    index: int
+    direction: str             # 'bullish_exhaustion' or 'bearish_exhaustion'
+    volume_decline_pct: float  # % decline from peak
+    bars_declining: int        # consecutive declining volume bars
+    strength: float            # 0-100
+    data_type: str = "OHLCV_PROXY"
+
+
+@dataclass
+class UnfinishedAuctionEvent:
+    """Unfinished auction (close at extreme of range)."""
+    index: int
+    auction_type: str          # 'unfinished_high' or 'unfinished_low'
+    close_position: float      # 0-1 where close sits in range
+    strength: float            # 0-100
+    data_type: str = "OHLCV_PROXY"
+
+
+@dataclass
+class ExitSignal:
+    """Exit signal from order flow analysis."""
+    should_exit: bool
+    reason: str
+    urgency: str               # 'immediate', 'next_bar', 'trail_tighter'
+    strength: float            # 0-100
     data_type: str = "OHLCV_PROXY"
 
 
@@ -768,6 +845,667 @@ class VolumeProfileEngine:
 
 
 # ============================================================================
+# VWAP ENGINE (Priority 1 — TraderPro Lesson 4)
+# ============================================================================
+
+class VWAPEngine:
+    """
+    Volume Weighted Average Price — institutional benchmark.
+
+    VWAP = cumsum(Typical Price * Volume) / cumsum(Volume)
+    Typical Price = (High + Low + Close) / 3
+
+    Price above VWAP = buyers in control.
+    Price below VWAP = sellers in control.
+    Distance from VWAP indicates over-extension.
+
+    OHLCV PROXY: standard VWAP calculation, works perfectly with OHLCV.
+    """
+
+    @staticmethod
+    def calculate(df: pd.DataFrame, session_bars: Optional[int] = None) -> Optional[VWAPResult]:
+        """
+        Calculate VWAP for the given data.
+
+        Args:
+            df: OHLCV DataFrame
+            session_bars: if set, only use last N bars (session reset).
+                          If None, use all data.
+        """
+        if len(df) < 5:
+            return None
+
+        data = df.tail(session_bars) if session_bars else df
+
+        typical_price = (data['high'] + data['low'] + data['close']) / 3
+        cumulative_tp_vol = (typical_price * data['volume']).cumsum()
+        cumulative_vol = data['volume'].cumsum()
+
+        # Avoid division by zero
+        cumulative_vol = cumulative_vol.replace(0, np.nan)
+        vwap_series = cumulative_tp_vol / cumulative_vol
+        vwap_series = vwap_series.ffill()
+
+        current_vwap = float(vwap_series.iloc[-1])
+
+        # Standard deviation bands
+        squared_diff = ((typical_price - vwap_series) ** 2 * data['volume']).cumsum()
+        variance = squared_diff / cumulative_vol
+        std_dev = np.sqrt(variance).fillna(0)
+        current_std = float(std_dev.iloc[-1])
+
+        upper_band = current_vwap + current_std
+        lower_band = current_vwap - current_std
+
+        current_price = float(data['close'].iloc[-1])
+
+        if current_price > current_vwap * 1.001:
+            position = 'above'
+        elif current_price < current_vwap * 0.999:
+            position = 'below'
+        else:
+            position = 'at'
+
+        distance_pct = ((current_price - current_vwap) / current_vwap * 100) if current_vwap > 0 else 0
+
+        return VWAPResult(
+            vwap=round(current_vwap, 6),
+            upper_band=round(upper_band, 6),
+            lower_band=round(lower_band, 6),
+            price_vs_vwap=position,
+            distance_pct=round(float(distance_pct), 4),
+            data_type="OHLCV_PROXY"
+        )
+
+
+# ============================================================================
+# CLIMAX DETECTOR (Priority 1 — TraderPro Lesson 4, 15)
+# ============================================================================
+
+class ClimaxDetector:
+    """
+    Detects buying and selling climax events.
+
+    Climax = extreme volume (2.5x+ avg) + reversal candle pattern.
+    Buying climax: huge volume, price at high, long upper wick → reversal.
+    Selling climax: huge volume, price at low, long lower wick → reversal.
+
+    OHLCV PROXY: works well since we check volume spike + wick pattern.
+    """
+
+    @staticmethod
+    def detect(
+        df: pd.DataFrame,
+        vol_multiplier: float = 2.5,
+        lookback: int = 20
+    ) -> List[ClimaxEvent]:
+        """Detect buying/selling climax events."""
+        events = []
+        if len(df) < lookback + 2:
+            return events
+
+        avg_volume = df['volume'].rolling(lookback).mean()
+
+        for i in range(lookback, len(df)):
+            vol = df['volume'].iloc[i]
+            avg_vol = avg_volume.iloc[i]
+
+            if avg_vol == 0 or vol < avg_vol * vol_multiplier:
+                continue
+
+            vol_ratio = vol / avg_vol
+            o, h, l, c = (df['open'].iloc[i], df['high'].iloc[i],
+                          df['low'].iloc[i], df['close'].iloc[i])
+            candle_range = h - l
+            if candle_range == 0:
+                continue
+
+            body = abs(c - o)
+            upper_wick = h - max(o, c)
+            lower_wick = min(o, c) - l
+            body_ratio = body / candle_range
+
+            # Buying climax: extreme volume + reversal wick at top
+            # Long upper wick = rejection of higher prices
+            if upper_wick > body and upper_wick / candle_range > 0.3:
+                # Confirm with next candle if available
+                reversal_confirmed = False
+                if i + 1 < len(df):
+                    next_close = df['close'].iloc[i + 1]
+                    reversal_confirmed = next_close < c
+
+                strength = min(100, (
+                    vol_ratio * 15 +
+                    (upper_wick / candle_range) * 40 +
+                    (20 if reversal_confirmed else 5) +
+                    15  # base
+                ))
+
+                events.append(ClimaxEvent(
+                    index=i,
+                    climax_type='buying_climax',
+                    volume_ratio=float(vol_ratio),
+                    reversal_size=float(upper_wick / candle_range),
+                    strength=float(strength),
+                    data_type="OHLCV_PROXY"
+                ))
+
+            # Selling climax: extreme volume + reversal wick at bottom
+            elif lower_wick > body and lower_wick / candle_range > 0.3:
+                reversal_confirmed = False
+                if i + 1 < len(df):
+                    next_close = df['close'].iloc[i + 1]
+                    reversal_confirmed = next_close > c
+
+                strength = min(100, (
+                    vol_ratio * 15 +
+                    (lower_wick / candle_range) * 40 +
+                    (20 if reversal_confirmed else 5) +
+                    15
+                ))
+
+                events.append(ClimaxEvent(
+                    index=i,
+                    climax_type='selling_climax',
+                    volume_ratio=float(vol_ratio),
+                    reversal_size=float(lower_wick / candle_range),
+                    strength=float(strength),
+                    data_type="OHLCV_PROXY"
+                ))
+
+        return events
+
+
+# ============================================================================
+# STACKED IMBALANCE DETECTOR (Priority 1 — TraderPro Lesson 9)
+# ============================================================================
+
+class StackedImbalanceDetector:
+    """
+    Detects stacked imbalances — consecutive candles with strong directional CLV.
+
+    3+ consecutive candles with strong CLV in same direction = institutional
+    footprint proxy. In real footprint charts this is "stacked bid/ask imbalance".
+
+    OHLCV PROXY: uses CLV > threshold as a directional imbalance proxy.
+    """
+
+    @staticmethod
+    def detect(
+        df: pd.DataFrame,
+        min_count: int = 3,
+        clv_threshold: float = 0.3
+    ) -> List[StackedImbalanceEvent]:
+        """Detect stacked imbalance sequences."""
+        events = []
+        if len(df) < min_count + 1:
+            return events
+
+        clv = DeltaEngine.calculate_clv(df)
+
+        i = 0
+        while i < len(df):
+            # Check bullish stacked imbalance (consecutive CLV > threshold)
+            if clv.iloc[i] > clv_threshold:
+                start = i
+                count = 0
+                total_clv = 0
+                while i < len(df) and clv.iloc[i] > clv_threshold:
+                    total_clv += clv.iloc[i]
+                    count += 1
+                    i += 1
+
+                if count >= min_count:
+                    avg_clv = total_clv / count
+                    strength = min(100, count * 15 + avg_clv * 60 + 10)
+                    events.append(StackedImbalanceEvent(
+                        start_index=start,
+                        end_index=i - 1,
+                        direction='bullish',
+                        count=count,
+                        avg_clv=float(avg_clv),
+                        strength=float(strength),
+                        data_type="OHLCV_PROXY"
+                    ))
+                continue
+
+            # Check bearish stacked imbalance (consecutive CLV < -threshold)
+            if clv.iloc[i] < -clv_threshold:
+                start = i
+                count = 0
+                total_clv = 0
+                while i < len(df) and clv.iloc[i] < -clv_threshold:
+                    total_clv += abs(clv.iloc[i])
+                    count += 1
+                    i += 1
+
+                if count >= min_count:
+                    avg_clv = total_clv / count
+                    strength = min(100, count * 15 + avg_clv * 60 + 10)
+                    events.append(StackedImbalanceEvent(
+                        start_index=start,
+                        end_index=i - 1,
+                        direction='bearish',
+                        count=count,
+                        avg_clv=float(avg_clv),
+                        strength=float(strength),
+                        data_type="OHLCV_PROXY"
+                    ))
+                continue
+
+            i += 1
+
+        return events
+
+
+# ============================================================================
+# ACCUMULATION / DISTRIBUTION CLASSIFIER (Priority 1 — TraderPro Lesson 10)
+# ============================================================================
+
+class AccDistClassifier:
+    """
+    Classifies accumulation vs distribution using CVD vs price relationship.
+
+    CVD up + Price up = confirmed uptrend
+    CVD down + Price down = confirmed downtrend
+    CVD up + Price down = accumulation (bullish divergence)
+    CVD down + Price up = distribution (bearish divergence)
+
+    OHLCV PROXY: uses CLV-based CVD.
+    """
+
+    @staticmethod
+    def classify(df: pd.DataFrame, lookback: int = 20) -> Optional[AccumulationDistribution]:
+        """Classify current market phase."""
+        if len(df) < lookback:
+            return None
+
+        recent = df.tail(lookback)
+        cvd = DeltaEngine.calculate_cvd(recent)
+
+        # Linear regression slopes
+        x = np.arange(lookback)
+        cvd_vals = cvd.values
+        price_vals = recent['close'].values
+
+        # Compute slopes using numpy polyfit
+        try:
+            cvd_slope = np.polyfit(x, cvd_vals, 1)[0]
+            price_slope = np.polyfit(x, price_vals, 1)[0]
+        except (np.linalg.LinAlgError, ValueError):
+            return None
+
+        # Normalize slopes to comparable scale
+        cvd_range = max(abs(cvd_vals.max() - cvd_vals.min()), 1)
+        price_range = max(abs(price_vals.max() - price_vals.min()), 0.001)
+
+        cvd_norm = cvd_slope / cvd_range * lookback
+        price_norm = price_slope / price_range * lookback
+
+        # Classification
+        if cvd_norm > 0.1 and price_norm > 0.1:
+            classification = 'confirmed_uptrend'
+            strength = min(100, (cvd_norm + price_norm) * 100)
+        elif cvd_norm < -0.1 and price_norm < -0.1:
+            classification = 'confirmed_downtrend'
+            strength = min(100, abs(cvd_norm + price_norm) * 100)
+        elif cvd_norm > 0.1 and price_norm < -0.05:
+            classification = 'accumulation'  # bullish divergence
+            strength = min(100, abs(cvd_norm - price_norm) * 80)
+        elif cvd_norm < -0.1 and price_norm > 0.05:
+            classification = 'distribution'  # bearish divergence
+            strength = min(100, abs(price_norm - cvd_norm) * 80)
+        elif cvd_norm > 0.05:
+            classification = 'accumulation'
+            strength = min(100, abs(cvd_norm) * 60)
+        elif cvd_norm < -0.05:
+            classification = 'distribution'
+            strength = min(100, abs(cvd_norm) * 60)
+        else:
+            classification = 'neutral'
+            strength = 20
+
+        return AccumulationDistribution(
+            classification=classification,
+            cvd_slope=float(cvd_norm),
+            price_slope=float(price_norm),
+            strength=float(strength),
+            data_type="OHLCV_PROXY"
+        )
+
+
+# ============================================================================
+# VOLUME EXHAUSTION DETECTOR (Priority 1 — TraderPro Lesson 4, 14)
+# ============================================================================
+
+class VolumeExhaustionDetector:
+    """
+    Detects volume exhaustion — declining volume during a price trend.
+
+    If price is trending up but volume is declining for 3+ bars,
+    the trend is losing conviction (exhaustion).
+
+    OHLCV PROXY: standard volume analysis, works perfectly.
+    """
+
+    @staticmethod
+    def detect(
+        df: pd.DataFrame,
+        min_declining_bars: int = 3,
+        lookback: int = 10
+    ) -> List[VolumeExhaustionEvent]:
+        """Detect volume exhaustion in recent candles."""
+        events = []
+        if len(df) < lookback + min_declining_bars:
+            return events
+
+        recent = df.tail(lookback)
+        vols = recent['volume'].values
+        closes = recent['close'].values
+
+        # Check if price is trending (up or down) while volume declines
+        price_up = closes[-1] > closes[0]
+        price_down = closes[-1] < closes[0]
+
+        if not (price_up or price_down):
+            return events
+
+        # Count consecutive declining volume bars from the end
+        declining_count = 0
+        peak_vol = vols[-1]
+        for j in range(len(vols) - 2, -1, -1):
+            if vols[j] > vols[j + 1]:
+                declining_count += 1
+                peak_vol = max(peak_vol, vols[j])
+            else:
+                break
+
+        if declining_count >= min_declining_bars and peak_vol > 0:
+            decline_pct = (1 - vols[-1] / peak_vol) * 100
+
+            if price_up:
+                direction = 'bullish_exhaustion'
+            else:
+                direction = 'bearish_exhaustion'
+
+            strength = min(100, decline_pct * 0.8 + declining_count * 10 + 10)
+
+            events.append(VolumeExhaustionEvent(
+                index=len(df) - 1,
+                direction=direction,
+                volume_decline_pct=float(decline_pct),
+                bars_declining=declining_count,
+                strength=float(strength),
+                data_type="OHLCV_PROXY"
+            ))
+
+        return events
+
+
+# ============================================================================
+# UNFINISHED AUCTION DETECTOR (Priority 1 — TraderPro Lesson 9)
+# ============================================================================
+
+class UnfinishedAuctionDetector:
+    """
+    Detects unfinished auctions — candle closes at extreme of range.
+
+    Close at >90% of range = unfinished business at the high (likely revisits).
+    Close at <10% of range = unfinished business at the low (likely revisits).
+
+    This indicates strong one-sided pressure without completion — price typically
+    returns to "finish" the auction.
+
+    OHLCV PROXY: standard candle analysis.
+    """
+
+    @staticmethod
+    def detect(
+        df: pd.DataFrame,
+        threshold: float = 0.90,
+        lookback: int = 10
+    ) -> List[UnfinishedAuctionEvent]:
+        """Detect unfinished auction candles."""
+        events = []
+        if len(df) < 3:
+            return events
+
+        recent = df.tail(lookback)
+
+        for i in range(len(recent)):
+            idx = len(df) - lookback + i
+            h = recent['high'].iloc[i]
+            l = recent['low'].iloc[i]
+            c = recent['close'].iloc[i]
+            candle_range = h - l
+
+            if candle_range == 0:
+                continue
+
+            close_position = (c - l) / candle_range  # 0=close at low, 1=close at high
+
+            # Close at extreme high — unfinished high
+            if close_position >= threshold:
+                strength = min(100, close_position * 80 + 20)
+                events.append(UnfinishedAuctionEvent(
+                    index=idx,
+                    auction_type='unfinished_high',
+                    close_position=float(close_position),
+                    strength=float(strength),
+                    data_type="OHLCV_PROXY"
+                ))
+
+            # Close at extreme low — unfinished low
+            elif close_position <= (1 - threshold):
+                strength = min(100, (1 - close_position) * 80 + 20)
+                events.append(UnfinishedAuctionEvent(
+                    index=idx,
+                    auction_type='unfinished_low',
+                    close_position=float(close_position),
+                    strength=float(strength),
+                    data_type="OHLCV_PROXY"
+                ))
+
+        return events
+
+
+# ============================================================================
+# EXIT SIGNAL ENGINE (Priority 1 — TraderPro Lesson 16)
+# ============================================================================
+
+class ExitSignalEngine:
+    """
+    Generates exit signals based on order flow analysis.
+
+    Exit methods:
+    1. Delta-based: OF score turns against position
+    2. Time-based: Trade hasn't reached target within max bars
+    3. Volume exhaustion: Volume drying up = momentum fading
+    4. Climax against position: Climax in opposite direction
+
+    OHLCV PROXY: all methods use OHLCV-derived data.
+    """
+
+    def __init__(self):
+        self.climax_detector = ClimaxDetector()
+        self.exhaustion_detector = VolumeExhaustionDetector()
+
+    def check_delta_exit(
+        self,
+        direction: str,
+        long_score: float,
+        short_score: float,
+        score_gap_threshold: float = 20
+    ) -> ExitSignal:
+        """
+        Exit if order flow has turned significantly against position.
+
+        For LONG: exit if short_score > long_score + threshold
+        For SHORT: exit if long_score > short_score + threshold
+        """
+        if direction == 'LONG' or direction == 'long':
+            if short_score > long_score + score_gap_threshold:
+                urgency = 'immediate' if short_score > long_score + 35 else 'next_bar'
+                return ExitSignal(
+                    should_exit=True,
+                    reason=f'delta_turned_bearish (short={short_score:.0f} vs long={long_score:.0f})',
+                    urgency=urgency,
+                    strength=min(100, (short_score - long_score) * 2),
+                    data_type="OHLCV_PROXY"
+                )
+        elif direction == 'SHORT' or direction == 'short':
+            if long_score > short_score + score_gap_threshold:
+                urgency = 'immediate' if long_score > short_score + 35 else 'next_bar'
+                return ExitSignal(
+                    should_exit=True,
+                    reason=f'delta_turned_bullish (long={long_score:.0f} vs short={short_score:.0f})',
+                    urgency=urgency,
+                    strength=min(100, (long_score - short_score) * 2),
+                    data_type="OHLCV_PROXY"
+                )
+
+        return ExitSignal(
+            should_exit=False, reason='delta_aligned',
+            urgency='none', strength=0, data_type="OHLCV_PROXY"
+        )
+
+    def check_time_exit(
+        self,
+        bars_in_trade: int,
+        max_bars: int = 20,
+        unrealized_pnl_pct: float = 0,
+        target_pct: float = 2.0
+    ) -> ExitSignal:
+        """
+        Exit stale trades that haven't reached meaningful progress.
+
+        Exit if bars_in_trade >= max_bars AND unrealized P&L < 30% of target.
+        """
+        if bars_in_trade >= max_bars:
+            progress = (unrealized_pnl_pct / target_pct * 100) if target_pct > 0 else 0
+            if progress < 30:
+                return ExitSignal(
+                    should_exit=True,
+                    reason=f'time_exit_after_{bars_in_trade}_bars (progress={progress:.0f}%)',
+                    urgency='next_bar',
+                    strength=min(100, bars_in_trade * 3 + 20),
+                    data_type="OHLCV_PROXY"
+                )
+
+        return ExitSignal(
+            should_exit=False, reason='within_time_limit',
+            urgency='none', strength=0, data_type="OHLCV_PROXY"
+        )
+
+    def check_exhaustion_exit(
+        self,
+        df: pd.DataFrame,
+        direction: str
+    ) -> ExitSignal:
+        """
+        Exit if volume is exhausting in the direction of the trade.
+        """
+        exhaustion_events = self.exhaustion_detector.detect(df)
+
+        for event in exhaustion_events:
+            # Bullish exhaustion while LONG → exit
+            if direction in ('LONG', 'long') and event.direction == 'bullish_exhaustion':
+                return ExitSignal(
+                    should_exit=True,
+                    reason=f'volume_exhaustion_bullish (decline={event.volume_decline_pct:.0f}%)',
+                    urgency='trail_tighter',
+                    strength=event.strength,
+                    data_type="OHLCV_PROXY"
+                )
+            # Bearish exhaustion while SHORT → exit
+            if direction in ('SHORT', 'short') and event.direction == 'bearish_exhaustion':
+                return ExitSignal(
+                    should_exit=True,
+                    reason=f'volume_exhaustion_bearish (decline={event.volume_decline_pct:.0f}%)',
+                    urgency='trail_tighter',
+                    strength=event.strength,
+                    data_type="OHLCV_PROXY"
+                )
+
+        return ExitSignal(
+            should_exit=False, reason='no_exhaustion',
+            urgency='none', strength=0, data_type="OHLCV_PROXY"
+        )
+
+    def check_climax_exit(
+        self,
+        df: pd.DataFrame,
+        direction: str
+    ) -> ExitSignal:
+        """
+        Exit if a climax event occurs against the position direction.
+        Buying climax while LONG = potential top → exit.
+        Selling climax while SHORT = potential bottom → exit.
+        """
+        climax_events = self.climax_detector.detect(df)
+
+        # Check recent climax (last 3 candles)
+        recent = [e for e in climax_events if e.index >= len(df) - 3]
+        for event in recent:
+            if direction in ('LONG', 'long') and event.climax_type == 'buying_climax':
+                return ExitSignal(
+                    should_exit=True,
+                    reason=f'buying_climax_detected (vol={event.volume_ratio:.1f}x)',
+                    urgency='immediate',
+                    strength=event.strength,
+                    data_type="OHLCV_PROXY"
+                )
+            if direction in ('SHORT', 'short') and event.climax_type == 'selling_climax':
+                return ExitSignal(
+                    should_exit=True,
+                    reason=f'selling_climax_detected (vol={event.volume_ratio:.1f}x)',
+                    urgency='immediate',
+                    strength=event.strength,
+                    data_type="OHLCV_PROXY"
+                )
+
+        return ExitSignal(
+            should_exit=False, reason='no_climax',
+            urgency='none', strength=0, data_type="OHLCV_PROXY"
+        )
+
+    def full_exit_check(
+        self,
+        df: pd.DataFrame,
+        direction: str,
+        long_score: float,
+        short_score: float,
+        bars_in_trade: int = 0,
+        unrealized_pnl_pct: float = 0,
+        target_pct: float = 2.0,
+        max_bars: int = 20
+    ) -> ExitSignal:
+        """
+        Run all exit checks and return the most urgent one.
+        """
+        checks = [
+            self.check_delta_exit(direction, long_score, short_score),
+            self.check_time_exit(bars_in_trade, max_bars, unrealized_pnl_pct, target_pct),
+            self.check_exhaustion_exit(df, direction),
+            self.check_climax_exit(df, direction),
+        ]
+
+        # Return the most urgent exit signal
+        urgency_order = {'immediate': 0, 'next_bar': 1, 'trail_tighter': 2, 'none': 3}
+        active_exits = [c for c in checks if c.should_exit]
+
+        if not active_exits:
+            return ExitSignal(
+                should_exit=False, reason='all_clear',
+                urgency='none', strength=0, data_type="OHLCV_PROXY"
+            )
+
+        # Sort by urgency then strength
+        active_exits.sort(key=lambda e: (urgency_order.get(e.urgency, 3), -e.strength))
+        return active_exits[0]
+
+
+# ============================================================================
 # COMPOSITE ORDER FLOW SCORER
 # ============================================================================
 
@@ -792,6 +1530,14 @@ class OrderFlowScorer:
         self.sweep_detector = LiquiditySweepDetector()
         self.trapped_detector = TrappedTraderDetector()
         self.volume_profile_engine = VolumeProfileEngine()
+        # Priority 1 upgrades (TraderPro Academy)
+        self.vwap_engine = VWAPEngine()
+        self.climax_detector = ClimaxDetector()
+        self.stacked_imbalance_detector = StackedImbalanceDetector()
+        self.acc_dist_classifier = AccDistClassifier()
+        self.exhaustion_detector = VolumeExhaustionDetector()
+        self.unfinished_auction_detector = UnfinishedAuctionDetector()
+        self.exit_signal_engine = ExitSignalEngine()
 
     def score(
         self,
@@ -1139,6 +1885,14 @@ class OrderFlowScorer:
         # Volume profile
         vol_profile = self.volume_profile_engine.calculate(df)
 
+        # ── Priority 1 upgrades (TraderPro Academy) ──
+        vwap_result = self.vwap_engine.calculate(df)
+        climax_events = self.climax_detector.detect(df)
+        stacked_events = self.stacked_imbalance_detector.detect(df)
+        acc_dist = self.acc_dist_classifier.classify(df)
+        exhaustion_events = self.exhaustion_detector.detect(df)
+        unfinished_events = self.unfinished_auction_detector.detect(df)
+
         # Scores for both directions
         long_score = self.score(df, 'long', swings, lookback)
         short_score = self.score(df, 'short', swings, lookback)
@@ -1213,6 +1967,72 @@ class OrderFlowScorer:
                 'position': vol_profile.current_position if vol_profile else None,
                 'hvn_count': len(vol_profile.hvn_levels) if vol_profile else 0,
                 'lvn_count': len(vol_profile.lvn_levels) if vol_profile else 0,
+            },
+            # ── Priority 1: VWAP ──
+            'vwap': {
+                'value': vwap_result.vwap if vwap_result else None,
+                'upper_band': vwap_result.upper_band if vwap_result else None,
+                'lower_band': vwap_result.lower_band if vwap_result else None,
+                'price_vs_vwap': vwap_result.price_vs_vwap if vwap_result else None,
+                'distance_pct': vwap_result.distance_pct if vwap_result else None,
+            },
+            # ── Priority 1: Climax events ──
+            'climax': {
+                'events_total': len(climax_events),
+                'recent': [
+                    {
+                        'type': e.climax_type,
+                        'volume_ratio': round(e.volume_ratio, 2),
+                        'reversal_size': round(e.reversal_size, 3),
+                        'strength': round(e.strength, 1),
+                    }
+                    for e in climax_events[-3:]
+                ],
+            },
+            # ── Priority 1: Stacked imbalance ──
+            'stacked_imbalance': {
+                'events_total': len(stacked_events),
+                'recent': [
+                    {
+                        'direction': e.direction,
+                        'count': e.count,
+                        'avg_clv': round(e.avg_clv, 3),
+                        'strength': round(e.strength, 1),
+                    }
+                    for e in stacked_events[-3:]
+                ],
+            },
+            # ── Priority 1: Accumulation/Distribution ──
+            'accumulation_distribution': {
+                'classification': acc_dist.classification if acc_dist else None,
+                'cvd_slope': round(acc_dist.cvd_slope, 4) if acc_dist else None,
+                'price_slope': round(acc_dist.price_slope, 4) if acc_dist else None,
+                'strength': round(acc_dist.strength, 1) if acc_dist else None,
+            },
+            # ── Priority 1: Volume exhaustion ──
+            'volume_exhaustion': {
+                'events_total': len(exhaustion_events),
+                'recent': [
+                    {
+                        'direction': e.direction,
+                        'decline_pct': round(e.volume_decline_pct, 1),
+                        'bars_declining': e.bars_declining,
+                        'strength': round(e.strength, 1),
+                    }
+                    for e in exhaustion_events[-3:]
+                ],
+            },
+            # ── Priority 1: Unfinished auction ──
+            'unfinished_auction': {
+                'events_total': len(unfinished_events),
+                'recent': [
+                    {
+                        'type': e.auction_type,
+                        'close_position': round(e.close_position, 3),
+                        'strength': round(e.strength, 1),
+                    }
+                    for e in unfinished_events[-3:]
+                ],
             },
             'scores': {
                 'long': {
