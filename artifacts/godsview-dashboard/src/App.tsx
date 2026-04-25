@@ -101,6 +101,7 @@ const TvStrategySyncPage          = React.lazy(() => import("@/pages/tv-strategy
 const ChartActionBridgePage       = React.lazy(() => import("@/pages/chart-action-bridge"));
 const TvReplayPage                = React.lazy(() => import("@/pages/tv-replay"));
 const OrderFlowPage               = React.lazy(() => import("@/pages/order-flow"));
+const C4StrategyPage              = React.lazy(() => import("@/pages/c4-strategy"));
 const HeatmapLiquidityPage        = React.lazy(() => import("@/pages/heatmap-liquidity"));
 const DomDepthPage                = React.lazy(() => import("@/pages/dom-depth"));
 const FootprintDeltaPage          = React.lazy(() => import("@/pages/footprint-delta"));
@@ -323,6 +324,7 @@ function Router() {
         <RoutedPage path="/chart-action-bridge" component={ChartActionBridgePage}   scope="page:chart-action-bridge" />
         <RoutedPage path="/tv-replay"           component={TvReplayPage}            scope="page:tv-replay" />
         <RoutedPage path="/order-flow"          component={OrderFlowPage}           scope="page:order-flow" />
+        <RoutedPage path="/c4-strategy"         component={C4StrategyPage}          scope="page:c4-strategy" />
         <RoutedPage path="/heatmap-liquidity"   component={HeatmapLiquidityPage}    scope="page:heatmap-liquidity" />
         <RoutedPage path="/dom-depth"           component={DomDepthPage}            scope="page:dom-depth" />
         <RoutedPage path="/footprint-delta"     component={FootprintDeltaPage}      scope="page:footprint-delta" />

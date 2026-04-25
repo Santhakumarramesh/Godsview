@@ -393,6 +393,7 @@ const navSections: NavSection[] = [
       { href: "/execution-pressure", label: "Exec Pressure", icon: "speed", sub: "Control Map" },
       { href: "/flow-confluence", label: "Flow Confluence", icon: "merge_type", sub: "Structure + Flow" },
       { href: "/microstructure", label: "Microstructure", icon: "candlestick_chart", sub: "Order Flow & Depth" },
+      { href: "/c4-strategy", label: "C4 Strategy", icon: "verified", sub: "4-Confirmation" },
     ],
   },
   {

@@ -1612,6 +1612,95 @@ def create_flask_app(trading_engine: PaperTradingEngine, signal_history: deque, 
 
         return jsonify(results)
 
+    @app.route('/c4-strategy', methods=['GET'])
+    def c4_strategy_analysis():
+        """C4 Order Flow Strategy — live scan for all tracked symbols."""
+        symbol_filter = request.args.get('symbol', None)
+        results = {}
+
+        if not ADVANCED_ORDER_FLOW:
+            return jsonify({'error': 'Advanced order flow engine not loaded', 'available': False})
+
+        try:
+            from c4_strategy import C4Scorer, log_c4_scan
+        except ImportError:
+            return jsonify({'error': 'C4 strategy module not available'})
+
+        c4_scorer = C4Scorer()
+        open_positions = len([p for p in trading_engine.positions if p.status == 'open'])
+
+        for strategy_name, config in STRATEGIES_CONFIG.items():
+            sym = config['symbol']
+            if symbol_filter and sym != symbol_filter:
+                continue
+
+            try:
+                fetcher = DataFetcher()
+                df = fetcher.fetch_ohlcv(sym, config['timeframe'], limit=100)
+                if df is None or len(df) < 30:
+                    results[sym] = {'error': 'insufficient data'}
+                    continue
+
+                # Evaluate both directions
+                directions = {}
+                for direction in ['LONG', 'SHORT']:
+                    result = c4_scorer.evaluate(
+                        df, sym, config['timeframe'], direction,
+                        max_positions=TRADING_CONFIG['max_concurrent_positions'],
+                        current_positions=open_positions,
+                        paper_mode=(TRADING_CONFIG['mode'] == 'PAPER')
+                    )
+                    if result:
+                        directions[direction.lower()] = {
+                            'total_score': result.total_score,
+                            'decision': result.decision.value,
+                            'c1_context': {
+                                'total': result.c1.total,
+                                'bos_choch': result.c1.bos_choch_score,
+                                'order_block': result.c1.ob_score,
+                                'sweep_zone': result.c1.sweep_zone_score,
+                            },
+                            'c2_confirmation': {
+                                'total': result.c2.total,
+                                'retest': result.c2.retest_score,
+                                'rejection': result.c2.rejection_score,
+                                'close_confirms': result.c2.close_confirms_score,
+                            },
+                            'c3_commitment': {
+                                'total': result.c3.total,
+                                'delta': result.c3.delta_score,
+                                'cvd': result.c3.cvd_score,
+                                'volume': result.c3.volume_score,
+                                'imbalance': result.c3.imbalance_score,
+                                'absorption': result.c3.absorption_score,
+                            },
+                            'c4_control': {
+                                'total': result.c4.total,
+                                'risk_reward': result.c4.rr_score,
+                                'sl_quality': result.c4.sl_quality_score,
+                                'risk_gate': result.c4.risk_gate_score,
+                            },
+                            'entry_price': result.entry_price,
+                            'stop_loss': result.stop_loss,
+                            'take_profit': result.take_profit,
+                            'risk_reward': result.risk_reward,
+                            'confirmations': result.confirmations,
+                            'warnings': result.warnings,
+                        }
+
+                results[sym] = {
+                    'timeframe': config['timeframe'],
+                    'price': float(df['close'].iloc[-1]),
+                    'directions': directions,
+                    'c4_threshold': 80,
+                    'watchlist_threshold': 65,
+                    'data_type': 'OHLCV_PROXY',
+                }
+            except Exception as e:
+                results[sym] = {'error': str(e)}
+
+        return jsonify(results)
+
     @app.route('/kill', methods=['POST'])
     def kill():
         logger.warning("PAPER MODE - Emergency stop initiated")
