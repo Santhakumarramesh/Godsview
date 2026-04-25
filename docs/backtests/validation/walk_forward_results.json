@@ -1,0 +1,224 @@
+[
+  {
+    "symbol": "SOLUSD",
+    "timeframe": "4h",
+    "verdict": "PASS",
+    "passed_checks": 5,
+    "total_checks": 5,
+    "train": {
+      "trades": 8,
+      "wins": 7,
+      "losses": 1,
+      "pf": 10.11,
+      "wr": 87.5,
+      "ret": 35.37,
+      "dd": 3.88,
+      "avg_r": 1.56
+    },
+    "validation": {
+      "trades": 4,
+      "wins": 2,
+      "losses": 2,
+      "pf": 2.21,
+      "wr": 50.0,
+      "ret": 4.67,
+      "dd": 1.96,
+      "avg_r": 0.44
+    },
+    "test": {
+      "trades": 4,
+      "wins": 4,
+      "losses": 0,
+      "pf": 8925.5,
+      "wr": 100.0,
+      "ret": 8.93,
+      "dd": 0,
+      "avg_r": 1.45
+    },
+    "full": {
+      "trades": 16,
+      "wins": 13,
+      "losses": 3,
+      "pf": 7.33,
+      "wr": 81.2,
+      "ret": 48.97,
+      "dd": 3.88,
+      "avg_r": 1.25
+    },
+    "half1": {
+      "trades": 8,
+      "wins": 7,
+      "losses": 1,
+      "pf": 10.11,
+      "wr": 87.5,
+      "ret": 35.37,
+      "dd": 3.88,
+      "avg_r": 1.56
+    },
+    "half2": {
+      "trades": 8,
+      "wins": 6,
+      "losses": 2,
+      "pf": 4.53,
+      "wr": 75.0,
+      "ret": 13.6,
+      "dd": 1.96,
+      "avg_r": 0.94
+    },
+    "checks": {
+      "pf_stable": true,
+      "wr_stable": true,
+      "no_crash": true,
+      "half_consistent": true,
+      "test_profitable": true
+    }
+  },
+  {
+    "symbol": "ETHUSD",
+    "timeframe": "1h",
+    "verdict": "PASS",
+    "passed_checks": 5,
+    "total_checks": 5,
+    "train": {
+      "trades": 6,
+      "wins": 4,
+      "losses": 2,
+      "pf": 5.48,
+      "wr": 66.7,
+      "ret": 8.13,
+      "dd": 1.82,
+      "avg_r": 0.96
+    },
+    "validation": {
+      "trades": 3,
+      "wins": 3,
+      "losses": 0,
+      "pf": 4706.7,
+      "wr": 100.0,
+      "ret": 4.71,
+      "dd": 0,
+      "avg_r": 1.78
+    },
+    "test": {
+      "trades": 4,
+      "wins": 3,
+      "losses": 1,
+      "pf": 47.67,
+      "wr": 75.0,
+      "ret": 5.74,
+      "dd": 0.12,
+      "avg_r": 1.02
+    },
+    "full": {
+      "trades": 13,
+      "wins": 10,
+      "losses": 3,
+      "pf": 10.58,
+      "wr": 76.9,
+      "ret": 18.58,
+      "dd": 1.82,
+      "avg_r": 1.16
+    },
+    "half1": {
+      "trades": 6,
+      "wins": 4,
+      "losses": 2,
+      "pf": 5.48,
+      "wr": 66.7,
+      "ret": 8.13,
+      "dd": 1.82,
+      "avg_r": 0.96
+    },
+    "half2": {
+      "trades": 7,
+      "wins": 6,
+      "losses": 1,
+      "pf": 85.93,
+      "wr": 85.7,
+      "ret": 10.45,
+      "dd": 0.12,
+      "avg_r": 1.34
+    },
+    "checks": {
+      "pf_stable": true,
+      "wr_stable": true,
+      "no_crash": true,
+      "half_consistent": true,
+      "test_profitable": true
+    }
+  },
+  {
+    "symbol": "BTCUSD",
+    "timeframe": "4h",
+    "verdict": "PASS",
+    "passed_checks": 4,
+    "total_checks": 5,
+    "train": {
+      "trades": 8,
+      "wins": 5,
+      "losses": 3,
+      "pf": 2.43,
+      "wr": 62.5,
+      "ret": 12.07,
+      "dd": 5.07,
+      "avg_r": 0.65
+    },
+    "validation": {
+      "trades": 4,
+      "wins": 2,
+      "losses": 2,
+      "pf": 2.06,
+      "wr": 50.0,
+      "ret": 3.34,
+      "dd": 3.16,
+      "avg_r": 0.42
+    },
+    "test": {
+      "trades": 5,
+      "wins": 1,
+      "losses": 4,
+      "pf": 1.01,
+      "wr": 20.0,
+      "ret": 0.03,
+      "dd": 3.54,
+      "avg_r": -0.22
+    },
+    "full": {
+      "trades": 17,
+      "wins": 8,
+      "losses": 9,
+      "pf": 2.02,
+      "wr": 47.1,
+      "ret": 15.45,
+      "dd": 5.07,
+      "avg_r": 0.34
+    },
+    "half1": {
+      "trades": 8,
+      "wins": 5,
+      "losses": 3,
+      "pf": 2.43,
+      "wr": 62.5,
+      "ret": 12.07,
+      "dd": 5.07,
+      "avg_r": 0.65
+    },
+    "half2": {
+      "trades": 9,
+      "wins": 3,
+      "losses": 6,
+      "pf": 1.5,
+      "wr": 33.3,
+      "ret": 3.38,
+      "dd": 4.4,
+      "avg_r": 0.07
+    },
+    "checks": {
+      "pf_stable": true,
+      "wr_stable": false,
+      "no_crash": true,
+      "half_consistent": true,
+      "test_profitable": true
+    }
+  }
+]

@@ -87,6 +87,8 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
@@ -99,6 +101,8 @@ services:
       NODE_ENV: production
       PORT: "3001"
       BACKTEST_DIR: "/app/docs/backtests"
+      SIGNAL_ENGINE_HOST: "host.docker.internal"
+      SIGNAL_ENGINE_PORT: "8099"
       DATABASE_URL: postgresql://godsview:${POSTGRES_PASSWORD:-godsview_secret}@postgres:5432/godsview
       REDIS_URL: "redis://redis:6379"
       MEMORY_STORE_PATH: "/data/memory"
@@ -158,6 +162,8 @@ services:
   nginx:
     image: nginx:1.27-alpine
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - api
     ports:

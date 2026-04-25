@@ -344,4 +344,8 @@ router.use("/api/pipeline", pipelineHealthRouter);
 router.use("/api/safety", tradingSafetyRouter);
 router.use("/api/monetization", monetizationRouter);
 
+// ── Signal Engine Bridge (Paper Trading Crypto) ────────────────
+import signalEngineBridgeRouter from "./signal_engine_bridge";
+router.use("/api/signal-engine", signalEngineBridgeRouter);
+
 export default router;

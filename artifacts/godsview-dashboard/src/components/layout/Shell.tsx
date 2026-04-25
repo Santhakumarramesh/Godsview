@@ -420,6 +420,8 @@ const navSections: NavSection[] = [
       { href: "/trade-journal", label: "Trade Journal", icon: "book", sub: "PnL Attribution" },
       { href: "/slippage-quality", label: "Slippage Quality", icon: "speed", sub: "Fill Analysis" },
       { href: "/emergency-controls", label: "Emergency Controls", icon: "emergency", sub: "Kill Switch" },
+      { href: "/crypto-backtests", label: "Crypto Backtests", icon: "currency_bitcoin", sub: "BTC/ETH/SOL Results" },
+      { href: "/paper-trading-live", label: "Paper Trading Live", icon: "play_circle", sub: "Signal Engine" },
     ],
   },
   {
@@ -434,7 +436,6 @@ const navSections: NavSection[] = [
       { href: "/promotion-pipeline", label: "Promotion Pipeline", icon: "arrow_upward", sub: "Lab → Live" },
       { href: "/mcp-backtester", label: "MCP Backtester", icon: "compare", sub: "MCP vs Raw" },
       { href: "/backtest-credibility", label: "Backtest Lab", icon: "biotech", sub: "Credibility & Overfit" },
-      { href: "/crypto-backtests", label: "Crypto Backtests", icon: "currency_bitcoin", sub: "BTC/ETH/SOL Results" },
       { href: "/side-by-side", label: "Side-by-Side", icon: "compare_arrows", sub: "Comparison Tool" },
     ],
   },
