@@ -120,6 +120,7 @@ services:
       GODSVIEW_COOLDOWN_MINUTES: "${GODSVIEW_COOLDOWN_MINUTES:-30}"
       GODSVIEW_BLOCK_ON_DEGRADED_DATA: "${GODSVIEW_BLOCK_ON_DEGRADED_DATA:-true}"
       GODSVIEW_OPERATOR_TOKEN: "${GODSVIEW_OPERATOR_TOKEN:-change-me}"
+      GODSVIEW_DATA_PERSISTENCE: "${GODSVIEW_DATA_PERSISTENCE:-database}"
       CORS_ORIGIN: "${CORS_ORIGIN:-http://localhost}"
       ECON_CALENDAR_URL: "${ECON_CALENDAR_URL:-https://nfs.faireconomy.media/ff_calendar_thisweek.json}"
       # Python v2 bridge (set to enable proxy to Python services)
