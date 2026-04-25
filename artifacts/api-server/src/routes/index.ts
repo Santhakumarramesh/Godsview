@@ -339,4 +339,8 @@ router.use("/api/pipeline", pipelineHealthRouter);
 router.use("/api/safety", tradingSafetyRouter);
 router.use("/api/monetization", monetizationRouter);
 
+// ── Route Aliases — maps dashboard-expected paths to actual handlers ────
+import routeAliasesRouter from "./route_aliases";
+router.use(routeAliasesRouter);
+
 export default router;
