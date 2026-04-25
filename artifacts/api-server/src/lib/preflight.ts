@@ -79,7 +79,7 @@ export async function runPreflight(): Promise<PreflightResult> {
 
   // 4. System mode validation
   const mode = runtimeConfig.systemMode;
-  const modeOk = ["dry_run", "paper_enabled", "live_enabled"].includes(mode);
+  const modeOk = ["demo", "paper", "live_disabled", "live_enabled"].includes(mode);
   checks.push({
     name: "system_mode",
     passed: modeOk,
