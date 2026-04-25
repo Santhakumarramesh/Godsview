@@ -41,7 +41,7 @@ router.get("/api/paper-trading/state", (req: Request, res: Response): void => {
 
 router.post("/api/paper-trading/start", (req: Request, res: Response): void => {
   try {
-    const config: Partial<PaperTradingConfig> = req.body.config || {};
+    const config: Partial<PaperTradingConfig> = req.body?.config || {};
     const result = startPaperTrading(config);
     res.status(result.success ? 200 : 503).json({
       ...result,
