@@ -30,6 +30,13 @@ import ccxt
 from flask import Flask, jsonify, request
 from dataclasses import dataclass, asdict
 
+# Import advanced order flow engine
+try:
+    from order_flow_engine import OrderFlowScorer, OrderFlowScore, FlowStrength
+    ADVANCED_ORDER_FLOW = True
+except ImportError:
+    ADVANCED_ORDER_FLOW = False
+
 # ============================================================================
 # CONFIGURATION
 # ============================================================================
@@ -73,6 +80,9 @@ TRADING_CONFIG = {
     'max_weekly_drawdown_pct': 5.0,  # 5% of capital
     'consecutive_loss_threshold': 3,  # Circuit breaker
     'strategy_pause_duration': 86400,  # 24 hours in seconds
+    'order_flow_threshold_paper': 60,  # Minimum order flow score for paper trades
+    'order_flow_threshold_live': 75,   # Minimum order flow score for live trades (future)
+    'order_flow_enabled': True,        # Enable advanced order flow gating
 }
 
 # Auto-detect base directory (works on EC2 and local)
@@ -555,10 +565,17 @@ class OrderFlowAnalyzer:
 
 class SignalGenerator:
     """Generates trading signals based on market structure and flow."""
-    
+
     def __init__(self):
         self.structure_analyzer = MarketStructureAnalyzer()
         self.flow_analyzer = OrderFlowAnalyzer()
+        # Advanced order flow scorer (from order_flow_engine.py)
+        if ADVANCED_ORDER_FLOW:
+            self.of_scorer = OrderFlowScorer()
+            logger.info("Advanced OrderFlowScorer loaded — OHLCV PROXY mode")
+        else:
+            self.of_scorer = None
+            logger.warning("Advanced OrderFlowScorer NOT available — running basic flow only")
     
     def generate_signals(
         self,
@@ -696,6 +713,56 @@ class SignalGenerator:
                                 timestamp=current_time
                             ))
         
+        # ── Advanced Order Flow Gate ──────────────────────────────
+        # Compute order flow score for each candidate signal and reject
+        # those below the threshold.  Attach full analysis to every signal.
+        if self.of_scorer is not None and TRADING_CONFIG.get('order_flow_enabled'):
+            swing_dicts = [
+                {'index': s.timestamp, 'price': s.price, 'type': s.type}
+                for s in swings
+            ]
+            gated = []
+            threshold = TRADING_CONFIG.get('order_flow_threshold_paper', 60)
+            for sig in signals:
+                direction_arg = 'long' if sig.direction == 'LONG' else 'short'
+                of_result = self.of_scorer.score(
+                    df, direction=direction_arg,
+                    swings=swing_dicts, lookback=20
+                )
+                # Attach order flow data to signal
+                sig.flow_confirmation['order_flow_score'] = of_result.total_score
+                sig.flow_confirmation['order_flow_strength'] = of_result.strength.value
+                sig.flow_confirmation['order_flow_bias'] = of_result.direction_bias
+                sig.flow_confirmation['order_flow_breakdown'] = {
+                    'delta': of_result.delta_score,
+                    'volume_spike': of_result.volume_spike_score,
+                    'absorption': of_result.absorption_score,
+                    'imbalance': of_result.imbalance_score,
+                    'sweep_trapped': of_result.sweep_trapped_score,
+                }
+                sig.flow_confirmation['order_flow_confirmations'] = of_result.confirmations
+                sig.flow_confirmation['order_flow_warnings'] = of_result.warnings
+                sig.flow_confirmation['data_type'] = 'OHLCV_PROXY'
+
+                if of_result.total_score >= threshold:
+                    # Boost confidence by blending structure + flow
+                    flow_bonus = (of_result.total_score - threshold) * 0.3
+                    sig.confidence_score = min(100, sig.confidence_score + flow_bonus)
+                    gated.append(sig)
+                    logger.info(
+                        f"OF-PASS {symbol} {sig.direction}: "
+                        f"score={of_result.total_score:.0f} "
+                        f"({of_result.strength.value}) "
+                        f"confirms={of_result.confirmations}"
+                    )
+                else:
+                    logger.info(
+                        f"OF-REJECT {symbol} {sig.direction}: "
+                        f"score={of_result.total_score:.0f} < {threshold} "
+                        f"warns={of_result.warnings}"
+                    )
+            signals = gated
+
         # Signal 3: Breakout_Retest
         # Price breaks support/resistance and comes back to retest
         if len(swings) >= 2:
@@ -1435,6 +1502,68 @@ def create_flask_app(trading_engine: PaperTradingEngine, signal_history: deque, 
             'strategies': list(STRATEGIES_CONFIG.keys()),
         })
 
+    @app.route('/order-flow', methods=['GET'])
+    def order_flow_analysis():
+        """Live order flow analysis for all tracked symbols."""
+        symbol_filter = request.args.get('symbol', None)
+        results = {}
+
+        if not ADVANCED_ORDER_FLOW:
+            return jsonify({'error': 'Advanced order flow engine not loaded', 'available': False})
+
+        scorer = OrderFlowScorer()
+        for strategy_name, config in STRATEGIES_CONFIG.items():
+            sym = config['symbol']
+            if symbol_filter and sym != symbol_filter:
+                continue
+
+            # Pull latest data from the last BOS scan or compute fresh
+            # For the API, we compute a quick analysis
+            try:
+                fetcher = DataFetcher()
+                df = fetcher.fetch_ohlcv(sym, config['timeframe'], limit=50)
+                if df is None or len(df) < 20:
+                    results[sym] = {'error': 'insufficient data'}
+                    continue
+
+                long_score = scorer.score(df, direction='long', lookback=20)
+                short_score = scorer.score(df, direction='short', lookback=20)
+
+                results[sym] = {
+                    'timeframe': config['timeframe'],
+                    'price': float(df['close'].iloc[-1]),
+                    'long_score': {
+                        'total': long_score.total_score,
+                        'strength': long_score.strength.value,
+                        'delta': long_score.delta_score,
+                        'volume_spike': long_score.volume_spike_score,
+                        'absorption': long_score.absorption_score,
+                        'imbalance': long_score.imbalance_score,
+                        'sweep_trapped': long_score.sweep_trapped_score,
+                        'bias': long_score.direction_bias,
+                        'confirmations': long_score.confirmations,
+                        'warnings': long_score.warnings,
+                    },
+                    'short_score': {
+                        'total': short_score.total_score,
+                        'strength': short_score.strength.value,
+                        'delta': short_score.delta_score,
+                        'volume_spike': short_score.volume_spike_score,
+                        'absorption': short_score.absorption_score,
+                        'imbalance': short_score.imbalance_score,
+                        'sweep_trapped': short_score.sweep_trapped_score,
+                        'bias': short_score.direction_bias,
+                        'confirmations': short_score.confirmations,
+                        'warnings': short_score.warnings,
+                    },
+                    'threshold_paper': TRADING_CONFIG.get('order_flow_threshold_paper', 60),
+                    'data_type': 'OHLCV_PROXY',
+                }
+            except Exception as e:
+                results[sym] = {'error': str(e)}
+
+        return jsonify(results)
+
     @app.route('/kill', methods=['POST'])
     def kill():
         logger.warning("PAPER MODE - Emergency stop initiated")
@@ -1537,11 +1666,12 @@ class CryptoSignalEngine:
 
                 df = data[symbol]
 
-                # Log BOS scan for every cycle (for /bos-log endpoint)
+                # Log BOS scan + order flow for every cycle
                 try:
                     swings = self.signal_generator.structure_analyzer.detect_swing_points(df, lookback=5)
                     bos_result = self.signal_generator.structure_analyzer.detect_bos_choch(swings, df)
-                    self.bos_scan_log.append({
+
+                    scan_entry = {
                         'timestamp': datetime.now().isoformat(),
                         'symbol': symbol,
                         'timeframe': timeframe,
@@ -1552,7 +1682,29 @@ class CryptoSignalEngine:
                         'swing_count': len(swings),
                         'swing_highs': len([s for s in swings if s.type == 'high']),
                         'swing_lows': len([s for s in swings if s.type == 'low']),
-                    })
+                    }
+
+                    # Attach order flow score to scan log
+                    if self.signal_generator.of_scorer is not None:
+                        try:
+                            swing_dicts = [
+                                {'index': s.timestamp, 'price': s.price, 'type': s.type}
+                                for s in swings
+                            ]
+                            of_long = self.signal_generator.of_scorer.score(df, 'long', swing_dicts, 20)
+                            of_short = self.signal_generator.of_scorer.score(df, 'short', swing_dicts, 20)
+                            scan_entry['order_flow'] = {
+                                'long_score': of_long.total_score,
+                                'long_strength': of_long.strength.value,
+                                'short_score': of_short.total_score,
+                                'short_strength': of_short.strength.value,
+                                'bias': of_long.direction_bias,
+                                'data_type': 'OHLCV_PROXY',
+                            }
+                        except Exception as ofe:
+                            scan_entry['order_flow'] = {'error': str(ofe)}
+
+                    self.bos_scan_log.append(scan_entry)
                 except Exception as e:
                     logger.warning(f"BOS log capture failed for {symbol}: {e}")
 
