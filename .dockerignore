@@ -47,3 +47,4 @@ pglite-data/
 *.md
 !lib/db/migrations/**
 attached_assets/
+.pnpm-store
