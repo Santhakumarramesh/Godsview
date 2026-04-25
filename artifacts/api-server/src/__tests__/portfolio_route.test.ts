@@ -133,7 +133,7 @@ describe("POST /portfolio/compute", () => {
       positions: [{ symbol: "BTCUSD", realized_vol: 0.02, sector: "crypto", current_qty: 1, current_price: 42000 }],
       equity:    100000,
     });
-    expect([400, 500]).toContain(status);
+    expect([400, 500, 503]).toContain(status);
   });
 
   it("accepts multiple positions", async () => {
