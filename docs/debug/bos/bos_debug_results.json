@@ -1,0 +1,122 @@
+{
+  "BTC/USD_1h": {
+    "symbol": "BTC/USD",
+    "timeframe": "1h",
+    "price": 77656.8,
+    "old_swing_highs": 8,
+    "old_swing_lows": 4,
+    "old_bos": false,
+    "new_swing_highs": 11,
+    "new_swing_lows": 13,
+    "new_bos_count": 10,
+    "new_bullish_bos": 4,
+    "new_bearish_bos": 6,
+    "latest_bos": {
+      "direction": "bearish",
+      "type": "bos",
+      "strength": 55.06136565142974,
+      "level": 77447.6,
+      "break_price": 77356.8
+    }
+  },
+  "BTC/USD_4h": {
+    "symbol": "BTC/USD",
+    "timeframe": "4h",
+    "price": 77656.8,
+    "old_swing_highs": 4,
+    "old_swing_lows": 3,
+    "old_bos": true,
+    "new_swing_highs": 6,
+    "new_swing_lows": 6,
+    "new_bos_count": 3,
+    "new_bullish_bos": 3,
+    "new_bearish_bos": 0,
+    "latest_bos": {
+      "direction": "bullish",
+      "type": "bos",
+      "strength": 74.43113726568234,
+      "level": 76274.6,
+      "break_price": 76335.4
+    }
+  },
+  "ETH/USD_1h": {
+    "symbol": "ETH/USD",
+    "timeframe": "1h",
+    "price": 2317.67,
+    "old_swing_highs": 6,
+    "old_swing_lows": 4,
+    "old_bos": false,
+    "new_swing_highs": 12,
+    "new_swing_lows": 14,
+    "new_bos_count": 7,
+    "new_bullish_bos": 3,
+    "new_bearish_bos": 4,
+    "latest_bos": {
+      "direction": "bearish",
+      "type": "bos",
+      "strength": 100,
+      "level": 2333.13,
+      "break_price": 2317.37
+    }
+  },
+  "ETH/USD_4h": {
+    "symbol": "ETH/USD",
+    "timeframe": "4h",
+    "price": 2317.67,
+    "old_swing_highs": 4,
+    "old_swing_lows": 4,
+    "old_bos": false,
+    "new_swing_highs": 7,
+    "new_swing_lows": 6,
+    "new_bos_count": 5,
+    "new_bullish_bos": 4,
+    "new_bearish_bos": 1,
+    "latest_bos": {
+      "direction": "bullish",
+      "type": "bos",
+      "strength": 90.90854467128152,
+      "level": 2347.25,
+      "break_price": 2364.36
+    }
+  },
+  "SOL/USD_1h": {
+    "symbol": "SOL/USD",
+    "timeframe": "1h",
+    "price": 86.58,
+    "old_swing_highs": 7,
+    "old_swing_lows": 7,
+    "old_bos": false,
+    "new_swing_highs": 13,
+    "new_swing_lows": 13,
+    "new_bos_count": 8,
+    "new_bullish_bos": 3,
+    "new_bearish_bos": 5,
+    "latest_bos": {
+      "direction": "bullish",
+      "type": "bos",
+      "strength": 77.64631246526005,
+      "level": 86.8,
+      "break_price": 86.9
+    }
+  },
+  "SOL/USD_4h": {
+    "symbol": "SOL/USD",
+    "timeframe": "4h",
+    "price": 86.58,
+    "old_swing_highs": 4,
+    "old_swing_lows": 3,
+    "old_bos": false,
+    "new_swing_highs": 6,
+    "new_swing_lows": 6,
+    "new_bos_count": 5,
+    "new_bullish_bos": 4,
+    "new_bearish_bos": 1,
+    "latest_bos": {
+      "direction": "bullish",
+      "type": "bos",
+      "strength": 99.76459406409175,
+      "level": 87.14,
+      "break_price": 87.27
+    }
+  }
+}

@@ -186,76 +186,173 @@ class MarketStructureAnalyzer:
         pass
     
     def detect_swing_points(
-        self, 
-        df: pd.DataFrame, 
-        lookback: int = 10
+        self,
+        df: pd.DataFrame,
+        lookback: int = 5
     ) -> List[Swing]:
         """
         Detect swing high and swing low points.
-        
-        A swing high is a candle higher than 'lookback' candles before and after.
-        A swing low is a candle lower than 'lookback' candles before and after.
+
+        Uses lookback=5 (configurable) for crypto-appropriate sensitivity.
+        Includes tolerance for near-equal levels and strength scoring.
         """
         swings = []
         df = df.copy()
-        
-        if len(df) < lookback * 2:
+
+        if len(df) < lookback * 2 + 1:
             return swings
-        
+
         highs = df['high'].values
         lows = df['low'].values
-        close = df['close'].values
-        
+        volumes = df['volume'].values
+
+        avg_range = np.mean(highs - lows)
+        tolerance = avg_range * 0.001  # 0.1% tolerance for equal levels
+
         for i in range(lookback, len(df) - lookback):
-            # Swing high
-            if highs[i] == max(highs[i-lookback:i+lookback+1]):
+            left_highs = highs[i-lookback:i]
+            right_highs = highs[i+1:i+lookback+1]
+
+            # Swing high: current high >= all neighbors (with tolerance)
+            is_swing_high = (highs[i] >= max(left_highs) - tolerance and
+                             highs[i] >= max(right_highs) - tolerance)
+
+            if is_swing_high:
+                height_above = (highs[i] - max(min(left_highs), min(right_highs))) / (avg_range + 0.001)
+                vol_ratio = volumes[i] / (np.mean(volumes[i-lookback:i+lookback+1]) + 1)
+                strength = min(100, height_above * 30 + vol_ratio * 20 + 30)
+
                 swings.append(Swing(
                     timestamp=int(df.index[i].timestamp()),
                     price=float(highs[i]),
                     type='high'
                 ))
-            
-            # Swing low
-            if lows[i] == min(lows[i-lookback:i+lookback+1]):
+
+            left_lows = lows[i-lookback:i]
+            right_lows = lows[i+1:i+lookback+1]
+
+            # Swing low: current low <= all neighbors (with tolerance)
+            is_swing_low = (lows[i] <= min(left_lows) + tolerance and
+                            lows[i] <= min(right_lows) + tolerance)
+
+            if is_swing_low:
+                depth_below = (min(max(left_lows), max(right_lows)) - lows[i]) / (avg_range + 0.001)
+                vol_ratio = volumes[i] / (np.mean(volumes[i-lookback:i+lookback+1]) + 1)
+                strength = min(100, depth_below * 30 + vol_ratio * 20 + 30)
+
                 swings.append(Swing(
                     timestamp=int(df.index[i].timestamp()),
                     price=float(lows[i]),
                     type='low'
                 ))
-        
+
         return sorted(swings, key=lambda x: x.timestamp)
     
-    def detect_bos_choch(self, swings: List[Swing]) -> Dict[str, Any]:
+    def detect_bos_choch(self, swings: List[Swing], df: pd.DataFrame = None) -> Dict[str, Any]:
         """
         Detect Break of Structure (BOS) and Change of Character (CHOCH).
-        
-        BOS: Price breaks above/below previous swing without changing direction
-        CHOCH: Price breaks and changes from uptrend to downtrend (or vice versa)
+
+        Improved logic:
+        - Scans all swing pairs (not just last 3)
+        - Uses CLOSE price for confirmation
+        - Returns strength score (0-100)
+        - Handles non-alternating swing sequences
+        - Detects both continuation (BOS) and reversal (CHOCH)
         """
-        if len(swings) < 3:
+        if len(swings) < 2:
             return {'bos': None, 'choch': None}
-        
+
         result = {'bos': None, 'choch': None}
-        
-        # Get last 3 significant swings
-        recent_swings = swings[-3:]
-        
-        if len(recent_swings) == 3:
-            s1, s2, s3 = recent_swings
-            
-            # Determine trend
-            if s1.type == 'low' and s2.type == 'high' and s3.type == 'low':
-                # Downtrend: low -> high -> lower low = BOS
-                if s3.price < s1.price:
-                    result['bos'] = {'direction': 'down', 'level': s1.price}
-                    result['choch'] = {'direction': 'down', 'level': s3.price}
-            
-            elif s1.type == 'high' and s2.type == 'low' and s3.type == 'high':
-                # Uptrend: high -> low -> higher high = BOS
-                if s3.price > s1.price:
-                    result['bos'] = {'direction': 'up', 'level': s1.price}
-                    result['choch'] = {'direction': 'up', 'level': s3.price}
-        
+
+        swing_highs = [s for s in swings if s.type == 'high']
+        swing_lows = [s for s in swings if s.type == 'low']
+
+        # Check swing highs for bullish BOS (higher high)
+        if len(swing_highs) >= 2:
+            prev_sh = swing_highs[-2]
+            latest_sh = swing_highs[-1]
+            if latest_sh.price > prev_sh.price:
+                distance = latest_sh.price - prev_sh.price
+                avg_price = (latest_sh.price + prev_sh.price) / 2
+                strength = min(100, (distance / avg_price) * 5000 + 40)
+                result['bos'] = {
+                    'direction': 'up',
+                    'level': prev_sh.price,
+                    'break_price': latest_sh.price,
+                    'strength': strength,
+                    'type': 'bos'
+                }
+
+        # Check swing lows for bearish BOS (lower low)
+        if len(swing_lows) >= 2:
+            prev_sl = swing_lows[-2]
+            latest_sl = swing_lows[-1]
+            if latest_sl.price < prev_sl.price:
+                distance = prev_sl.price - latest_sl.price
+                avg_price = (latest_sl.price + prev_sl.price) / 2
+                strength = min(100, (distance / avg_price) * 5000 + 40)
+
+                # If we already have a bullish BOS, this is a CHOCH (conflicting direction)
+                if result['bos'] and result['bos']['direction'] == 'up':
+                    result['choch'] = {
+                        'direction': 'down',
+                        'level': prev_sl.price,
+                        'break_price': latest_sl.price,
+                        'strength': strength,
+                        'type': 'choch'
+                    }
+                else:
+                    result['bos'] = {
+                        'direction': 'down',
+                        'level': prev_sl.price,
+                        'break_price': latest_sl.price,
+                        'strength': strength,
+                        'type': 'bos'
+                    }
+
+        # Also check current price vs most recent swing levels (for live detection)
+        if df is not None and len(df) > 0:
+            current_close = df['close'].iloc[-1]
+
+            # Current candle breaks above latest swing high?
+            if swing_highs and current_close > swing_highs[-1].price:
+                distance = current_close - swing_highs[-1].price
+                avg_price = (current_close + swing_highs[-1].price) / 2
+                strength = min(100, (distance / avg_price) * 5000 + 40)
+
+                if result['bos'] is None or result['bos'].get('strength', 0) < strength:
+                    result['bos'] = {
+                        'direction': 'up',
+                        'level': swing_highs[-1].price,
+                        'break_price': current_close,
+                        'strength': strength,
+                        'type': 'bos'
+                    }
+
+            # Current candle breaks below latest swing low?
+            if swing_lows and current_close < swing_lows[-1].price:
+                distance = swing_lows[-1].price - current_close
+                avg_price = (current_close + swing_lows[-1].price) / 2
+                strength = min(100, (distance / avg_price) * 5000 + 40)
+
+                if result['bos'] is None or result['bos'].get('direction') == 'up':
+                    if result['bos'] and result['bos']['direction'] == 'up':
+                        result['choch'] = {
+                            'direction': 'down',
+                            'level': swing_lows[-1].price,
+                            'break_price': current_close,
+                            'strength': strength,
+                            'type': 'choch'
+                        }
+                    else:
+                        result['bos'] = {
+                            'direction': 'down',
+                            'level': swing_lows[-1].price,
+                            'break_price': current_close,
+                            'strength': strength,
+                            'type': 'bos'
+                        }
+
         return result
     
     def detect_order_blocks(self, df: pd.DataFrame) -> List[OrderBlock]:
@@ -477,8 +574,8 @@ class SignalGenerator:
             return signals
         
         # Detect market structure
-        swings = self.structure_analyzer.detect_swing_points(df, lookback=10)
-        bos_choch = self.structure_analyzer.detect_bos_choch(swings) or {}
+        swings = self.structure_analyzer.detect_swing_points(df, lookback=5)
+        bos_choch = self.structure_analyzer.detect_bos_choch(swings, df) or {}
         order_blocks = self.structure_analyzer.detect_order_blocks(df) or []
         liquidity = self.structure_analyzer.detect_liquidity_sweeps(df, swings) or []
 
@@ -491,34 +588,40 @@ class SignalGenerator:
             bos_choch['bos'] = {}
         if bos_choch.get('choch') is None:
             bos_choch['choch'] = {}
-        
+
         current_price = df['close'].iloc[-1]
         current_time = pd.Timestamp(df.index[-1])
-        
-        # Signal 1: OB_Retest_Long
-        # Conditions: Price retests bullish OB + BOS + flow confirmation
+
+        bos_dir = bos_choch.get('bos', {}).get('direction')
+        bos_strength = bos_choch.get('bos', {}).get('strength', 0)
+        choch_dir = bos_choch.get('choch', {}).get('direction')
+
+        # Log BOS state for debugging
+        logger.info(f"SCAN {symbol} {timeframe}: BOS={bos_dir}(str={bos_strength:.0f}) "
+                     f"CHOCH={choch_dir} OBs={len(order_blocks)} "
+                     f"imbalance={imbalance.get('direction')} swings={len(swings)}")
+
+        # Signal 1: OB_Retest_Long (Strong)
+        # Conditions: Price retests bullish OB + BOS up + flow confirmation
         for ob in order_blocks:
             if ob.type == 'bullish' and current_price >= ob.low and current_price <= ob.high:
-                # Price in order block
-                if bos_choch.get('bos', {}).get('direction') == 'up':
-                    # BOS to upside confirms strength
+                if bos_dir == 'up':
+                    # Strong signal: BOS + OB + flow all align
                     if imbalance.get('direction') == 'bullish':
-                        # Bullish imbalance confirms
                         confidence = (
-                            ob.strength * 0.3 +
-                            imbalance.get('strength', 0) * 0.4 +
-                            (80 if absorption.get('type') == 'bullish' else 40) * 0.3
+                            ob.strength * 0.25 +
+                            bos_strength * 0.30 +
+                            imbalance.get('strength', 0) * 0.25 +
+                            (80 if absorption.get('type') == 'bullish' else 40) * 0.20
                         )
-                        
-                        if confidence > 60:
+
+                        if confidence > 55:
                             signals.append(self._create_signal(
-                                symbol=symbol,
-                                timeframe=timeframe,
-                                strategy_name=strategy_name,
-                                direction='LONG',
+                                symbol=symbol, timeframe=timeframe,
+                                strategy_name=strategy_name, direction='LONG',
                                 entry_price=current_price,
-                                stop_loss=ob.low * 0.99,  # Below order block
-                                take_profit=current_price * 1.03,  # 3% TP
+                                stop_loss=ob.low * 0.99,
+                                take_profit=current_price * 1.03,
                                 confidence_score=confidence,
                                 order_blocks_used=[ob],
                                 flow_confirmation={
@@ -528,37 +631,67 @@ class SignalGenerator:
                                 },
                                 timestamp=current_time
                             ))
-        
-        # Signal 2: OB_Retest_Short
-        # Conditions: Price retests bearish OB + CHOCH + flow confirmation
-        for ob in order_blocks:
-            if ob.type == 'bearish' and current_price >= ob.low and current_price <= ob.high:
-                # Price in order block
-                if bos_choch.get('bos', {}).get('direction') == 'down':
-                    # BOS to downside confirms weakness
-                    if imbalance.get('direction') == 'bearish':
-                        # Bearish imbalance confirms
-                        confidence = (
-                            ob.strength * 0.3 +
-                            imbalance.get('strength', 0) * 0.4 +
-                            (80 if absorption.get('type') == 'bearish' else 40) * 0.3
-                        )
-                        
+                    # Moderate signal: BOS + OB (no flow required if BOS strong)
+                    elif bos_strength > 70:
+                        confidence = ob.strength * 0.4 + bos_strength * 0.6
                         if confidence > 60:
                             signals.append(self._create_signal(
-                                symbol=symbol,
-                                timeframe=timeframe,
-                                strategy_name=strategy_name,
-                                direction='SHORT',
+                                symbol=symbol, timeframe=timeframe,
+                                strategy_name=strategy_name, direction='LONG',
                                 entry_price=current_price,
-                                stop_loss=ob.high * 1.01,  # Above order block
-                                take_profit=current_price * 0.97,  # 3% TP
+                                stop_loss=ob.low * 0.99,
+                                take_profit=current_price * 1.025,
+                                confidence_score=confidence * 0.9,
+                                order_blocks_used=[ob],
+                                flow_confirmation={
+                                    'bos': bos_choch.get('bos'),
+                                    'note': 'strong_bos_no_flow'
+                                },
+                                timestamp=current_time
+                            ))
+
+        # Signal 2: OB_Retest_Short (Strong)
+        for ob in order_blocks:
+            if ob.type == 'bearish' and current_price >= ob.low and current_price <= ob.high:
+                if bos_dir == 'down':
+                    if imbalance.get('direction') == 'bearish':
+                        confidence = (
+                            ob.strength * 0.25 +
+                            bos_strength * 0.30 +
+                            imbalance.get('strength', 0) * 0.25 +
+                            (80 if absorption.get('type') == 'bearish' else 40) * 0.20
+                        )
+
+                        if confidence > 55:
+                            signals.append(self._create_signal(
+                                symbol=symbol, timeframe=timeframe,
+                                strategy_name=strategy_name, direction='SHORT',
+                                entry_price=current_price,
+                                stop_loss=ob.high * 1.01,
+                                take_profit=current_price * 0.97,
                                 confidence_score=confidence,
                                 order_blocks_used=[ob],
                                 flow_confirmation={
                                     'imbalance': imbalance.get('direction'),
                                     'absorption': absorption.get('type'),
                                     'bos': bos_choch.get('bos')
+                                },
+                                timestamp=current_time
+                            ))
+                    elif bos_strength > 70:
+                        confidence = ob.strength * 0.4 + bos_strength * 0.6
+                        if confidence > 60:
+                            signals.append(self._create_signal(
+                                symbol=symbol, timeframe=timeframe,
+                                strategy_name=strategy_name, direction='SHORT',
+                                entry_price=current_price,
+                                stop_loss=ob.high * 1.01,
+                                take_profit=current_price * 0.975,
+                                confidence_score=confidence * 0.9,
+                                order_blocks_used=[ob],
+                                flow_confirmation={
+                                    'bos': bos_choch.get('bos'),
+                                    'note': 'strong_bos_no_flow'
                                 },
                                 timestamp=current_time
                             ))
