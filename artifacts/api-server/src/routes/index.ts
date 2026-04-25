@@ -97,6 +97,11 @@ router.use("/api/checklist", checklistRouter);
 router.use("/api/war-room", warRoomRouter);
 router.use("/api/proof", proofRouter);
 router.use("/api/macro", macroRouter);
+
+// ── Route Aliases — MUST be before journal (whose /:id catches "trades") ──
+import routeAliasesRouter from "./route_aliases";
+router.use(routeAliasesRouter);
+
 router.use("/api/journal", journalRouter);
 router.use("/api", watchlistRouter);
 router.use("/api", analyticsRouter);
@@ -338,9 +343,5 @@ router.use("/api/data-quality", dataQualityRouter);
 router.use("/api/pipeline", pipelineHealthRouter);
 router.use("/api/safety", tradingSafetyRouter);
 router.use("/api/monetization", monetizationRouter);
-
-// ── Route Aliases — maps dashboard-expected paths to actual handlers ────
-import routeAliasesRouter from "./route_aliases";
-router.use(routeAliasesRouter);
 
 export default router;
