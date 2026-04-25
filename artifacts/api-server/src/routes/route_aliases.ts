@@ -282,6 +282,13 @@ router.post("/api/walk-forward/run", (req: Request, res: Response) => {
   res.redirect(307, "/api/validation/walk-forward");
 });
 
+// ── Explainability replay alias ────────────────────────────────────────────
+// Dashboard expects: /api/explainability/replay (singular)
+// Actual: /api/explainability/replays (plural)
+router.get("/api/explainability/replay", (_req: Request, res: Response) => {
+  res.redirect(307, "/api/explainability/replays");
+});
+
 // ── Seed endpoint ──────────────────────────────────────────────────────────
 // Dashboard may call POST /api/seed — provide a no-op success
 router.post("/api/seed", (_req: Request, res: Response) => {
