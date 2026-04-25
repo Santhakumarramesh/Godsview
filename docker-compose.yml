@@ -123,6 +123,20 @@ services:
       GODSVIEW_DATA_PERSISTENCE: "${GODSVIEW_DATA_PERSISTENCE:-database}"
       CORS_ORIGIN: "${CORS_ORIGIN:-http://localhost}"
       ECON_CALENDAR_URL: "${ECON_CALENDAR_URL:-https://nfs.faireconomy.media/ff_calendar_thisweek.json}"
+      # Alt-Data & Market Intelligence
+      FINNHUB_API_KEY: "${FINNHUB_API_KEY:-}"
+      ALPHA_VANTAGE_API_KEY: "${ALPHA_VANTAGE_API_KEY:-}"
+      TIINGO_API_KEY: "${TIINGO_API_KEY:-}"
+      FRED_API_KEY: "${FRED_API_KEY:-}"
+      BRAIN_WEBHOOK_SECRET: "${BRAIN_WEBHOOK_SECRET:-}"
+      # AWS S3 Storage
+      S3_ACCESS_KEY_ID: "${S3_ACCESS_KEY_ID:-}"
+      S3_SECRET_ACCESS_KEY: "${S3_SECRET_ACCESS_KEY:-}"
+      S3_BUCKET: "${S3_BUCKET:-}"
+      S3_REGION: "${S3_REGION:-us-east-1}"
+      # Service & Platform API Keys
+      INTERNAL_API_KEY: "${INTERNAL_API_KEY:-}"
+      GODSVIEW_API_KEY: "${GODSVIEW_API_KEY:-}"
       # Python v2 bridge (set to enable proxy to Python services)
       PY_GATEWAY_URL: "${PY_GATEWAY_URL:-http://py-gateway:8000}"
       PY_SERVICES_ENABLED: "${PY_SERVICES_ENABLED:-false}"
