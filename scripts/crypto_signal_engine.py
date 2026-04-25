@@ -1201,7 +1201,7 @@ class DataFetcher:
 # FLASK API SERVER
 # ============================================================================
 
-def create_flask_app(trading_engine: PaperTradingEngine, signal_history: deque):
+def create_flask_app(trading_engine: PaperTradingEngine, signal_history: deque, bos_scan_log: deque):
     """Create Flask app for API endpoints."""
     app = Flask(__name__)
     
@@ -1344,6 +1344,97 @@ def create_flask_app(trading_engine: PaperTradingEngine, signal_history: deque):
         logger.info(f"PAPER MODE - Strategy resumed manually: {strategy}")
         return jsonify({'status': 'resumed'})
     
+    @app.route('/trades', methods=['GET'])
+    def trades():
+        """Return all closed trades with full details."""
+        limit = request.args.get('limit', 100, type=int)
+        closed = [p for p in trading_engine.positions if p.status.startswith('closed')]
+        trades_list = []
+        for p in closed[-limit:]:
+            risk = abs(p.entry_price - p.stop_loss) * p.position_size if p.position_size else 0
+            r_multiple = p.pnl / risk if risk > 0 else 0
+            trades_list.append({
+                'position_id': p.position_id,
+                'symbol': p.symbol,
+                'timeframe': p.timeframe,
+                'strategy': p.strategy_name,
+                'direction': p.direction,
+                'entry_price': p.entry_price,
+                'entry_time': p.entry_time.isoformat() if p.entry_time else None,
+                'close_price': p.close_price,
+                'close_time': p.close_time.isoformat() if p.close_time else None,
+                'stop_loss': p.stop_loss,
+                'take_profit': p.take_profit,
+                'pnl': round(p.pnl, 2),
+                'pnl_pct': round(p.pnl_pct, 2),
+                'r_multiple': round(r_multiple, 2),
+                'candles_held': p.candles_held,
+                'status': p.status,
+                'close_reason': p.close_reason,
+            })
+        return jsonify(trades_list)
+
+    @app.route('/bos-log', methods=['GET'])
+    def bos_log():
+        """Return BOS scan history from the scan_log."""
+        limit = request.args.get('limit', 100, type=int)
+        log_entries = list(bos_scan_log)[-limit:]
+        return jsonify(log_entries)
+
+    @app.route('/equity-curve', methods=['GET'])
+    def equity_curve():
+        """Return equity history for charting."""
+        return jsonify({
+            'starting_equity': trading_engine.starting_equity,
+            'current_equity': trading_engine.current_equity,
+            'pnl': round(trading_engine.current_equity - trading_engine.starting_equity, 2),
+            'pnl_pct': round((trading_engine.current_equity - trading_engine.starting_equity) / trading_engine.starting_equity * 100, 4),
+            'equity_points': trading_engine.equity_history[-200:],
+            'max_drawdown': trading_engine.risk_gate.max_drawdown,
+            'total_trades': len([p for p in trading_engine.positions if p.status.startswith('closed')]),
+            'open_positions': len([p for p in trading_engine.positions if p.status == 'open']),
+        })
+
+    @app.route('/summary', methods=['GET'])
+    def summary():
+        """Complete engine summary for validation dashboard."""
+        closed = [p for p in trading_engine.positions if p.status.startswith('closed')]
+        open_pos = [p for p in trading_engine.positions if p.status == 'open']
+        wins = [p for p in closed if p.pnl > 0]
+        losses = [p for p in closed if p.pnl <= 0]
+        total_pnl = sum(p.pnl for p in closed)
+        gross_profit = sum(p.pnl for p in wins) if wins else 0
+        gross_loss = abs(sum(p.pnl for p in losses)) if losses else 0
+        profit_factor = gross_profit / gross_loss if gross_loss > 0 else float('inf') if gross_profit > 0 else 0
+        avg_win = np.mean([p.pnl for p in wins]) if wins else 0
+        avg_loss = np.mean([abs(p.pnl) for p in losses]) if losses else 0
+        expectancy = (len(wins)/len(closed) * avg_win - len(losses)/len(closed) * avg_loss) if closed else 0
+
+        return jsonify({
+            'mode': 'PAPER',
+            'uptime_cycles': len(trading_engine.equity_history),
+            'equity': {
+                'starting': trading_engine.starting_equity,
+                'current': round(trading_engine.current_equity, 2),
+                'pnl': round(total_pnl, 2),
+                'max_drawdown': round(trading_engine.risk_gate.max_drawdown, 2),
+            },
+            'trades': {
+                'total': len(closed),
+                'open': len(open_pos),
+                'wins': len(wins),
+                'losses': len(losses),
+                'win_rate': round(len(wins) / len(closed) * 100, 1) if closed else 0,
+                'profit_factor': round(profit_factor, 2),
+                'expectancy': round(expectancy, 2),
+                'avg_win': round(avg_win, 2),
+                'avg_loss': round(avg_loss, 2),
+            },
+            'signals_generated': len(signal_history),
+            'bos_scans': len(bos_scan_log),
+            'strategies': list(STRATEGIES_CONFIG.keys()),
+        })
+
     @app.route('/kill', methods=['POST'])
     def kill():
         logger.warning("PAPER MODE - Emergency stop initiated")
@@ -1418,8 +1509,10 @@ class CryptoSignalEngine:
         self.data_fetcher = DataFetcher()
         self.signal_generator = SignalGenerator()
         self.signal_history = deque(maxlen=1000)  # Keep last 1000 signals
+        self.bos_scan_log = deque(maxlen=5000)    # Keep last 5000 BOS scans
+        self.last_signal_key = {}  # Dedup: strategy -> (direction, price_bucket)
         self.running = False
-        self.flask_app = create_flask_app(self.trading_engine, self.signal_history)
+        self.flask_app = create_flask_app(self.trading_engine, self.signal_history, self.bos_scan_log)
     
     def run_cycle(self):
         """Single iteration of the main loop."""
@@ -1435,15 +1528,34 @@ class CryptoSignalEngine:
             for strategy_name, strategy_config in STRATEGIES_CONFIG.items():
                 if not strategy_config['enabled']:
                     continue
-                
+
                 symbol = strategy_config['symbol']
                 timeframe = strategy_config['timeframe']
-                
+
                 if symbol not in data:
                     continue
-                
+
                 df = data[symbol]
-                
+
+                # Log BOS scan for every cycle (for /bos-log endpoint)
+                try:
+                    swings = self.signal_generator.structure_analyzer.detect_swing_points(df, lookback=5)
+                    bos_result = self.signal_generator.structure_analyzer.detect_bos_choch(swings, df)
+                    self.bos_scan_log.append({
+                        'timestamp': datetime.now().isoformat(),
+                        'symbol': symbol,
+                        'timeframe': timeframe,
+                        'strategy': strategy_name,
+                        'price': float(df['close'].iloc[-1]),
+                        'bos': bos_result.get('bos'),
+                        'choch': bos_result.get('choch'),
+                        'swing_count': len(swings),
+                        'swing_highs': len([s for s in swings if s.type == 'high']),
+                        'swing_lows': len([s for s in swings if s.type == 'low']),
+                    })
+                except Exception as e:
+                    logger.warning(f"BOS log capture failed for {symbol}: {e}")
+
                 # Generate signals
                 signals = self.signal_generator.generate_signals(
                     symbol=symbol,
@@ -1451,15 +1563,28 @@ class CryptoSignalEngine:
                     df=df,
                     strategy_name=strategy_name
                 )
-                
-                # Execute approved signals
-                for signal in signals:
-                    self.signal_history.append(signal)
-                    position = self.trading_engine.execute_signal(signal)
-                    
-                    if position:
-                        logger.info(f"PAPER MODE - Signal generated and executed: "
-                                  f"{strategy_name} {signal.symbol} {signal.direction}")
+
+                # Deduplicate: only take the best signal per strategy per cycle
+                if signals:
+                    best_signal = max(signals, key=lambda s: s.confidence_score)
+
+                    # Check if this is truly new (different direction or price moved >0.5%)
+                    sig_key = f"{strategy_name}_{best_signal.direction}"
+                    price_bucket = round(best_signal.entry_price, 0)
+                    last_key = self.last_signal_key.get(strategy_name)
+
+                    if last_key and last_key == (best_signal.direction, price_bucket):
+                        # Same signal as before — skip to avoid flooding
+                        logger.debug(f"DEDUP: Skipping duplicate signal for {strategy_name}")
+                    else:
+                        self.last_signal_key[strategy_name] = (best_signal.direction, price_bucket)
+                        self.signal_history.append(best_signal)
+                        position = self.trading_engine.execute_signal(best_signal)
+
+                        if position:
+                            logger.info(f"PAPER MODE - Signal generated and executed: "
+                                      f"{strategy_name} {best_signal.symbol} {best_signal.direction} "
+                                      f"conf={best_signal.confidence_score:.1f}")
             
             # Update positions with current prices
             price_updates = {symbol: df['close'].iloc[-1] for symbol, df in data.items()}
