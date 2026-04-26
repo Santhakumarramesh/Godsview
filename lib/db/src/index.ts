@@ -142,6 +142,9 @@ if (dbUrl) {
       actor TEXT NOT NULL DEFAULT 'system',
       reason TEXT,
       payload_json TEXT,
+      prev_hash TEXT,
+      row_hash TEXT,
+      org_id TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     CREATE TABLE IF NOT EXISTS trading_sessions (
