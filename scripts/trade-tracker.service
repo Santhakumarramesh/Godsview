@@ -1,0 +1,23 @@
+[Unit]
+Description=GodsView Paper Trade Tracker — 50-Trade Validation
+After=network.target godsview-signal-engine.service
+Wants=godsview-signal-engine.service
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/Godsview/scripts
+ExecStart=/usr/bin/python3 /home/ubuntu/Godsview/scripts/trade_tracker.py
+Restart=on-failure
+RestartSec=30
+Environment=SIGNAL_ENGINE_URL=http://localhost:8099
+Environment=TRACKER_POLL_INTERVAL=120
+Environment=TRACKER_TARGET_TRADES=50
+Environment=TRACKER_REPORT_EVERY=10
+Environment=TRACKER_OUTPUT_DIR=/home/ubuntu/Godsview/docs/backtests/c4/live-validation
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=godsview-trade-tracker
+
+[Install]
+WantedBy=multi-user.target
