@@ -194,7 +194,7 @@ async function persistSIDecision(
 function recordExecutionLog(entry: ExecutionLogEntry): void {
   try {
     persistAppend("execution_log", entry, 5000);
-  } catch (err) {
+  } catch (err: any) {
     logger.warn({ err }, "Failed to record execution log entry");
   }
 }
@@ -204,10 +204,10 @@ export function getExecutionLog(symbol?: string, limit: number = 100): Execution
     const log = persistRead<ExecutionLogEntry[]>("execution_log", []);
     let filtered = log;
     if (symbol) {
-      filtered = log.filter((entry) => entry.symbol === symbol);
+      filtered = log.filter((entry: ExecutionLogEntry) => entry.symbol === symbol);
     }
     return filtered.slice(-limit);
-  } catch (err) {
+  } catch (err: any) {
     logger.warn({ err }, "Failed to retrieve execution log");
     return [];
   }
@@ -217,18 +217,18 @@ export function executionHealthCheck(): ExecutionHealthCheck {
   try {
     const log = persistRead<ExecutionLogEntry[]>("execution_log", []);
     const total = log.length;
-    const successful = log.filter((e) => e.success).length;
+    const successful = log.filter((e: ExecutionLogEntry) => e.success).length;
     const failed = total - successful;
     const errorRate = total > 0 ? (failed / total) * 100 : 0;
 
     // Calculate average latency
     const avgLatency = total > 0
-      ? log.reduce((sum, e) => sum + e.duration_ms, 0) / total
+      ? log.reduce((sum: number, e: ExecutionLogEntry) => sum + e.duration_ms, 0) / total
       : 0;
 
     // Get pending orders (recent unsuccessful executions)
     const pending = log.filter(
-      (e) => !e.success && !e.error_message?.includes("blocked"),
+      (e: ExecutionLogEntry) => !e.success && !(e.error_message?.includes("blocked")),
     ).length;
 
     return {
@@ -240,7 +240,7 @@ export function executionHealthCheck(): ExecutionHealthCheck {
       failed_executions: failed,
       last_execution_at: log.length > 0 ? log[log.length - 1].timestamp : null,
     };
-  } catch (err) {
+  } catch (err: any) {
     logger.warn({ err }, "Failed to compute execution health check");
     return {
       pending_orders: 0,
@@ -379,12 +379,12 @@ export async function executeOrder(req: ExecutionRequest): Promise<ExecutionResu
       order_type: "limit",
       execution_mode: mode,
       success: true,
-      order_id: order?.id,
+      order_id: (order as any)?.id,
       duration_ms: duration,
     });
 
     logger.info(
-      { ...logCtx, orderId: order?.id, mode },
+      { ...logCtx, orderId: (order as any)?.id, mode },
       "Order placed successfully",
     );
 
@@ -396,7 +396,7 @@ export async function executeOrder(req: ExecutionRequest): Promise<ExecutionResu
 
     return {
       executed: true,
-      order_id: order?.id,
+      order_id: (order as any)?.id,
       mode,
       si_decision_id: siDecisionId,
       details: {
@@ -405,13 +405,13 @@ export async function executeOrder(req: ExecutionRequest): Promise<ExecutionResu
         quantity: req.quantity,
         entry_price: req.entry_price,
         submitted_limit_price: req.entry_price,
-        filled_avg_price: order?.filled_avg_price ? Number(order.filled_avg_price) : null,
-        broker_status: order?.status ?? null,
+        filled_avg_price: (order as any)?.filled_avg_price ? Number((order as any).filled_avg_price) : null,
+        broker_status: (order as any)?.status ?? null,
         stop_loss: req.stop_loss,
         take_profit: req.take_profit,
-        kelly_pct: req.decision.meta.kelly_pct,
-        win_probability: req.decision.meta.win_probability,
-        edge_score: req.decision.meta.edge_score,
+        kelly_pct: (req.decision as any).meta.kelly_pct,
+        win_probability: (req.decision as any).meta.win_probability,
+        edge_score: (req.decision as any).meta.edge_score,
       },
     };
   } catch (err: any) {
@@ -423,7 +423,7 @@ export async function executeOrder(req: ExecutionRequest): Promise<ExecutionResu
       quantity: req.quantity,
       execution_mode: mode,
       success: false,
-      error_message: err.message ?? "Unknown execution error",
+      error_message: (err as any).message ?? "Unknown execution error",
       duration_ms: duration,
     });
     logger.error({ ...logCtx, err, mode }, "Order placement failed");
@@ -431,7 +431,7 @@ export async function executeOrder(req: ExecutionRequest): Promise<ExecutionResu
       executed: false,
       mode,
       si_decision_id: siDecisionId,
-      error: err.message ?? "Unknown execution error",
+      error: (err as any).message ?? "Unknown execution error",
       details: { raw_error: String(err) },
     };
   }

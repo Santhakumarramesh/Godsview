@@ -330,13 +330,13 @@ async function checkDriftAndRetrain(): Promise<void> {
 
     if (recentDecisions.length < 20) return; // Not enough data for drift detection
 
-    const approvedDecisions = recentDecisions.filter((d) => d.approved);
+    const approvedDecisions = recentDecisions.filter((d: any) => d.approved);
     if (approvedDecisions.length < 10) return;
 
-    const actualWins = approvedDecisions.filter((d) => d.outcome === "win").length;
+    const actualWins = approvedDecisions.filter((d: any) => d.outcome === "win").length;
     const actualWinRate = actualWins / approvedDecisions.length;
     const avgPredicted = approvedDecisions.reduce(
-      (sum, d) => sum + parseFloat(String(d.win_probability)),
+      (sum: any, d: any) => sum + parseFloat(String(d.win_probability)),
       0
     ) / approvedDecisions.length;
 

@@ -1,4 +1,5 @@
-import { Database } from "better-sqlite3";
+// @ts-ignore — better-sqlite3 types optional, only used at runtime if available
+import type { Database } from "better-sqlite3";
 import {
   executionValidations,
   slippageDistributions,
@@ -275,13 +276,13 @@ export class SlippageAnalyzer {
       symbol,
       periodStart.toISOString(),
       periodEnd.toISOString()
-    ) as { slippage_bps: number }[];
+    ) as any[];
 
     if (rows.length === 0) {
       return null;
     }
 
-    const slippages = rows.map((r) => r.slippage_bps);
+    const slippages = rows.map((r: any) => (r as any).slippage_bps);
     const mean = slippages.reduce((a, b) => a + b, 0) / slippages.length;
     const median = this.percentile(slippages, 50);
     const p95 = this.percentile(slippages, 95);
@@ -329,13 +330,13 @@ export class SlippageAnalyzer {
     const result = stmt.get(
       strategyId,
       new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-    ) as { avg_p95: number | null };
+    ) as any;
 
-    if (!result || result.avg_p95 === null) {
+    if (!result || (result as any).avg_p95 === null) {
       return true;
     }
 
-    return result.avg_p95 <= threshold;
+    return (result as any).avg_p95 <= threshold;
   }
 
   /**
@@ -357,9 +358,9 @@ export class SlippageAnalyzer {
     const result = stmt.get(
       strategyId,
       new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-    ) as { avg_live: number | null };
+    ) as any;
 
-    const liveSlippageBps = result?.avg_live ?? 0;
+    const liveSlippageBps = (result as any)?.avg_live ?? 0;
     const divergence =
       Math.abs(liveSlippageBps - backtestAssumedSlippageBps) /
       Math.max(1, Math.abs(backtestAssumedSlippageBps));
@@ -623,13 +624,13 @@ export class ExecutionDriftDetector {
     const result = stmt.get(
       strategyId,
       new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-    ) as { max_severity: string | null };
+    ) as any;
 
-    if (!result || !result.max_severity) {
+    if (!result || !(result as any).max_severity) {
       return "clean";
     }
 
-    const severity = result.max_severity;
+    const severity = (result as any).max_severity as string;
     if (severity === "critical") return "critical";
     if (severity === "warning") return "warning";
     return "clean";
@@ -693,52 +694,43 @@ export class ExecutionFeedbackLoop {
       strategyId,
       periodStart.toISOString(),
       periodEnd.toISOString()
-    ) as Array<{
-      symbol: string;
-      side: string;
-      slippage_bps: number;
-      latency_ms: number;
-      fill_quality_score: number;
-      venue: string;
-      expected_qty: number;
-      actual_qty: number;
-    }>;
+    ) as any[];
 
     const totalFills = fills.length;
     const averageSlippageBps =
       fills.length > 0
-        ? fills.reduce((sum, f) => sum + f.slippage_bps, 0) / fills.length
+        ? fills.reduce((sum: number, f: any) => sum + (f as any).slippage_bps, 0) / fills.length
         : 0;
     const p95SlippageBps =
       fills.length > 0
         ? this.percentile(
-            fills.map((f) => f.slippage_bps),
+            fills.map((f: any) => (f as any).slippage_bps),
             95
           )
         : 0;
     const p99SlippageBps =
       fills.length > 0
         ? this.percentile(
-            fills.map((f) => f.slippage_bps),
+            fills.map((f: any) => (f as any).slippage_bps),
             99
           )
         : 0;
     const averageLatencyMs =
       fills.length > 0
-        ? fills.reduce((sum, f) => sum + f.latency_ms, 0) / fills.length
+        ? fills.reduce((sum: number, f: any) => sum + (f as any).latency_ms, 0) / fills.length
         : 0;
     const fillCompletionRate =
       fills.length > 0
         ? fills.reduce(
-            (sum, f) =>
+            (sum: number, f: any) =>
               sum +
-              Math.min(f.actual_qty, f.expected_qty) / f.expected_qty,
+              Math.min((f as any).actual_qty, (f as any).expected_qty) / (f as any).expected_qty,
             0
           ) / fills.length
         : 0;
     const fillQualityScore =
       fills.length > 0
-        ? fills.reduce((sum, f) => sum + f.fill_quality_score, 0) /
+        ? fills.reduce((sum: number, f: any) => sum + (f as any).fill_quality_score, 0) /
           fills.length
         : 0;
 
@@ -763,25 +755,17 @@ export class ExecutionFeedbackLoop {
     const driftRows = driftStmt.all(
       strategyId,
       new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-    ) as Array<{
-      drift_type: string;
-      severity: string;
-      observed_value: number;
-      expected_range_low: number;
-      expected_range_high: number;
-      details: Record<string, unknown>;
-      detected_at: string;
-    }>;
+    ) as any[];
 
-    const recentDriftEvents = driftRows.map((r) => ({
+    const recentDriftEvents = driftRows.map((r: any) => ({
       strategyId,
-      driftType: r.drift_type as DriftEvent["driftType"],
-      severity: r.severity as "info" | "warning" | "critical",
-      observedValue: r.observed_value,
-      expectedRangeLow: r.expected_range_low,
-      expectedRangeHigh: r.expected_range_high,
-      details: r.details,
-      detectedAt: new Date(r.detected_at),
+      driftType: (r as any).drift_type as DriftEvent["driftType"],
+      severity: (r as any).severity as "info" | "warning" | "critical",
+      observedValue: (r as any).observed_value,
+      expectedRangeLow: (r as any).expected_range_low,
+      expectedRangeHigh: (r as any).expected_range_high,
+      details: (r as any).details,
+      detectedAt: new Date((r as any).detected_at),
     }));
 
     // Backtest vs live comparison
@@ -795,10 +779,11 @@ export class ExecutionFeedbackLoop {
     const symbols: Record<string, SlippageStats> = {};
 
     for (const fill of fills) {
-      venues[fill.venue] = (venues[fill.venue] ?? 0) + 1;
+      const venue = (fill as any).venue as string;
+      venues[venue] = (venues[venue] ?? 0) + 1;
     }
 
-    const uniqueSymbols = [...new Set(fills.map((f) => f.symbol))];
+    const uniqueSymbols = [...new Set(fills.map((f: any) => (f as any).symbol))];
     for (const symbol of uniqueSymbols) {
       const dist = this.analyzer.computeDistribution(strategyId, symbol, 7);
       if (dist) {

@@ -41,6 +41,7 @@ interface ProxyOptions {
   method?: string;
   body?: unknown;
   query?: Record<string, string>;
+  requestId?: string;
 }
 
 async function proxyToService(
@@ -66,6 +67,7 @@ async function proxyToService(
         "Content-Type": "application/json",
         "X-API-Key": INTERNAL_API_KEY,
         "X-Forwarded-From": "node-gateway",
+        ...(() => { const rid = res.getHeader("x-request-id"); return rid ? { "x-request-id": String(rid) } : {}; })(),
       },
     };
     if (body) {

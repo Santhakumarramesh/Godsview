@@ -19,6 +19,7 @@ export const brainEntitiesTable = pgTable("brain_entities", {
   volatility: numeric("volatility", { precision: 8, scale: 4 }),
   last_price: numeric("last_price", { precision: 14, scale: 6 }),
   state_json: text("state_json"),
+  org_id: text("org_id"),
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

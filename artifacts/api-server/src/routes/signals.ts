@@ -204,7 +204,7 @@ function detectFakeEntry(
 
 // ─── GET /signals ────────────────────────────────────────────────────────────
 
-signalsRouter.get("/signals", async (req: Request, res: Response) => {
+signalsRouter.get("/signals", async (req: Request, res: Response): Promise<any> => {
   try {
     const parsedQuery = GetSignalsQueryParams.safeParse(req.query);
     if (!parsedQuery.success) {
@@ -239,7 +239,7 @@ signalsRouter.get("/signals", async (req: Request, res: Response) => {
 
 // ─── POST /signals ───────────────────────────────────────────────────────────
 
-signalsRouter.post("/signals", async (req: Request, res: Response) => {
+signalsRouter.post("/signals", async (req: Request, res: Response): Promise<any> => {
   try {
     const parsedBody = CreateSignalBody.safeParse(req.body);
     if (!parsedBody.success) {
@@ -460,7 +460,7 @@ signalsRouter.post("/signals", async (req: Request, res: Response) => {
 
 // ─── GET /signals/latest — convenience alias ────────────────────────────────
 
-signalsRouter.get("/signals/latest", async (_req: Request, res: Response) => {
+signalsRouter.get("/signals/latest", async (_req: Request, res: Response): Promise<any> => {
   try {
     const rows = await db
       .select()
@@ -480,7 +480,7 @@ signalsRouter.get("/signals/latest", async (_req: Request, res: Response) => {
 
 // ─── GET /signals/:id ────────────────────────────────────────────────────────
 
-signalsRouter.get("/signals/:id", async (req: Request, res: Response) => {
+signalsRouter.get("/signals/:id", async (req: Request, res: Response): Promise<any> => {
   try {
     const { id } = req.params;
 
@@ -502,7 +502,7 @@ signalsRouter.get("/signals/:id", async (req: Request, res: Response) => {
 });
 
 // ─── GET /signals/:id/plot — chart + orderblock + position payload ──────────
-signalsRouter.get("/signals/:id/plot", async (req: Request, res: Response) => {
+signalsRouter.get("/signals/:id/plot", async (req: Request, res: Response): Promise<any> => {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id) || id <= 0) {
@@ -566,7 +566,7 @@ signalsRouter.get("/signals/:id/plot", async (req: Request, res: Response) => {
 });
 
 // ─── POST /signals/:id/autobacktest — historical + Claude learning ──────────
-signalsRouter.post("/signals/:id/autobacktest", async (req: Request, res: Response) => {
+signalsRouter.post("/signals/:id/autobacktest", async (req: Request, res: Response): Promise<any> => {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id) || id <= 0) {

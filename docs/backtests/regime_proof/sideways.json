@@ -1,0 +1,50 @@
+{
+  "regime": "sideways",
+  "seed": 42,
+  "bars": 2000,
+  "strategy": {
+    "name": "sma_cross_atr_stops",
+    "fast": 10,
+    "slow": 30,
+    "atrN": 14,
+    "atrMult": 1.5,
+    "tpR": 2
+  },
+  "train": {
+    "bars": 1200,
+    "trades": 50,
+    "winRate": 0.2,
+    "profitFactor": 0.5,
+    "expectancy": -0.4,
+    "sharpe": -2.333333333333334,
+    "maxDrawdownR": 20,
+    "totalR": -20
+  },
+  "test": {
+    "bars": 800,
+    "trades": 30,
+    "winRate": 0.23333333333333334,
+    "profitFactor": 0.6086956521739131,
+    "expectancy": -0.3,
+    "sharpe": -1.2732313271445845,
+    "maxDrawdownR": 18,
+    "totalR": -9
+  },
+  "overall": {
+    "bars": 2000,
+    "trades": 81,
+    "winRate": 0.2222222222222222,
+    "profitFactor": 0.5714285714285714,
+    "expectancy": -0.3333333333333333,
+    "sharpe": -2.390457218668788,
+    "maxDrawdownR": 34,
+    "totalR": -27
+  },
+  "generalizationGap": {
+    "sharpeGap": -1.0601020061887494,
+    "winRateGap": -0.033333333333333326,
+    "expectancyGap": -0.10000000000000003,
+    "testWorseThanTrain": false
+  },
+  "timestamp": "2026-04-26T17:27:26.647Z"
+}

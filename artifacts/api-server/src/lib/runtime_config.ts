@@ -11,7 +11,7 @@ function parseNodeEnv(raw: string | undefined): NodeEnv {
 }
 
 function parsePositiveIntegerEnv(name: string, fallback: number): number {
-  const raw = process.env[name];
+  const raw = process.env[name] as any;
   if (!raw) return fallback;
   const parsed = Number.parseInt(raw, 10);
   if (!Number.isFinite(parsed) || parsed <= 0) {
@@ -20,7 +20,7 @@ function parsePositiveIntegerEnv(name: string, fallback: number): number {
   return parsed;
 }
 
-function parsePort(raw: string | undefined): number {
+function parsePort(raw: string | undefined | any): number {
   if (!raw) {
     throw new Error("PORT environment variable is required but was not provided.");
   }
@@ -31,14 +31,14 @@ function parsePort(raw: string | undefined): number {
   return parsed;
 }
 
-function parseCorsOrigins(raw: string | undefined): string[] {
+function parseCorsOrigins(raw: string | undefined | any): string[] {
   return String(raw ?? "")
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);
 }
 
-function parseBodyLimit(raw: string | undefined): string {
+function parseBodyLimit(raw: string | undefined | any): string {
   const value = String(raw ?? "1mb").trim().toLowerCase();
   if (/^\d+(b|kb|mb)$/i.test(value)) return value;
   throw new Error(
@@ -46,7 +46,7 @@ function parseBodyLimit(raw: string | undefined): string {
   );
 }
 
-function parseTrustProxy(raw: string | undefined): boolean | number {
+function parseTrustProxy(raw: string | undefined | any): boolean | number {
   const value = String(raw ?? "").trim().toLowerCase();
   if (!value) return false;
   if (["1", "true", "yes", "on"].includes(value)) return true;
@@ -61,7 +61,7 @@ function parseTrustProxy(raw: string | undefined): boolean | number {
 }
 
 function requiredTrimmed(name: string): string {
-  return String(process.env[name] ?? "").trim();
+  return String((process.env[name] as any) ?? "").trim();
 }
 
 const legacyLiveTradingEnabled =
@@ -124,11 +124,11 @@ export interface RuntimeConfig {
 
 const config: RuntimeConfig = {
   nodeEnv,
-  port: parsePort(process.env.PORT),
+  port: parsePort(process.env.PORT as any),
   corsOrigins,
   systemMode,
-  trustProxy: parseTrustProxy(process.env.GODSVIEW_TRUST_PROXY),
-  requestBodyLimit: parseBodyLimit(process.env.GODSVIEW_REQUEST_BODY_LIMIT),
+  trustProxy: parseTrustProxy(process.env.GODSVIEW_TRUST_PROXY as any),
+  requestBodyLimit: parseBodyLimit(process.env.GODSVIEW_REQUEST_BODY_LIMIT as any),
   requestTimeoutMs: parsePositiveIntegerEnv("GODSVIEW_REQUEST_TIMEOUT_MS", 45_000),
   keepAliveTimeoutMs: parsePositiveIntegerEnv("GODSVIEW_KEEPALIVE_TIMEOUT_MS", 65_000),
   headersTimeoutMs: parsePositiveIntegerEnv("GODSVIEW_HEADERS_TIMEOUT_MS", 66_000),

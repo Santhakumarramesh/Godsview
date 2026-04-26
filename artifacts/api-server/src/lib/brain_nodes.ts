@@ -402,6 +402,7 @@ async function loadEntities(limit: number): Promise<Array<typeof brainEntitiesTa
       volatility: null,
       last_price: null,
       state_json: null,
+      org_id: null,
       created_at: row.created_at ?? new Date(),
       updated_at: row.created_at ?? new Date(),
     });

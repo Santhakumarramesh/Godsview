@@ -1,0 +1,65 @@
+// ─────────────────────────────────────────────────────────────────────────
+// GodsView — Example Pine Script Alert
+// Strategy: VWAP Reclaim Long
+// Sends a JSON payload to the GodsView /tradingview/webhook endpoint.
+//
+// HOW TO USE:
+// 1. In TradingView, open Pine Editor and paste this study.
+// 2. Add to chart, then Right-click → Add alert on this study.
+// 3. Set "Webhook URL" = https://your-godsview-host/tradingview/webhook
+// 4. Set "Message" exactly to the JSON template at the bottom of this file.
+// 5. Make sure the passphrase matches TRADINGVIEW_WEBHOOK_SECRET in .env.
+//
+// SAFETY:
+// - The JSON payload is HMAC-validated by the API. Wrong passphrase → 401.
+// - The signal_type whitelist is enforced server-side.
+// - Risk engine rejects oversized positions and stale alerts.
+// ─────────────────────────────────────────────────────────────────────────
+
+//@version=5
+indicator("GodsView VWAP Reclaim Long", overlay=true)
+
+// ── Inputs ────────────────────────────────────────────────────────────────
+length      = input.int(20,    title="VWAP MA length")
+slBuffer    = input.float(0.4, title="Stop loss buffer (%)") / 100
+tpRR        = input.float(2.0, title="Target risk-reward")
+
+// ── Indicators ────────────────────────────────────────────────────────────
+v           = ta.vwap(hlc3)
+priceAboveV = close > v
+priceBelowV = close < v
+crossUp     = ta.crossover(close, v)
+
+// ── Trigger logic ────────────────────────────────────────────────────────
+// Long when price reclaims VWAP after being below for at least N bars
+barsBelow   = ta.barssince(priceAboveV)
+trigger     = crossUp and barsBelow > length
+
+stopPrice   = v * (1 - slBuffer)
+risk        = close - stopPrice
+target      = close + risk * tpRR
+
+plot(v, color=color.orange, title="VWAP")
+plotshape(trigger, location=location.belowbar, color=color.green, style=shape.labelup, text="LONG")
+
+// ── Alert template ───────────────────────────────────────────────────────
+// COPY THE BELOW JSON INTO TradingView's Alert "Message" field. Use {{...}}
+// substitutions; TradingView replaces them at firing time.
+//
+// {
+//   "symbol":      "{{ticker}}",
+//   "signal":      "vwap_reclaim",
+//   "timeframe":   "{{interval}}",
+//   "price":       {{close}},
+//   "timestamp":   {{timenow}},
+//   "direction":   "long",
+//   "stop_loss":   {{plot("VWAP")}} ,
+//   "take_profit": {{close}} ,
+//   "meta":        {"bars_below_vwap": {{plot_0}}},
+//   "strategy_name": "vwap_reclaim_v1",
+//   "message":     "VWAP reclaim long on {{ticker}} {{interval}}",
+//   "passphrase":  "REPLACE_WITH_TRADINGVIEW_WEBHOOK_SECRET"
+// }
+
+alertcondition(trigger, title="VWAP Reclaim Long",
+     message='{"symbol":"{{ticker}}","signal":"vwap_reclaim","timeframe":"{{interval}}","price":{{close}},"timestamp":{{timenow}},"direction":"long","strategy_name":"vwap_reclaim_v1","passphrase":"REPLACE_WITH_TRADINGVIEW_WEBHOOK_SECRET"}')

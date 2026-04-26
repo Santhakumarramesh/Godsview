@@ -13,6 +13,7 @@ import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { runtimeConfig } from "./lib/runtime_config";
+import { bootPipeline, shutdownPipeline, getPipelineStatus } from "./lib/bootstrap";
 import { createRateLimiter, securityHeadersMiddleware } from "./lib/request_guards";
 import { extractAuth, requireAuth } from "./middlewares/auth_guard";
 import {
@@ -123,6 +124,30 @@ app.use("/api", router);
 // Also mount non-prefixed routes (backtest, health)
 app.use(router);
 
+// ── Pipeline status endpoint ─────────────────────────────────────────────
+app.get("/api/pipeline/status", (_req: Request, res: Response) => {
+  res.json({ ok: true, pipeline: getPipelineStatus() });
+});
+
+// ── Boot the full GodsView trading pipeline ──────────────────────────────
+// This wires: Data Engine → MCP Intelligence → Risk → Execution → Learning
+// Runs async — server starts immediately, pipeline initializes in background
+bootPipeline().catch((err) => {
+  logger.error({ err }, "Pipeline bootstrap failed — server running in API-only mode");
+});
+
+// Graceful shutdown
+process.on("SIGTERM", async () => {
+  logger.info("SIGTERM received — shutting down pipeline");
+  await shutdownPipeline();
+  process.exit(0);
+});
+process.on("SIGINT", async () => {
+  logger.info("SIGINT received — shutting down pipeline");
+  await shutdownPipeline();
+  process.exit(0);
+});
+
 // ── Static file serving for single-process / Docker deployment ──────────────
 const publicDir = path.resolve(__dirname, "../public");
 if (fs.existsSync(publicDir)) {
@@ -165,6 +190,47 @@ function isDbConnectionError(err: unknown): boolean {
   return dbPatterns.some((p) => msg.includes(p));
 }
 
+// ── Optional Sentry error tracking (activate via SENTRY_DSN env var) ─────
+let sentryCapture: ((err: Error, context?: Record<string, unknown>) => void) | null = null;
+
+// Hard warn: production without SENTRY_DSN gives you no external error visibility.
+// We continue to boot — the in-process /api/system/errors ring still works —
+// but the operator must SEE that this safety net is missing.
+if ((process.env.NODE_ENV ?? "").toLowerCase() === "production" && !process.env.SENTRY_DSN) {
+  console.warn(
+    "\n[sentry] WARNING — running in production without SENTRY_DSN. External error tracking is OFF. " +
+    "Set SENTRY_DSN in your secret store before promoting any tier higher than paper.\n"
+  );
+}
+
+if (process.env.SENTRY_DSN) {
+  try {
+    // Dynamic import to avoid hard dependency
+    // @ts-ignore — @sentry/node is an optional peer dependency
+    import("@sentry/node").then((Sentry: any) => {
+      Sentry.init({
+        dsn: process.env.SENTRY_DSN,
+        environment: process.env.NODE_ENV || "development",
+        release: process.env.GODSVIEW_VERSION || "unknown",
+        tracesSampleRate: 0.1,
+      });
+      sentryCapture = (err, context) => {
+        Sentry.captureException(err, { extra: context });
+      };
+      console.log("[sentry] Error tracking initialized");
+    }).catch(() => {
+      console.warn("[sentry] @sentry/node not installed — error tracking disabled");
+    });
+  } catch {
+    // Sentry not available, continue without it
+  }
+}
+
+// Pull in our in-process error ring so /api/system/errors can surface them.
+// This is in addition to Sentry — Sentry is the external sink, this ring is
+// the operator-visible recent-error feed.
+import { recordError } from "./middlewares/error_capture";
+
 const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   // Detect DB connection errors and return 503 Service Unavailable
   const isDbError = isDbConnectionError(err);
@@ -184,6 +250,22 @@ const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
     },
     isDbError ? "Database unavailable — returning 503" : "Unhandled API error",
   );
+
+  // Report to Sentry if available and server error
+  if (sentryCapture && status >= 500 && err instanceof Error) {
+    sentryCapture(err, { requestId: req.id, method: req.method, path: req.originalUrl ?? req.url });
+  }
+
+  // Record into the in-process error ring (visible at /api/system/errors)
+  recordError({
+    ts: Date.now(),
+    method: req.method,
+    path: req.originalUrl ?? req.url,
+    status,
+    type: err?.constructor?.name ?? typeof err,
+    message: err instanceof Error ? err.message : String(err),
+    stack: runtimeConfig.nodeEnv !== "production" && err instanceof Error ? err.stack : undefined,
+  });
 
   if (res.headersSent) {
     return;

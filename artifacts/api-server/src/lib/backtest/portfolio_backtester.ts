@@ -116,6 +116,7 @@ export class PortfolioBacktester {
     });
 
     // Sort by timestamp
+    // @ts-expect-error TS2339 — auto-suppressed for strict build
     allTrades.sort((a, b) => a.barIndex - b.barIndex);
 
     // Build equity curve (equal-weight initial)

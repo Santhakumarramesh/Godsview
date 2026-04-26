@@ -31,7 +31,7 @@ function parseArray(value: unknown): string[] {
     try {
       return JSON.parse(value);
     } catch {
-      return value.split(",").map((s) => s.trim());
+      return value.split(",").map((s: any) => s.trim());
     }
   }
   if (Array.isArray(value)) return value;
@@ -44,7 +44,7 @@ function parseArray(value: unknown): string[] {
  * GET /paper-program/status
  * Get current program status
  */
-router.get("/status", (_req, res) => {
+router.get("/status", (_req: any, res: any): void => {
   try {
     const status = getProgramStatus();
     res.json(status);
@@ -58,7 +58,7 @@ router.get("/status", (_req, res) => {
  * POST /paper-program/start
  * Start a new validation program
  */
-router.post("/start", (req, res) => {
+router.post("/start", (req: any, res: any): void => {
   try {
     const { strategies, symbols, capitalAllocation } = req.body;
 
@@ -90,7 +90,7 @@ router.post("/start", (req, res) => {
 
     res.json(result);
   } catch (err) {
-    req.log.error({ err }, "Failed to start paper program");
+    (req as any).log.error({ err }, "Failed to start paper program");
     res.status(503).json({ error: "start_failed", message: String(err) });
   }
 });
@@ -99,12 +99,12 @@ router.post("/start", (req, res) => {
  * POST /paper-program/advance
  * Advance program by one day
  */
-router.post("/advance", (_req, res) => {
+router.post("/advance", (_req: any, res: any): void => {
   try {
     const result = advanceDay();
     res.json(result);
   } catch (err) {
-    req.log.error({ err }, "Failed to advance paper program day");
+    (_req as any).log.error({ err }, "Failed to advance paper program day");
     res.status(503).json({ error: "advance_failed", message: String(err) });
   }
 });
@@ -113,7 +113,7 @@ router.post("/advance", (_req, res) => {
  * POST /paper-program/pause
  * Pause the program
  */
-router.post("/pause", (_req, res) => {
+router.post("/pause", (_req: any, res: any): void => {
   try {
     const result = pauseProgram();
     if (result.success) {
@@ -122,7 +122,7 @@ router.post("/pause", (_req, res) => {
       res.status(400).json(result);
     }
   } catch (err) {
-    req.log.error({ err }, "Failed to pause paper program");
+    (_req as any).log.error({ err }, "Failed to pause paper program");
     res.status(503).json({ error: "pause_failed", message: String(err) });
   }
 });
@@ -131,7 +131,7 @@ router.post("/pause", (_req, res) => {
  * POST /paper-program/resume
  * Resume a paused program
  */
-router.post("/resume", (_req, res) => {
+router.post("/resume", (_req: any, res: any): void => {
   try {
     const result = resumeProgram();
     if (result.success) {
@@ -140,7 +140,7 @@ router.post("/resume", (_req, res) => {
       res.status(400).json(result);
     }
   } catch (err) {
-    req.log.error({ err }, "Failed to resume paper program");
+    (_req as any).log.error({ err }, "Failed to resume paper program");
     res.status(503).json({ error: "resume_failed", message: String(err) });
   }
 });
@@ -149,7 +149,7 @@ router.post("/resume", (_req, res) => {
  * GET /paper-program/phase/:phase
  * Get report for a specific phase (1-4)
  */
-router.get("/phase/:phase", (req, res) => {
+router.get("/phase/:phase", (req: any, res: any): void => {
   try {
     const phase = parseInt(req.params.phase, 10) as 1 | 2 | 3 | 4;
 
@@ -170,7 +170,7 @@ router.get("/phase/:phase", (req, res) => {
  * GET /paper-program/signals
  * Get signal verification log
  */
-router.get("/signals", (req, res) => {
+router.get("/signals", (req: any, res: any): void => {
   try {
     const limit = parseNum(req.query.limit) ?? 50;
     const signals = getSignalLog(Math.min(500, Math.max(1, limit)));
@@ -185,7 +185,7 @@ router.get("/signals", (req, res) => {
  * GET /paper-program/executions
  * Get execution simulation log
  */
-router.get("/executions", (req, res) => {
+router.get("/executions", (req: any, res: any): void => {
   try {
     const limit = parseNum(req.query.limit) ?? 50;
     const executions = getExecutionLog(Math.min(500, Math.max(1, limit)));
@@ -200,12 +200,12 @@ router.get("/executions", (req, res) => {
  * GET /paper-program/risk-compliance
  * Get risk compliance test results
  */
-router.get("/risk-compliance", (_req, res) => {
+router.get("/risk-compliance", (_req: any, res: any): void => {
   try {
     const report = getRiskComplianceReport();
     res.json(report);
   } catch (err) {
-    req.log.error({ err }, "Failed to get risk compliance report");
+    (_req as any).log.error({ err }, "Failed to get risk compliance report");
     res.status(503).json({ error: "risk_failed", message: String(err) });
   }
 });
@@ -214,12 +214,12 @@ router.get("/risk-compliance", (_req, res) => {
  * GET /paper-program/strategy-comparison
  * Get paper vs backtest strategy comparison
  */
-router.get("/strategy-comparison", (_req, res) => {
+router.get("/strategy-comparison", (_req: any, res: any): void => {
   try {
     const report = getStrategyComparisonReport();
     res.json(report);
   } catch (err) {
-    req.log.error({ err }, "Failed to get strategy comparison report");
+    (_req as any).log.error({ err }, "Failed to get strategy comparison report");
     res.status(503).json({ error: "comparison_failed", message: String(err) });
   }
 });
@@ -228,12 +228,12 @@ router.get("/strategy-comparison", (_req, res) => {
  * GET /paper-program/certification
  * Get current certification status
  */
-router.get("/certification", (_req, res) => {
+router.get("/certification", (_req: any, res: any): void => {
   try {
     const status = getCertificationStatus();
     res.json(status);
   } catch (err) {
-    req.log.error({ err }, "Failed to get certification status");
+    (_req as any).log.error({ err }, "Failed to get certification status");
     res.status(503).json({ error: "certification_failed", message: String(err) });
   }
 });
@@ -242,7 +242,7 @@ router.get("/certification", (_req, res) => {
  * POST /paper-program/certify
  * Generate a certificate if all phases pass
  */
-router.post("/certify", (_req, res) => {
+router.post("/certify", (_req: any, res: any): void => {
   try {
     const result = generateCertificate();
     if (result.success) {
@@ -251,7 +251,7 @@ router.post("/certify", (_req, res) => {
       res.status(400).json(result);
     }
   } catch (err) {
-    req.log.error({ err }, "Failed to generate certificate");
+    (_req as any).log.error({ err }, "Failed to generate certificate");
     res.status(503).json({ error: "certify_failed", message: String(err) });
   }
 });
@@ -260,12 +260,12 @@ router.post("/certify", (_req, res) => {
  * GET /paper-program/report
  * Get complete program report
  */
-router.get("/report", (_req, res) => {
+router.get("/report", (_req: any, res: any): void => {
   try {
     const report = getFullReport();
     res.json(report);
   } catch (err) {
-    req.log.error({ err }, "Failed to get full report");
+    (_req as any).log.error({ err }, "Failed to get full report");
     res.status(503).json({ error: "report_failed", message: String(err) });
   }
 });

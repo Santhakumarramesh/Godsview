@@ -218,13 +218,27 @@ const generateHiddenSignals = (orderbook: OrderbookData): HiddenSignal[] => {
 export default function HeatmapLiquidity() {
   const [symbol, setSymbol] = useState("AAPL");
 
+  const [usingMock, setUsingMock] = useState(false);
   const { data: orderbook = {}, isLoading: orderbookLoading, error: orderbookError } = useQuery({
     queryKey: ["orderbook", symbol],
     queryFn: async () => {
-      const res = await fetch(`${API}/api/market/orderbook?symbol=${symbol}`);
-      if (!res.ok) return generatePlaceholderOrderbook();
-      const data = await res.json();
-      return data && (data.bids || data.asks) ? data : generatePlaceholderOrderbook();
+      try {
+        const res = await fetch(`${API}/api/market/orderbook?symbol=${symbol}`);
+        if (!res.ok) {
+          setUsingMock(true);
+          return generatePlaceholderOrderbook();
+        }
+        const data = await res.json();
+        if (data && (data.bids || data.asks)) {
+          setUsingMock(false);
+          return data;
+        }
+        setUsingMock(true);
+        return generatePlaceholderOrderbook();
+      } catch {
+        setUsingMock(true);
+        return generatePlaceholderOrderbook();
+      }
     },
     refetchInterval: 5000,
     staleTime: 4000,
@@ -251,6 +265,15 @@ export default function HeatmapLiquidity() {
   return (
     <div style={{ backgroundColor: COLORS.bg, minHeight: "100vh", padding: "24px" }}>
       <div style={{ maxWidth: "1600px", margin: "0 auto" }}>
+        {usingMock && (
+          <div role="status" style={{
+            background: "rgba(255,68,68,0.15)", color: "#ff8a8a",
+            border: "1px solid rgba(255,68,68,0.5)", padding: "10px 14px",
+            borderRadius: 6, fontFamily: "monospace", fontSize: 12, marginBottom: 16,
+          }}>
+            ⚠ MOCK DATA — `/api/market/orderbook` returned no data. The depth/heatmap below is synthesised, not a live order book.
+          </div>
+        )}
         {/* Header */}
         <div style={{ marginBottom: "32px" }}>
           <h1 style={{ fontFamily: FONTS.label, fontSize: "28px", color: COLORS.text, marginBottom: "8px" }}>

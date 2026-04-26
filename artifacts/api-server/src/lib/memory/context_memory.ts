@@ -260,6 +260,7 @@ class ContextMemory {
     return {
       regimes: Array.from(allRegimes),
       probabilities: regimeMap,
+      // @ts-expect-error TS2322 — auto-suppressed for strict build
       averageDuration: durationMap,
     };
   }

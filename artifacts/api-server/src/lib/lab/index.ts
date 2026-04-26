@@ -138,10 +138,7 @@ export class StrategyLab {
       feedback.toLowerCase().includes('tight') ||
       feedback.toLowerCase().includes('reduce stop')
     ) {
-      if (
-        refinedStrategy.exit.stopLoss &&
-        typeof refinedStrategy.exit.stopLoss === 'object'
-      ) {
+      if (refinedStrategy.exit.stopLoss) {
         const currentStop = refinedStrategy.exit.stopLoss.value || 2;
         refinedStrategy.exit.stopLoss.value = Math.max(
           0.5,
@@ -157,10 +154,7 @@ export class StrategyLab {
       feedback.toLowerCase().includes('loose') ||
       feedback.toLowerCase().includes('wider stop')
     ) {
-      if (
-        refinedStrategy.exit.stopLoss &&
-        typeof refinedStrategy.exit.stopLoss === 'object'
-      ) {
+      if (refinedStrategy.exit.stopLoss) {
         const currentStop = refinedStrategy.exit.stopLoss.value || 2;
         refinedStrategy.exit.stopLoss.value = currentStop * 1.3;
         changesSummary.push(
@@ -173,10 +167,10 @@ export class StrategyLab {
       feedback.toLowerCase().includes('conservative') ||
       feedback.toLowerCase().includes('more confirmation')
     ) {
-      refinedStrategy.entry.confirmationBars =
-        (refinedStrategy.entry.confirmationBars || 1) + 1;
+      refinedStrategy.entry.minConfirmationsRequired =
+        (refinedStrategy.entry.minConfirmationsRequired || 1) + 1;
       changesSummary.push(
-        `Increased confirmation bars to ${refinedStrategy.entry.confirmationBars}`
+        `Increased confirmation bars to ${refinedStrategy.entry.minConfirmationsRequired}`
       );
     }
 
@@ -184,12 +178,12 @@ export class StrategyLab {
       feedback.toLowerCase().includes('aggressive') ||
       feedback.toLowerCase().includes('faster entry')
     ) {
-      refinedStrategy.entry.confirmationBars = Math.max(
+      refinedStrategy.entry.minConfirmationsRequired = Math.max(
         1,
-        (refinedStrategy.entry.confirmationBars || 2) - 1
+        (refinedStrategy.entry.minConfirmationsRequired || 2) - 1
       );
       changesSummary.push(
-        `Reduced confirmation bars to ${refinedStrategy.entry.confirmationBars}`
+        `Reduced confirmation bars to ${refinedStrategy.entry.minConfirmationsRequired}`
       );
     }
 
@@ -197,16 +191,13 @@ export class StrategyLab {
       feedback.toLowerCase().includes('filter') ||
       feedback.toLowerCase().includes('volatility')
     ) {
-      const hasVolatilityFilter = refinedStrategy.filters?.some(
-        (f) => f.type === 'volatility'
-      );
+      const hasVolatilityFilter = refinedStrategy.marketContext.volatilityFilter?.minATR !== undefined;
       if (!hasVolatilityFilter) {
-        refinedStrategy.filters = refinedStrategy.filters || [];
-        refinedStrategy.filters.push({
-          type: 'volatility',
-          minAtr: 0.3,
-          maxAtr: 2.5,
-        });
+        refinedStrategy.marketContext.volatilityFilter = {
+          minATR: 0.3,
+          maxATR: 2.5,
+          preferExpanding: false,
+        };
         changesSummary.push('Added volatility filter');
       }
     }
@@ -216,14 +207,14 @@ export class StrategyLab {
       feedback.toLowerCase().includes('complex')
     ) {
       if (
-        refinedStrategy.filters &&
-        refinedStrategy.filters.length > 2
+        refinedStrategy.entry.conditions &&
+        refinedStrategy.entry.conditions.length > 2
       ) {
-        refinedStrategy.filters = refinedStrategy.filters.slice(
+        refinedStrategy.entry.conditions = refinedStrategy.entry.conditions.slice(
           0,
           2
         );
-        changesSummary.push('Simplified filters (reduced to 2)');
+        changesSummary.push('Simplified conditions (reduced to 2)');
       }
     }
 
@@ -231,20 +222,20 @@ export class StrategyLab {
       feedback.toLowerCase().includes('profit') ||
       feedback.toLowerCase().includes('target')
     ) {
-      if (refinedStrategy.exit.profitTargets.length === 0) {
-        refinedStrategy.exit.profitTargets = [
+      if (refinedStrategy.exit.takeProfit.targets.length === 0) {
+        refinedStrategy.exit.takeProfit.targets = [
           {
-            threshold: 3,
-            percentPosition: 1.0,
+            ratio: 3,
+            closePercent: 1.0,
           },
         ];
         changesSummary.push('Added default profit target at 3%');
       } else {
-        refinedStrategy.exit.profitTargets[0].threshold =
-          refinedStrategy.exit.profitTargets[0].threshold *
+        refinedStrategy.exit.takeProfit.targets[0].ratio =
+          refinedStrategy.exit.takeProfit.targets[0].ratio *
           1.2;
         changesSummary.push(
-          `Increased profit target to ${refinedStrategy.exit.profitTargets[0].threshold.toFixed(2)}%`
+          `Increased profit target to ${refinedStrategy.exit.takeProfit.targets[0].ratio.toFixed(2)}%`
         );
       }
     }

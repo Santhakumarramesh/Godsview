@@ -108,7 +108,7 @@ export default function WarRoom() {
   };
 
   const currentVerdictConfig = analyzed ? verdictConfig[analyzed.verdict] : null;
-  const VerdictIcon = currentVerdictConfig?.icon;
+  const VerdictIcon = currentVerdictConfig?.icon as any;
 
   return (
     <div className="min-h-screen bg-[#0e0e0f] text-[#ffffff]">

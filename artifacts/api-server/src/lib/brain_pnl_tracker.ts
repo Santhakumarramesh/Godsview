@@ -171,15 +171,15 @@ class BrainPnLTracker {
     if (positions.length === 0) return;
 
     try {
-      const { getAlpacaClient } = await import("./alpaca.js");
-      const client = getAlpacaClient();
+      const alpacaMod: any = await import("./alpaca.js");
+      const client = alpacaMod.getAlpacaClient?.() ?? alpacaMod.default?.();
       if (!client) return;
 
       for (const pos of positions) {
         try {
           const bar = await (client as any).getLatestTrade(pos.symbol);
-          if (bar?.price) {
-            updatePriceCache(pos.symbol, Number(bar.price));
+          if ((bar as any)?.price) {
+            updatePriceCache(pos.symbol, Number((bar as any).price));
           }
         } catch {
           // Symbol not available — skip silently
@@ -255,7 +255,7 @@ class BrainPnLTracker {
     }
 
     // Portfolio stats from DB
-    const portfolioStats = await getPortfolioStats();
+    const portfolioStats = await getPortfolioStats() as any;
 
     return {
       openPositions,

@@ -49,7 +49,7 @@ function parseNum(input: unknown): number | undefined {
 
 // ── POST /backtest/run ──────────────────────────────────────────────────────
 // Run a full backtest comparison: baseline vs Super Intelligence
-router.post("/backtest/run", async (req, res): Promise<void> => {
+router.post("/backtest/run", async (req: Request, res: Response): Promise<any> => {
   try {
     const config: BacktestConfig = {
       lookback_days: req.body.lookback_days ?? 90,
@@ -76,7 +76,7 @@ router.post("/backtest/run", async (req, res): Promise<void> => {
 
 // ── GET /backtest/quick ─────────────────────────────────────────────────────
 // Quick 30-day backtest with defaults (for dashboard widget)
-router.get("/backtest/quick", async (_req, res): Promise<void> => {
+router.get("/backtest/quick", async (_req: Request, res: Response): Promise<any> => {
   try {
     if (cachedResult && Date.now() - cachedResult.ts < CACHE_TTL_MS) {
       res.json({
@@ -128,7 +128,7 @@ router.get("/backtest/quick", async (_req, res): Promise<void> => {
 
 // ── POST /backtest/continuous/start ─────────────────────────────────────────
 // Start continuous backtesting over expanding time horizons (30/60/90/180/365 days)
-router.post("/backtest/continuous/start", async (_req, res): Promise<void> => {
+router.post("/backtest/continuous/start", async (_req: Request, res: Response): Promise<any> => {
   try {
     const result = await startContinuousBacktest();
     res.json(result);
@@ -139,7 +139,7 @@ router.post("/backtest/continuous/start", async (_req, res): Promise<void> => {
 
 // ── POST /backtest/continuous/stop ──────────────────────────────────────────
 // Stop continuous backtesting
-router.post("/backtest/continuous/stop", async (_req, res): Promise<void> => {
+router.post("/backtest/continuous/stop", async (_req: Request, res: Response): Promise<any> => {
   try {
     const result = stopContinuousBacktest();
     res.json(result);
@@ -150,7 +150,7 @@ router.post("/backtest/continuous/stop", async (_req, res): Promise<void> => {
 
 // ── GET /backtest/continuous/status ─────────────────────────────────────────
 // Get continuous backtest status and statistics
-router.get("/backtest/continuous/status", async (_req, res): Promise<void> => {
+router.get("/backtest/continuous/status", async (_req: Request, res: Response): Promise<any> => {
   try {
     const status = getContinuousBacktestStatus();
     res.json(status);
@@ -161,7 +161,7 @@ router.get("/backtest/continuous/status", async (_req, res): Promise<void> => {
 
 // ── GET /backtest/strategy-leaderboard ──────────────────────────────────────
 // Get strategy leaderboard with star ratings and consistency scores
-router.get("/backtest/strategy-leaderboard", async (_req, res): Promise<void> => {
+router.get("/backtest/strategy-leaderboard", async (_req: Request, res: Response): Promise<any> => {
   try {
     const leaderboard = getStrategyLeaderboard();
     res.json({
@@ -173,7 +173,7 @@ router.get("/backtest/strategy-leaderboard", async (_req, res): Promise<void> =>
   }
 });
 
-async function handleWalkForward(req: Request, res: Response): Promise<void> {
+async function handleWalkForward(req: Request, res: Response): Promise<any> {
   try {
     const strategyId = String(req.params.strategyId ?? "").trim();
     if (!strategyId) {
@@ -212,7 +212,7 @@ router.get("/brain/backtest/walk-forward/:strategyId", handleWalkForward);
 router.post("/brain/backtest/walk-forward/:strategyId", handleWalkForward);
 
 // ── GET /backtest/walk-forward/tiers ────────────────────────────────────────
-router.get("/backtest/walk-forward/tiers", async (_req, res): Promise<void> => {
+router.get("/backtest/walk-forward/tiers", async (_req: Request, res: Response): Promise<any> => {
   try {
     const tiers = getWalkForwardTierRegistry();
     res.json({ count: tiers.length, tiers });
@@ -221,7 +221,7 @@ router.get("/backtest/walk-forward/tiers", async (_req, res): Promise<void> => {
   }
 });
 
-router.get("/brain/backtest/walk-forward/tiers", async (_req, res): Promise<void> => {
+router.get("/brain/backtest/walk-forward/tiers", async (_req: Request, res: Response): Promise<any> => {
   try {
     const tiers = getWalkForwardTierRegistry();
     res.json({ count: tiers.length, tiers });
@@ -231,7 +231,7 @@ router.get("/brain/backtest/walk-forward/tiers", async (_req, res): Promise<void
 });
 
 // ── GET /backtest/walk-forward/latest[/ :strategyId] ────────────────────────
-router.get("/backtest/walk-forward/latest", async (_req, res): Promise<void> => {
+router.get("/backtest/walk-forward/latest", async (_req: Request, res: Response): Promise<any> => {
   try {
     const latest = getLatestWalkForward();
     const rows = Array.isArray(latest) ? latest : latest ? [latest] : [];
@@ -241,7 +241,7 @@ router.get("/backtest/walk-forward/latest", async (_req, res): Promise<void> => 
   }
 });
 
-router.get("/backtest/walk-forward/latest/:strategyId", async (req, res): Promise<void> => {
+router.get("/backtest/walk-forward/latest/:strategyId", async (req: Request, res: Response): Promise<any> => {
   try {
     const latest = getLatestWalkForward(String(req.params.strategyId ?? ""));
     if (!latest) {
@@ -255,7 +255,7 @@ router.get("/backtest/walk-forward/latest/:strategyId", async (req, res): Promis
 });
 
 // ── POST /backtest/optimize/:strategyId ─────────────────────────────────────
-router.post("/backtest/optimize/:strategyId", async (req, res): Promise<void> => {
+router.post("/backtest/optimize/:strategyId", async (req: Request, res: Response): Promise<any> => {
   try {
     const strategyId = String(req.params.strategyId ?? "").trim();
     if (!strategyId) {
@@ -279,7 +279,7 @@ router.post("/backtest/optimize/:strategyId", async (req, res): Promise<void> =>
   }
 });
 
-router.post("/brain/backtest/optimize/:strategyId", async (req, res): Promise<void> => {
+router.post("/brain/backtest/optimize/:strategyId", async (req: Request, res: Response): Promise<any> => {
   try {
     const strategyId = String(req.params.strategyId ?? "").trim();
     if (!strategyId) {
@@ -421,7 +421,8 @@ router.get("/backtest/crypto/summary", (_req: Request, res: Response): void => {
 // ── GET /backtest/crypto/:symbol/:timeframe/metrics ─────────────────────────
 router.get("/backtest/crypto/:symbol/:timeframe/metrics", (req: Request, res: Response): void => {
   try {
-    const { symbol, timeframe } = req.params;
+    const symbol = req.params.symbol as string;
+    const timeframe = req.params.timeframe as string;
     const metricsPath = path.join(BACKTEST_DIR, symbol, timeframe, "metrics.json");
     if (!fs.existsSync(metricsPath)) {
       res.status(404).json({ ok: false, error: `No metrics for ${symbol}/${timeframe}` });
@@ -437,7 +438,8 @@ router.get("/backtest/crypto/:symbol/:timeframe/metrics", (req: Request, res: Re
 // ── GET /backtest/crypto/:symbol/:timeframe/trades ──────────────────────────
 router.get("/backtest/crypto/:symbol/:timeframe/trades", (req: Request, res: Response): void => {
   try {
-    const { symbol, timeframe } = req.params;
+    const symbol = req.params.symbol as string;
+    const timeframe = req.params.timeframe as string;
     const tradesPath = path.join(BACKTEST_DIR, symbol, timeframe, "trades.json");
     if (!fs.existsSync(tradesPath)) {
       res.status(404).json({ ok: false, error: `No trades for ${symbol}/${timeframe}` });
@@ -453,7 +455,8 @@ router.get("/backtest/crypto/:symbol/:timeframe/trades", (req: Request, res: Res
 // ── GET /backtest/crypto/:symbol/:timeframe/report ──────────────────────────
 router.get("/backtest/crypto/:symbol/:timeframe/report", (req: Request, res: Response): void => {
   try {
-    const { symbol, timeframe } = req.params;
+    const symbol = req.params.symbol as string;
+    const timeframe = req.params.timeframe as string;
     const reportPath = path.join(BACKTEST_DIR, symbol, timeframe, "report.md");
     if (!fs.existsSync(reportPath)) {
       res.status(404).json({ ok: false, error: `No report for ${symbol}/${timeframe}` });
@@ -470,7 +473,9 @@ router.get("/backtest/crypto/:symbol/:timeframe/report", (req: Request, res: Res
 // Serves plot images (price_chart, order_flow, equity_curve, trade_distribution, summary)
 router.get("/backtest/crypto/:symbol/:timeframe/plot/:name", (req: Request, res: Response): void => {
   try {
-    const { symbol, timeframe, name } = req.params;
+    const symbol = req.params.symbol as string;
+    const timeframe = req.params.timeframe as string;
+    const name = req.params.name as string;
     const allowed = ["price_chart", "order_flow", "equity_curve", "trade_distribution", "summary"];
     if (!allowed.includes(name)) {
       res.status(400).json({ ok: false, error: `Invalid plot name. Use: ${allowed.join(", ")}` });

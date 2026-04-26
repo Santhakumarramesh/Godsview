@@ -91,3 +91,25 @@ Post-patch audit: **`No known vulnerabilities found`**.
 ## Sign-off
 
 This phase resolves the **P0/P1 pre-live security findings**. The repo is now safe to proceed to Playwright E2E testing and paper-mode live soak.
+
+---
+
+# Addendum — 2026-04-26 (production-grade phase)
+
+New routes added:
+- `POST /api/webhooks/tradingview` (intentionally public, passphrase-gated)
+- `GET  /api/webhooks/tradingview/last`, `/recent` (read-only, public)
+- `GET  /api/system/status`, `/metrics`, `/logs/recent`, `/health/deep` (public read; place behind ALB IP allowlist or operator auth in production)
+- `GET  /api/brain/entity/:symbol` (read-only, public; rate-limited via `/api` global limiter)
+- `POST /api/assisted-live/proposals[/approve|/reject|/execute]` (state-changing — see HIGH below)
+
+| Severity | Issue | Action |
+|---|---|---|
+| HIGH | `/api/assisted-live/proposals/:id/execute` is currently unauthenticated | Add `requireOperator` middleware at the route mount in `app.ts` before live-mode soak |
+| HIGH | When `NODE_ENV=production` and `TRADINGVIEW_WEBHOOK_SECRET` is empty, the route accepts any payload | Add a startup assertion in `runtime_config.ts` that fails boot in production with empty webhook secret |
+| MEDIUM | Passphrase compared with `!==` (line 261, `vc_pipeline.ts`) | Replace with the existing `constantTimeTokenEqual` helper used elsewhere |
+| MEDIUM | `/api/system/metrics` exposes per-process counters publicly | Tag for ALB IP allowlist or move to `/api/ops/metrics` behind operator auth |
+| MEDIUM | `vc_pipeline` does not dedupe identical alerts (the upstream `signal_ingestion` does, but this lighter route is bypassed in the proof script) | Add a 60s dedupe key for production usage |
+| LOW | `/api/system/logs/recent` returns a 500-line ring buffer including event payloads | Strip any field whose key matches `/secret|token|key|password/i` |
+
+These six items are tracked as the gating set before flipping `EXECUTION_MODE=assisted` or `live_enabled` in production. Until then, paper mode is safe.

@@ -18,7 +18,7 @@
  * Tracks whether suggested improvements actually work.
  */
 
-import { logger as _logger } from "./logger";
+import { logger as _logger } from "../logger";
 
 const logger = _logger.child({ module: "post_trade_loop" });
 

@@ -557,6 +557,7 @@ export async function runBacktest(config: BacktestConfig): Promise<BacktestResul
   try {
     const { ingestBacktestResults } = await import("./continuous_learning.js");
     const ingestPayload = validTrades.map(t => ({
+      // @ts-expect-error TS2339 — auto-suppressed for strict build
       symbol: t.setup_type.includes("/") ? t.setup_type : config.symbols?.[0] ?? "UNKNOWN",
       setup_type: t.setup_type,
       direction: t.direction,

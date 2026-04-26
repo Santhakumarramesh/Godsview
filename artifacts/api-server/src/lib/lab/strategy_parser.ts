@@ -315,18 +315,50 @@ export class NaturalLanguageStrategyParser {
     const filters = this.buildFilters(marketStructure, indicators, timeframe);
 
     return {
+      id: `strategy_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      version: 1,
       name: this.extractStrategyName(description),
       description,
+      author: 'NLP Parser',
       marketContext: {
-        asset: this.extractAsset(description),
-        timeframe: timeframe || 'daily',
-        minDataPoints: 100,
+        regimeFilter: {
+          allowed: ['trending_up', 'trending_down', 'ranging'],
+          blocked: [],
+          minStrength: 0.5,
+        },
+        sessionFilter: {
+          allowedSessions: ['us_open', 'us_morning', 'us_afternoon'],
+          avoidEvents: true,
+          minMinutesFromOpen: 5,
+        },
+        volatilityFilter: {
+          preferExpanding: false,
+        },
+        trendFilter: {
+          requiredTrend: 'any',
+          mtfAlignment: false,
+        },
       },
       entry: entrySpec,
       exit: exitSpec,
       sizing: sizingSpec,
-      filters,
-      tags: ['nlp_parsed'],
+      filters: {
+        minQualityScore: 0.6,
+        minEdgeScore: 0.55,
+        maxCorrelation: 0.7,
+        maxOpenPositions: 3,
+        cooldownBars: 0,
+        blackoutPeriods: [],
+      },
+      complexity: 'simple',
+      estimatedEdgeSource: 'nlp_parsed',
+      bestRegimes: [],
+      worstRegimes: [],
+      timeframes: [timeframe || 'daily'],
+      symbols: [this.extractAsset(description)],
+      parseConfidence: 0.7,
+      ambiguities: [],
+      warnings: [],
       createdAt: new Date().toISOString(),
     };
   }
@@ -467,37 +499,70 @@ export class NaturalLanguageStrategyParser {
     indicators: ParsedConcept[],
     orderflow: ParsedConcept[]
   ): EntrySpec {
-    const conditions: string[] = [];
+    const conditions: any[] = [];
 
-    priceAction.forEach((pa) => {
+    priceAction.forEach((pa, idx) => {
       if (pa.confidence > 0.85) {
-        conditions.push(`price_action.${pa.name}`);
+        conditions.push({
+          id: `pa_${idx}`,
+          name: pa.name,
+          type: 'price_action' as const,
+          operator: 'breaks' as const,
+          params: {},
+          weight: pa.confidence,
+          required: false,
+        });
       }
     });
 
-    marketStructure.forEach((ms) => {
+    marketStructure.forEach((ms, idx) => {
       if (ms.confidence > 0.8) {
-        conditions.push(`market.${ms.name}`);
+        conditions.push({
+          id: `ms_${idx}`,
+          name: ms.name,
+          type: 'structure' as const,
+          operator: 'touches' as const,
+          params: {},
+          weight: ms.confidence,
+          required: false,
+        });
       }
     });
 
-    indicators.forEach((ind) => {
+    indicators.forEach((ind, idx) => {
       if (ind.confidence > 0.85) {
-        conditions.push(`indicator.${ind.name}`);
+        conditions.push({
+          id: `ind_${idx}`,
+          name: ind.name,
+          type: 'indicator' as const,
+          operator: 'crosses_above' as const,
+          params: {},
+          weight: ind.confidence,
+          required: false,
+        });
       }
     });
 
-    orderflow.forEach((of) => {
+    orderflow.forEach((of, idx) => {
       if (of.confidence > 0.8) {
-        conditions.push(`orderflow.${of.name}`);
+        conditions.push({
+          id: `of_${idx}`,
+          name: of.name,
+          type: 'orderflow' as const,
+          operator: 'is_above' as const,
+          params: {},
+          weight: of.confidence,
+          required: false,
+        });
       }
     });
 
     return {
-      trigger: conditions.length > 0 ? `(${conditions.join(' AND ')})` : 'manual',
+      type: 'market' as const,
       conditions,
-      confirmationBars: 1,
-      entryMethod: 'market',
+      confirmations: [],
+      minConfirmationsRequired: 1,
+      aggressiveness: 'moderate' as const,
     };
   }
 
@@ -508,34 +573,33 @@ export class NaturalLanguageStrategyParser {
     riskParams: Record<string, any>,
     indicators: ParsedConcept[]
   ): ExitSpec {
-    const exits: string[] = [];
-
-    if (riskParams.stop_loss) {
-      exits.push(`stoploss_${riskParams.stop_loss.value}`);
-    }
-
-    if (riskParams.take_profit) {
-      exits.push(`takeprofit_${riskParams.take_profit.value}`);
-    }
-
-    if (indicators.some((i) => i.name.includes('rsi'))) {
-      exits.push('rsi_overbought');
-    }
-
     return {
-      profitTargets: riskParams.take_profit
-        ? [
-            {
-              threshold: riskParams.take_profit.value,
-              percentPosition: 1.0,
-            },
-          ]
-        : [],
       stopLoss: riskParams.stop_loss
-        ? { type: 'fixed', value: riskParams.stop_loss.value }
-        : undefined,
-      timeBasedExit: undefined,
-      exitMethods: exits.length > 0 ? exits : ['manual'],
+        ? {
+            type: 'percentage' as const,
+            value: riskParams.stop_loss.value,
+          }
+        : {
+            type: 'percentage' as const,
+            value: 2.0,
+          },
+      takeProfit: {
+        type: 'fixed_rr' as const,
+        targets: riskParams.take_profit
+          ? [
+              {
+                ratio: riskParams.take_profit.value,
+                closePercent: 1.0,
+              },
+            ]
+          : [
+              {
+                ratio: 3.0,
+                closePercent: 1.0,
+              },
+            ],
+        minRR: 1.5,
+      },
     };
   }
 
@@ -544,16 +608,13 @@ export class NaturalLanguageStrategyParser {
    */
   private buildSizingSpec(riskParams: Record<string, any>): SizingSpec {
     return {
-      method: 'fixed',
-      baseSize: 1.0,
-      maxSize: riskParams.max_loss
+      method: 'fixed_percent' as const,
+      maxRiskPercent: riskParams.max_loss
+        ? Math.min(riskParams.max_loss.value, 2.0)
+        : 1.0,
+      maxPositionPercent: riskParams.max_loss
         ? Math.min(riskParams.max_loss.value / 100, 0.1)
         : 0.02,
-      scalingFactor: 1.0,
-      riskPerTrade:
-        riskParams.risk_reward && riskParams.risk_reward.value
-          ? riskParams.risk_reward.value
-          : 1.0,
     };
   }
 
@@ -564,39 +625,30 @@ export class NaturalLanguageStrategyParser {
     marketStructure: ParsedConcept[],
     indicators: ParsedConcept[],
     timeframe: string | null
-  ): FilterSpec[] {
-    const filters: FilterSpec[] = [];
+  ): any {
+    const filters: any = {
+      minQualityScore: 0.6,
+      minEdgeScore: 0.55,
+      maxCorrelation: 0.7,
+      maxOpenPositions: 3,
+      cooldownBars: 0,
+      blackoutPeriods: [],
+    };
 
     if (marketStructure.some((m) => m.name.includes('trend'))) {
-      filters.push({
-        type: 'trend',
-        direction: 'any',
-        strength: 'moderate',
-      });
+      filters.minQualityScore = 0.7;
     }
 
     if (marketStructure.some((m) => m.name.includes('volatility'))) {
-      filters.push({
-        type: 'volatility',
-        minAtr: 0.5,
-        maxAtr: 5.0,
-      });
+      filters.minEdgeScore = 0.65;
     }
 
     if (marketStructure.some((m) => m.name.includes('range'))) {
-      filters.push({
-        type: 'range',
-        minRange: 0.01,
-        maxRange: 0.5,
-      });
+      filters.maxCorrelation = 0.5;
     }
 
     if (timeframe === 'daily') {
-      filters.push({
-        type: 'time',
-        allowedHours: [9, 16],
-        excludeWeekends: true,
-      });
+      filters.blackoutPeriods = [];
     }
 
     return filters;

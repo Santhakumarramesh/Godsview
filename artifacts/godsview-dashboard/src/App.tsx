@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Shell } from "@/components/layout/Shell";
 import { GlobalDataProvider } from "@/components/GlobalDataProvider";
 import { NotificationSystem } from "@/components/NotificationSystem";
+import ModeBadge from "@/components/ModeBadge";
 
 // ── Eager: primary landing page (fastest first paint) ───────────────────────
 import Dashboard from "@/pages/dashboard";
@@ -97,6 +98,7 @@ const ChartAnnotationsPage        = React.lazy(() => import("@/pages/chart-annot
 const TradingViewMcpPage          = React.lazy(() => import("@/pages/tradingview-mcp"));
 const PineScriptsPage             = React.lazy(() => import("@/pages/pine-scripts"));
 const WebhookRouterPage           = React.lazy(() => import("@/pages/webhook-router"));
+const VcModePage                  = React.lazy(() => import("@/pages/vc-mode"));
 const TvStrategySyncPage          = React.lazy(() => import("@/pages/tv-strategy-sync"));
 const ChartActionBridgePage       = React.lazy(() => import("@/pages/chart-action-bridge"));
 const TvReplayPage                = React.lazy(() => import("@/pages/tv-replay"));
@@ -234,6 +236,7 @@ function Router() {
           </AppErrorBoundary>
         </Route>
 
+        <RoutedPage path="/vc-mode"           component={VcModePage}            scope="page:vc-mode" />
         <RoutedPage path="/signals"           component={Signals}               scope="page:signals" />
         <RoutedPage path="/trades"            component={Trades}                scope="page:trades" />
         <RoutedPage path="/performance"       component={Performance}           scope="page:performance" />
@@ -382,6 +385,7 @@ function App() {
             </WouterRouter>
           </AppErrorBoundary>
           <NotificationSystem />
+          <ModeBadge />
         </GlobalDataProvider>
         <Toaster />
       </TooltipProvider>

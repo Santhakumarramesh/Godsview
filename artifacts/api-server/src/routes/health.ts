@@ -4,7 +4,7 @@
  * - /readyz        — Readiness probe (are dependencies healthy?)
  * - /metrics       — Prometheus-compatible metrics
  */
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { HealthCheckResponse } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
 import { collectMetrics } from "../lib/metrics";
@@ -17,7 +17,7 @@ const router: IRouter = Router();
 const startedAt = new Date().toISOString();
 
 /* ── Liveness: is the process running? ────────────────────────────── */
-router.get("/healthz", (_req, res) => {
+router.get("/healthz", (_req: Request, res: Response): void => {
   const data = HealthCheckResponse.parse({ status: "ok" });
   res.json({
     ...data,
@@ -28,7 +28,7 @@ router.get("/healthz", (_req, res) => {
 });
 
 /* ── Readiness: are dependencies healthy? ─────────────────────────── */
-router.get("/readyz", async (_req, res) => {
+router.get("/readyz", async (_req: Request, res: Response): Promise<void> => {
   const checks: Record<string, { status: string; latencyMs?: number; error?: string }> = {};
   let allHealthy = true;
 
@@ -149,7 +149,7 @@ router.get("/readyz", async (_req, res) => {
 });
 
 /* ── Prometheus Metrics ───────────────────────────────────────────── */
-router.get("/metrics", (_req, res) => {
+router.get("/metrics", (_req: Request, res: Response): void => {
   try {
     const metrics = collectMetrics();
     res.setHeader("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
@@ -161,7 +161,7 @@ router.get("/metrics", (_req, res) => {
 });
 
 /* ── Degradation Status ───────────────────────────────────────────── */
-router.get("/degradation", (_req, res) => {
+router.get("/degradation", (_req: Request, res: Response): void => {
   try {
     const snapshot = getDegradationSnapshot();
     res.json(snapshot);
@@ -172,7 +172,7 @@ router.get("/degradation", (_req, res) => {
 });
 
 /* ── Auth Failure State ───────────────────────────────────────────── */
-router.get("/auth-failures", async (_req, res) => {
+router.get("/auth-failures", async (_req: Request, res: Response): Promise<void> => {
   try {
     const { getAlpacaAuthFailureState } = await import("../lib/alpaca");
     const { getOrderbookAuthFailureState } = await import("../lib/market/orderbook");
@@ -188,7 +188,7 @@ router.get("/auth-failures", async (_req, res) => {
 });
 
 /* ── Reasoning Fallback State ────────────────────────────────────── */
-router.get("/reasoning-fallback", async (_req, res) => {
+router.get("/reasoning-fallback", async (_req: Request, res: Response): Promise<void> => {
   try {
     const { getReasoningFallbackState } = await import("../lib/reasoning_engine");
     const fallbackState = getReasoningFallbackState();
@@ -204,7 +204,7 @@ router.get("/reasoning-fallback", async (_req, res) => {
 });
 
 /* ── DB Health (detailed) ─────────────────────────────────────────── */
-router.get("/db-health", async (_req, res) => {
+router.get("/db-health", async (_req: Request, res: Response): Promise<void> => {
   try {
     const health = await checkDbHealth();
     res.status(health.ok ? 200 : 503).json(health);

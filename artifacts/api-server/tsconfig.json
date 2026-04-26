@@ -6,7 +6,7 @@
     "types": ["node", "express", "cors"]
   },
   "include": ["src"],
-  "exclude": ["src/__tests__"],
+  "exclude": ["src/__tests__", "src/**/* 2.*", "src/**/* 2/**"],
   "references": [
     {
       "path": "../../lib/common-types"

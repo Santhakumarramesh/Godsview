@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { db, tradesTable } from "@workspace/db";
 import { eq, desc, and, sql } from "drizzle-orm";
 import { CreateTradeBody, UpdateTradeBody, GetTradesQueryParams, UpdateTradeParams } from "@workspace/api-zod";
@@ -31,10 +31,10 @@ function coerceNumericFields<T extends Record<string, unknown>>(payload: T): T {
   return next as T;
 }
 
-router.get("/trades", async (req, res) => {
+router.get("/trades", async (req: Request, res: Response): Promise<void> => {
   try {
     const query = GetTradesQueryParams.parse(req.query);
-    const conditions = [];
+    const conditions: any[] = [];
     if (query.instrument) conditions.push(eq(tradesTable.instrument, query.instrument));
     if (query.setup_type) conditions.push(eq(tradesTable.setup_type, query.setup_type));
 
@@ -71,7 +71,7 @@ router.get("/trades", async (req, res) => {
   }
 });
 
-router.post("/trades", async (req, res) => {
+router.post("/trades", async (req: Request, res: Response): Promise<void> => {
   try {
     const body = CreateTradeBody.parse(req.body);
     const insertPayload = coerceNumericFields({ ...body, outcome: "open" });
@@ -99,7 +99,7 @@ router.post("/trades", async (req, res) => {
   }
 });
 
-router.put("/trades/:id", async (req, res) => {
+router.put("/trades/:id", async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = UpdateTradeParams.parse(req.params);
     const body = UpdateTradeBody.parse(req.body);

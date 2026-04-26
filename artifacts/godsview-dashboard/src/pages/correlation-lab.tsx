@@ -316,12 +316,23 @@ const CorrelationMatrix = ({
 
   const isDangerous = (value: number): boolean => Math.abs(value) > 0.7;
 
+  const isMock = data === null;
+
   return (
     <Section
       title="Correlation Matrix"
       loading={loading}
       error={error ?? undefined}
     >
+      {isMock && (
+        <div role="status" style={{
+          background: "rgba(255,68,68,0.15)", color: "#ff8a8a",
+          border: "1px solid rgba(255,68,68,0.5)", padding: "8px 12px",
+          borderRadius: 6, fontFamily: "monospace", fontSize: 12, marginBottom: 12,
+        }}>
+          ⚠ MOCK DATA — backend returned no correlation matrix. Values shown are illustrative only.
+        </div>
+      )}
       <div
         style={{
           overflowX: "auto",

@@ -33,8 +33,8 @@ const PLACEHOLDER_ASKS = [
 export default function DOMDepth() {
   const [symbol, setSymbol] = useState("AAPL");
   const [depthLevel, setDepthLevel] = useState(10);
-  const [previousBids, setPreviousBids] = useState([]);
-  const [previousAsks, setPreviousAsks] = useState([]);
+  const [previousBids, setPreviousBids] = useState<{ price: number; size: number }[]>([]);
+  const [previousAsks, setPreviousAsks] = useState<{ price: number; size: number }[]>([]);
 
   const { data: quote = {}, isLoading: quoteLoading, error: quoteError } = useQuery({
     queryKey: ["quote", symbol],
@@ -136,7 +136,7 @@ export default function DOMDepth() {
             fontSize: "13px",
             fontFamily: "Space Grotesk",
           }}>
-            Error loading data. Using placeholder data.
+            ⚠ MOCK DATA — backend unreachable. The DOM/depth values shown below are placeholders, not live order book data.
           </div>
         )}
 

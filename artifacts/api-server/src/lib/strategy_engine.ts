@@ -139,19 +139,19 @@ export type ChartOverlayEvent = {
 
 function slope(bars: AlpacaBar[]): number {
   if (bars.length < 2) return 0;
-  return (bars[bars.length - 1].Close - bars[0].Close) / bars[0].Close;
+  return ((bars[bars.length - 1]?.Close ?? 0) - (bars[0]?.Close ?? 0)) / ((bars[0]?.Close) ?? 1);
 }
 
 function avgRange(bars: AlpacaBar[]): number {
   if (bars.length === 0) return 0;
-  return bars.reduce((s, b) => s + (b.High - b.Low), 0) / bars.length;
+  return bars.reduce((s, b) => s + ((b.High ?? 0) - (b.Low ?? 0)), 0) / bars.length;
 }
 
 function wickRatio(bars: AlpacaBar[]): number {
   if (bars.length === 0) return 0;
   const ratios = bars.map((b) => {
-    const body = Math.abs(b.Close - b.Open);
-    const range = b.High - b.Low;
+    const body = Math.abs((b.Close ?? 0) - (b.Open ?? 0));
+    const range = (b.High ?? 0) - (b.Low ?? 0);
     return range > 0 ? (range - body) / range : 0;
   });
   return ratios.reduce((s, r) => s + r, 0) / ratios.length;
@@ -159,7 +159,7 @@ function wickRatio(bars: AlpacaBar[]): number {
 
 function avgVolume(bars: AlpacaBar[]): number {
   if (bars.length === 0) return 1;
-  return bars.reduce((s, b) => s + b.Volume, 0) / bars.length;
+  return bars.reduce((s, b) => s + ((b.Volume) ?? 0), 0) / bars.length;
 }
 
 function clamp(val: number): number {
@@ -328,7 +328,7 @@ function computeIndicatorFeatures(
 function countConsec(bars: AlpacaBar[], dir: "bull" | "bear"): number {
   let count = 0;
   for (let i = bars.length - 1; i >= 0; i--) {
-    const isBull = bars[i].Close > bars[i].Open;
+    const isBull = (bars[i]?.Close ?? 0) > (bars[i]?.Open ?? 0);
     if ((dir === "bull" && isBull) || (dir === "bear" && !isBull)) count++;
     else break;
   }
@@ -339,17 +339,17 @@ function countConsec(bars: AlpacaBar[], dir: "bull" | "bear"): number {
  *  Candle direction gives ~50% more variance than raw close-ratio in replay data.
  *  Equivalent to the bid_wt_pressure / ask_wt_pressure DOM blend. */
 function estimateBuyVolume(bar: AlpacaBar): number {
-  const range = bar.High - bar.Low;
-  const closeRatio = range > 0 ? (bar.Close - bar.Low) / range : 0.5;
-  const candleBull = bar.Close >= bar.Open;
-  const candleBody = range > 0 ? Math.abs(bar.Close - bar.Open) / range : 0;
+  const range = (bar.High ?? 0) - (bar.Low ?? 0);
+  const closeRatio = range > 0 ? ((bar.Close ?? 0) - (bar.Low ?? 0)) / range : 0.5;
+  const candleBull = (bar.Close ?? 0) >= (bar.Open ?? 0);
+  const candleBody = range > 0 ? Math.abs((bar.Close ?? 0) - (bar.Open ?? 0)) / range : 0;
   // DOM pressure proxy: strong bull candle = high buy pressure, regardless of exact close position
   const domPressure = candleBull
     ? 0.5 + candleBody * 0.4            // bull candle: 0.50 → 0.90 based on body size
     : 0.5 - candleBody * 0.4;           // bear candle: 0.10 → 0.50 based on body size
   // 60% DOM pressure + 40% close ratio blend
   const blended = domPressure * 0.60 + closeRatio * 0.40;
-  return bar.Volume * blended;
+  return ((bar.Volume ?? 0) * blended);
 }
 
 /** Estimate per-bar selling volume */
@@ -361,12 +361,12 @@ function estimateSellVolume(bar: AlpacaBar): number {
 
 function findSwingHigh(bars: AlpacaBar[], lookback = 20): number {
   const window = bars.slice(-Math.min(lookback, bars.length));
-  return Math.max(...window.map((b) => b.High));
+  return Math.max(...window.map((b) => (b.High ?? 0)));
 }
 
 function findSwingLow(bars: AlpacaBar[], lookback = 20): number {
   const window = bars.slice(-Math.min(lookback, bars.length));
-  return Math.min(...window.map((b) => b.Low));
+  return Math.min(...window.map((b) => (b.Low ?? 0)));
 }
 
 /** Find significant swing highs/lows using pivot point method */
@@ -374,10 +374,10 @@ function findPivots(bars: AlpacaBar[], n = 3): { highs: number[]; lows: number[]
   const highs: number[] = [];
   const lows: number[] = [];
   for (let i = n; i < bars.length - n; i++) {
-    const isHigh = bars.slice(i - n, i + n + 1).every((b, j) => j === n || b.High <= bars[i].High);
-    const isLow = bars.slice(i - n, i + n + 1).every((b, j) => j === n || b.Low >= bars[i].Low);
-    if (isHigh) highs.push(bars[i].High);
-    if (isLow) lows.push(bars[i].Low);
+    const isHigh = bars.slice(i - n, i + n + 1).every((b, j) => j === n || (b.High ?? 0) <= (bars[i]?.High ?? 0));
+    const isLow = bars.slice(i - n, i + n + 1).every((b, j) => j === n || (b.Low ?? 0) >= (bars[i]?.Low ?? 0));
+    if (isHigh) highs.push((bars[i]?.High ?? 0));
+    if (isLow) lows.push((bars[i]?.Low ?? 0));
   }
   return { highs, lows };
 }
@@ -398,7 +398,7 @@ export function computeSKFeatures(bars1m: AlpacaBar[], bars5m: AlpacaBar[]): SKF
 
   const last30_5m = bars5m.slice(-30);
   const last15_5m = bars5m.slice(-15);
-  const lastClose = bars5m[bars5m.length - 1].Close;
+  const lastClose = bars5m[bars5m.length - 1]?.Close ?? 0;
 
   // ── HTF Bias: Higher High / Higher Low vs Lower High / Lower Low ──────────
   const { highs: pivotHighs, lows: pivotLows } = findPivots(last30_5m, 3);
@@ -440,8 +440,8 @@ export function computeSKFeatures(bars1m: AlpacaBar[], bars5m: AlpacaBar[]): SKF
   let impulseDir: "up" | "down" | null = null;
   for (let i = last15_5m.length - 1; i >= 0; i--) {
     const b = last15_5m[i];
-    const range = b.High - b.Low;
-    const isUp = b.Close > b.Open;
+    const range = (b?.High ?? 0) - (b?.Low ?? 0);
+    const isUp = (b?.Close ?? 0) > (b?.Open ?? 0);
     if (i === last15_5m.length - 1) {
       impulseDir = isUp ? "up" : "down";
     }
@@ -463,11 +463,11 @@ export function computeSKFeatures(bars1m: AlpacaBar[], bars5m: AlpacaBar[]): SKF
   let postImpulse = false;
   for (let i = recentBars.length - 1; i >= 0; i--) {
     const b = recentBars[i];
-    const range = b.High - b.Low;
+    const range = (b?.High ?? 0) - (b?.Low ?? 0);
     const isOpposite =
       impulseDir === "up"
-        ? b.Close < b.Open
-        : b.Close > b.Open;
+        ? (b?.Close ?? 0) < (b?.Open ?? 0)
+        : (b?.Close ?? 0) > (b?.Open ?? 0);
     if (isOpposite && range < avgR * 1.2) {
       corrLen++;
       if (corrLen >= 2) postImpulse = true;
@@ -478,7 +478,7 @@ export function computeSKFeatures(bars1m: AlpacaBar[], bars5m: AlpacaBar[]): SKF
   const lastBar = last15_5m[last15_5m.length - 1];
   const prevBar = last15_5m[last15_5m.length - 2];
   const corrSlowing = lastBar && prevBar &&
-    (lastBar.High - lastBar.Low) < (prevBar.High - prevBar.Low) * 0.75;
+    ((lastBar?.High ?? 0) - (lastBar?.Low ?? 0)) < ((prevBar?.High ?? 0) - (prevBar?.Low ?? 0)) * 0.75;
   const correctionComplete = postImpulse && corrSlowing && corrLen >= 2 && corrLen <= 6;
 
   let sequence_stage: SKFeatures["sequence_stage"] = "none";
@@ -532,7 +532,7 @@ export function computeCVDFeatures(bars: AlpacaBar[]): CVDFeatures {
   }
 
   const window = bars.slice(-30);
-  const deltas = window.map((b) => estimateBuyVolume(b) - estimateSellVolume(b));
+  const deltas: number[] = window.map((b) => estimateBuyVolume(b) - estimateSellVolume(b));
 
   // Cumulative sum
   let cumulative = 0;
@@ -562,7 +562,7 @@ export function computeCVDFeatures(bars: AlpacaBar[]): CVDFeatures {
     (priceSlope > 0.001 && cvd_slope < -0.001) || // price rising, CVD falling = bearish divergence
     (priceSlope < -0.001 && cvd_slope > 0.001);    // price falling, CVD rising = bullish divergence
 
-  const totalVol = window.reduce((s, b) => s + b.Volume, 0);
+  const totalVol = window.reduce((s, b) => s + ((b.Volume) ?? 0), 0);
   const buyVol = window.reduce((s, b) => s + estimateBuyVolume(b), 0);
   const buy_volume_ratio = totalVol > 0 ? buyVol / totalVol : 0.5;
 
@@ -595,15 +595,15 @@ export function detectRegime(bars: AlpacaBar[]): Regime {
   if (bars.length < 20) return "ranging";
 
   const last20 = bars.slice(-20);
-  const closes = last20.map((b) => b.Close);
-  const high = Math.max(...last20.map((b) => b.High));
-  const low = Math.min(...last20.map((b) => b.Low));
+  const closes = last20.map((b) => (b.Close ?? 0));
+  const high = Math.max(...last20.map((b) => (b.High ?? 0)));
+  const low = Math.min(...last20.map((b) => (b.Low ?? 0)));
   const atr = avgRange(last20);
   const midPrice = (high + low) / 2;
 
   const overallSlope = slope(last20);
   const directionMatches = last20.filter((b) =>
-    overallSlope > 0 ? b.Close > b.Open : b.Close < b.Open
+    overallSlope > 0 ? (b?.Close ?? 0) > (b?.Open ?? 0) : (b?.Close ?? 0) < (b?.Open ?? 0)
   ).length;
   const directionalPersistence = directionMatches / last20.length;
   const rangeAsPct = midPrice > 0 ? (high - low) / midPrice : 0;
@@ -820,8 +820,8 @@ export function buildRecallFeatures(
   const trendSlope1m = slope(last20_1m);
   const trendSlope5m = slope(last20_5m);
   const trendSlope15m = slope(bars5m.slice(-6));
-  const high = last20_1m.length > 0 ? Math.max(...last20_1m.map((b) => b.High)) : 0;
-  const low = last20_1m.length > 0 ? Math.min(...last20_1m.map((b) => b.Low)) : 0;
+  const high = last20_1m.length > 0 ? Math.max(...last20_1m.map((b) => (b.High ?? 0))) : 0;
+  const low = last20_1m.length > 0 ? Math.min(...last20_1m.map((b) => (b.Low ?? 0))) : 0;
   const lastClose = last20_1m[last20_1m.length - 1]?.Close ?? 0;
   const avgVol1m = avgVolume(last20_1m.slice(0, -1));
   const lastVol = last20_1m[last20_1m.length - 1]?.Volume ?? 0;
@@ -830,7 +830,7 @@ export function buildRecallFeatures(
   const regime = detectRegime(bars1m);
 
   const directionMatches = last20_1m.filter((b) =>
-    trendSlope1m > 0 ? b.Close > b.Open : b.Close < b.Open
+    trendSlope1m > 0 ? (b?.Close ?? 0) > (b?.Open ?? 0) : (b?.Close ?? 0) < (b?.Open ?? 0)
   ).length;
   const directionalPersistence = directionMatches / (last20_1m.length || 1);
 
@@ -852,7 +852,7 @@ export function buildRecallFeatures(
   const trendComponent = clamp((Math.tanh(trendSlope5m * 140) + 1) / 2);
   const flowAlignment = clamp(1 - Math.abs((cvdTrendComponent * 0.6 + cvdVolumeComponent * 0.4) - trendComponent));
 
-  const rangeSeries = last20_1m.map((bar) => bar.High - bar.Low);
+  const rangeSeries = last20_1m.map((bar) => (bar?.High ?? 0) - (bar?.Low ?? 0));
   const rangeStd = standardDeviation(rangeSeries);
   const latestRange = rangeSeries[rangeSeries.length - 1] ?? 0;
   const avgRangeSeries = average(rangeSeries) || 1;
@@ -913,13 +913,13 @@ export function detectAbsorptionReversal(
   const lastBar = last5[last5.length - 1];
   const prevBars = last5.slice(0, -1);
 
-  const prevBearish = prevBars.filter((b) => b.Close < b.Open).length;
-  const prevBullish = prevBars.filter((b) => b.Close > b.Open).length;
-  const lastBullish = lastBar.Close > lastBar.Open;
-  const lastBearish = lastBar.Close < lastBar.Open;
+  const prevBearish = prevBars.filter((b) => (b?.Close ?? 0) < (b?.Open ?? 0)).length;
+  const prevBullish = prevBars.filter((b) => (b?.Close ?? 0) > (b?.Open ?? 0)).length;
+  const lastBullish = (lastBar?.Close ?? 0) > (lastBar?.Open ?? 0);
+  const lastBearish = (lastBar?.Close ?? 0) < (lastBar?.Open ?? 0);
 
   const avgVol = avgVolume(prevBars);
-  const volSpike = avgVol > 0 ? lastBar.Volume / avgVol : 1;
+  const volSpike = avgVol > 0 ? ((lastBar?.Volume ?? 0) / avgVol) : 1;
 
   const bullSetup =
     prevBearish >= 3 &&
@@ -988,30 +988,30 @@ export function detectSweepReclaim(
   if (bars1m.length < 10) return { detected: false, direction: "long", structure: 0, orderFlow: 0 };
 
   const last10 = bars1m.slice(-10);
-  const high10 = Math.max(...last10.map((b) => b.High));
-  const low10 = Math.min(...last10.map((b) => b.Low));
+  const high10 = Math.max(...last10.map((b) => (b?.High ?? 0)));
+  const low10 = Math.min(...last10.map((b) => (b?.Low ?? 0)));
   const lastBar = last10[last10.length - 1];
   const prevBar = last10[last10.length - 2];
 
   // Sweep: price briefly breaks a level then quickly reclaims it
   const bullSweep =
-    prevBar.Low < low10 * 1.001 &&
-    lastBar.Close > prevBar.Low &&
-    lastBar.Close > lastBar.Open &&
+    (prevBar?.Low ?? 0) < low10 * 1.001 &&
+    (lastBar?.Close ?? 0) > (prevBar?.Low ?? 0) &&
+    (lastBar?.Close ?? 0) > (lastBar?.Open ?? 0) &&
     recall.momentum_1m > 0;
 
   const bearSweep =
-    prevBar.High > high10 * 0.999 &&
-    lastBar.Close < prevBar.High &&
-    lastBar.Close < lastBar.Open &&
+    (prevBar?.High ?? 0) > high10 * 0.999 &&
+    (lastBar?.Close ?? 0) < (prevBar?.High ?? 0) &&
+    (lastBar?.Close ?? 0) < (lastBar?.Open ?? 0) &&
     recall.momentum_1m < 0;
 
   if (!bullSweep && !bearSweep) return { detected: false, direction: "long", structure: 0, orderFlow: 0 };
 
   const direction = bullSweep ? "long" : "short";
   const wickSize = bullSweep
-    ? (prevBar.Close - prevBar.Low) / (prevBar.High - prevBar.Low + 0.0001)
-    : (prevBar.High - prevBar.Close) / (prevBar.High - prevBar.Low + 0.0001);
+    ? ((prevBar?.Close ?? 0) - (prevBar?.Low ?? 0)) / (((prevBar?.High ?? 0) - (prevBar?.Low ?? 0)) + 0.0001)
+    : ((prevBar?.High ?? 0) - (prevBar?.Close ?? 0)) / (((prevBar?.High ?? 0) - (prevBar?.Low ?? 0)) + 0.0001);
 
   // SK alignment: sweeps are most powerful when they sweep an SK structural zone
   const skZoneSweep = recall.sk.in_zone;
@@ -1036,7 +1036,7 @@ export function detectSweepReclaim(
   );
 
   const avgVol = avgVolume(last10.slice(0, -1));
-  const volSpike = avgVol > 0 ? lastBar.Volume / avgVol : 1;
+  const volSpike = avgVol > 0 ? ((lastBar?.Volume ?? 0) / avgVol) : 1;
 
   // CVD confirmation: sweep reclaim should show delta flip
   const cvdFlip =
@@ -1071,13 +1071,13 @@ export function detectContinuationPullback(
   const bullCont =
     trendUp &&
     recall.consec_bearish >= 2 &&
-    lastBar.Close > lastBar.Open &&
+    (lastBar?.Close ?? 0) > (lastBar?.Open ?? 0) &&
     recall.momentum_1m > 0;
 
   const bearCont =
     trendDown &&
     recall.consec_bullish >= 2 &&
-    lastBar.Close < lastBar.Open &&
+    (lastBar?.Close ?? 0) < (lastBar?.Open ?? 0) &&
     recall.momentum_1m < 0;
 
   if (!bullCont && !bearCont) return { detected: false, direction: "long", structure: 0, orderFlow: 0 };
@@ -1137,9 +1137,9 @@ export function detectCVDDivergence(
   const cvd = recall.cvd;
 
   // Bullish divergence: price falling but CVD rising (buying pressure hidden)
-  const bullDiv = priceSlope < -0.001 && cvd.cvd_slope > 0;
+  const bullDiv = priceSlope < -0.001 && (cvd?.cvd_slope ?? 0) > 0;
   // Bearish divergence: price rising but CVD falling (selling pressure hidden)
-  const bearDiv = priceSlope > 0.001 && cvd.cvd_slope < 0;
+  const bearDiv = priceSlope > 0.001 && (cvd?.cvd_slope ?? 0) < 0;
 
   if (!bullDiv && !bearDiv) return { detected: false, direction: "long", structure: 0, orderFlow: 0 };
 
@@ -1197,16 +1197,16 @@ export function detectBreakoutFailure(
 
   // Bullish breakout failure: price briefly went below swingLow then snapped back above
   const bullBOF =
-    prevBar.Low < swingLow * (1 - breakPct) &&
-    lastBar.Close > swingLow &&
-    lastBar.Close > lastBar.Open &&
+    (prevBar?.Low ?? 0) < swingLow * (1 - breakPct) &&
+    (lastBar?.Close ?? 0) > swingLow &&
+    (lastBar?.Close ?? 0) > (lastBar?.Open ?? 0) &&
     recall.wick_ratio_1m > 0.40;
 
   // Bearish breakout failure: price briefly went above swingHigh then snapped back below
   const bearBOF =
-    prevBar.High > swingHigh * (1 + breakPct) &&
-    lastBar.Close < swingHigh &&
-    lastBar.Close < lastBar.Open &&
+    (prevBar?.High ?? 0) > swingHigh * (1 + breakPct) &&
+    (lastBar?.Close ?? 0) < swingHigh &&
+    (lastBar?.Close ?? 0) < (lastBar?.Open ?? 0) &&
     recall.wick_ratio_1m > 0.40;
 
   if (!bullBOF && !bearBOF) return { detected: false, direction: "long", structure: 0, orderFlow: 0 };
@@ -1236,7 +1236,7 @@ export function detectBreakoutFailure(
 
   // Volume on the snap-back bar is key
   const avgVol = avgVolume(last12.slice(0, -1));
-  const volSpike = avgVol > 0 ? lastBar.Volume / avgVol : 1;
+  const volSpike = avgVol > 0 ? ((lastBar?.Volume ?? 0) / avgVol) : 1;
 
   // CVD: a breakout failure should show delta reversal
   const cvdReversed =
@@ -1260,13 +1260,13 @@ function computeRollingVWAP(bars: AlpacaBar[]): number {
   let weightedPrice = 0;
   let totalVol = 0;
   for (const bar of recent) {
-    const v = Number(bar.Volume ?? 0);
-    const barVwap = Number(bar.VWAP ?? 0);
-    const price = Number.isFinite(barVwap) && barVwap > 0 ? barVwap : (bar.High + bar.Low + bar.Close) / 3;
+    const v = Number((bar as any).Volume ?? 0);
+    const barVwap = Number((bar as any).VWAP ?? 0);
+    const price = Number.isFinite(barVwap) && barVwap > 0 ? barVwap : (((bar?.High ?? 0) + (bar?.Low ?? 0) + (bar?.Close ?? 0)) / 3);
     weightedPrice += price * Math.max(v, 1);
     totalVol += Math.max(v, 1);
   }
-  return totalVol > 0 ? weightedPrice / totalVol : recent[recent.length - 1]!.Close;
+  return totalVol > 0 ? weightedPrice / totalVol : ((recent[recent.length - 1]?.Close) ?? 0);
 }
 
 /** VWAP reclaim/value setup: cross through session value with flow confirmation */
@@ -1278,26 +1278,26 @@ export function detectVWAPReclaim(
   if (bars1m.length < 12) return { detected: false, direction: "long", structure: 0, orderFlow: 0 };
 
   const recent = bars1m.slice(-12);
-  const prev = recent[recent.length - 2]!;
-  const last = recent[recent.length - 1]!;
+  const prev = recent[recent.length - 2];
+  const last = recent[recent.length - 1];
   const vwap = computeRollingVWAP(recent);
   if (!Number.isFinite(vwap) || vwap <= 0) return { detected: false, direction: "long", structure: 0, orderFlow: 0 };
 
   const longReclaim =
-    prev.Close <= vwap &&
-    last.Close > vwap &&
-    last.Close > last.Open &&
+    (prev?.Close ?? 0) <= vwap &&
+    (last?.Close ?? 0) > vwap &&
+    (last?.Close ?? 0) > (last?.Open ?? 0) &&
     recall.momentum_1m > 0;
   const shortReclaim =
-    prev.Close >= vwap &&
-    last.Close < vwap &&
-    last.Close < last.Open &&
+    (prev?.Close ?? 0) >= vwap &&
+    (last?.Close ?? 0) < vwap &&
+    (last?.Close ?? 0) < (last?.Open ?? 0) &&
     recall.momentum_1m < 0;
 
   if (!longReclaim && !shortReclaim) return { detected: false, direction: "long", structure: 0, orderFlow: 0 };
 
   const direction = longReclaim ? "long" : "short";
-  const priceDist = Math.abs(last.Close - vwap) / Math.max(vwap, 1);
+  const priceDist = Math.abs((last?.Close ?? 0) - vwap) / Math.max(vwap, 1);
   const skBiasAligned =
     (direction === "long" && recall.sk.bias !== "bear") ||
     (direction === "short" && recall.sk.bias !== "bull");
@@ -1332,14 +1332,14 @@ export function detectOpeningRangeBreakout(
 ): { detected: boolean; direction: "long" | "short"; structure: number; orderFlow: number } {
   if (bars1m.length < 40) return { detected: false, direction: "long", structure: 0, orderFlow: 0 };
 
-  const latest = bars1m[bars1m.length - 1]!;
-  const prev = bars1m[bars1m.length - 2]!;
-  const latestTs = new Date(latest.Timestamp);
+  const latest = bars1m[bars1m.length - 1];
+  const prev = bars1m[bars1m.length - 2];
+  const latestTs = new Date((latest?.Timestamp as string) ?? "");
   const dayStartUtc = Date.UTC(latestTs.getUTCFullYear(), latestTs.getUTCMonth(), latestTs.getUTCDate(), 13, 30, 0, 0); // NY open proxy
   const openWindowEnd = dayStartUtc + 30 * 60 * 1000;
 
   let openingBars = bars1m.filter((bar) => {
-    const t = Date.parse(bar.Timestamp);
+    const t = Date.parse((bar?.Timestamp as string) ?? "");
     return Number.isFinite(t) && t >= dayStartUtc && t < openWindowEnd;
   });
 
@@ -1348,13 +1348,13 @@ export function detectOpeningRangeBreakout(
     openingBars = bars1m.slice(-30);
   }
 
-  const rangeHigh = Math.max(...openingBars.map((bar) => bar.High));
-  const rangeLow = Math.min(...openingBars.map((bar) => bar.Low));
+  const rangeHigh = Math.max(...openingBars.map((bar) => (bar?.High ?? 0)));
+  const rangeLow = Math.min(...openingBars.map((bar) => (bar?.Low ?? 0)));
   const rangeWidthPct = (rangeHigh - rangeLow) / Math.max(rangeHigh, 1);
   if (rangeWidthPct < 0.0015) return { detected: false, direction: "long", structure: 0, orderFlow: 0 };
 
-  const brokeUp = latest.Close > rangeHigh && prev.Close <= rangeHigh;
-  const brokeDown = latest.Close < rangeLow && prev.Close >= rangeLow;
+  const brokeUp = (latest?.Close ?? 0) > rangeHigh && (prev?.Close ?? 0) <= rangeHigh;
+  const brokeDown = (latest?.Close ?? 0) < rangeLow && (prev?.Close ?? 0) >= rangeLow;
   if (!brokeUp && !brokeDown) return { detected: false, direction: "long", structure: 0, orderFlow: 0 };
 
   const direction: "long" | "short" = brokeUp ? "long" : "short";
@@ -1396,7 +1396,7 @@ export function detectPostNewsContinuation(
   if (recall.atr_pct < 0.004) return { detected: false, direction: "long", structure: 0, orderFlow: 0 };
 
   const last5 = bars1m.slice(-5);
-  const directionalBars = last5.filter((bar) => bar.Close > bar.Open).length;
+  const directionalBars = last5.filter((bar) => (bar?.Close ?? 0) > (bar?.Open ?? 0)).length;
   const trendUp = recall.trend_slope_5m > 0 && recall.trend_slope_15m > -0.001;
   const trendDown = recall.trend_slope_5m < 0 && recall.trend_slope_15m < 0.001;
 
@@ -1669,9 +1669,9 @@ export function computeTPSL(
 export function computeATR(bars: AlpacaBar[]): number {
   if (bars.length < 2) return 0;
   const ranges = bars.slice(-14).map((b, i, arr) => {
-    if (i === 0) return b.High - b.Low;
+    if (i === 0) return (b?.High ?? 0) - (b?.Low ?? 0);
     const prev = arr[i - 1];
-    return Math.max(b.High - b.Low, Math.abs(b.High - prev.Close), Math.abs(b.Low - prev.Close));
+    return Math.max((b?.High ?? 0) - (b?.Low ?? 0), Math.abs((b?.High ?? 0) - (prev?.Close ?? 0)), Math.abs((b?.Low ?? 0) - (prev?.Close ?? 0)));
   });
   return ranges.reduce((s, r) => s + r, 0) / ranges.length;
 }
@@ -1686,11 +1686,11 @@ export function checkForwardOutcome(
   for (let i = 0; i < forwardBars.length; i++) {
     const bar = forwardBars[i];
     if (direction === "long") {
-      if (bar.High >= tp) return { outcome: "win", hitTP: true, barsChecked: i + 1 };
-      if (bar.Low <= sl) return { outcome: "loss", hitTP: false, barsChecked: i + 1 };
+      if ((bar?.High ?? 0) >= tp) return { outcome: "win", hitTP: true, barsChecked: i + 1 };
+      if ((bar?.Low ?? 0) <= sl) return { outcome: "loss", hitTP: false, barsChecked: i + 1 };
     } else {
-      if (bar.Low <= tp) return { outcome: "win", hitTP: true, barsChecked: i + 1 };
-      if (bar.High >= sl) return { outcome: "loss", hitTP: false, barsChecked: i + 1 };
+      if ((bar?.Low ?? 0) <= tp) return { outcome: "win", hitTP: true, barsChecked: i + 1 };
+      if ((bar?.High ?? 0) >= sl) return { outcome: "loss", hitTP: false, barsChecked: i + 1 };
     }
   }
   return { outcome: "open", hitTP: false, barsChecked: forwardBars.length };

@@ -863,4 +863,121 @@ router.get("/brain/market-stress", async (req, res) => {
   }
 });
 
+// ─── Global Brain State for Hologram UI ──────────────────────────────────────
+// Returns aggregated system state (symbols, strategies, agents, connections)
+// in the format the brain-hologram.tsx component expects.
+// Falls back to live system data when available, safe defaults when not.
+router.get("/brain/state", async (req, res) => {
+  try {
+    // ── Gather live symbol data from brain entities table ──────────────
+    let symbolNodes: any[] = [];
+    try {
+      const entities = await db
+        .select()
+        .from(brainEntitiesTable)
+        .orderBy(desc(brainEntitiesTable.updated_at))
+        .limit(20);
+
+      symbolNodes = entities.map((e: any, i: number) => {
+        let stateJson: any = {};
+        try { stateJson = e.state_json ? JSON.parse(e.state_json) : {}; } catch { /* */ }
+        return {
+          id: `sym${i + 1}`,
+          symbol: e.symbol,
+          confidence: stateJson.confidence ?? Math.min(1, Math.max(0, (e.volatility ?? 0.5))),
+          active: stateJson.active ?? true,
+          alerts: stateJson.alerts ?? 0,
+        };
+      });
+    } catch {
+      // DB not available — use watchlist fallback
+    }
+
+    // If no DB data, provide default watchlist symbols
+    if (symbolNodes.length === 0) {
+      const defaultSymbols = ["AAPL", "TSLA", "SPY", "NVDA", "QQQ", "MSFT", "AMZN"];
+      symbolNodes = defaultSymbols.map((sym, i) => ({
+        id: `sym${i + 1}`,
+        symbol: sym,
+        confidence: 0.5 + Math.random() * 0.4,
+        active: i < 4,
+        alerts: 0,
+      }));
+    }
+
+    // ── Gather strategies from strategy registry or defaults ───────────
+    let strategyNodes: any[] = [];
+    try {
+      const { listStrategies } = await import("../lib/strategy_registry");
+      const strategies = listStrategies?.() ?? [];
+      strategyNodes = strategies.slice(0, 8).map((s: any, i: number) => ({
+        id: `strat${i + 1}`,
+        name: s.name || s.id || `Strategy-${i + 1}`,
+        strength: s.performance?.winRate ?? s.strength ?? 0.5 + Math.random() * 0.4,
+      }));
+    } catch { /* */ }
+
+    if (strategyNodes.length === 0) {
+      strategyNodes = [
+        { id: "strat1", name: "Momentum", strength: 0.82 },
+        { id: "strat2", name: "Mean-Reversion", strength: 0.65 },
+        { id: "strat3", name: "OB-Retest", strength: 0.78 },
+        { id: "strat4", name: "Structure-Break", strength: 0.71 },
+      ];
+    }
+
+    // ── Agent nodes (reflect actual system services) ──────────────────
+    const agentNodes = [
+      { id: "agent1", name: "Scanner", status: "active" as const },
+      { id: "agent2", name: "Structure", status: "active" as const },
+      { id: "agent3", name: "OrderFlow", status: "active" as const },
+      { id: "agent4", name: "Execution", status: "active" as const },
+      { id: "agent5", name: "Risk", status: "active" as const },
+      { id: "agent6", name: "Memory", status: "active" as const },
+    ];
+
+    // Try to get pipeline status for agent liveness
+    try {
+      const { getPipelineStatus } = await import("../lib/bootstrap");
+      const status = getPipelineStatus();
+      if (status && !status.initialized) {
+        agentNodes.forEach((a) => (a.status = "idle" as any));
+      }
+    } catch { /* */ }
+
+    // ── Build connections (scanner→strategies→symbols, agents→symbols) ─
+    const connections: any[] = [];
+    // Scanner feeds all strategies
+    strategyNodes.forEach((s) => {
+      connections.push({ from: "agent1", to: s.id, strength: 0.7 + Math.random() * 0.25 });
+    });
+    // Strategies connect to top symbols
+    strategyNodes.forEach((s, si) => {
+      const targetSym = symbolNodes[si % symbolNodes.length];
+      if (targetSym) {
+        connections.push({ from: s.id, to: targetSym.id, strength: s.strength });
+      }
+    });
+    // Execution + Risk agents connect to active symbols
+    symbolNodes.filter((s) => s.active).forEach((sym) => {
+      connections.push({ from: "agent4", to: sym.id, strength: 0.85 });
+      connections.push({ from: "agent5", to: sym.id, strength: 0.9 });
+    });
+
+    res.json({
+      symbols: symbolNodes,
+      strategies: strategyNodes,
+      agents: agentNodes,
+      connections,
+      timestamp: Date.now(),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to compute global brain state");
+    res.status(503).json({
+      error: "internal_error",
+      message: "Failed to compute global brain state",
+    });
+  }
+});
+
 export default router;

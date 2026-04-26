@@ -15,12 +15,17 @@ export const auditEventsTable = pgTable("audit_events", {
   actor: text("actor").notNull().default("system"),
   reason: text("reason"),
   payload_json: text("payload_json"),
+  prev_hash: text("prev_hash"),
+  row_hash: text("row_hash"),
+  org_id: text("org_id"),
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const insertAuditEventSchema = createInsertSchema(auditEventsTable).omit({
   id: true,
   created_at: true,
+  prev_hash: true,
+  row_hash: true,
 });
 export type InsertAuditEvent = z.infer<typeof insertAuditEventSchema>;
 export type AuditEvent = typeof auditEventsTable.$inferSelect;

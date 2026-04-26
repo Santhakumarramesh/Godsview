@@ -1,5 +1,5 @@
 /**
- * Backtest↔Live Alignment Engine
+ * Backtest-Live Alignment Engine
  *
  * Compares backtest assumptions against actual execution outcomes
  * from the execution truth layer (Phase 12). Produces:
@@ -436,7 +436,7 @@ export async function computeLiveMetrics(
     }
 
     // Get execution metrics for these orders
-    const orderIds = orders.map(o => o.id);
+    const orderIds = orders.map((o: any) => o.id);
     const metrics = await db.select()
       .from(executionMetricsTable)
       .where(
@@ -454,13 +454,13 @@ export async function computeLiveMetrics(
       );
 
     // Compute aggregate metrics
-    const wins = orders.filter(o => {
+    const wins = orders.filter((o: any) => {
       const pnl = Number(o.realized_pnl ?? 0);
       return pnl > 0;
     }).length;
 
-    const pnls = orders.map(o => Number(o.realized_pnl ?? 0));
-    const totalPnl = pnls.reduce((s, v) => s + v, 0);
+    const pnls = orders.map((o: any) => Number(o.realized_pnl ?? 0));
+    const totalPnl = pnls.reduce((s: any, v: any) => s + v, 0);
     const avgPnl = pnls.length > 0 ? totalPnl / pnls.length : 0;
     const winRate = orders.length > 0 ? wins / orders.length : 0;
 
@@ -471,9 +471,9 @@ export async function computeLiveMetrics(
     const maxDD = computeMaxDrawdownPct(pnls);
 
     // Average slippage from fills
-    const slippageValues = fills.map(f => Number(f.slippage_bps ?? 0));
+    const slippageValues = fills.map((f: any) => Number(f.slippage_bps ?? 0));
     const avgSlippage = slippageValues.length > 0
-      ? slippageValues.reduce((s, v) => s + v, 0) / slippageValues.length
+      ? slippageValues.reduce((s: any, v: any) => s + v, 0) / slippageValues.length
       : 0;
 
     return {
@@ -527,8 +527,8 @@ export async function computeSlippageCalibration(
 
     if (fills.length < 5) return null;
 
-    const values = fills.map(f => Number(f.slippage_bps ?? 0)).sort((a, b) => a - b);
-    const avg = values.reduce((s, v) => s + v, 0) / values.length;
+    const values = fills.map((f: any) => Number(f.slippage_bps ?? 0)).sort((a: any, b: any) => a - b);
+    const avg = values.reduce((s: any, v: any) => s + v, 0) / values.length;
     const p50 = percentile(values, 0.50);
     const p95 = percentile(values, 0.95);
     const max = values[values.length - 1] ?? 0;
@@ -588,11 +588,11 @@ export async function getAlignmentHistory(
   strategyId: string,
   limit: number = 20,
 ): Promise<any[]> {
-  return db.select()
+  return (await db.select()
     .from(alignmentSnapshotsTable)
     .where(eq(alignmentSnapshotsTable.strategy_id, strategyId))
     .orderBy(desc(alignmentSnapshotsTable.created_at))
-    .limit(limit);
+    .limit(limit)) as any[];
 }
 
 /**
@@ -601,14 +601,14 @@ export async function getAlignmentHistory(
 export async function getUnresolvedDriftEvents(
   strategyId?: string,
 ): Promise<any[]> {
-  const conditions = [eq(driftEventsTable.resolved, false)];
+  const conditions: any[] = [eq(driftEventsTable.resolved, false)];
   if (strategyId) conditions.push(eq(driftEventsTable.strategy_id, strategyId));
 
-  return db.select()
+  return (await db.select()
     .from(driftEventsTable)
     .where(and(...conditions))
     .orderBy(desc(driftEventsTable.created_at))
-    .limit(50);
+    .limit(50)) as any[];
 }
 
 /**
@@ -620,7 +620,7 @@ export async function getLatestSlippageCalibration(symbol: string): Promise<any 
     .where(eq(slippageCalibrationTable.symbol, symbol))
     .orderBy(desc(slippageCalibrationTable.created_at))
     .limit(1);
-  return rows[0] ?? null;
+  return (rows[0] as any) ?? null;
 }
 
 /**

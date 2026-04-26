@@ -121,7 +121,7 @@ function SystemHealthPanel({ health, isLoading, error }: { health?: SystemHealth
         <StatCard label="Degraded" value={statsData.degraded} />
         <StatCard label="Errors" value={statsData.errors} />
       </div>
-      <div style={{ color: COLORS.muted }} className={`text-xs pt-2 border-t ${FONTS.data}`} style={{ borderColor: COLORS.border }}>
+      <div style={{ color: COLORS.muted, borderColor: COLORS.border }} className={`text-xs pt-2 border-t ${FONTS.data}`}>
         Uptime: {uptime} minutes
       </div>
     </div>

@@ -20,75 +20,69 @@ import { selfMonitor } from "./self_monitor";
 import { modeManager } from "./mode_manager";
 import { safetyBoundaries } from "./safety_boundaries";
 import { postTradeLoop } from "./post_trade_loop";
-import { logger as _logger } from "./logger";
+import { logger as _logger } from "../logger";
 
 const logger = _logger.child({ module: "autonomous_orchestrator" });
 
-export {
-  driftDetector,
-  DriftDetector,
-  DriftReport,
-  DriftAlert,
-  type LiveMetrics,
-  type BacktestMetrics,
-  type ExecutionDrift,
-  type ModelDrift,
-  type DataDrift,
+export { driftDetector } from "./drift_detector";
+export type { DriftDetector, DriftReport, DriftAlert } from "./drift_detector";
+
+export type {
+  LiveMetrics,
+  BacktestMetrics,
+  ExecutionDrift,
+  ModelDrift,
+  DataDrift,
 } from "./drift_detector";
 
-export {
-  selfMonitor,
-  SelfMonitor,
-  SelfCheckReport,
-  PostTradeReview,
-  DailyAssessment,
-  TradingReadinessCheck,
-  type ExecutionQualityCheck,
-  type ModelHealthCheck,
-  type DataHealthCheck,
-  type RiskLimitCheck,
-  type PerformanceCheck,
-  type InfraCheck,
+export { selfMonitor } from "./self_monitor";
+export type { SelfMonitor, SelfCheckReport, PostTradeReview, DailyAssessment, TradingReadinessCheck } from "./self_monitor";
+
+export type {
+  ExecutionQualityCheck,
+  ModelHealthCheck,
+  DataHealthCheck,
+  RiskLimitCheck,
+  PerformanceCheck,
+  InfraCheck,
 } from "./self_monitor";
 
 export {
   modeManager,
   ModeManager,
+} from "./mode_manager";
+
+export type {
+  Mode,
+  ModeParameters,
   OperatingMode,
   ModeDecision,
   ModeChangeRecord,
-  type Mode,
-  type ModeParameters,
-  type UpgradeDecision,
-  type DowngradeDecision,
+  UpgradeDecision,
+  DowngradeDecision,
 } from "./mode_manager";
 
-export {
-  safetyBoundaries,
-  SafetyBoundaries,
-  BoundaryReport,
-  BoundaryViolation,
-  BoundaryWarning,
-  BoundaryConfig,
-  type PositionSafetyCheck,
-  type PortfolioSafetyCheck,
-  type MarketSafetyCheck,
-  type SystemState,
-  type EmergencyStopRecord,
+export { safetyBoundaries } from "./safety_boundaries";
+export type { SafetyBoundaries, BoundaryReport, BoundaryViolation, BoundaryWarning, BoundaryConfig } from "./safety_boundaries";
+
+export type {
+  PositionSafetyCheck,
+  PortfolioSafetyCheck,
+  MarketSafetyCheck,
+  SystemState,
+  EmergencyStopRecord,
 } from "./safety_boundaries";
 
-export {
-  postTradeLoop,
-  PostTradeLoop,
-  PostTradeAnalysis,
-  BatchAnalysis,
-  DailyReviewReport,
-  type TradeRecord,
-  type EntryAnalysis,
-  type ExitAnalysis,
-  type SizingAnalysis,
-  type MarketContext,
-  type WhatIfAnalysis,
+export { postTradeLoop } from "./post_trade_loop";
+export type { PostTradeLoop, PostTradeAnalysis, BatchAnalysis, DailyReviewReport } from "./post_trade_loop";
+
+export type {
+  TradeRecord,
+  EntryAnalysis,
+  ExitAnalysis,
+  SizingAnalysis,
+  MarketContext,
+  WhatIfAnalysis,
 } from "./post_trade_loop";
 
 // ─── Autonomous System Orchestrator ────────────────────────────────────────
@@ -215,7 +209,7 @@ export class AutonomousOrchestrator {
   /**
    * Trigger mode evaluation
    */
-  evaluateMode(selfCheck: any, driftReport: any, performance: any): ModeDecision {
+  evaluateMode(selfCheck: any, driftReport: any, performance: any): any {
     return modeManager.evaluateMode(selfCheck, driftReport, performance);
   }
 
@@ -350,5 +344,4 @@ export class AutonomousOrchestrator {
 // Export singleton
 export const autonomousOrchestrator = new AutonomousOrchestrator();
 
-// Types
-export type { AutonomousSystemStatus, ModeDecision };
+// (AutonomousSystemStatus already exported above as interface)

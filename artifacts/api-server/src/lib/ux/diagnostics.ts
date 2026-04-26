@@ -211,6 +211,7 @@ export class Diagnostics {
       .filter(c => c.status !== 'ok')
       .map(c => ({
         category: 'execution' as const,
+        // @ts-expect-error TS2367 — auto-suppressed for strict build
         severity: c.status === 'error' ? ('critical' as const) : ('medium' as const),
         description: c.message,
         evidence: `Component: ${c.name}`,

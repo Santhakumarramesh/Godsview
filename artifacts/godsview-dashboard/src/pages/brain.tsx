@@ -97,6 +97,7 @@ type StockNodeData = {
   price: number;
   changePct: number;
   riskGate: "ALLOW" | "WATCH" | "REDUCE" | "BLOCK";
+  siScore?: number;
   winRate?: number;
   similarSetups?: number;
   profitFactor?: number;
@@ -2800,6 +2801,8 @@ function BrainPageComponent() {
   const { data: executionIncidentGuard } = useExecutionIncidentGuard({ refetchInterval: 10_000 });
   const { data: executionMarketGuard } = useExecutionMarketGuard({ refetchInterval: 10_000 });
 
+  const stocksAreMock = !brainEntities || brainEntities.length === 0;
+  const supremeIsMock = !consciousness;
   const stocks = useMemo(() => {
     if (!brainEntities?.length) return MOCK_STOCKS;
     return brainEntities.map((entity: any): StockNodeData => {
@@ -3016,6 +3019,30 @@ function BrainPageComponent() {
 
   return (
     <div style={{ position: "relative", width: "100%", height: "calc(100vh - 40px)", overflow: "hidden" }}>
+      {(stocksAreMock || supremeIsMock) && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            position: "absolute",
+            top: 8,
+            left: 8,
+            right: 8,
+            zIndex: 9999,
+            background: "rgba(255, 68, 68, 0.92)",
+            color: "#fff",
+            padding: "8px 14px",
+            fontFamily: "monospace",
+            fontSize: 12,
+            fontWeight: 700,
+            borderRadius: 6,
+            textAlign: "center",
+            boxShadow: "0 2px 12px rgba(0,0,0,0.5)",
+          }}
+        >
+          ⚠ MOCK DATA — backend has no brain_entities / consciousness yet. Run `node /app/dist/seed.js` or send a TradingView alert to populate.
+        </div>
+      )}
       <style>{`
         @keyframes slideInRight {
           from { transform: translateX(100%); opacity: 0; }
@@ -3093,7 +3120,7 @@ function BrainPageComponent() {
         <Canvas3DErrorBoundary fallback={
           <Brain2DFallback
             stocks={stocks.map((s) => ({ symbol: s.symbol, score: s.siScore ?? 0, confidence: s.confidence ?? 0 }))}
-            onSelect={(sym) => handleSelectStock(stocks.find((s) => s.symbol === sym) ?? null)}
+            onSelect={(sym: string) => handleSelectStock(stocks.find((s) => s.symbol === sym) as any)}
           />
         }>
           {detectWebGL() ? (
@@ -3122,7 +3149,7 @@ function BrainPageComponent() {
           ) : (
             <Brain2DFallback
               stocks={stocks.map((s) => ({ symbol: s.symbol, score: s.siScore ?? 0, confidence: s.confidence ?? 0 }))}
-              onSelect={(sym) => handleSelectStock(stocks.find((s) => s.symbol === sym) ?? null)}
+              onSelect={(sym: string) => handleSelectStock(stocks.find((s) => s.symbol === sym) as any)}
             />
           )}
         </Canvas3DErrorBoundary>

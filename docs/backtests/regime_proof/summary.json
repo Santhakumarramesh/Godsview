@@ -1,0 +1,55 @@
+{
+  "seed": 42,
+  "bars_per_regime": 2000,
+  "generated_at": "2026-04-26T17:27:26.652Z",
+  "regimes": [
+    {
+      "regime": "trending_up",
+      "trades": 43,
+      "win_rate": 0.4419,
+      "profit_factor": 1.583,
+      "expectancy_r": 0.3256,
+      "sharpe": 1.416,
+      "max_dd_r": 7,
+      "total_r": 14,
+      "test_worse_than_train": false,
+      "sharpe_gap": -1.29
+    },
+    {
+      "regime": "sideways",
+      "trades": 81,
+      "win_rate": 0.2222,
+      "profit_factor": 0.571,
+      "expectancy_r": -0.3333,
+      "sharpe": -2.39,
+      "max_dd_r": 34,
+      "total_r": -27,
+      "test_worse_than_train": false,
+      "sharpe_gap": -1.06
+    },
+    {
+      "regime": "high_vol",
+      "trades": 66,
+      "win_rate": 0.3182,
+      "profit_factor": 0.933,
+      "expectancy_r": -0.0455,
+      "sharpe": -0.262,
+      "max_dd_r": 17,
+      "total_r": -3,
+      "test_worse_than_train": false,
+      "sharpe_gap": -3.1
+    },
+    {
+      "regime": "trending_down",
+      "trades": 44,
+      "win_rate": 0.3636,
+      "profit_factor": 1.143,
+      "expectancy_r": 0.0909,
+      "sharpe": 0.413,
+      "max_dd_r": 12,
+      "total_r": 4,
+      "test_worse_than_train": false,
+      "sharpe_gap": -1.72
+    }
+  ]
+}

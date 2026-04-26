@@ -148,19 +148,19 @@ class AlpacaAccountStream {
     });
 
     ws.on("message", (raw: Buffer) => {
-      this._handleMessage(raw.toString());
+      this._handleMessage(raw.toString() as string);
     });
 
-    ws.on("close", (code, reason) => {
+    ws.on("close", (code: number, reason: any) => {
       this.authenticated = false;
       this.connectedAt = null;
       this.disconnectCount++;
       this.ws = null;
-      logger.warn({ code, reason: reason.toString(), delay: this.reconnectDelay }, "[AccountStream] Disconnected — scheduling reconnect");
+      logger.warn({ code, reason: (reason as any)?.toString?.() ?? String(reason), delay: this.reconnectDelay }, "[AccountStream] Disconnected — scheduling reconnect");
       this._scheduleReconnect();
     });
 
-    ws.on("error", (err) => {
+    ws.on("error", (err: any) => {
       logger.error({ err }, "[AccountStream] WebSocket error");
       // close handler will reconnect
     });
@@ -205,10 +205,10 @@ class AlpacaAccountStream {
   }
 
   private _dispatchTradeUpdate(event: { event?: string } & Record<string, unknown>): void {
-    const eventType = event.event as string;
+    const eventType = (event.event as any) ?? "";
 
     if (eventType === "fill" || eventType === "partial_fill") {
-      const order = event.order as Record<string, string> | undefined;
+      const order = (event.order as any) as Record<string, any> | undefined;
       const fill: FillEvent = {
         event: eventType,
         execution_id: (event.execution_id as string) ?? "",
@@ -267,9 +267,9 @@ export function wireAccountStreamToReconciler(): void {
       const { registerCostBasis } = await import("./fill_reconciler.js");
       // The reconciler handles deduplication via execution_id
       // We inject directly into the reconciler's tick processing:
-      const { _injectFill } = await import("./fill_reconciler.js");
-      if (typeof _injectFill === "function") {
-        _injectFill({
+      const fillMod: any = await import("./fill_reconciler.js");
+      if (typeof fillMod._injectFill === "function") {
+        fillMod._injectFill({
           id: fill.execution_id || fill.order_id,
           order_id: fill.order_id,
           symbol: fill.symbol,
@@ -283,8 +283,9 @@ export function wireAccountStreamToReconciler(): void {
 
     // 2. Emit to brain event bus
     try {
-      const { brainEventBus } = await import("./brain_event_bus.js");
-      brainEventBus.emit("fill", {
+      const mod = await import("./brain_event_bus.js");
+      const brainEventBus = (mod as any).brainEventBus;
+      (brainEventBus as any).emit("fill", {
         symbol: fill.symbol,
         side: fill.side,
         qty: fill.qty,
@@ -296,9 +297,11 @@ export function wireAccountStreamToReconciler(): void {
 
     // 3. Check if this fill closes a brain position → fire alert
     try {
-      const { brainPositions } = await import("./brain_execution_bridge.js");
-      const { brainAlerts } = await import("./brain_alerts.js");
-      const pos = brainPositions.get(fill.symbol);
+      const bridgeMod = await import("./brain_execution_bridge.js");
+      const alertsMod = await import("./brain_alerts.js");
+      const brainPositions = (bridgeMod as any).brainPositions;
+      const brainAlerts = (alertsMod as any).brainAlerts;
+      const pos = (brainPositions as any).get(fill.symbol);
       if (pos) {
         const isClose =
           (pos.direction === "long" && fill.side === "sell") ||
@@ -311,9 +314,9 @@ export function wireAccountStreamToReconciler(): void {
           const distToTP = Math.abs(fill.price - pos.takeProfit);
           const distToSL = Math.abs(fill.price - pos.stopLoss);
           if (distToTP < distToSL) {
-            brainAlerts.tpHit(fill.symbol, pnlR).catch(() => {});
+            (brainAlerts as any).tpHit?.(fill.symbol, pnlR)?.catch?.(() => {});
           } else {
-            brainAlerts.slHit(fill.symbol, pnlR).catch(() => {});
+            (brainAlerts as any).slHit?.(fill.symbol, pnlR)?.catch?.(() => {});
           }
         }
       }

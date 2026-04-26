@@ -21,6 +21,8 @@ export const signalsTable = pgTable("signals", {
   session: text("session"),
   regime: text("regime"),
   news_lockout: boolean("news_lockout").notNull().default(false),
+  rejection_reason: text("rejection_reason"),
+  org_id: text("org_id"),
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

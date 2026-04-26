@@ -22,7 +22,7 @@
  * Upgrades are conservative; downgrades are quick.
  */
 
-import { logger as _logger } from "./logger";
+import { logger as _logger } from "../logger";
 
 const logger = _logger.child({ module: "mode_manager" });
 

@@ -75,6 +75,13 @@ import dataTruthRouter from "./data_truth";
 import executionValidationRouter from "./execution_validation";
 import certificationRunRouter from "./certification_run";
 import opsV2Router from "./ops_v2";
+import assistedLiveRouter from "./assisted_live";
+import vcPipelineRouter from "./vc_pipeline";
+import vcStatusRouter from "./vc_status";
+import vcBrainEntityRouter from "./vc_brain_entity";
+import systemMetricsRouter from "./system_metrics";
+import killSwitchRouter from "./kill_switch";
+import riskPolicyRouter from "./risk_policy";
 
 const router: IRouter = Router();
 
@@ -97,6 +104,13 @@ router.use("/api/checklist", checklistRouter);
 router.use("/api/war-room", warRoomRouter);
 router.use("/api/proof", proofRouter);
 router.use("/api/macro", macroRouter);
+router.use("/api/assisted-live", assistedLiveRouter);
+router.use("/api/webhooks", vcPipelineRouter);
+router.use("/api/system", vcStatusRouter);
+router.use("/api/system", systemMetricsRouter);
+router.use("/api/system", killSwitchRouter);
+router.use("/api/risk", riskPolicyRouter);
+router.use("/api/brain", vcBrainEntityRouter);
 
 // ── Route Aliases — MUST be before journal (whose /:id catches "trades") ──
 import routeAliasesRouter from "./route_aliases";
@@ -203,7 +217,7 @@ router.use("/api/trust", trustRouter);
 // ── Phase 91: System Integration & Operations ────────────────────────────
 import systemBridgeRouter from "./system_bridge";
 import opsQuantRouter from "./ops_quant";
-router.use("/api/bridge", systemBridgeRouter);
+router.use("/api/bridge", systemBridgeRouter as any);
 router.use("/api/ops-quant", opsQuantRouter);
 
 // ── Phase 97-98: TradingView MCP Integration ────────────────────────────

@@ -13,10 +13,6 @@
 // ─── Normalized Schema Module ─────────────────────────────────────────────────
 export {
   DataSource,
-  NormalizedBar,
-  NormalizedQuote,
-  NormalizedTrade,
-  DataSourceSchema,
   NormalizedBarSchema,
   NormalizedQuoteSchema,
   NormalizedTradeSchema,
@@ -26,18 +22,25 @@ export {
   isValidBar,
   isValidQuote,
   isValidTrade,
-  type ValidatedBar,
-  type ValidatedQuote,
-  type ValidatedTrade,
+} from "./normalized_schema";
+export type {
+  NormalizedBar,
+  NormalizedQuote,
+  NormalizedTrade,
+  ValidatedBar,
+  ValidatedQuote,
+  ValidatedTrade,
 } from "./normalized_schema";
 
 // ─── Data Quality Module ───────────────────────────────────────────────────────
-export {
+export type {
   QualityIssueSeverity,
   QualityIssue,
   BarQualityAnalysis,
   QualityReport,
   QualityConfig,
+} from "./data_quality";
+export {
   analyzeBarQuality,
   analyzeSeriesQuality,
   formatQualityReport,
@@ -46,11 +49,13 @@ export {
 } from "./data_quality";
 
 // ─── Provider Failover Module ──────────────────────────────────────────────────
-export {
+export type {
   ProviderHealth,
   FailoverDecision,
   FailoverConfig,
   FailoverStatus,
+} from "./provider_failover";
+export {
   recordSuccess,
   recordFailure,
   getProviderHealth,
@@ -69,10 +74,12 @@ export {
 } from "./provider_failover";
 
 // ─── Timestamp Synchronization Module ──────────────────────────────────────────
-export {
+export type {
   MarketSession,
   SyncResult,
   BatchSyncResult,
+} from "./timestamp_sync";
+export {
   parseISOTimestamp,
   formatUTCISO,
   normalizeTimestamp,
@@ -90,12 +97,14 @@ export {
 } from "./timestamp_sync";
 
 // ─── Replay Storage Module ─────────────────────────────────────────────────────
-export {
+export type {
   OrderBookLevel,
   OrderBookSnapshot,
   StorageMetrics,
   CompressionStats,
   ReplayStorageConfig,
+} from "./replay_storage";
+export {
   storeBar,
   getBarsInRange,
   getLatestBar,
@@ -119,11 +128,13 @@ export {
 } from "./replay_storage";
 
 // ─── Cache Layer Module ────────────────────────────────────────────────────────
-export {
+export type {
   CacheMetrics,
   CacheConfig,
   EvictionPolicy,
   CacheWarmerFn,
+} from "./cache_layer";
+export {
   get as cacheGet,
   set as cacheSet,
   has as cacheHas,
@@ -139,33 +150,33 @@ export {
   setSizeLimits,
   setDefaultTtl,
   evictByPolicy,
-  flushExpired,
-  getStatistics as getCacheStatistics,
-  resetMetrics as resetCacheMetrics,
 } from "./cache_layer";
 
 // ─── Data Normalizer Module (Phase 5) ──────────────────────────────────────
 export {
   DataNormalizer,
+  DataIssueType,
+} from "./data_normalizer";
+export type {
   NormalizedOrderBook,
   NormalizedTrade as DataNormalizerTrade,
-  DataIssueType,
-  type IssuesSeverity,
-  type DataIssue,
-  type CleanedData,
-  type AlignedData,
+  IssuesSeverity,
+  DataIssue,
+  CleanedData,
+  AlignedData,
 } from "./data_normalizer";
 
 // ─── Feed Manager Module (Phase 5) ────────────────────────────────────────
 export {
   FeedManager,
   ProviderStatus,
-  type ProviderHealth,
-  type DataProvider,
-  type PriceSnapshot,
-  type FeedHealthReport,
-  type LatencyReport,
-  type DegradationAction,
+} from "./feed_manager";
+export type {
+  DataProvider,
+  PriceSnapshot,
+  FeedHealthReport,
+  LatencyReport,
+  DegradationAction,
 } from "./feed_manager";
 
 // ─── Execution Simulator Module (Phase 5) ────────────────────────────────
@@ -192,7 +203,7 @@ export {
 } from "./replay_store";
 
 // ─── Existing Market Modules ──────────────────────────────────────────────────
-export {
+export type {
   PriceLevel,
   OrderBookSnapshot as OrderBookSnapshotLegacy,
   OrderBookUpdate,
@@ -201,4 +212,4 @@ export {
   OrderBookListener,
 } from "./types";
 
-export { symbols, normalizeMarketSymbol, toAlpacaSlash } from "./symbols";
+export { normalizeMarketSymbol, toAlpacaSlash } from "./symbols";

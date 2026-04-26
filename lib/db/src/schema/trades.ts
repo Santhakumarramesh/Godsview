@@ -24,7 +24,11 @@ export const tradesTable = pgTable("trades", {
   notes: text("notes"),
   entry_time: timestamp("entry_time", { withTimezone: true }),
   exit_time: timestamp("exit_time", { withTimezone: true }),
+  status: text("status").notNull().default("pending"),
+  rejection_reason: text("rejection_reason"),
+  org_id: text("org_id"),
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const insertTradeSchema = createInsertSchema(tradesTable).omit({ id: true, created_at: true });

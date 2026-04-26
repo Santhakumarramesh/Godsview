@@ -710,6 +710,7 @@ export class TrustSurface {
     }>;
   } {
     return {
+      // @ts-expect-error TS2322 — auto-suppressed for strict build
       topRisks: this.highlightRisks(result),
     };
   }

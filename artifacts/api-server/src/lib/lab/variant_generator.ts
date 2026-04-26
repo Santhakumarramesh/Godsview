@@ -129,24 +129,24 @@ export class VariantGenerator {
       JSON.stringify(strategy)
     ) as StrategyDSL;
 
-    if (newStrategy.entry.confirmationBars > 1) {
-      newStrategy.entry.confirmationBars = Math.max(
+    if (newStrategy.entry.minConfirmationsRequired > 1) {
+      newStrategy.entry.minConfirmationsRequired = Math.max(
         1,
-        newStrategy.entry.confirmationBars - 1
+        newStrategy.entry.minConfirmationsRequired - 1
       );
     }
 
     const modifications: string[] = [];
     modifications.push(
-      `Confirmation bars reduced from ${strategy.entry.confirmationBars} to ${newStrategy.entry.confirmationBars}`
+      `Confirmation bars reduced from ${strategy.entry.minConfirmationsRequired} to ${newStrategy.entry.minConfirmationsRequired}`
     );
 
-    if (newStrategy.filters && newStrategy.filters.length > 0) {
-      newStrategy.filters = newStrategy.filters.slice(
+    if (newStrategy.entry.conditions && newStrategy.entry.conditions.length > 0) {
+      newStrategy.entry.conditions = newStrategy.entry.conditions.slice(
         0,
-        Math.max(0, newStrategy.filters.length - 1)
+        Math.max(0, newStrategy.entry.conditions.length - 1)
       );
-      modifications.push('Removed 1 filter for faster entries');
+      modifications.push('Removed 1 condition for faster entries');
     }
 
     return {
@@ -176,24 +176,21 @@ export class VariantGenerator {
       JSON.stringify(strategy)
     ) as StrategyDSL;
 
-    newStrategy.entry.confirmationBars =
-      (newStrategy.entry.confirmationBars || 1) + 1;
+    newStrategy.entry.minConfirmationsRequired =
+      (newStrategy.entry.minConfirmationsRequired || 1) + 1;
 
     const modifications: string[] = [];
     modifications.push(
-      `Confirmation bars increased from ${strategy.entry.confirmationBars} to ${newStrategy.entry.confirmationBars}`
+      `Confirmation bars increased from ${strategy.entry.minConfirmationsRequired} to ${newStrategy.entry.minConfirmationsRequired}`
     );
 
-    const hasVolatilityFilter = newStrategy.filters?.some(
-      (f) => f.type === 'volatility'
-    );
+    const hasVolatilityFilter = newStrategy.marketContext.volatilityFilter?.minATR !== undefined;
     if (!hasVolatilityFilter) {
-      newStrategy.filters = newStrategy.filters || [];
-      newStrategy.filters.push({
-        type: 'volatility',
-        minAtr: 0.5,
-        maxAtr: 2.0,
-      });
+      newStrategy.marketContext.volatilityFilter = {
+        minATR: 0.5,
+        maxATR: 2.0,
+        preferExpanding: false,
+      };
       modifications.push('Added volatility filter for stable entries');
     }
 
@@ -224,30 +221,21 @@ export class VariantGenerator {
       JSON.stringify(strategy)
     ) as StrategyDSL;
 
-    newStrategy.filters = newStrategy.filters || [];
     const modifications: string[] = [];
 
-    const hasTrendFilter = newStrategy.filters.some(
-      (f) => f.type === 'trend'
-    );
+    const hasTrendFilter = newStrategy.marketContext.trendFilter?.requiredTrend !== undefined;
     if (!hasTrendFilter) {
-      newStrategy.filters.push({
-        type: 'trend',
-        direction: 'any',
-        strength: 'moderate',
-      });
+      newStrategy.marketContext.trendFilter = {
+        requiredTrend: 'any',
+        minTrendStrength: 0.5,
+        mtfAlignment: false,
+      };
       modifications.push('Added trend detection filter');
     }
 
-    const hasVolumeFilter = newStrategy.filters.some(
-      (f) => f.type === 'volume'
-    );
+    const hasVolumeFilter = newStrategy.filters?.minQualityScore !== undefined;
     if (!hasVolumeFilter) {
-      newStrategy.filters.push({
-        type: 'volume',
-        minVolume: 1000000,
-      });
-      modifications.push('Added minimum volume filter');
+      modifications.push('Applied quality scoring filter');
     }
 
     return {
@@ -278,13 +266,13 @@ export class VariantGenerator {
     ) as StrategyDSL;
 
     if (newStrategy.sizing) {
-      newStrategy.sizing.baseSize =
-        (newStrategy.sizing.baseSize || 1) * 0.5;
-      newStrategy.sizing.maxSize =
-        (newStrategy.sizing.maxSize || 0.02) * 0.5;
+      newStrategy.sizing.maxRiskPercent =
+        (newStrategy.sizing.maxRiskPercent || 1) * 0.5;
+      newStrategy.sizing.maxPositionPercent =
+        (newStrategy.sizing.maxPositionPercent || 0.02) * 0.5;
     }
 
-    if (newStrategy.exit.stopLoss && typeof newStrategy.exit.stopLoss === 'object') {
+    if (newStrategy.exit.stopLoss) {
       newStrategy.exit.stopLoss.value =
         (newStrategy.exit.stopLoss.value || 2) * 0.75;
     }
@@ -293,9 +281,11 @@ export class VariantGenerator {
     modifications.push(
       'Position size reduced by 50% for capital preservation'
     );
-    modifications.push(
-      `Stop loss tightened to ${newStrategy.exit.stopLoss?.value || 1.5}%`
-    );
+    if (newStrategy.exit.stopLoss) {
+      modifications.push(
+        `Stop loss tightened to ${newStrategy.exit.stopLoss.value || 1.5}%`
+      );
+    }
 
     return {
       ...newStrategy,
@@ -325,13 +315,13 @@ export class VariantGenerator {
     ) as StrategyDSL;
 
     if (newStrategy.sizing) {
-      newStrategy.sizing.baseSize =
-        (newStrategy.sizing.baseSize || 1) * 1.5;
-      newStrategy.sizing.maxSize =
-        Math.min((newStrategy.sizing.maxSize || 0.02) * 1.5, 0.1);
+      newStrategy.sizing.maxRiskPercent =
+        (newStrategy.sizing.maxRiskPercent || 1) * 1.5;
+      newStrategy.sizing.maxPositionPercent =
+        Math.min((newStrategy.sizing.maxPositionPercent || 0.02) * 1.5, 0.1);
     }
 
-    if (newStrategy.exit.stopLoss && typeof newStrategy.exit.stopLoss === 'object') {
+    if (newStrategy.exit.stopLoss) {
       newStrategy.exit.stopLoss.value =
         (newStrategy.exit.stopLoss.value || 2) * 1.5;
     }
@@ -340,9 +330,11 @@ export class VariantGenerator {
     modifications.push(
       'Position size increased by 50% for aggressive growth'
     );
-    modifications.push(
-      `Stop loss widened to ${newStrategy.exit.stopLoss?.value || 3}%`
-    );
+    if (newStrategy.exit.stopLoss) {
+      modifications.push(
+        `Stop loss widened to ${newStrategy.exit.stopLoss.value || 3}%`
+      );
+    }
 
     return {
       ...newStrategy,
@@ -373,43 +365,27 @@ export class VariantGenerator {
       JSON.stringify(strategy)
     ) as StrategyDSL;
 
-    newStrategy.filters = newStrategy.filters || [];
     const modifications: string[] = [];
 
-    const requiredFilters: FilterSpec[] = [
-      {
-        type: 'trend',
-        direction: 'any',
-        strength: 'moderate',
-      },
-      {
-        type: 'volatility',
-        minAtr: 0.3,
-        maxAtr: 3.0,
-      },
-      {
-        type: 'volume',
-        minVolume: 1000000,
-      },
-      {
-        type: 'time',
-        allowedHours: [9, 16],
-        excludeWeekends: true,
-      },
-    ];
+    newStrategy.marketContext.trendFilter = {
+      requiredTrend: 'any',
+      minTrendStrength: 0.5,
+      mtfAlignment: false,
+    };
+    modifications.push('Added trend detection filter');
 
-    requiredFilters.forEach((newFilter) => {
-      const exists = newStrategy.filters?.some(
-        (f) => f.type === newFilter.type
-      );
-      if (!exists) {
-        newStrategy.filters?.push(newFilter);
-        modifications.push(`Added ${newFilter.type} filter`);
-      }
-    });
+    newStrategy.marketContext.volatilityFilter = {
+      minATR: 0.3,
+      maxATR: 3.0,
+      preferExpanding: false,
+    };
+    modifications.push('Added volatility filter');
 
-    newStrategy.entry.confirmationBars =
-      Math.max(newStrategy.entry.confirmationBars || 1, 2);
+    newStrategy.filters.minQualityScore = 0.8;
+    modifications.push('Increased quality score threshold');
+
+    newStrategy.entry.minConfirmationsRequired =
+      Math.max(newStrategy.entry.minConfirmationsRequired || 1, 2);
     modifications.push('Increased confirmation bars to 2 minimum');
 
     return {
@@ -495,14 +471,14 @@ export class VariantGenerator {
       hybrid.sizing = v2.sizing;
     }
 
-    if (v2.filters) {
-      v2.filters.forEach((f) => {
+    if (v2.entry.conditions && hybrid.entry.conditions) {
+      v2.entry.conditions.forEach((f: any) => {
         if (
-          !hybrid.filters?.some(
-            (existing) => existing.type === f.type
+          !hybrid.entry.conditions?.some(
+            (existing: any) => existing.type === f.type
           )
         ) {
-          hybrid.filters?.push(f);
+          hybrid.entry.conditions?.push(f);
         }
       });
     }

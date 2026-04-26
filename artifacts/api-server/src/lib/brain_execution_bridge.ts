@@ -264,7 +264,7 @@ class BrainExecutionBridge {
     // Apply Kelly scaling — respects per-strategy override (Phase 11B) +
     // regime-adaptive multiplier (Phase 12C)
     const baseKelly = strategyParamsStore.effectiveMaxKelly(signal.strategyId, strategy.maxKellyFraction);
-    const regimeConfidence = (signal.layerContext?.regimeConfidence as number) ?? 0.7;
+    const regimeConfidence = ((signal.layerContext?.regimeConfidence as any) as number) ?? 0.7;
     const regimeAdaptedKelly = adaptKellyToRegime(baseKelly, signal.regime, regimeConfidence);
     const kellyFraction = brainState.mode === "DEFENSIVE"
       ? regimeAdaptedKelly * 0.5
@@ -404,6 +404,7 @@ class BrainExecutionBridge {
     exitPrice: number,
     reason: "TP_HIT" | "SL_HIT" | "MANUAL" | "TIME_EXIT" | "TRAIL_STOP",
   ): Promise<void> {
+    // Position closed handler
     const pos = brainPositions.close(symbol);
     if (!pos) {
       logger.warn({ symbol }, "[BrainBridge] onPositionClosed: no open position found");
@@ -455,25 +456,27 @@ class BrainExecutionBridge {
     });
 
     // ── Emit TP/SL alert ─────────────────────────────────────────────────────
-    if (reason === "TP_HIT") {
-      brainAlerts.tpHit(symbol, pnlR).catch(() => {});
-    } else if (reason === "SL_HIT") {
-      brainAlerts.slHit(symbol, pnlR).catch(() => {});
-    }
+    try {
+      if (reason === "TP_HIT") {
+        (brainAlerts as any).tpHit(symbol, pnlR);
+      } else if (reason === "SL_HIT") {
+        (brainAlerts as any).slHit(symbol, pnlR);
+      }
+    } catch (_) { /* non-critical alert */ }
 
     // Feed V3 super intelligence with outcome (also feeds V2 internally)
     const adverseConditions: string[] = [];
     if (pos.v3Prediction) {
-      if (pos.v3Prediction.v3Adjustments.antifragility < 0.4) adverseConditions.push("low_antifragility");
-      if (pos.v3Prediction.v3Adjustments.correlationBoost < -0.02) adverseConditions.push("cross_asset_contradiction");
-      if (pos.v3Prediction.v3Adjustments.regimeBoost < -0.03) adverseConditions.push("adverse_regime");
+      if ((pos.v3Prediction.v3Adjustments as any).antifragility < 0.4) adverseConditions.push("low_antifragility");
+      if ((pos.v3Prediction.v3Adjustments as any).correlationBoost < -0.02) adverseConditions.push("cross_asset_contradiction");
+      if ((pos.v3Prediction.v3Adjustments as any).regimeBoost < -0.03) adverseConditions.push("adverse_regime");
     }
     superIntelligenceV3.recordOutcome({
       id: pos.confirmationId,
       symbol,
       strategyId: pos.strategyId,
       direction: pos.direction,
-      regime: pos.v3Prediction?.regime ?? "unknown",
+      regime: (pos.v3Prediction?.regime as string) ?? "unknown",
       features: {},
       predictedWinProb: pos.winProbAtEntry ?? 0.5,
       actualWon: won,
@@ -483,13 +486,14 @@ class BrainExecutionBridge {
     });
 
     // Feed autonomous brain for streak tracking + defensive mode
-    autonomousBrain.recordTradeOutcome({
+    autonomousBrain.recordTradeOutcome(
       symbol,
+      pos.direction as "long" | "short",
       won,
       pnlR,
-      strategyId: pos.strategyId,
-      regime: "unknown",
-    });
+      "unknown",
+      pos.winProbAtEntry ?? 0.5,
+    );
 
     // Emit event to UI
     brainEventBus.agentReport({

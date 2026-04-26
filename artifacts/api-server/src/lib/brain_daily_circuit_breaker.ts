@@ -111,7 +111,7 @@ class BrainDailyCircuitBreaker {
   manualReset(): void {
     this.state = "OPEN";
     logger.info("[CircuitBreaker] Manually reset to OPEN");
-    brainAlerts.custom("CUSTOM", "info", "Circuit Breaker Reset", "Daily risk circuit breaker manually reset").catch(() => {});
+    (brainAlerts as any).custom("CUSTOM", "info", "Circuit Breaker Reset", "Daily risk circuit breaker manually reset");
   }
 
   // ── Daily reset ────────────────────────────────────────────────────────────
@@ -178,11 +178,11 @@ class BrainDailyCircuitBreaker {
           dailyPnlR: this.dailyPnlR, dailyTrades: this.dailyTrades,
         }, "[CircuitBreaker] Entering HALF_OPEN — approaching daily limits");
 
-        brainAlerts.custom(
+        (brainAlerts as any).custom(
           "RISK_LIMIT_HIT", "warning",
           "Approaching Daily Risk Limit",
           `PnL: ${this.dailyPnlR.toFixed(2)}R | Trades: ${this.dailyTrades} | Mode → DEFENSIVE`
-        ).catch(() => {});
+        );
       }
     }
   }
@@ -205,11 +205,11 @@ class BrainDailyCircuitBreaker {
 
     logger.error({ event }, "[CircuitBreaker] TRIPPED — brain paused");
 
-    brainAlerts.custom(
+    (brainAlerts as any).custom(
       "RISK_LIMIT_HIT", "critical",
       `🚨 Brain Circuit Tripped — ${reason}`,
       `${details} | Daily P&L: ${this.dailyPnlR.toFixed(2)}R | Trades: ${this.dailyTrades}`
-    ).catch(() => {});
+    );
 
     // Auto-pause the brain
     import("./autonomous_brain.js").then(({ autonomousBrain }) => {
@@ -217,7 +217,7 @@ class BrainDailyCircuitBreaker {
         autonomousBrain.setMode("PAUSED");
         logger.warn("[CircuitBreaker] Brain auto-paused due to circuit trip");
       }
-    }).catch(() => {});
+    });
   }
 
   private _scheduleMidnightReset(): void {

@@ -57,11 +57,11 @@ export function computeC4ConfirmationScore(
   detected: { structure: number; orderFlow: number },
   recall: RecallFeatures,
 ): number {
-  const reclaimBonus   = setupDef.requiresReclaim
-    ? (detected.structure >= setupDef.minStructureScore ? 1 : 0.35)
+  const reclaimBonus: number   = (setupDef as any).requiresReclaim
+    ? (detected.structure >= ((setupDef as any).minStructureScore ?? 0) ? 1 : 0.35)
     : 0.7;
-  const flowConfirm    = detected.orderFlow >= setupDef.minOrderFlowScore ? 1 : 0.4;
-  const earlyRiskPenalty = 1 - clamp01(recall.fake_entry_risk);
+  const flowConfirm: number    = detected.orderFlow >= ((setupDef as any).minOrderFlowScore ?? 0) ? 1 : 0.4;
+  const earlyRiskPenalty: number = 1 - clamp01((recall as any).fake_entry_risk ?? 0);
   return clamp01(
     detected.structure  * 0.35 +
     detected.orderFlow  * 0.35 +

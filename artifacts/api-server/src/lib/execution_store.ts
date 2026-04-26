@@ -192,7 +192,7 @@ export async function getOpenOrders(symbol?: string): Promise<Order[]> {
 
     const rows = await query;
     if (symbol) {
-      return rows.filter(r => r.symbol === symbol);
+      return rows.filter((r: any) => r.symbol === symbol);
     }
     return rows;
   } catch (err) {

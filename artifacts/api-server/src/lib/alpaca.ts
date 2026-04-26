@@ -326,7 +326,7 @@ const BAR_CACHE_TTL = 8_000; // 8 seconds — fast enough for live trading, slow
 const _barInflight = new Map<string, Promise<AlpacaBar[]>>();
 
 // Log cache policy on module load
-if (typeof window === "undefined" && process.env.NODE_ENV === "production") {
+if (typeof globalThis !== "undefined" && typeof (globalThis as any).window === "undefined" && process.env.NODE_ENV === "production") {
   // Only log in server-side production mode (not in browser or tests)
   const cacheMode = process.env.GODSVIEW_CACHE_MODE ?? "in-memory";
   if (cacheMode === "in-memory") {

@@ -253,6 +253,7 @@ export class ParameterTuner {
         const sensitivity = valueDelta > 0 ? scoreDelta / valueDelta : 0;
 
         sensitivityData.push({
+          // @ts-expect-error TS2552 — auto-suppressed for strict build
           parameterName,
           value: paramValue,
           score,

@@ -885,6 +885,230 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error401'
 
+  # ── VC pipeline / production-grade webhook ────────────────────────────────
+  /api/webhooks/tradingview:
+    post:
+      tags: [TradingView]
+      summary: TradingView webhook ingestion (production-grade pipeline)
+      description: |
+        Single-call pipeline: validates the Pine alert, runs risk gates,
+        persists a signal row, creates a paper trade if allowed, updates the
+        brain entity, and writes a tamper-evident audit row. Returns one
+        envelope listing every artifact ID. Rate-limited to 60/min/IP.
+      operationId: postTradingViewWebhook
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: false
+          schema: { type: string }
+        - in: header
+          name: X-Org-Id
+          required: false
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [symbol, signal, timeframe, price, timestamp]
+              properties:
+                symbol:        { type: string, example: "AAPL" }
+                signal:        { type: string }
+                timeframe:     { type: string, enum: [1m, 5m, 15m, 1h, 4h, 1d] }
+                price:         { type: number, format: float, minimum: 0 }
+                timestamp:     { type: integer }
+                direction:     { type: string, enum: [long, short, neutral] }
+                stop_loss:     { type: number }
+                take_profit:   { type: number }
+                strategy_name: { type: string }
+                passphrase:    { type: string }
+      responses:
+        '201': { description: Paper trade created }
+        '200': { description: Signal received but rejected by risk engine }
+        '400': { description: Schema validation failed }
+        '401': { description: Invalid passphrase }
+        '409': { description: Duplicate idempotency key }
+        '423': { description: Kill-switch active }
+        '429': { description: Rate limited }
+        '503': { description: Production secret misconfigured }
+
+  /api/webhooks/tradingview/last:
+    get:
+      tags: [TradingView]
+      summary: Last successful webhook envelope
+      operationId: getLastWebhookEnvelope
+      responses:
+        '200': { description: Cached last envelope or null }
+
+  /api/webhooks/tradingview/recent:
+    get:
+      tags: [TradingView]
+      summary: Recent vc_pipeline audit events
+      operationId: getRecentWebhookAudit
+      responses:
+        '200': { description: Up to 20 most-recent events }
+
+  /api/webhooks/audit/verify:
+    get:
+      tags: [TradingView]
+      summary: Verify the audit-event HMAC chain
+      operationId: verifyAuditChain
+      responses:
+        '200': { description: Chain status }
+
+  /api/system/status:
+    get:
+      tags: [Operator]
+      summary: Real-time system status
+      operationId: getSystemStatus
+      responses:
+        '200': { description: Status snapshot }
+
+  /api/system/metrics:
+    get:
+      tags: [Operator]
+      summary: In-process metrics (operator only)
+      operationId: getSystemMetrics
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Counters + latency p50/p95/p99 }
+        '401': { description: Unauthorized }
+
+  /api/system/metrics/prometheus:
+    get:
+      tags: [Operator]
+      summary: Prometheus exposition format
+      operationId: getPrometheusMetrics
+      responses:
+        '200': { description: prometheus exposition (text/plain) }
+
+  /api/system/logs/recent:
+    get:
+      tags: [Operator]
+      summary: Recent log ring events (operator only)
+      operationId: getRecentLogs
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Events }
+        '401': { description: Unauthorized }
+
+  /api/system/errors:
+    get:
+      tags: [Operator]
+      summary: Captured errors (operator only)
+      operationId: getRecentErrors
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Errors }
+        '401': { description: Unauthorized }
+
+  /api/system/health/deep:
+    get:
+      tags: [Operator]
+      summary: Deep health (DB+Redis+disk+safety-nets)
+      operationId: getDeepHealth
+      responses:
+        '200': { description: All probes ok }
+        '503': { description: Probe failed }
+
+  /api/system/kill-switch:
+    get:
+      tags: [Operator]
+      summary: Kill-switch snapshot
+      operationId: getKillSwitch
+      responses:
+        '200': { description: Snapshot }
+    post:
+      tags: [Operator]
+      summary: Activate kill-switch (operator only)
+      operationId: activateKillSwitch
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, maxLength: 240 }
+      responses:
+        '201': { description: Activated }
+        '401': { description: Unauthorized }
+    delete:
+      tags: [Operator]
+      summary: Deactivate kill-switch (operator only)
+      operationId: deactivateKillSwitch
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Deactivated }
+        '401': { description: Unauthorized }
+
+  /api/brain/entity/{symbol}:
+    get:
+      tags: [Brain]
+      summary: Brain entity detail
+      operationId: getBrainEntity
+      parameters:
+        - in: path
+          name: symbol
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Entity detail }
+
+  /api/assisted-live/proposals:
+    post:
+      tags: [Execution]
+      summary: Submit a trade proposal (operator only)
+      operationId: submitAssistedProposal
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [symbol, direction, entry, stop, target, reason, confidence]
+              properties:
+                symbol:     { type: string }
+                direction:  { type: string, enum: [long, short] }
+                entry:      { type: number }
+                stop:       { type: number }
+                target:     { type: number }
+                reason:     { type: string }
+                confidence: { type: number, minimum: 0, maximum: 100 }
+      responses:
+        '201': { description: Proposal queued }
+        '400': { description: Validation failed }
+        '401': { description: Unauthorized }
+
+  /api/assisted-live/proposals/{id}/execute:
+    post:
+      tags: [Execution]
+      summary: Execute an approved proposal with safety re-checks (operator only)
+      operationId: executeAssistedProposal
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                currentPrice:   { type: number }
+                maxSlippageBps: { type: integer, minimum: 1, maximum: 1000 }
+      responses:
+        '200': { description: Executed }
+        '404': { description: Proposal not found }
+        '409': { description: Blocked by status / risk / slippage gate }
+        '503': { description: Live price feed unavailable }
+
 security:
   - bearerAuth: []
   - apiKeyAuth: []

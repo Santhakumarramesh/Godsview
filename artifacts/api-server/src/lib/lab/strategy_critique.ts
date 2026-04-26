@@ -120,7 +120,7 @@ export class StrategyCritique {
     }
 
     const hasDefinedExits =
-      strategy.exit.profitTargets.length > 0 ||
+      (strategy.exit.takeProfit?.targets?.length || 0) > 0 ||
       strategy.exit.stopLoss !== undefined;
     if (hasDefinedExits) {
       profitFactor += 0.5;
@@ -128,19 +128,17 @@ export class StrategyCritique {
     }
 
     const hasMomentumIndicators = strategy.entry.conditions.some(
-      (c) =>
-        c.includes('rsi') ||
-        c.includes('macd') ||
-        c.includes('stochastic')
+      (c: any) =>
+        c.name?.includes('rsi') ||
+        c.name?.includes('macd') ||
+        c.name?.includes('stochastic')
     );
     if (hasMomentumIndicators) {
       expectedWinRate += 0.05;
       notes.push('Momentum indicators typically improve entry timing');
     }
 
-    const hasVolatilityFilter = strategy.filters.some(
-      (f) => f.type === 'volatility'
-    );
+    const hasVolatilityFilter = strategy.marketContext.volatilityFilter?.minATR !== undefined;
     if (hasVolatilityFilter) {
       expectedWinRate -= 0.05;
       notes.push('Volatility filters may reduce trade frequency');
@@ -148,10 +146,10 @@ export class StrategyCritique {
 
     if (
       strategy.exit.stopLoss &&
-      strategy.exit.profitTargets.length > 0
+      strategy.exit.takeProfit?.targets?.length > 0
     ) {
       const sl = strategy.exit.stopLoss.value || 2;
-      const tp = strategy.exit.profitTargets[0].threshold || 3;
+      const tp = strategy.exit.takeProfit.targets[0]?.ratio || 3;
       profitFactor = 1 + (tp - sl) / sl;
     }
 
@@ -184,10 +182,10 @@ export class StrategyCritique {
     let riskRewardRatio = 1.5;
     if (
       strategy.exit.stopLoss &&
-      strategy.exit.profitTargets.length > 0
+      strategy.exit.takeProfit.targets.length > 0
     ) {
       const risk = strategy.exit.stopLoss.value || 2;
-      const reward = strategy.exit.profitTargets[0].threshold || 3;
+      const reward = strategy.exit.takeProfit.targets[0].ratio || 3;
       riskRewardRatio = reward / risk;
       notes.push(
         `Explicit risk/reward ratio: ${riskRewardRatio.toFixed(2)}:1`
@@ -195,7 +193,7 @@ export class StrategyCritique {
     }
 
     const maxDrawdownEstimate = Math.min(
-      0.15 + 0.05 * strategy.filters.length,
+      0.15 + 0.05 * (strategy.entry.conditions.length || 1),
       0.4
     );
     notes.push(`Estimated max drawdown: ${(maxDrawdownEstimate * 100).toFixed(1)}%`);
@@ -232,27 +230,24 @@ export class StrategyCritique {
 
     let parameterCount = 0;
 
-    if (
-      strategy.exit.stopLoss &&
-      typeof strategy.exit.stopLoss === 'object'
-    ) {
+    if (strategy.exit.stopLoss) {
       parameterCount += 1;
     }
 
-    parameterCount += strategy.exit.profitTargets.length;
-    parameterCount += strategy.filters.length * 2;
+    parameterCount += strategy.exit.takeProfit.targets.length;
+    parameterCount += strategy.entry.conditions.length * 2;
 
     const indicatorCount = strategy.entry.conditions.filter(
-      (c) =>
-        c.includes('rsi') ||
-        c.includes('macd') ||
-        c.includes('sma') ||
-        c.includes('ema')
+      (c: any) =>
+        c.name?.includes('rsi') ||
+        c.name?.includes('macd') ||
+        c.name?.includes('sma') ||
+        c.name?.includes('ema')
     ).length;
     parameterCount += indicatorCount * 2;
 
     const dataPointsRequired = Math.max(100, parameterCount * 30);
-    const actualDataPoints = strategy.marketContext.minDataPoints || 100;
+    const actualDataPoints = 100;
 
     let overallRisk: 'high' | 'medium' | 'low' = 'low';
     let complexityPenalty = 0;
@@ -300,18 +295,16 @@ export class StrategyCritique {
     const notes: string[] = [];
 
     const hasTrendIndicators = strategy.entry.conditions.some(
-      (c) => c.includes('sma') || c.includes('ema')
+      (c: any) => c.name?.includes('sma') || c.name?.includes('ema')
     );
     const trendingMarketScore = hasTrendIndicators ? 0.8 : 0.5;
 
     const hasRangeIndicators = strategy.entry.conditions.some(
-      (c) => c.includes('rsi') || c.includes('bollinger')
+      (c: any) => c.name?.includes('rsi') || c.name?.includes('bollinger')
     );
     const rangingMarketScore = hasRangeIndicators ? 0.7 : 0.4;
 
-    const hasVolatilityFilter = strategy.filters.some(
-      (f) => f.type === 'volatility'
-    );
+    const hasVolatilityFilter = strategy.marketContext.volatilityFilter?.minATR !== undefined;
     const volatileMarketScore = hasVolatilityFilter ? 0.6 : 0.3;
 
     const maxScore = Math.max(
@@ -365,18 +358,18 @@ export class StrategyCritique {
 
     const ruleCount =
       strategy.entry.conditions.length +
-      strategy.exit.exitMethods.length;
+      (strategy.entry.conditions.length > 0 ? 1 : 0);
 
     const indicatorCount = strategy.entry.conditions.filter(
-      (c) =>
+      (c: any) =>
         /rsi|macd|sma|ema|atr|bollinger|stochastic|cci|adx/i.test(
-          c
+          c.name || ''
         )
     ).length;
 
-    const filterCount = strategy.filters.length;
+    const filterCount = strategy.entry.conditions.length;
     const complexityScore = Math.min(
-      (ruleCount + indicatorCount * 1.5 + filterCount) / 10,
+      (ruleCount + indicatorCount * 1.5 + (filterCount || 0)) / 10,
       10
     );
 
@@ -423,7 +416,7 @@ export class StrategyCritique {
     let crowdingScore = 0;
 
     const hasMACDRSI = strategy.entry.conditions.some(
-      (c) => c.includes('macd') && c.includes('rsi')
+      (c: any) => c.name?.includes('macd') && c.name?.includes('rsi')
     );
     if (hasMACDRSI) {
       crowdingScore += 2;
@@ -431,11 +424,11 @@ export class StrategyCritique {
     }
 
     const hasMovingAverageCrossover =
-      strategy.entry.conditions.some((c) =>
-        /sma|ema/.test(c)
+      strategy.entry.conditions.some((c: any) =>
+        /sma|ema/.test(c.name || '')
       ) &&
-      strategy.entry.conditions.filter((c) =>
-        /sma|ema/.test(c)
+      strategy.entry.conditions.filter((c: any) =>
+        /sma|ema/.test(c.name || '')
       ).length >= 2;
     if (hasMovingAverageCrossover) {
       crowdingScore += 1.5;
@@ -443,7 +436,7 @@ export class StrategyCritique {
     }
 
     const hasBollingerRSI = strategy.entry.conditions.some(
-      (c) => c.includes('bollinger') && c.includes('rsi')
+      (c: any) => c.name?.includes('bollinger') && c.name?.includes('rsi')
     );
     if (hasBollingerRSI) {
       crowdingScore += 1.5;
@@ -451,7 +444,7 @@ export class StrategyCritique {
     }
 
     const hasSupportResistance = strategy.entry.conditions.some(
-      (c) => c.includes('support') || c.includes('resistance')
+      (c: any) => c.name?.includes('support') || c.name?.includes('resistance')
     );
     if (hasSupportResistance && !hasMovingAverageCrossover) {
       crowdingScore += 0.5;
@@ -495,19 +488,15 @@ export class StrategyCritique {
   ): ExecutionRiskAnalysis {
     const notes: string[] = [];
 
-    const slippageEstimate = 0.005 + strategy.filters.length * 0.001;
+    const slippageEstimate = 0.005 + (strategy.entry.conditions.length || 0) * 0.001;
     notes.push(
       `Estimated slippage: ${(slippageEstimate * 100).toFixed(2)}%`
     );
 
-    const hasVolatilityFilter = strategy.filters.some(
-      (f) => f.type === 'volatility'
-    );
+    const hasVolatilityFilter = strategy.marketContext.volatilityFilter?.minATR !== undefined;
     const liquidityScore = hasVolatilityFilter ? 0.8 : 0.6;
 
-    const hasTimeFilter = strategy.filters.some(
-      (f) => f.type === 'time'
-    );
+    const hasTimeFilter = strategy.marketContext.sessionFilter?.allowedSessions !== undefined;
     const timingDependency = hasTimeFilter ? 'high' : 'medium';
 
     const entryCount = strategy.entry.conditions.length;
@@ -520,7 +509,7 @@ export class StrategyCritique {
     }
 
     if (
-      strategy.entry.entryMethod === 'limit' &&
+      strategy.entry.type === 'limit' &&
       timingDependency === 'high'
     ) {
       notes.push(

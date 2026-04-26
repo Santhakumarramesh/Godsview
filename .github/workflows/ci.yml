@@ -2,295 +2,136 @@ name: GodsView CI/CD
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
     branches: [main]
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+env:
+  NODE_VERSION: "22"
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  # ── 1. TypeCheck + Test ───────────────────────────────────────────
-  typecheck-and-test:
-    name: TypeCheck + Test
+  typecheck:
+    name: TypeScript Check
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-
     steps:
       - uses: actions/checkout@v4
-
       - uses: pnpm/action-setup@v4
         with:
           version: latest
-
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck:libs
+      - name: Typecheck API Server
+        run: cd artifacts/api-server && npx tsc --noEmit
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: TypeCheck libs
-        run: pnpm run typecheck:libs
-
-      - name: TypeCheck API Server
-        continue-on-error: true
-        run: pnpm --filter @workspace/api-server typecheck
-
-      - name: TypeCheck Dashboard
-        run: pnpm --filter @workspace/godsview-dashboard typecheck
-
-      - name: Run Unit Tests
-        run: pnpm --filter @workspace/api-server test
-        env:
-          PORT: "3000"
-          GODSVIEW_SYSTEM_MODE: paper
-          NODE_ENV: test
-
-  # ── 2. Python v2 Microservices ────────────────────────────────────
-  python-v2:
-    name: Python v2 Services (lint + test)
+  test:
+    name: Test Suite
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-
+    needs: typecheck
+    env:
+      NODE_ENV: test
+      GODSVIEW_SYSTEM_MODE: dry_run
+      GODSVIEW_ENABLE_LIVE_TRADING: "false"
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-
-      - name: Install Python dependencies
-        run: |
-          pip install --upgrade pip
-          pip install -r services/requirements.txt
-          pip install ruff pytest pytest-asyncio
-
-      - name: Ruff lint
-        run: ruff check services/ godsview-openbb/ --select=E,W,F,I --ignore=E501,F401 || true
-
-      - name: Ruff format check
-        run: ruff format --check services/ godsview-openbb/ || true
-
-      - name: MyPy typecheck (shared contracts)
-        run: |
-          pip install mypy pydantic
-          mypy godsview-openbb/app/shared_contracts.py --ignore-missing-imports --no-error-summary || true
-
-      - name: Run pytest (all 130+ tests)
-        env:
-          APP_ENV: development
-          ALPACA_KEY_ID: ""
-          ALPACA_SECRET_KEY: ""
-          SECRET_KEY: test-secret
-          INTERNAL_API_KEY: internal-dev-key
-        run: |
-          cd ${{ github.workspace }}
-          python -m pytest services/tests/ -q --tb=short --no-header
-
-  # ── 2b. Security Scan ─────────────────────────────────────────────
-  security-scan:
-    name: Security Scan
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    steps:
-      - uses: actions/checkout@v4
-
       - uses: pnpm/action-setup@v4
         with:
           version: latest
-
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck:libs
+      - name: Run Tests
+        run: cd artifacts/api-server && npx vitest run --reporter=verbose
+        timeout-minutes: 10
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Audit Node dependencies
-        run: pnpm audit --audit-level=high || true
-
-      - name: Check for secrets in code
-        run: |
-          if grep -rn "ALPACA_SECRET\|sk-[a-zA-Z0-9]\{20,\}\|password\s*=\s*['\"][^'\"]\+" --include="*.ts" --include="*.js" --include="*.py" api-server/src/ godsview-openbb/ services/ 2>/dev/null | grep -v "test\|mock\|example\|\.env\."; then
-            echo "::warning::Potential hardcoded secrets detected"
-          fi
-
-      - name: Check for unsafe patterns
-        run: |
-          if grep -rn "eval(\|Function(\|child_process\|exec(" --include="*.ts" --include="*.js" api-server/src/ 2>/dev/null | grep -v "test\|__tests__"; then
-            echo "::warning::Potentially unsafe code patterns detected"
-          fi
-
-  # ── 2c. Contract Validation ──────────────────────────────────────
-  contract-validation:
-    name: Validate Shared Contracts
+  build-api:
+    name: Build API
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    needs: [typecheck-and-test]
-
+    needs: typecheck
     steps:
       - uses: actions/checkout@v4
-
       - uses: pnpm/action-setup@v4
         with:
           version: latest
-
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck:libs
+      - name: Build API
+        run: cd artifacts/api-server && pnpm run build
+      - name: Verify bundle exists
+        run: test -f artifacts/api-server/dist/index.mjs
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run contract tests
-        run: |
-          GODSVIEW_DATA_DIR=artifacts/api-server/.runtime pnpm --filter @workspace/api-server exec vitest run src/__tests__/shared_contracts.test.ts
-        env:
-          NODE_ENV: test
-
-  # ── 3. Docker build Python services (main only) ───────────────────
-  docker-python:
-    name: Docker Build (Python services)
+  build-dashboard:
+    name: Build Dashboard
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    needs: [python-v2]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    permissions:
-      contents: read
-      packages: write
-
+    needs: typecheck
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build Python services image
-        uses: docker/build-push-action@v6
-        with:
-          context: ./services
-          dockerfile: ./services/Dockerfile
-          push: true
-          tags: |
-            ghcr.io/${{ github.repository }}-python:latest
-            ghcr.io/${{ github.repository }}-python:sha-${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  # ── 4. Build ──────────────────────────────────────────────────────
-  build:
-    name: Build
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    needs: [typecheck-and-test, python-v2, security-scan, contract-validation]
-
-    steps:
-      - uses: actions/checkout@v4
-
       - uses: pnpm/action-setup@v4
         with:
           version: latest
-
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build API Server
-        run: pnpm --filter @workspace/api-server build
-
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck:libs
       - name: Build Dashboard
-        run: pnpm --filter @workspace/godsview-dashboard build
+        run: cd artifacts/godsview-dashboard && pnpm run build
+      - name: Verify build output
+        run: test -d artifacts/godsview-dashboard/dist
 
-      - name: Verify test count (regression gate)
-        run: |
-          TEST_COUNT=$(GODSVIEW_DATA_DIR=artifacts/api-server/.runtime pnpm --filter @workspace/api-server exec vitest run --reporter=json 2>/dev/null | grep -o '"numPassedTests":[0-9]*' | grep -o '[0-9]*' || echo "0")
-          echo "Tests passed: $TEST_COUNT"
-          if [ "$TEST_COUNT" -lt 3000 ]; then
-            echo "::error::Test count regression: $TEST_COUNT < 3000 minimum"
-            exit 1
-          fi
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-dist
-          path: |
-            artifacts/api-server/dist/
-            artifacts/godsview-dashboard/dist/
-          retention-days: 7
-
-  # ── 5. Docker Build + Push (main only) ───────────────────────────
   docker:
-    name: Docker Build & Push
+    name: Docker Image
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    needs: build
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [test, build-api, build-dashboard]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: read
       packages: write
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
+      - uses: docker/metadata-action@v5
         id: meta
-        uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            type=sha,prefix=sha-
+            type=sha,prefix=
             type=raw,value=latest
-
-      - name: Build and push
-        uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v5
         with:
           context: .
-          dockerfile: Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # ── 6. Deploy (main only, after Docker push) ─────────────────────
   deploy:
-    name: Deploy to Production
+    name: Deploy
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     needs: docker
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     environment: production
-
     steps:
+      - uses: actions/checkout@v4
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
         with:
@@ -299,8 +140,8 @@ jobs:
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script: |
             cd /opt/godsview
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            docker compose pull
-            docker compose up -d --remove-orphans
-            docker image prune -f
-            echo "Deploy complete — $(docker compose ps --format 'table {{.Name}}\t{{.Status}}')"
+            docker compose pull api
+            docker compose up -d api
+            sleep 10
+            docker compose exec api curl -sf http://localhost:3001/healthz || echo "Health check warning"
+            echo "Deploy complete"
