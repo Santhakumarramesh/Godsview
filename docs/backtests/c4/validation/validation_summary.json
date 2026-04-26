@@ -1,0 +1,208 @@
+{
+  "validation_date": "2026-04-26",
+  "threshold_65": {
+    "total_trades": 234,
+    "total_pnl_pct": -98.72,
+    "details": [
+      {
+        "sym": "BTC/USD",
+        "tf": "5m",
+        "trades": 15,
+        "wr": 26.7,
+        "pf": 0.44,
+        "pnl": -1.16
+      },
+      {
+        "sym": "BTC/USD",
+        "tf": "15m",
+        "trades": 16,
+        "wr": 37.5,
+        "pf": 0.74,
+        "pnl": -1.64
+      },
+      {
+        "sym": "BTC/USD",
+        "tf": "1h",
+        "trades": 18,
+        "wr": 33.3,
+        "pf": 0.83,
+        "pnl": -1.62
+      },
+      {
+        "sym": "BTC/USD",
+        "tf": "4h",
+        "trades": 26,
+        "wr": 23.1,
+        "pf": 0.24,
+        "pnl": -24.26
+      },
+      {
+        "sym": "ETH/USD",
+        "tf": "5m",
+        "trades": 13,
+        "wr": 69.2,
+        "pf": 1.94,
+        "pnl": 1.08
+      },
+      {
+        "sym": "ETH/USD",
+        "tf": "15m",
+        "trades": 17,
+        "wr": 41.2,
+        "pf": 1.11,
+        "pnl": 0.53
+      },
+      {
+        "sym": "ETH/USD",
+        "tf": "1h",
+        "trades": 20,
+        "wr": 30.0,
+        "pf": 0.78,
+        "pnl": -5.08
+      },
+      {
+        "sym": "ETH/USD",
+        "tf": "4h",
+        "trades": 25,
+        "wr": 24.0,
+        "pf": 0.29,
+        "pnl": -45.09
+      },
+      {
+        "sym": "SOL/USD",
+        "tf": "5m",
+        "trades": 17,
+        "wr": 29.4,
+        "pf": 0.27,
+        "pnl": -2.53
+      },
+      {
+        "sym": "SOL/USD",
+        "tf": "15m",
+        "trades": 21,
+        "wr": 38.1,
+        "pf": 0.65,
+        "pnl": -2.68
+      },
+      {
+        "sym": "SOL/USD",
+        "tf": "1h",
+        "trades": 20,
+        "wr": 40.0,
+        "pf": 1.13,
+        "pnl": 1.97
+      },
+      {
+        "sym": "SOL/USD",
+        "tf": "4h",
+        "trades": 26,
+        "wr": 26.9,
+        "pf": 0.58,
+        "pnl": -18.24
+      }
+    ]
+  },
+  "threshold_80": {
+    "total_trades": 85,
+    "total_pnl_pct": 6.28,
+    "details": [
+      {
+        "sym": "BTC/USD",
+        "tf": "5m",
+        "trades": 5,
+        "wr": 20.0,
+        "pf": 0.2,
+        "pnl": -0.31
+      },
+      {
+        "sym": "BTC/USD",
+        "tf": "15m",
+        "trades": 6,
+        "wr": 33.3,
+        "pf": 1.03,
+        "pnl": 0.09
+      },
+      {
+        "sym": "BTC/USD",
+        "tf": "1h",
+        "trades": 5,
+        "wr": 40.0,
+        "pf": 1.53,
+        "pnl": 1.37
+      },
+      {
+        "sym": "BTC/USD",
+        "tf": "4h",
+        "trades": 9,
+        "wr": 22.2,
+        "pf": 1.07,
+        "pnl": 0.22
+      },
+      {
+        "sym": "ETH/USD",
+        "tf": "5m",
+        "trades": 7,
+        "wr": 28.6,
+        "pf": 0.46,
+        "pnl": -0.62
+      },
+      {
+        "sym": "ETH/USD",
+        "tf": "15m",
+        "trades": 7,
+        "wr": 42.9,
+        "pf": 0.61,
+        "pnl": -1.28
+      },
+      {
+        "sym": "ETH/USD",
+        "tf": "1h",
+        "trades": 6,
+        "wr": 50.0,
+        "pf": 0.95,
+        "pnl": -0.12
+      },
+      {
+        "sym": "ETH/USD",
+        "tf": "4h",
+        "trades": 7,
+        "wr": 28.6,
+        "pf": 2.68,
+        "pnl": 7.13
+      },
+      {
+        "sym": "SOL/USD",
+        "tf": "5m",
+        "trades": 4,
+        "wr": 50.0,
+        "pf": 2.17,
+        "pnl": 0.55
+      },
+      {
+        "sym": "SOL/USD",
+        "tf": "15m",
+        "trades": 7,
+        "wr": 57.1,
+        "pf": 2.01,
+        "pnl": 1.13
+      },
+      {
+        "sym": "SOL/USD",
+        "tf": "1h",
+        "trades": 10,
+        "wr": 60.0,
+        "pf": 3.57,
+        "pnl": 8.64
+      },
+      {
+        "sym": "SOL/USD",
+        "tf": "4h",
+        "trades": 12,
+        "wr": 16.7,
+        "pf": 0.4,
+        "pnl": -10.52
+      }
+    ]
+  },
+  "conclusion": "Threshold 80 produces fewer but higher-quality trades with better risk-adjusted returns. T65 generates 3x more trades but with significantly worse PnL. Recommendation: keep threshold at 80."
+}
