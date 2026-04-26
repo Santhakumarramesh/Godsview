@@ -1,14 +1,24 @@
 #!/usr/bin/env python3
 """
-GodsView Crypto Signal Engine - Live Paper Trading
-==================================================
-Real-time crypto signal generation using market structure analysis.
-Runs validated backtest strategies in PAPER TRADING ONLY mode.
+GodsView Crypto Signal Engine v2 — Liquidity-First Paper Trading
+=================================================================
+Real-time crypto signal generation using LIQUIDITY-FIRST market structure.
+v2 applies 8 refined rules from reverse analysis of 754 historical trades.
+
+v2 CHANGES:
+- OB Retest is PRIMARY entry trigger (73% WR, +1.89% avgPnL)
+- BOS/CHOCH demoted to CONFIRMATION only (BOS-only = 9.6% WR)
+- 5m timeframe BLOCKED (9-25% WR — always losing)
+- SHORT + 4h BLOCKED (21.9% WR, -1.32%/trade)
+- Breakout_Retest REMOVED (unstable in walk-forward)
+- C4_control >= 22 REQUIRED (strongest discriminator)
+- OB strength > 50 FLAGGED as warning (inverted signal)
+- 1h timeframe PREFERRED (only consistently profitable)
 
 Strategies:
-- SOLUSD 4h (PF=7.33, WR=81.2%)
+- SOLUSD 1h (preferred), SOLUSD 4h (LONG only)
 - ETHUSD 1h (PF=10.58, WR=76.9%)
-- BTCUSD 4h (PF=2.02, WR=47.1%)
+- BTCUSD 1h (preferred), BTCUSD 4h (LONG only)
 
 Exchange: Kraken via ccxt
 Mode: PAPER ONLY - no real money trades
@@ -47,11 +57,12 @@ except ImportError:
 # ============================================================================
 
 STRATEGIES_CONFIG = {
-    'SOLUSD_4h': {
+    # ── v2: 1h is PRIMARY (only consistently profitable TF — Rule 8) ──
+    'SOLUSD_1h': {
         'symbol': 'SOL/USD',
-        'timeframe': '4h',
-        'profit_factor': 7.33,
-        'win_rate': 81.2,
+        'timeframe': '1h',
+        'profit_factor': 3.65,     # SOLUSD 1h Full_C4 WR=60%
+        'win_rate': 60.0,
         'lookback_candles': 100,
         'enabled': True,
     },
@@ -63,6 +74,23 @@ STRATEGIES_CONFIG = {
         'lookback_candles': 100,
         'enabled': True,
     },
+    'BTCUSD_1h': {
+        'symbol': 'BTC/USD',
+        'timeframe': '1h',
+        'profit_factor': 1.61,     # Full_C4 1h systematic edge
+        'win_rate': 52.4,
+        'lookback_candles': 100,
+        'enabled': True,
+    },
+    # ── v2: 4h kept for LONG only (SHORT+4h blocked in C4 scorer — Rule 3) ──
+    'SOLUSD_4h': {
+        'symbol': 'SOL/USD',
+        'timeframe': '4h',
+        'profit_factor': 7.33,
+        'win_rate': 81.2,
+        'lookback_candles': 100,
+        'enabled': True,
+    },
     'BTCUSD_4h': {
         'symbol': 'BTC/USD',
         'timeframe': '4h',
@@ -71,6 +99,8 @@ STRATEGIES_CONFIG = {
         'lookback_candles': 100,
         'enabled': True,
     },
+    # NOTE: 5m strategies REMOVED entirely (Rule 1)
+    # NOTE: A_BOS_only, B_BOS_OB, C_BOS_OB_OF strategies REMOVED (Rule 2)
 }
 
 TRADING_CONFIG = {
@@ -589,12 +619,33 @@ class SignalGenerator:
         df: pd.DataFrame,
         strategy_name: str
     ) -> List[Signal]:
-        """Generate trading signals for a given symbol and timeframe."""
+        """
+        Generate trading signals — v2 LIQUIDITY-FIRST flow.
+
+        v2 CHANGES (from reverse analysis of 754 trades):
+        - OB Retest is the PRIMARY entry trigger (73% WR, +1.89% avgPnL)
+        - BOS/CHOCH is confirmation only, NOT an entry driver
+        - Order flow is a quality gate (not a signal generator)
+        - Breakout_Retest REMOVED (unstable in walk-forward: 42.9%→30%)
+        - SHORT + 4h BLOCKED at signal level (21.9% WR, -1.32%/trade)
+        - 5m timeframe BLOCKED entirely (9-25% WR across all strategies)
+        - BOS-only strategies REMOVED: A_BOS_only, B_BOS_OB, C_BOS_OB_OF
+
+        New flow: OB Retest → Risk Control → Order Flow Gate → BOS confirms
+        """
         signals = []
-        
+
         if len(df) < 30:
             return signals
-        
+
+        # ── v2 PRE-FILTERS ──
+        # Rule 1: Block 5m timeframe
+        if timeframe == '5m':
+            return signals
+
+        # Rule 3: Block SHORT + 4h combination
+        # (still detect structure for LONG on 4h)
+
         # Detect market structure
         swings = self.structure_analyzer.detect_swing_points(df, lookback=5)
         bos_choch = self.structure_analyzer.detect_bos_choch(swings, df) or {}
@@ -605,7 +656,7 @@ class SignalGenerator:
         absorption = self.flow_analyzer.detect_absorption(df) or {}
         imbalance = self.flow_analyzer.detect_imbalance(df) or {}
 
-        # Null-safe: ensure nested dicts are not None
+        # Null-safe
         if bos_choch.get('bos') is None:
             bos_choch['bos'] = {}
         if bos_choch.get('choch') is None:
@@ -618,109 +669,115 @@ class SignalGenerator:
         bos_strength = bos_choch.get('bos', {}).get('strength', 0)
         choch_dir = bos_choch.get('choch', {}).get('direction')
 
-        # Log BOS state for debugging
-        logger.info(f"SCAN {symbol} {timeframe}: BOS={bos_dir}(str={bos_strength:.0f}) "
+        logger.info(f"v2-SCAN {symbol} {timeframe}: BOS={bos_dir}(str={bos_strength:.0f}) "
                      f"CHOCH={choch_dir} OBs={len(order_blocks)} "
                      f"imbalance={imbalance.get('direction')} swings={len(swings)}")
 
-        # Signal 1: OB_Retest_Long (Strong)
-        # Conditions: Price retests bullish OB + BOS up + flow confirmation
+        # ══════════════════════════════════════════════════════════
+        # v2 SIGNAL: OB_Retest_Long (PRIMARY — highest edge)
+        # Flow: OB Retest detected → flow confirms → BOS as bonus
+        # ══════════════════════════════════════════════════════════
         for ob in order_blocks:
             if ob.type == 'bullish' and current_price >= ob.low and current_price <= ob.high:
+                # v2: OB retest is the entry trigger, NOT BOS
+                # BOS adds confidence but is NOT required
+
+                # Rule 6: Flag high OB strength as warning
+                ob_quality = ob.strength
+                ob_warning = ''
+                if ob.strength > 50:
+                    ob_quality *= 0.6  # Penalize over-tested zones
+                    ob_warning = ' [OB>50 INVERTED]'
+
+                # Base confidence from OB retest quality
+                base_conf = ob_quality * 0.35
+
+                # Flow confirmation adds weight
+                flow_bonus = 0
+                if imbalance.get('direction') == 'bullish':
+                    flow_bonus = imbalance.get('strength', 0) * 0.30
+                if absorption.get('type') == 'bullish':
+                    flow_bonus += 15
+
+                # BOS as CONFIRMATION bonus (not requirement)
+                bos_bonus = 0
                 if bos_dir == 'up':
-                    # Strong signal: BOS + OB + flow all align
-                    if imbalance.get('direction') == 'bullish':
-                        confidence = (
-                            ob.strength * 0.25 +
-                            bos_strength * 0.30 +
-                            imbalance.get('strength', 0) * 0.25 +
-                            (80 if absorption.get('type') == 'bullish' else 40) * 0.20
-                        )
+                    bos_bonus = bos_strength * 0.15
+                elif choch_dir == 'bullish':
+                    bos_bonus = 10  # CHOCH gives smaller bonus
 
-                        if confidence > 55:
-                            signals.append(self._create_signal(
-                                symbol=symbol, timeframe=timeframe,
-                                strategy_name=strategy_name, direction='LONG',
-                                entry_price=current_price,
-                                stop_loss=ob.low * 0.99,
-                                take_profit=current_price * 1.03,
-                                confidence_score=confidence,
-                                order_blocks_used=[ob],
-                                flow_confirmation={
-                                    'imbalance': imbalance.get('direction'),
-                                    'absorption': absorption.get('type'),
-                                    'bos': bos_choch.get('bos')
-                                },
-                                timestamp=current_time
-                            ))
-                    # Moderate signal: BOS + OB (no flow required if BOS strong)
-                    elif bos_strength > 70:
-                        confidence = ob.strength * 0.4 + bos_strength * 0.6
-                        if confidence > 60:
-                            signals.append(self._create_signal(
-                                symbol=symbol, timeframe=timeframe,
-                                strategy_name=strategy_name, direction='LONG',
-                                entry_price=current_price,
-                                stop_loss=ob.low * 0.99,
-                                take_profit=current_price * 1.025,
-                                confidence_score=confidence * 0.9,
-                                order_blocks_used=[ob],
-                                flow_confirmation={
-                                    'bos': bos_choch.get('bos'),
-                                    'note': 'strong_bos_no_flow'
-                                },
-                                timestamp=current_time
-                            ))
+                confidence = base_conf + flow_bonus + bos_bonus + 20  # base floor
 
-        # Signal 2: OB_Retest_Short (Strong)
-        for ob in order_blocks:
-            if ob.type == 'bearish' and current_price >= ob.low and current_price <= ob.high:
-                if bos_dir == 'down':
+                if confidence > 50:
+                    signals.append(self._create_signal(
+                        symbol=symbol, timeframe=timeframe,
+                        strategy_name=strategy_name, direction='LONG',
+                        entry_price=current_price,
+                        stop_loss=ob.low * 0.99,
+                        take_profit=current_price * 1.03,
+                        confidence_score=min(100, confidence),
+                        order_blocks_used=[ob],
+                        flow_confirmation={
+                            'strategy': 'OB_Retest_Long_v2',
+                            'imbalance': imbalance.get('direction'),
+                            'absorption': absorption.get('type'),
+                            'bos': bos_choch.get('bos'),
+                            'bos_role': 'confirmation_only',
+                            'ob_warning': ob_warning,
+                        },
+                        timestamp=current_time
+                    ))
+
+        # ══════════════════════════════════════════════════════════
+        # v2 SIGNAL: OB_Retest_Short (PRIMARY)
+        # BLOCKED on 4h (Rule 3: SHORT+4h is a trap)
+        # ══════════════════════════════════════════════════════════
+        if timeframe != '4h':  # Rule 3: Block SHORT+4h
+            for ob in order_blocks:
+                if ob.type == 'bearish' and current_price >= ob.low and current_price <= ob.high:
+                    ob_quality = ob.strength
+                    ob_warning = ''
+                    if ob.strength > 50:
+                        ob_quality *= 0.6
+                        ob_warning = ' [OB>50 INVERTED]'
+
+                    base_conf = ob_quality * 0.35
+                    flow_bonus = 0
                     if imbalance.get('direction') == 'bearish':
-                        confidence = (
-                            ob.strength * 0.25 +
-                            bos_strength * 0.30 +
-                            imbalance.get('strength', 0) * 0.25 +
-                            (80 if absorption.get('type') == 'bearish' else 40) * 0.20
-                        )
+                        flow_bonus = imbalance.get('strength', 0) * 0.30
+                    if absorption.get('type') == 'bearish':
+                        flow_bonus += 15
 
-                        if confidence > 55:
-                            signals.append(self._create_signal(
-                                symbol=symbol, timeframe=timeframe,
-                                strategy_name=strategy_name, direction='SHORT',
-                                entry_price=current_price,
-                                stop_loss=ob.high * 1.01,
-                                take_profit=current_price * 0.97,
-                                confidence_score=confidence,
-                                order_blocks_used=[ob],
-                                flow_confirmation={
-                                    'imbalance': imbalance.get('direction'),
-                                    'absorption': absorption.get('type'),
-                                    'bos': bos_choch.get('bos')
-                                },
-                                timestamp=current_time
-                            ))
-                    elif bos_strength > 70:
-                        confidence = ob.strength * 0.4 + bos_strength * 0.6
-                        if confidence > 60:
-                            signals.append(self._create_signal(
-                                symbol=symbol, timeframe=timeframe,
-                                strategy_name=strategy_name, direction='SHORT',
-                                entry_price=current_price,
-                                stop_loss=ob.high * 1.01,
-                                take_profit=current_price * 0.975,
-                                confidence_score=confidence * 0.9,
-                                order_blocks_used=[ob],
-                                flow_confirmation={
-                                    'bos': bos_choch.get('bos'),
-                                    'note': 'strong_bos_no_flow'
-                                },
-                                timestamp=current_time
-                            ))
-        
+                    bos_bonus = 0
+                    if bos_dir == 'down':
+                        bos_bonus = bos_strength * 0.15
+                    elif choch_dir == 'bearish':
+                        bos_bonus = 10
+
+                    confidence = base_conf + flow_bonus + bos_bonus + 20
+
+                    if confidence > 50:
+                        signals.append(self._create_signal(
+                            symbol=symbol, timeframe=timeframe,
+                            strategy_name=strategy_name, direction='SHORT',
+                            entry_price=current_price,
+                            stop_loss=ob.high * 1.01,
+                            take_profit=current_price * 0.97,
+                            confidence_score=min(100, confidence),
+                            order_blocks_used=[ob],
+                            flow_confirmation={
+                                'strategy': 'OB_Retest_Short_v2',
+                                'imbalance': imbalance.get('direction'),
+                                'absorption': absorption.get('type'),
+                                'bos': bos_choch.get('bos'),
+                                'bos_role': 'confirmation_only',
+                                'ob_warning': ob_warning,
+                            },
+                            timestamp=current_time
+                        ))
+
         # ── Advanced Order Flow Gate ──────────────────────────────
-        # Compute order flow score for each candidate signal and reject
-        # those below the threshold.  Attach full analysis to every signal.
+        # Quality gate: reject signals where order flow contradicts
         if self.of_scorer is not None and TRADING_CONFIG.get('order_flow_enabled'):
             swing_dicts = [
                 {'index': s.timestamp, 'price': s.price, 'type': s.type}
@@ -750,7 +807,6 @@ class SignalGenerator:
                 sig.flow_confirmation['data_type'] = 'OHLCV_PROXY'
 
                 if of_result.total_score >= threshold:
-                    # Boost confidence by blending structure + flow
                     flow_bonus = (of_result.total_score - threshold) * 0.3
                     sig.confidence_score = min(100, sig.confidence_score + flow_bonus)
                     gated.append(sig)
@@ -768,48 +824,10 @@ class SignalGenerator:
                     )
             signals = gated
 
-        # Signal 3: Breakout_Retest
-        # Price breaks support/resistance and comes back to retest
-        if len(swings) >= 2:
-            last_swing = swings[-1]
-            prev_price = df['close'].iloc[-2]
-            
-            if last_swing.type == 'low' and prev_price > last_swing.price and current_price < last_swing.price:
-                # Broke below support (downside breakout)
-                if imbalance.get('direction') == 'bearish':
-                    confidence = 50 + imbalance.get('strength', 0) * 0.5
-                    signals.append(self._create_signal(
-                        symbol=symbol,
-                        timeframe=timeframe,
-                        strategy_name=strategy_name,
-                        direction='SHORT',
-                        entry_price=current_price,
-                        stop_loss=last_swing.price * 1.01,
-                        take_profit=current_price * 0.97,
-                        confidence_score=confidence,
-                        order_blocks_used=[],
-                        flow_confirmation={'breakout': 'down', 'imbalance': imbalance},
-                        timestamp=current_time
-                    ))
-            
-            elif last_swing.type == 'high' and prev_price < last_swing.price and current_price > last_swing.price:
-                # Broke above resistance (upside breakout)
-                if imbalance.get('direction') == 'bullish':
-                    confidence = 50 + imbalance.get('strength', 0) * 0.5
-                    signals.append(self._create_signal(
-                        symbol=symbol,
-                        timeframe=timeframe,
-                        strategy_name=strategy_name,
-                        direction='LONG',
-                        entry_price=current_price,
-                        stop_loss=last_swing.price * 0.99,
-                        take_profit=current_price * 1.03,
-                        confidence_score=confidence,
-                        order_blocks_used=[],
-                        flow_confirmation={'breakout': 'up', 'imbalance': imbalance},
-                        timestamp=current_time
-                    ))
-        
+        # ── v2: Breakout_Retest REMOVED ──
+        # Walk-forward showed instability: Train 42.9% → Test 30.0%
+        # Was Signal 3 in v1 — now blocked entirely.
+
         return signals
     
     def _create_signal(
@@ -1641,7 +1659,7 @@ def create_flask_app(trading_engine: PaperTradingEngine, signal_history: deque, 
                     results[sym] = {'error': 'insufficient data'}
                     continue
 
-                # Evaluate both directions
+                # Evaluate both directions (C4Scorer handles blocking SHORT+4h internally)
                 directions = {}
                 for direction in ['LONG', 'SHORT']:
                     result = c4_scorer.evaluate(

@@ -1,10 +1,19 @@
 #!/usr/bin/env python3
 """
-GodsView — C4 Order Flow Strategy
-===================================
+GodsView — C4 Order Flow Strategy (v2 — Liquidity-First)
+==========================================================
 Strict 4-confirmation strategy requiring all 4 pillars before trade.
 
-C1 = Context      (0-25): BOS/CHOCH + OB + liquidity sweep/retest zone
+v2 CHANGES (from Reverse Analysis of 754 trades):
+  - Liquidity/OB-Retest FIRST, BOS as confirmation only
+  - Block 5m timeframe entirely
+  - Block SHORT + 4h combination
+  - Require C4_control >= 22/25
+  - Flag OB strength > 50 as warning (inverted signal)
+  - Prioritize OB_Retest signals (73% WR, +1.89% avgPnL)
+  - Prioritize 1h timeframe (only consistently profitable)
+
+C1 = Context      (0-25): OB + liquidity sweep/retest zone + BOS/CHOCH (demoted)
 C2 = Confirmation  (0-25): OB retest + rejection candle + close confirms direction
 C3 = Commitment    (0-25): Order flow: delta + CVD + volume spike + imbalance + absorption
 C4 = Control       (0-25): RR >= 1:2 + SL beyond OB/sweep + risk gate passes
@@ -365,6 +374,13 @@ class C4Scorer:
         self.of_scorer = OrderFlowScorer()
         self.exit_engine = ExitSignalEngine()
 
+    # ── v2 REFINED RULES (from reverse analysis of 754 trades) ──
+    BLOCKED_TIMEFRAMES = {'5m'}          # Rule 1: 5m always loses
+    BLOCKED_COMBOS = {('SHORT', '4h')}   # Rule 3: SHORT+4h = -1.32%/trade
+    MIN_C4_CONTROL = 22.0                # Rule 4: strongest discriminator
+    OB_STRENGTH_WARNING = 50.0           # Rule 6: inverted — high OB str is BAD
+    PREFERRED_TIMEFRAMES = {'1h'}        # Rule 8: only consistently profitable TF
+
     def evaluate(
         self,
         df: pd.DataFrame,
@@ -376,7 +392,7 @@ class C4Scorer:
         paper_mode: bool = True
     ) -> Optional[C4Result]:
         """
-        Run full C4 evaluation.
+        Run full C4 evaluation (v2 — liquidity-first).
 
         Args:
             df: OHLCV DataFrame (needs at least 50 candles)
@@ -388,9 +404,20 @@ class C4Scorer:
             paper_mode: must be True
 
         Returns:
-            C4Result or None if insufficient data
+            C4Result or None if insufficient data or blocked by rules
         """
         if len(df) < 30:
+            return None
+
+        # ── v2 PRE-EVALUATION FILTERS ──
+        # Rule 1: Block 5m timeframe entirely
+        if timeframe in self.BLOCKED_TIMEFRAMES:
+            logger.debug(f"BLOCKED: {symbol} {timeframe} — 5m timeframe banned (Rule 1)")
+            return None
+
+        # Rule 3: Block SHORT + 4h combination
+        if (direction, timeframe) in self.BLOCKED_COMBOS:
+            logger.debug(f"BLOCKED: {symbol} {direction} {timeframe} — SHORT+4h banned (Rule 3)")
             return None
 
         # Detect market structure
@@ -430,12 +457,29 @@ class C4Scorer:
         # Total
         total = c1.total + c2.total + c3.total + c4.total
 
-        if total >= 80:
+        # ── v2 POST-SCORE FILTERS ──
+
+        # Rule 4: Require C4_control >= 22 (strongest discriminator)
+        if c4.total < self.MIN_C4_CONTROL:
+            logger.debug(
+                f"FILTERED: {symbol} {direction} {timeframe} — "
+                f"C4_control {c4.total:.1f} < {self.MIN_C4_CONTROL} (Rule 4)"
+            )
+            # Demote to REJECT regardless of total score
+            decision = C4Decision.REJECT
+            warns.append(f'v2: C4_control {c4.total:.1f} < {self.MIN_C4_CONTROL} — HARD REJECT (Rule 4)')
+        elif total >= 80:
             decision = C4Decision.TRADE
         elif total >= 65:
             decision = C4Decision.WATCHLIST
         else:
             decision = C4Decision.REJECT
+
+        # Rule 8: Log timeframe preference (informational)
+        if timeframe in self.PREFERRED_TIMEFRAMES:
+            confirms.append(f'v2: 1h timeframe — preferred (Rule 8)')
+        elif timeframe == '4h' and direction == 'LONG':
+            confirms.append('v2: 4h LONG — allowed but less preferred')
 
         timestamp = str(df.index[-1]) if hasattr(df.index[-1], 'isoformat') else str(df.index[-1])
 
@@ -459,56 +503,48 @@ class C4Scorer:
     # ── C1: Context scoring ──
 
     def _score_c1(self, direction, bos_choch, order_blocks, sweeps, price, confirms, warns) -> C1Score:
+        """
+        C1 Context — v2 LIQUIDITY-FIRST scoring.
+
+        v2 CHANGE: OB and liquidity sweep are now PRIMARY (0-10 and 0-9).
+        BOS/CHOCH is SECONDARY confirmation only (0-6, down from 0-10).
+        Total still 0-25.
+
+        Rationale (from 754-trade reverse analysis):
+        - OB_Retest: 73% WR, +1.89% avgPnL
+        - BOS-only: 9.6% WR, catastrophic losses
+        - BOS should confirm structure, NOT drive entries
+        """
         bos_score = 0
         ob_score = 0
         sweep_score = 0
         details = {}
 
-        # BOS / CHOCH (0-10)
-        bos = bos_choch.get('bos', {})
-        choch = bos_choch.get('choch', {})
-
-        if direction == 'LONG':
-            if bos.get('detected') and bos.get('direction') == 'up':
-                bos_score = min(10, bos.get('strength', 0) / 100 * 10)
-                confirms.append(f'C1: Bullish BOS (str={bos.get("strength", 0):.0f})')
-                details['bos'] = 'bullish_bos'
-            elif choch.get('detected') and choch.get('direction') == 'bullish':
-                bos_score = min(10, choch.get('strength', 0) / 100 * 10)
-                confirms.append(f'C1: Bullish CHOCH (str={choch.get("strength", 0):.0f})')
-                details['bos'] = 'bullish_choch'
-            else:
-                warns.append('C1: No bullish BOS/CHOCH')
-                details['bos'] = 'none'
-
-        elif direction == 'SHORT':
-            if bos.get('detected') and bos.get('direction') == 'down':
-                bos_score = min(10, bos.get('strength', 0) / 100 * 10)
-                confirms.append(f'C1: Bearish BOS (str={bos.get("strength", 0):.0f})')
-                details['bos'] = 'bearish_bos'
-            elif choch.get('detected') and choch.get('direction') == 'bearish':
-                bos_score = min(10, choch.get('strength', 0) / 100 * 10)
-                confirms.append(f'C1: Bearish CHOCH (str={choch.get("strength", 0):.0f})')
-                details['bos'] = 'bearish_choch'
-            else:
-                warns.append('C1: No bearish BOS/CHOCH')
-                details['bos'] = 'none'
-
-        # Order Block quality (0-8)
+        # ── PRIMARY: Order Block quality (0-10, upgraded from 0-8) ──
         matching_obs = [ob for ob in order_blocks
                         if (direction == 'LONG' and ob.ob_type == 'bullish') or
                            (direction == 'SHORT' and ob.ob_type == 'bearish')]
 
         if matching_obs:
             best_ob = max(matching_obs, key=lambda o: o.strength)
-            ob_score = min(8, best_ob.strength / 100 * 8)
+            raw_ob_score = best_ob.strength / 100 * 10
+
+            # Rule 6: OB strength > 50 is INVERTED — penalize it
+            if best_ob.strength > self.OB_STRENGTH_WARNING:
+                raw_ob_score *= 0.6  # Penalize over-tested zones
+                warns.append(f'C1: OB strength {best_ob.strength:.0f} > 50 — INVERTED WARNING (Rule 6)')
+                details['ob_inverted'] = True
+            else:
+                details['ob_inverted'] = False
+
+            ob_score = min(10, raw_ob_score)
             confirms.append(f'C1: {best_ob.ob_type} OB (str={best_ob.strength:.0f})')
             details['ob'] = {'type': best_ob.ob_type, 'strength': best_ob.strength}
         else:
             warns.append(f'C1: No {direction.lower()} order block found')
             details['ob'] = None
 
-        # Liquidity sweep / zone (0-7)
+        # ── PRIMARY: Liquidity sweep / zone (0-9, upgraded from 0-7) ──
         if direction == 'LONG':
             matching_sweeps = [s for s in sweeps if s['type'] == 'sweep_low']
         else:
@@ -516,19 +552,51 @@ class C4Scorer:
 
         if matching_sweeps:
             best_sweep = max(matching_sweeps, key=lambda s: s['strength'])
-            sweep_score = min(7, best_sweep['strength'] / 100 * 7)
+            sweep_score = min(9, best_sweep['strength'] / 100 * 9)
             confirms.append(f'C1: Liquidity sweep {best_sweep["type"]} (str={best_sweep["strength"]:.0f})')
             details['sweep'] = best_sweep
         else:
             # No sweep but OB retest zone counts for partial credit
             if matching_obs:
-                sweep_score = 2
+                sweep_score = 3
                 details['sweep'] = 'ob_zone_only'
             else:
                 warns.append('C1: No liquidity sweep or retest zone')
                 details['sweep'] = None
 
-        total = min(25, bos_score + ob_score + sweep_score)
+        # ── SECONDARY: BOS / CHOCH (0-6, demoted from 0-10) ──
+        # BOS is confirmation only — NOT an entry driver
+        bos = bos_choch.get('bos', {})
+        choch = bos_choch.get('choch', {})
+
+        if direction == 'LONG':
+            if bos.get('detected') and bos.get('direction') == 'up':
+                bos_score = min(6, bos.get('strength', 0) / 100 * 6)
+                confirms.append(f'C1: Bullish BOS confirms (str={bos.get("strength", 0):.0f})')
+                details['bos'] = 'bullish_bos'
+            elif choch.get('detected') and choch.get('direction') == 'bullish':
+                bos_score = min(6, choch.get('strength', 0) / 100 * 6)
+                confirms.append(f'C1: Bullish CHOCH confirms (str={choch.get("strength", 0):.0f})')
+                details['bos'] = 'bullish_choch'
+            else:
+                # No BOS is NOT a hard fail in v2 — just no bonus
+                bos_score = 0
+                details['bos'] = 'none'
+
+        elif direction == 'SHORT':
+            if bos.get('detected') and bos.get('direction') == 'down':
+                bos_score = min(6, bos.get('strength', 0) / 100 * 6)
+                confirms.append(f'C1: Bearish BOS confirms (str={bos.get("strength", 0):.0f})')
+                details['bos'] = 'bearish_bos'
+            elif choch.get('detected') and choch.get('direction') == 'bearish':
+                bos_score = min(6, choch.get('strength', 0) / 100 * 6)
+                confirms.append(f'C1: Bearish CHOCH confirms (str={choch.get("strength", 0):.0f})')
+                details['bos'] = 'bearish_choch'
+            else:
+                bos_score = 0
+                details['bos'] = 'none'
+
+        total = min(25, ob_score + sweep_score + bos_score)
         return C1Score(total=round(total, 1), bos_choch_score=round(bos_score, 1),
                        ob_score=round(ob_score, 1), sweep_zone_score=round(sweep_score, 1),
                        details=details)
