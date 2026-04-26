@@ -163,7 +163,7 @@ async def _scan_symbol(client: httpx.AsyncClient, symbol: str, timeframe: str) -
 
 async def _scan_loop() -> None:
     """Periodic signal scanner — runs every scan_interval_seconds."""
-    log.info("scan_loop.started", interval=state.scan_interval_seconds)
+    log.info("scan_loop.started interval=%s", state.scan_interval_seconds)
     while state.running:
         try:
             async with httpx.AsyncClient() as client:
@@ -177,7 +177,7 @@ async def _scan_loop() -> None:
                 state.scan_count += 1
                 state.signals_found += found
                 state.last_scan = datetime.now(timezone.utc)
-                log.info("scan.complete", signals_found=found, total_scan=state.scan_count)
+                log.info("scan.complete signals_found=%s total_scan=%s", found, state.scan_count)
         except Exception as exc:
             state.errors.append(f"scan_loop: {exc}")
 
@@ -214,7 +214,7 @@ async def _retrain_loop() -> None:
                             )
                 state.retrain_count += 1
                 state.last_retrain = datetime.now(timezone.utc)
-                log.info("retrain.triggered", count=state.retrain_count)
+                log.info("retrain.triggered count=%s", state.retrain_count)
             except Exception as exc:
                 state.errors.append(f"retrain_loop: {exc}")
 
@@ -289,7 +289,7 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(_position_monitor_loop(), name="position_monitor"),
         asyncio.create_task(_health_ticker_loop(),    name="health_ticker"),
     ])
-    log.info("scheduler.started", tasks=len(_tasks))
+    log.info("scheduler.started tasks=%s", len(_tasks))
     yield
     state.running = False
     for task in _tasks:
@@ -358,7 +358,7 @@ async def trigger_scan(req: ScanTriggerRequest = ScanTriggerRequest()):
             state.scan_count += 1
             state.signals_found += found
             state.last_scan = datetime.now(timezone.utc)
-            log.info("manual_scan.complete", signals_found=found)
+            log.info("manual_scan.complete signals_found=%s", found)
 
     asyncio.create_task(_run())
     return {
