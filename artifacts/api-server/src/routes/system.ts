@@ -827,17 +827,10 @@ router.post("/system/risk/reset", requireOperator, (_req, res) => {
   });
 });
 
-// ─── POST /api/system/kill-switch — toggle runtime kill switch ──────────────
-router.post("/system/kill-switch", requireOperator, (req, res) => {
-  const body = (typeof req.body === "object" && req.body !== null ? req.body : {}) as Record<string, unknown>;
-  const active = Boolean(body.active);
-  const state = setKillSwitchActive(active);
-  res.json({
-    ...state,
-    active,
-    updated_at: new Date().toISOString(),
-  });
-});
+// POST /system/kill-switch removed — handled by routes/kill_switch.ts
+// (the new handler takes {reason} body and writes to lib/kill_switch state
+// which is the store the webhook gate reads).
+
 
 // ─── GET /api/system/audit — recent audit events ─────────────────────────────
 router.get("/system/audit", async (req, res) => {

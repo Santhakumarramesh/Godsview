@@ -87,6 +87,8 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
+    env_file:
+      - .env
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:

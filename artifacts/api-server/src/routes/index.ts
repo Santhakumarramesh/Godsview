@@ -90,6 +90,10 @@ router.use(healthRouter);
 router.use(signalsRouter);
 router.use(tradesRouter);
 router.use(performanceRouter);
+// Kill-switch router must come BEFORE systemRouter so the new {reason}-based
+// handler in routes/kill_switch.ts intercepts before the legacy {active}-based
+// handler in routes/system.ts (which writes to a different in-memory store).
+router.use("/api/system", killSwitchRouter);
 router.use(systemRouter);
 router.use(alpacaRouter);
 router.use(orderbookRouter);

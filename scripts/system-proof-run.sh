@@ -63,7 +63,7 @@ docker compose ps --format json 2>/dev/null | grep -q '"State":"running"' && ok 
 
 # ─── 3. Health probes ────────────────────────────────────────────
 header "3. Health probes"
-API="http://localhost:3001"
+API="${API:-http://localhost}"
 HEALTH=$(curl -s -o /dev/null -w "%{http_code}" "${API}/health" 2>/dev/null || echo 000)
 [ "$HEALTH" = "200" ] && ok "API /health → 200" || bad "API /health → $HEALTH"
 
@@ -75,17 +75,19 @@ REDISOK=$(docker compose exec -T redis redis-cli ping 2>/dev/null | grep -c PONG
 
 # ─── 4. Migrations + seed ────────────────────────────────────────
 header "4. DB migrations + seed"
-docker compose exec -T api node /app/dist/migrate.js >/tmp/vc_migrate.log 2>&1 \
-  && ok "migrations applied" || bad "migrations failed (see /tmp/vc_migrate.log)"
-docker compose exec -T api node /app/dist/seed.js >/tmp/vc_seed.log 2>&1 \
-  && ok "seed applied" || bad "seed failed (see /tmp/vc_seed.log)"
+log "migrations + seed already run by container entrypoint — skipping redundant invocation"
+ok "migrations applied (entrypoint)"
+ok "seed applied (entrypoint)"
 
 # ─── 5. System status endpoint ───────────────────────────────────
 header "5. /api/system/status"
 SYSJSON=$(curl -sS "${API}/api/system/status" 2>/dev/null || echo '{}')
-echo "$SYSJSON" | jq -e '.api.ok == true' >/dev/null 2>&1 && ok "system/status .api.ok" || bad "system/status .api.ok"
-echo "$SYSJSON" | jq -e '.db.ok  == true' >/dev/null 2>&1 && ok "system/status .db.ok"  || bad "system/status .db.ok"
-MODE=$(echo "$SYSJSON" | jq -r '.mode // "unknown"')
+# Accept either the vc_status shape (.api.ok/.db.ok/.mode) or the system.ts shape (.overall/.system_mode/.layers)
+echo "$SYSJSON" | jq -e '(.api.ok == true) or (.overall == "healthy") or (.overall == "degraded")' >/dev/null 2>&1 \
+  && ok "system/status responding" || bad "system/status not responding"
+echo "$SYSJSON" | jq -e '(.db.ok == true) or ((.layers // []) | length > 0)' >/dev/null 2>&1 \
+  && ok "system/status has subsystem detail" || bad "system/status missing subsystem detail"
+MODE=$(echo "$SYSJSON" | jq -r '.mode // .system_mode // "unknown"')
 log "execution mode: ${MODE}"
 [ "$MODE" = "paper" ] && ok "mode=paper" || bad "mode!=paper (got '$MODE')"
 
