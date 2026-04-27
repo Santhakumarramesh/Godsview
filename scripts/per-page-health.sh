@@ -8,6 +8,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 # format: PAGE_NAME|URL_PATH|primary_endpoint
+# Each row's primary_endpoint is the URL the page actually fetches (verified by
+# audit on 2026-04-27). Auth-protected paths are tested with the operator
+# bearer token loaded from .env below.
 PAGES="
 home|/|/api/system/status
 god-brain|/|/api/system/status
@@ -23,26 +26,26 @@ risk-command-v2|/risk-command-v2|/api/correlation/matrix
 portfolio|/portfolio|/api/portfolio/summary
 performance-analytics|/performance-analytics|/api/analytics/summary
 pipeline|/pipeline|/api/system/pipeline/latest
-microstructure|/microstructure|/api/microstructure/heatmap
-order-flow|/order-flow|/api/orderflow/snapshot/BTCUSD
-order-blocks|/order-blocks|/api/structure/order-blocks/BTCUSD
+microstructure|/microstructure|/api/microstructure/quality?symbol=BTCUSD
+order-flow|/order-flow|/api/signal-engine/order-flow
+order-blocks|/order-blocks|/api/market-structure?symbol=BTCUSD
 multi-timeframe|/multi-timeframe|/api/intelligence/mtf/confluence
 regime-detection|/regime-detection|/api/intelligence/regime/current
 regime-intelligence|/regime-intelligence|/api/intelligence/regime/current
 candle-xray|/candle-xray|/api/alpaca/bars?symbol=BTCUSD&timeframe=1Hour
-heatmap-liquidity|/heatmap-liquidity|/api/orderbook/snapshot/BTCUSD
+heatmap-liquidity|/heatmap-liquidity|/api/market/orderbook?symbol=BTCUSD
 footprint-delta|/footprint-delta|/api/features/BTCUSD
-flow-confluence|/flow-confluence|/api/orderflow/snapshot/BTCUSD
-liquidity-environment|/liquidity-environment|/api/orderflow/snapshot/BTCUSD
-liquidity-sweep|/liquidity-sweep|/api/orderflow/snapshot/BTCUSD
-absorption-detector|/absorption-detector|/api/orderflow/snapshot/BTCUSD
-imbalance-engine|/imbalance-engine|/api/orderflow/snapshot/BTCUSD
-execution-pressure|/execution-pressure|/api/orderflow/snapshot/BTCUSD
-dom-depth|/dom-depth|/api/orderbook/snapshot/BTCUSD
+flow-confluence|/flow-confluence|/api/context-fusion/evaluate
+liquidity-environment|/liquidity-environment|/api/market/orderbook?symbol=BTCUSD
+liquidity-sweep|/liquidity-sweep|/api/signals?symbol=BTCUSD&type=sweep&limit=80
+absorption-detector|/absorption-detector|/api/features/BTCUSD
+imbalance-engine|/imbalance-engine|/api/features/BTCUSD
+execution-pressure|/execution-pressure|/api/features/BTCUSD
+dom-depth|/dom-depth|/api/alpaca/quote/BTCUSD
 trades|/trades|/api/trades
 execution|/execution|/api/alpaca/orders
 execution-control|/execution-control|/api/alpaca/orders
-exec-reliability|/exec-reliability|/api/execution-truth/reliability
+exec-reliability|/exec-reliability|/api/exec-reliability/state
 position-monitor|/position-monitor|/api/alpaca/positions/live
 allocation-engine|/allocation-engine|/api/portfolio/allocation
 correlation-risk|/correlation-risk|/api/correlation/matrix
@@ -52,7 +55,7 @@ risk-policies|/risk-policies|/api/risk/policies
 pretrade-gate|/pretrade-gate|/api/risk/policies
 capital-efficiency|/capital-efficiency|/api/capital-gating/launch/status
 capital-gating|/capital-gating|/api/capital-gating/launch/status
-slippage-quality|/slippage-quality|/api/microstructure/slippage?symbol=BTCUSD&side=buy&quantity=10
+slippage-quality|/slippage-quality|/api/analytics/execution
 emergency-controls|/emergency-controls|/api/system/kill-switch
 session-control|/session-control|/api/system/status
 alerts|/alerts|/api/alerts/active
@@ -62,9 +65,9 @@ news-sentiment|/news-sentiment|/api/news/sentiment
 data-integrity|/data-integrity|/api/data-integrity/health
 system|/system|/api/system/status
 system-audit|/system-audit|/api/governance/audit
-proof|/proof|/api/proof/status
+proof|/proof|/api/proof/dashboard?days=30
 super-intelligence|/super-intelligence|/api/super-intelligence/status
-intelligence-center|/intelligence-center|/api/intelligence/health
+intelligence-center|/intelligence-center|/api/system/intelligence-center
 recall-engine|/recall-engine|/api/memory/stats
 case-library|/case-library|/api/memory/failures
 setup-similarity|/setup-similarity|/api/memory/stats
@@ -75,10 +78,10 @@ strategy-builder|/strategy-builder|/api/strategies
 backtester|/backtester|/api/backtest-v2/results
 mcp-backtester|/mcp-backtester|/api/backtest-v2/results
 backtest-credibility|/backtest-credibility|/api/backtest-v2/results
-walk-forward|/walk-forward|/api/walk-forward/status
+walk-forward|/walk-forward|/api/backtest/walk-forward
 experiment-tracker|/experiment-tracker|/api/strategies
 promotion-pipeline|/promotion-pipeline|/api/capital-gating/launch/status
-trust-surface|/trust-surface|/api/trust/surface
+trust-surface|/trust-surface|/api/strategies
 model-governance|/model-governance|/api/governance/audit
 trade-credibility|/backtest-credibility|/api/backtest-v2/results
 strategy-radar|/system|/api/strategies
@@ -94,6 +97,13 @@ webhook-router|/webhook-router|/api/tradingview/health
 tradingview-chart|/tradingview-chart|/api/alpaca/bars?symbol=AAPL&timeframe=1Hour
 "
 
+# Load operator token for auth-protected endpoints (memory routes etc.)
+# We never echo this — only used as a curl Authorization header.
+OPERATOR_TOKEN=""
+if [ -f .env ]; then
+  OPERATOR_TOKEN=$(grep -E "^GODSVIEW_OPERATOR_TOKEN=" .env | cut -d= -f2- | tr -d '"' | tr -d "'")
+fi
+
 REAL=0; DEGRADED=0; BROKEN=0
 echo "Per-page health (15s timeout per endpoint):"
 echo "──────────────────────────────────────────────────────────────"
@@ -103,7 +113,21 @@ echo "────────────────────────�
 while IFS='|' read -r PAGE RPATH EP; do
   [ -z "$PAGE" ] && continue
   [ "$PAGE" = "PAGE_NAME" ] && continue
-  CODE=$(curl -sS -m 15 -o /dev/null -w "%{http_code}" "http://localhost${EP}" 2>/dev/null || echo 000)
+  # Auth-protected endpoints: send the operator bearer token if available.
+  case "$EP" in
+    /api/memory/*|/api/governance/*)
+      if [ -n "$OPERATOR_TOKEN" ]; then
+        CODE=$(curl -sS -m 15 -o /dev/null -w "%{http_code}" \
+          -H "Authorization: Bearer ${OPERATOR_TOKEN}" \
+          "http://localhost${EP}" 2>/dev/null || echo 000)
+      else
+        CODE=$(curl -sS -m 15 -o /dev/null -w "%{http_code}" "http://localhost${EP}" 2>/dev/null || echo 000)
+      fi
+      ;;
+    *)
+      CODE=$(curl -sS -m 15 -o /dev/null -w "%{http_code}" "http://localhost${EP}" 2>/dev/null || echo 000)
+      ;;
+  esac
   case "$CODE" in
     200|307)
       printf "  \033[1;32m✓\033[0m %-26s %-8s %s\n" "$PAGE" "$CODE" "$EP"

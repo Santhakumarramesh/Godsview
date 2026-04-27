@@ -9,6 +9,7 @@ import {
   type OHLCV,
 } from "../lib/feature_pipeline";
 import { markEngineRun, markEngineError } from "../lib/ops_monitor";
+import { getBars } from "../lib/alpaca";
 
 const router = Router();
 
@@ -120,6 +121,77 @@ router.get("/indicators", (req: Request, res: Response): void => {
     logger.error(`Indicator compute failed: ${error}`);
     res.status(503).json({
       error: error instanceof Error ? error.message : "Internal server error",
+    });
+  }
+});
+
+// GET /features/:symbol — fetch latest bars from Alpaca, return current
+// feature vector for the symbol. Powers footprint-delta,
+// absorption-detector, imbalance-engine, and execution-pressure pages.
+//
+// IMPORTANT: this is a catch-all path param and MUST stay below the more
+// specific routes above (/compute, /series, /indicators) so they aren't
+// shadowed.
+//
+// Query params:
+//   timeframe — Alpaca bar TF (1Min|5Min|15Min|1Hour|1Day, default 1Min)
+//   bars     — bar count to fetch (default 200, min 50, max 1000)
+router.get("/:symbol", async (req: Request, res: Response): Promise<void> => {
+  const start = Date.now();
+  const symbol = String(req.params.symbol || "").toUpperCase();
+  if (!symbol) {
+    res.status(400).json({ error: "symbol path param required" });
+    return;
+  }
+
+  const timeframeRaw = String(req.query.timeframe ?? "1Min");
+  const allowedTfs = ["1Min", "5Min", "15Min", "1Hour", "1Day"] as const;
+  const timeframe = (allowedTfs as readonly string[]).includes(timeframeRaw)
+    ? (timeframeRaw as (typeof allowedTfs)[number])
+    : "1Min";
+
+  const requestedBars = Number(req.query.bars ?? 200);
+  const barCount = Math.max(50, Math.min(1000, isNaN(requestedBars) ? 200 : requestedBars));
+
+  try {
+    const bars = await getBars(symbol, timeframe, barCount);
+    if (!bars || bars.length === 0) {
+      res.status(503).json({
+        error: "no_bars",
+        message: `No bars returned for ${symbol} (${timeframe})`,
+      });
+      return;
+    }
+
+    const validBars: OHLCV[] = bars.map((b: any) => ({
+      open: Number(b.open ?? b.o),
+      high: Number(b.high ?? b.h),
+      low: Number(b.low ?? b.l),
+      close: Number(b.close ?? b.c),
+      volume: Number(b.volume ?? b.v ?? 0),
+      timestamp: b.timestamp ?? b.t ?? new Date().toISOString(),
+    }));
+
+    const features = computeFeatures(validBars, symbol, timeframe);
+    markEngineRun("feature-pipeline");
+
+    res.json({
+      symbol,
+      timeframe,
+      features,
+      bars_used: validBars.length,
+      generated_at: new Date().toISOString(),
+      latency_ms: Date.now() - start,
+    });
+  } catch (error) {
+    markEngineError("feature-pipeline");
+    const msg = error instanceof Error ? error.message : String(error);
+    logger.error(`[features] GET /:symbol failed for ${symbol}: ${msg}`);
+    res.status(503).json({
+      error: "feature_compute_failed",
+      message: msg,
+      symbol,
+      timeframe,
     });
   }
 });
