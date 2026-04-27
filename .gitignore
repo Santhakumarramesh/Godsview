@@ -78,3 +78,4 @@ artifacts/api-server/public/public/
 
 # ── Nested clone prevention ───────────────────────────────────────────────────
 Godsview/
+logs/

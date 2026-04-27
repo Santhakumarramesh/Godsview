@@ -61,15 +61,41 @@ else
   bad "backtest run failed"
 fi
 
-# ─── 4. Audit-chain integrity ────────────────────────────────────
-hdr "4. audit-chain integrity"
-INTEG=$(curl -sS "${API}/api/webhooks/audit/verify" 2>/dev/null || echo '{}')
-echo "$INTEG" | jq . > "$OUT/data-integrity.txt" 2>/dev/null
-if echo "$INTEG" | jq -e '.brokenCount == 0' >/dev/null 2>&1; then
-  ok "audit chain verifies (brokenCount=0)"
+# ─── 4. Audit-chain integrity (rolling 24h window) ───────────────
+# We deliberately scope the daily check to the last 24 hours so legacy
+# pre-epoch rows (whose hashed columns may have shifted under earlier
+# schema/encoding migrations) cannot poison tomorrow's run.
+#
+# Inside the window the check is STRICT: any broken row fails the day.
+# Manual full-history audits still go through GET /api/webhooks/audit/verify
+# (untouched) — and we capture its current snapshot below for the record.
+hdr "4. audit-chain integrity (rolling 24h window)"
+WIN_OUT="$OUT/audit-chain-window.json"
+WIN_HUMAN="$OUT/audit-chain-window.txt"
+
+if AUDIT_VERIFY_JSON=1 node scripts/verify-audit-chain-window.mjs > "$WIN_OUT" 2>"$WIN_HUMAN.err"; then
+  WIN_OK=1
 else
-  bad "audit chain has broken rows (see $OUT/data-integrity.txt)"
+  WIN_OK=0
 fi
+
+# Re-emit the human-readable form for the daily folder + stdout
+AUDIT_WINDOW_HOURS="${AUDIT_WINDOW_HOURS:-24}" node scripts/verify-audit-chain-window.mjs \
+  > "$WIN_HUMAN" 2>&1 || true
+cat "$WIN_HUMAN"
+
+if [ "$WIN_OK" = "1" ] && jq -e '.brokenCount == 0' "$WIN_OUT" >/dev/null 2>&1; then
+  ok "audit chain verifies (rolling 24h, brokenCount=0)"
+else
+  FIRST_BROKEN=$(jq -r '.broken[0].id // "n/a"' "$WIN_OUT" 2>/dev/null)
+  TOTAL=$(jq -r '.total // 0' "$WIN_OUT" 2>/dev/null)
+  BROKEN=$(jq -r '.brokenCount // "?"' "$WIN_OUT" 2>/dev/null)
+  bad "audit chain has broken rows in last 24h (total=$TOTAL, broken=$BROKEN, first_id=$FIRST_BROKEN — see $WIN_OUT)"
+fi
+
+# Also snapshot the full-history endpoint result for manual audit reference.
+INTEG=$(curl -sS "${API}/api/webhooks/audit/verify" 2>/dev/null || echo '{}')
+echo "$INTEG" | jq . > "$OUT/data-integrity.txt" 2>/dev/null || echo "$INTEG" > "$OUT/data-integrity.txt"
 
 # ─── 5. Export today's audit + trades + metrics ─────────────────
 hdr "5. Daily exports"

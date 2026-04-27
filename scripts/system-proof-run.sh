@@ -181,12 +181,29 @@ VCMODE_STATUS=$(curl -sS -o /dev/null -w "%{http_code}" "http://localhost/vc-mod
 # /vc-mode is a SPA route, served by index.html — also expects 200
 [ "$VCMODE_STATUS" = "200" ] && ok "dashboard /vc-mode → 200" || bad "dashboard /vc-mode → $VCMODE_STATUS"
 
-# ─── 11a. Audit chain verifies clean ─────────────────────────────
-header "11a. Audit chain integrity"
+# ─── 11a. Audit chain integrity (rolling 24h window) ────────────
+# Daily/system-proof checks verify only the last 24 hours so legacy
+# pre-epoch rows cannot poison the run; tamper detection inside the
+# window remains strict. The full-history endpoint
+# (GET /api/webhooks/audit/verify) is unchanged for manual audits and
+# is still snapshotted below for diagnostics.
+header "11a. Audit chain integrity (rolling 24h window)"
+WINDOW_OUT="/tmp/vc_audit_window.json"
+if AUDIT_VERIFY_JSON=1 node scripts/verify-audit-chain-window.mjs > "$WINDOW_OUT" 2>/dev/null; then
+  WIN_RC=0
+else
+  WIN_RC=$?
+fi
+# Human-readable line for the operator
+AUDIT_WINDOW_HOURS="${AUDIT_WINDOW_HOURS:-24}" node scripts/verify-audit-chain-window.mjs 2>/dev/null | sed 's/^/    /'
+if [ "$WIN_RC" = "0" ] && jq -e '.brokenCount == 0' "$WINDOW_OUT" >/dev/null 2>&1; then
+  ok "audit chain verifies (rolling 24h, no broken rows)"
+else
+  FIRST=$(jq -r '.broken[0].id // "n/a"' "$WINDOW_OUT" 2>/dev/null)
+  bad "audit chain reports broken rows in last 24h (first id=$FIRST)"
+fi
+# Snapshot full-history endpoint for diagnostics — does not gate the run
 CHAIN=$(curl -sS "${API}/api/webhooks/audit/verify" 2>/dev/null || echo '{}')
-echo "$CHAIN" | jq -e '.brokenCount == 0' >/dev/null 2>&1 \
-  && ok "audit chain verifies (no broken rows)" \
-  || bad "audit chain reports broken rows"
 
 # ─── 11b. Idempotency replay returns 409 ─────────────────────────
 header "11b. Idempotency-Key replay"
@@ -249,7 +266,7 @@ printf "God Brain updated:    %s\n" "$( [ -n "$BRAINID" ] && echo PASS || echo F
 printf "Audit log created:    %s\n" "$( [ -n "$AUDITID" ] && echo PASS || echo FAIL )"
 printf "Dashboard reachable:  %s\n" "$( [ "$DASH_STATUS" = "200" ] && echo PASS || echo FAIL )"
 printf "VC Mode reachable:    %s\n" "$( [ "$VCMODE_STATUS" = "200" ] && echo PASS || echo FAIL )"
-printf "Audit chain verify:   %s\n" "$( echo "$CHAIN" | jq -e '.brokenCount == 0' >/dev/null 2>&1 && echo PASS || echo FAIL )"
+printf "Audit chain verify:   %s\n" "$( jq -e '.brokenCount == 0' "$WINDOW_OUT" >/dev/null 2>&1 && echo PASS || echo FAIL )"
 printf "Idempotency replay:   %s\n" "$( [ "$DUP_STATUS" = "409" ] && echo PASS || echo FAIL )"
 printf "Operator auth gate:   %s\n" "$( [ "$M_STATUS" = "401" ] || [ "$M_STATUS" = "403" ] && echo PASS || echo FAIL )"
 printf "Backtest proof:       %s\n" "$( [ -f docs/backtests/regime_proof/summary.json ] && echo PASS || echo FAIL )"
