@@ -154,7 +154,10 @@ router.use(tradingviewOverlayRouter);
 router.use(liveIntelligenceMonitorRouter);
 router.use(circuitBreakerRouter);
 router.use(positionSizingRouter);
-router.use(tradeJournalRouter);
+// trade-journal router exposes /snapshot, /entries, /analytics, /replay, /reset
+// — mount under /trade-journal so the dashboard's /api/trade-journal/* calls
+// resolve correctly (the parent router is mounted at /api in app.ts).
+router.use("/trade-journal", tradeJournalRouter);
 router.use(systemOrchestratorRouter);
 router.use(apiGatewayRouter);
 router.use("/api", dailyReviewRouter);
