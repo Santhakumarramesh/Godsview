@@ -72,12 +72,14 @@ const BRAIN_NODES: Omit<BrainNode, "x" | "y" | "vx" | "vy">[] = [
 ];
 
 function createEdges(nodes: typeof BRAIN_NODES): NodeEdge[] {
+  // Edge strength is a visual property — kept deterministic (0.8) so the
+  // graph layout is stable across reloads.
   const edges: NodeEdge[] = [];
   const ids = new Set(nodes.map((n) => n.id));
   for (const node of nodes) {
     for (const target of node.connections) {
       if (ids.has(target)) {
-        edges.push({ from: node.id, to: target, strength: 0.6 + Math.random() * 0.4 });
+        edges.push({ from: node.id, to: target, strength: 0.8 });
       }
     }
   }
@@ -85,10 +87,12 @@ function createEdges(nodes: typeof BRAIN_NODES): NodeEdge[] {
 }
 
 function initNodes(): BrainNode[] {
+  // Deterministic radial layout so positions don't jiggle between renders.
   const cx = 500, cy = 350;
   return BRAIN_NODES.map((n, i) => {
     const angle = (i / BRAIN_NODES.length) * Math.PI * 2;
-    const radius = 160 + Math.random() * 80;
+    // Alternate radii to spread nodes visually without using Math.random.
+    const radius = 160 + (i % 3) * 30;
     return { ...n, x: cx + Math.cos(angle) * radius, y: cy + Math.sin(angle) * radius, vx: 0, vy: 0 };
   });
 }
@@ -104,22 +108,49 @@ export default function BrainNodesPage() {
   const animFrameRef = useRef<number>(0);
   const timeRef = useRef(0);
 
-  /* ── Simulated status updates ─────────────────────────────────────────────── */
+  /* ── Real subsystem health updates ───────────────────────────────────────── */
+  // Poll /api/system/health/deep to overlay real subsystem state onto the
+  // architectural node graph. The graph topology (nodes + connections) is
+  // a fixed documentation of the system architecture; the live status (
+  // healthy/degraded/critical) and metrics come from the live API.
   useEffect(() => {
-    const interval = setInterval(() => {
-      const nodes = nodesRef.current;
-      const idx = Math.floor(Math.random() * nodes.length);
-      const node = nodes[idx];
-      node.latencyMs = Math.max(0.1, node.latencyMs + (Math.random() - 0.5) * 2);
-      node.throughput = Math.max(10, Math.round(node.throughput + (Math.random() - 0.5) * 200));
-      node.errorRate = Math.max(0, Math.min(0.1, node.errorRate + (Math.random() - 0.5) * 0.005));
-      if (node.errorRate > 0.03) node.status = "critical";
-      else if (node.errorRate > 0.015) node.status = "degraded";
-      else if (node.throughput < 50) node.status = "idle";
-      else node.status = "healthy";
-      if (selectedNode?.id === node.id) setSelectedNode({ ...node });
-    }, 2000);
-    return () => clearInterval(interval);
+    let cancelled = false;
+    async function refresh() {
+      try {
+        const r = await fetch("/api/system/health/deep");
+        if (!r.ok) return;
+        const data = await r.json();
+        // The endpoint returns a per-subsystem health map. We try a few
+        // common shapes; if none match we silently leave the static defaults.
+        const layers: any[] = data.layers ?? data.subsystems ?? data.checks ?? [];
+        if (!Array.isArray(layers) || cancelled) return;
+        const byKey: Record<string, any> = {};
+        for (const l of layers) {
+          const k = String(l.name ?? l.id ?? "").toLowerCase().replace(/\s+/g, "-");
+          if (k) byKey[k] = l;
+        }
+        const nodes = nodesRef.current;
+        for (const n of nodes) {
+          const match = byKey[n.id] || byKey[n.label.toLowerCase().replace(/\s+/g, "-")];
+          if (!match) continue;
+          const status = String(match.status ?? "").toLowerCase();
+          if (status === "ok" || status === "healthy" || status === "active") n.status = "healthy";
+          else if (status === "warning" || status === "degraded") n.status = "degraded";
+          else if (status === "error" || status === "critical" || status === "failed") n.status = "critical";
+          else if (status === "idle") n.status = "idle";
+          if (typeof match.latencyMs === "number") n.latencyMs = match.latencyMs;
+          if (typeof match.throughput === "number") n.throughput = match.throughput;
+          if (typeof match.errorRate === "number") n.errorRate = match.errorRate;
+        }
+        if (selectedNode) {
+          const refreshed = nodes.find((n) => n.id === selectedNode.id);
+          if (refreshed) setSelectedNode({ ...refreshed });
+        }
+      } catch { /* ignore — leave static state */ }
+    }
+    refresh();
+    const interval = setInterval(refresh, 5000);
+    return () => { cancelled = true; clearInterval(interval); };
   }, [selectedNode]);
 
   /* ── Find node at point ───────────────────────────────────────────────────── */

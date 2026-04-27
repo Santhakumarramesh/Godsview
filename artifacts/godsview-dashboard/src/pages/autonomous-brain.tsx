@@ -160,26 +160,13 @@ export default function AutonomousBrainPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const eventSourceRef = useRef<EventSource | null>(null);
 
-  // Fetch initial brain list
+  // Fetch initial brain list — no mock fallback. If the API is unreachable,
+  // we leave brains empty and the UI shows "no autonomous brains active".
   useEffect(() => {
     fetch("/api/autonomous/brains")
-      .then(r => r.json())
-      .then(d => setBrains(d.brains ?? []))
-      .catch(() => {
-        // Seed mock data if API not available
-        const mockSymbols = ["AAPL","MSFT","GOOGL","AMZN","TSLA","NVDA","META","SPY","QQQ","AMD","NFLX","JPM","V","BTCUSD","ETHUSD"];
-        setBrains(mockSymbols.map(s => {
-          const score = 30 + Math.random() * 50;
-          return {
-            symbol: s, isActive: true, compositeScore: Math.round(score),
-            compositeBias: score > 60 ? "BULL" : score < 40 ? "BEAR" : "NEUTRAL",
-            compositeDecision: score > 60 ? "LONG" : score < 40 ? "SHORT" : "HOLD",
-            winRate: 0.4 + Math.random() * 0.3, totalTrades: Math.floor(50 + Math.random() * 200),
-            pnl: -5000 + Math.random() * 30000, sharpe: 0.5 + Math.random() * 2.5,
-            lastUpdate: Date.now(),
-          };
-        }));
-      });
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
+      .then(d => setBrains(Array.isArray(d.brains) ? d.brains : []))
+      .catch(() => setBrains([]));
   }, []);
 
   // SSE stream for live updates
@@ -199,43 +186,15 @@ export default function AutonomousBrainPage() {
     } catch { return; }
   }, []);
 
-  // Fetch detail when symbol selected
+  // Fetch detail when symbol selected — no mock fallback. If the per-symbol
+  // detail isn't available, leave detail null (the UI shows the empty state).
   useEffect(() => {
     if (!selectedSymbol) { setDetail(null); return; }
     fetch(`/api/autonomous/brain/${selectedSymbol}`)
-      .then(r => r.json())
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
       .then(d => setDetail(d))
-      .catch(() => {
-        // Generate mock detail
-        const dims = ANALYSIS_DIMS;
-        const decisions: any = {};
-        for (const tf of TIMEFRAMES) {
-          const sc: any = {};
-          for (const dim of dims) sc[dim] = { score: 20 + Math.random() * 60, bias: "NEUTRAL" };
-          const conf = Math.round(30 + Math.random() * 50);
-          decisions[tf] = {
-            timeframe: tf, decision: conf > 60 ? "LONG" : conf < 40 ? "SHORT" : "HOLD",
-            confidence: conf, bias: conf > 60 ? "BULL" : "NEUTRAL",
-            entryPrice: 100 + Math.random() * 200, stopLoss: 90 + Math.random() * 180,
-            targets: [110 + Math.random() * 100, 120 + Math.random() * 100, 130 + Math.random() * 100],
-            riskReward: 1.5 + Math.random() * 3, positionSizePct: 1 + Math.random() * 5,
-            humanReadableSummary: `[${selectedSymbol}] Brain analysis for ${tf}`,
-            reasoningChain: dims.map(d => ({
-              module: DIM_LABELS[d], observation: `${DIM_LABELS[d]} score: ${Math.round(sc[d].score)}/100`,
-              conclusion: sc[d].score > 60 ? `${DIM_LABELS[d]} supports LONG` : `${DIM_LABELS[d]} is NEUTRAL`,
-              confidence: sc[d].score / 100, weight: 0.11,
-            })),
-            scores: sc,
-          };
-        }
-        const b = brains.find(x => x.symbol === selectedSymbol);
-        setDetail({
-          symbol: selectedSymbol, compositeScore: b?.compositeScore ?? 50,
-          compositeBias: b?.compositeBias ?? "NEUTRAL", compositeDecision: b?.compositeDecision ?? "HOLD",
-          winRate: b?.winRate ?? 0.5, pnl: b?.pnl ?? 0, sharpe: b?.sharpe ?? 1, decisions,
-        });
-      });
-  }, [selectedSymbol, brains]);
+      .catch(() => setDetail(null));
+  }, [selectedSymbol]);
 
   const filteredBrains = useMemo(() => {
     if (!searchQuery) return brains;

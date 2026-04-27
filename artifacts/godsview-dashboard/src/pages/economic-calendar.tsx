@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/api";
 
 /* ── Types ─────────────────────────────────────────────── */
 interface EconEvent {
@@ -14,6 +16,14 @@ interface EconEvent {
   description: string;
 }
 
+interface EconomicIndicatorsResponse {
+  ok?: boolean;
+  feedConnected?: boolean;
+  indicators?: EconEvent[];
+  message?: string;
+  lastUpdated?: string | null;
+}
+
 const IMPACT_CFG: Record<string, { color: string; bg: string; weight: number; label: string }> = {
   critical: { color: "text-red-400",    bg: "bg-red-500/20",    weight: 4, label: "🔴 Critical" },
   high:     { color: "text-orange-400", bg: "bg-orange-500/20", weight: 3, label: "🟠 High" },
@@ -21,43 +31,19 @@ const IMPACT_CFG: Record<string, { color: string; bg: string; weight: number; la
   low:      { color: "text-blue-400",   bg: "bg-blue-500/20",   weight: 1, label: "🔵 Low" },
 };
 
-const CATEGORIES = ["Interest Rate", "Employment", "Inflation", "GDP", "Manufacturing", "Consumer", "Trade", "Housing"];
-
-/* ── Seed data generator ────────────────────────────────── */
-function generateEvents(): EconEvent[] {
-  const now = Date.now();
-  const impacts: EconEvent["impact"][] = ["low","medium","high","critical"];
-  const countries = ["US","EU","UK","JP","CN","CA","AU"];
-  const names = [
-    "Fed Interest Rate Decision","Non-Farm Payrolls","CPI YoY",
-    "GDP QoQ","ISM Manufacturing PMI","Retail Sales MoM",
-    "Trade Balance","Housing Starts","Consumer Confidence",
-    "ECB Rate Decision","BOJ Policy Rate","Unemployment Rate",
-    "PPI MoM","Industrial Production","Durable Goods Orders",
-    "Michigan Consumer Sentiment","Philadelphia Fed Index",
-    "Empire State Manufacturing","Existing Home Sales",
-    "New Home Sales","Initial Jobless Claims","PCE Price Index",
-  ];
-  const events: EconEvent[] = [];
-  for (let i = 0; i < 30; i++) {
-    const offset = (i - 8) * 3600_000 * (3 + Math.random() * 12);
-    const dt = new Date(now + offset);
-    const impact = impacts[Math.floor(Math.random() * impacts.length)];
-    const country = countries[Math.floor(Math.random() * countries.length)];
-    const name = names[i % names.length];
-    const cat = CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)];
-    const prev = (Math.random() * 5 - 1).toFixed(1) + "%";
-    const fc = (Math.random() * 5 - 1).toFixed(1) + "%";
-    const actual = offset < 0 ? (Math.random() * 5 - 1).toFixed(1) + "%" : undefined;
-    events.push({
-      id: `eco-${i}`,
-      name: `${country} ${name}`,
-      country, datetime: dt.toISOString(), impact, category: cat,
-      previous: prev, forecast: fc, actual,
-      description: `${name} release for ${country}`,
-    });
-  }
-  return events.sort((a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime());
+/* ── Real economic-indicators feed ────────────────────────
+ * Hits /api/market/economic-indicators which currently returns an empty
+ * { feedConnected: false } payload until a macro provider (FRED, Polygon,
+ * etc.) is wired server-side. When that's done, the same endpoint will
+ * return populated `indicators` and this page renders the events live.
+ */
+function useEconomicEvents() {
+  return useQuery<EconomicIndicatorsResponse>({
+    queryKey: ["market", "economic-indicators"],
+    queryFn: () => apiFetch<EconomicIndicatorsResponse>("/market/economic-indicators"),
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
 }
 
 /* ── Countdown hook ─────────────────────────────────────── */
@@ -110,7 +96,15 @@ function ImpactBar({ events }: { events: EconEvent[] }) {
 
 /* ── Main component ─────────────────────────────────────── */
 export default function EconomicCalendarPage() {
-  const [events] = useState(generateEvents);
+  const eventsQuery = useEconomicEvents();
+  const events: EconEvent[] = useMemo(
+    () => (eventsQuery.data?.indicators ?? []).slice().sort(
+      (a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime(),
+    ),
+    [eventsQuery.data?.indicators],
+  );
+  const feedConnected = eventsQuery.data?.feedConnected !== false; // default to true if undefined
+  const noFeedMessage = eventsQuery.data?.message ?? "Macro data provider not configured.";
   const [filterImpact, setFilterImpact] = useState<string>("all");
   const [filterCountry, setFilterCountry] = useState<string>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -159,6 +153,19 @@ export default function EconomicCalendarPage() {
           )}
         </div>
       </div>
+
+      {!feedConnected && (
+        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-4 py-3 text-sm text-yellow-300">
+          <div className="font-medium mb-1">Macro feed not connected</div>
+          <div className="text-yellow-300/70 text-xs">{noFeedMessage}</div>
+        </div>
+      )}
+
+      {eventsQuery.isLoading && (
+        <div className="bg-[#1a1a2e] rounded-lg px-4 py-6 text-center text-gray-400 text-sm">
+          Loading economic indicators…
+        </div>
+      )}
 
       <ImpactBar events={filtered} />
 

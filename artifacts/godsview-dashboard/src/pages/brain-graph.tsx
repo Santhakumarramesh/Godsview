@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense } fr
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import { Text, OrbitControls, Sphere, Line, Html } from '@react-three/drei';
 import * as THREE from 'three';
+import { useSignals } from '@/lib/api';
 
 // ── Design tokens ───────────────────────────────────────────────────────────
 const C = {
@@ -103,35 +104,58 @@ const CONNECTIONS: Connection[] = [
 ];
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
-const generateSyntheticSignal = (): SignalEvent => {
-  const symbols = ['AAPL', 'TSLA', 'MSFT', 'NVDA', 'AMD', 'BTCUSD', 'SPY'];
-  const grades = ['A+', 'A', 'A-', 'B+', 'B', 'C+'];
-  const regimes = ['Bull', 'Bear', 'Sideways', 'Volatile'];
-  const decisions: ('APPROVE' | 'REJECT')[] = ['APPROVE', 'REJECT'];
 
+/** Derive A+/A/A-/B+/B/C grade from a 0..1 final-quality score. */
+function gradeFromScore(q: number): string {
+  if (q >= 0.85) return 'A+';
+  if (q >= 0.75) return 'A';
+  if (q >= 0.65) return 'A-';
+  if (q >= 0.55) return 'B+';
+  if (q >= 0.45) return 'B';
+  return 'C';
+}
+
+/**
+ * Map a real signal row from /api/signals (DB shape) into the SignalEvent
+ * shape this page's visualizer expects. We get structure / order-flow /
+ * recall scores from the DB and synthesize the missing per-node scores
+ * (tick, timeframe, context) by reusing the closest available metric so
+ * the brain cascade animation still renders meaningfully.
+ */
+function dbSignalToEvent(row: any): SignalEvent {
+  const finalQuality = Number(row.final_quality ?? row.finalQuality ?? 0);
+  const structureScore = Number(row.structure_score ?? row.structureScore ?? 0);
+  const orderFlowScore = Number(row.order_flow_score ?? row.orderFlowScore ?? 0);
+  const recallScore = Number(row.recall_score ?? row.recallScore ?? 0);
+  const isLong = String(row.direction ?? '').toLowerCase() === 'long';
+  const isApproved = ['pending', 'approved', 'live', 'open', 'filled'].includes(
+    String(row.status ?? '').toLowerCase(),
+  );
   return {
-    id: `signal-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    timestamp: Date.now(),
-    decision: decisions[Math.floor(Math.random() * decisions.length)],
-    score: Math.floor(Math.random() * 40 + 60),
-    grade: grades[Math.floor(Math.random() * grades.length)],
-    thesis: `${Math.random() > 0.5 ? 'Long' : 'Short'} bias with strong momentum`,
-    symbol: symbols[Math.floor(Math.random() * symbols.length)],
-    direction: Math.random() > 0.5 ? '↑' : '↓',
+    id: `signal-${row.id ?? Date.now()}`,
+    timestamp: row.created_at ? Date.parse(String(row.created_at)) : Date.now(),
+    decision: isApproved ? 'APPROVE' : 'REJECT',
+    score: Math.round(finalQuality * 100),
+    grade: gradeFromScore(finalQuality),
+    thesis: `${row.setup_type ?? 'setup'} ${isLong ? 'long' : 'short'} on ${row.instrument ?? row.symbol ?? '—'}`,
+    symbol: String(row.instrument ?? row.symbol ?? ''),
+    direction: isLong ? '↑' : '↓',
     scores: {
-      tick: Math.random() * 100,
-      timeframe: Math.random() * 100,
-      structure: Math.random() * 100,
-      orderflow: Math.random() * 100,
-      context: Math.random() * 100,
-      memory: Math.random() * 100,
+      // Map the 3 real scores onto the 6 brain nodes — repeat structure
+      // for tick (single-bar context) and order-flow for the latest activation.
+      tick: structureScore * 100,
+      timeframe: structureScore * 100,
+      structure: structureScore * 100,
+      orderflow: orderFlowScore * 100,
+      context: finalQuality * 100,
+      memory: recallScore * 100,
     },
-    regime: regimes[Math.floor(Math.random() * regimes.length)],
-    session: `Session ${Math.floor(Math.random() * 1000)}`,
-    dataQuality: `${Math.floor(Math.random() * 40 + 60)}%`,
-    sentiment: ['Bullish', 'Neutral', 'Bearish'][Math.floor(Math.random() * 3)],
+    regime: String(row.regime ?? 'unknown'),
+    session: row.id ? `Signal #${row.id}` : 'live',
+    dataQuality: `${Math.round(finalQuality * 100)}%`,
+    sentiment: isLong ? 'Bullish' : 'Bearish',
   };
-};
+}
 
 const getNodeColor = (score: number): string => {
   if (score >= 75) return C.primary;
@@ -646,33 +670,60 @@ export default function BrainGraphPage() {
     setLatestSignal(signal);
   }, []);
 
-  // SSE connection + synthetic fallback
-  useEffect(() => {
-    const synthTimer = setInterval(() => {
-      processSignal(generateSyntheticSignal());
-    }, 3500);
+  // Real-data signal feed: poll /api/signals every 3.5s, detect new rows by
+  // ID, and play each new one through the brain cascade animation. The SSE
+  // endpoint /api/mcp/stream/brain-graph is also tried as a primary source —
+  // if the server is streaming live decisions, those land instantly; the
+  // poll is the catch-up channel.
+  const signalsQuery = useSignals();
+  const lastProcessedIdRef = useRef<number>(0);
 
+  useEffect(() => {
+    const rows = signalsQuery.data;
+    if (!rows || !Array.isArray(rows) || rows.length === 0) return;
+    // Sort newest first, then play any rows whose ID is greater than the
+    // last one we processed (so on first mount we play the most recent few,
+    // and on subsequent polls only genuinely new signals).
+    const sorted = [...rows].sort((a: any, b: any) => Number(b.id) - Number(a.id));
+    const fresh = sorted.filter((r: any) => Number(r.id) > lastProcessedIdRef.current);
+    if (fresh.length === 0) return;
+    // Cap: on first load, replay up to the last 5 to populate the right panel.
+    // After that, only the brand new ones (typically 0-2 per poll cycle).
+    const toPlay = lastProcessedIdRef.current === 0 ? fresh.slice(0, 5).reverse() : fresh.reverse();
+    let delay = 0;
+    toPlay.forEach((r) => {
+      setTimeout(() => processSignal(dbSignalToEvent(r)), delay);
+      delay += 600; // stagger so cascades don't overlap visually
+    });
+    lastProcessedIdRef.current = Math.max(...sorted.map((r: any) => Number(r.id) || 0));
+  }, [signalsQuery.data, processSignal]);
+
+  // Optional SSE primary channel — if /api/mcp/stream/brain-graph is wired
+  // server-side, it'll deliver decisions in real time instead of waiting
+  // for the next poll. Failures are silently ignored — polling covers it.
+  useEffect(() => {
+    let es: EventSource | null = null;
     try {
-      const es = new EventSource('/api/mcp/stream/brain-graph');
+      es = new EventSource('/api/mcp/stream/brain-graph');
       es.onmessage = (event) => {
         try {
-          processSignal(JSON.parse(event.data));
-        } catch {
-          /* parse error — ignore */
-        }
+          const parsed = JSON.parse(event.data);
+          // Server may already send the SignalEvent shape, or send a DB row.
+          // Handle both: if it has `scores` keyed by nodes, treat as event;
+          // otherwise translate from DB shape.
+          if (parsed && typeof parsed === 'object' && parsed.scores && parsed.decision) {
+            processSignal(parsed as SignalEvent);
+          } else if (parsed && typeof parsed === 'object') {
+            processSignal(dbSignalToEvent(parsed));
+          }
+        } catch { /* parse error — ignore */ }
       };
-      es.onerror = () => {
-        es.close();
-      };
+      es.onerror = () => { es?.close(); };
       eventSourceRef.current = es;
     } catch {
-      /* SSE unavailable */
+      /* SSE not available — polling above will provide signals */
     }
-
-    return () => {
-      clearInterval(synthTimer);
-      eventSourceRef.current?.close();
-    };
+    return () => { es?.close(); eventSourceRef.current = null; };
   }, [processSignal]);
 
   return (
@@ -747,8 +798,16 @@ export default function BrainGraphPage() {
               gap: '6px',
             }}
           >
-            <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: C.primary, animation: 'pulse 2s infinite' }} />
-            LIVE — {signals.length} signals processed
+            <div style={{
+              width: '6px', height: '6px', borderRadius: '50%',
+              backgroundColor: signalsQuery.isLoading ? C.gold : (signals.length > 0 ? C.primary : C.outline),
+              animation: signals.length > 0 ? 'pulse 2s infinite' : 'none',
+            }} />
+            {signalsQuery.isLoading
+              ? 'LOADING signals…'
+              : signals.length > 0
+                ? `LIVE — ${signals.length} signals processed (DB)`
+                : 'IDLE — no signals yet (waiting for /api/signals)'}
           </div>
 
           {/* Overlay: decision feed */}

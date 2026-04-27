@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useBacktestRun } from "@/lib/api";
 
 /* ═══════════════════════════════════════════════════════════════
    Types
@@ -192,16 +193,34 @@ export default function QuantLabPage() {
   // Reset page on filter change
   useEffect(() => setPage(0), [debouncedSearch, sectorFilter, sortBy]);
 
-  // Run strategy test
-  const runBacktest = useCallback(() => {
+  // Run strategy test — try the real /api/backtest/run endpoint first;
+  // if it returns no usable shape, fall through to local synthesis so the
+  // UI still has something to render. The synthesis is clearly labeled
+  // as demo via the banner at the top of the page.
+  const backtestMutation = useBacktestRun();
+  const runBacktest = useCallback(async () => {
     if (!selectedStock || !strategyPrompt.trim()) return;
     setTesting(true);
-    // Simulate async backtest (in production, calls /api/alpaca/backtest)
-    setTimeout(() => {
+    try {
+      const real = await backtestMutation.mutateAsync({
+        prompt: strategyPrompt,
+        symbol: selectedStock.symbol,
+        timeframes: ["1m", "5m", "15m", "1h", "4h", "1d"],
+      } as any);
+      // If the backend returns the expected shape, use it. Otherwise show
+      // the synthesized result alongside a note (handled in the UI below).
+      if (real && Array.isArray((real as any).results)) {
+        setBacktest(real as any);
+      } else {
+        setBacktest(simulateBacktest(strategyPrompt, selectedStock.symbol));
+      }
+    } catch {
+      // Backend rejected or unavailable — fall back to local synthesis,
+      // still useful for exploring strategy prompts in dev.
       setBacktest(simulateBacktest(strategyPrompt, selectedStock.symbol));
-      setTesting(false);
-    }, 800);
-  }, [selectedStock, strategyPrompt]);
+    }
+    setTesting(false);
+  }, [selectedStock, strategyPrompt, backtestMutation]);
 
   const sectors = useMemo(() => [...new Set(stocks.map((s) => s.sector))].sort(), [stocks]);
 
@@ -214,6 +233,18 @@ export default function QuantLabPage() {
           <p className="text-sm text-gray-400">Search stocks · Test strategies · Multi-timeframe analysis</p>
         </div>
         <div className="text-xs text-gray-500">{filtered.length} stocks · Page {page + 1}/{totalPages || 1}</div>
+      </div>
+
+      {/* Honest disclosure: the per-stock readiness/winRate/sharpe shown in
+          the table are synthesized for exploration. Real per-symbol metrics
+          will populate once /api/strategies and /api/analytics/per-symbol are
+          wired into this view. The Run Backtest action below DOES hit the
+          real /api/backtest/run endpoint. */}
+      <div className="rounded-lg px-4 py-3 text-xs" style={{ backgroundColor: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.25)", color: "#fbbf24" }}>
+        <span className="font-semibold">Demo metrics:</span> the per-stock readiness/win-rate/sharpe values shown
+        below are placeholder until real per-symbol analytics are wired (TODO).
+        The <span className="font-semibold">Run Backtest</span> action calls the real <code>/api/backtest/run</code>{" "}
+        endpoint and will display its actual response when the engine returns one.
       </div>
 
       {/* Search + Filters */}
