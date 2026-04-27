@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { safeLen } from "@/lib/safe";
 
 const API = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -153,7 +154,7 @@ export default function ScreenshotVault() {
         {/* Screenshots Grid */}
         {isLoading ? (
           <div style={{ textAlign: "center", padding: "40px" }}>Loading screenshots...</div>
-        ) : screenshotData && screenshotData.screenshots.length > 0 ? (
+        ) : screenshotData && screenshotData.safeLen(screenshots) > 0 ? (
           <div
             style={{
               display: "grid",
@@ -232,7 +233,7 @@ export default function ScreenshotVault() {
                   )}
 
                   {/* Tags */}
-                  {screenshot.tags.length > 0 && (
+                  {screenshot.safeLen(tags) > 0 && (
                     <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
                       {screenshot.tags.map((tag) => (
                         <span

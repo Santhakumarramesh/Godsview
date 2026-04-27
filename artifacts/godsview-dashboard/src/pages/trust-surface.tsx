@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toArray } from "@/lib/safe";
 
 interface Strategy {
   id: string;
@@ -225,7 +226,7 @@ export default function TrustSurfaceDashboard() {
           }}
         >
           <option value="">-- Choose a strategy --</option>
-          {strategies.map((strategy) => (
+          {toArray(strategies).map((strategy) => (
             <option key={strategy.id} value={strategy.id}>
               {strategy.name}
             </option>

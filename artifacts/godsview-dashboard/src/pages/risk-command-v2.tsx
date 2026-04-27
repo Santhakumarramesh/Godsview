@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { safeFixed, safeNum } from "@/lib/safe";
 
 // ============================================================================
 // Design Tokens (Capital-Grade Styling)
@@ -274,11 +275,11 @@ const Header: React.FC<HeaderProps> = ({ portfolio }) => {
               style={{
                 fontSize: '18px',
                 fontWeight: 700,
-                color: portfolio.grossLeverage > 2 ? C.red : portfolio.grossLeverage > 1.5 ? C.amber : C.green,
+                color: portfolio.data?.grossLeverage ?? 0 > 2 ? C.red : portfolio.data?.grossLeverage ?? 0 > 1.5 ? C.amber : C.green,
                 fontFamily: C.mono,
               }}
             >
-              {portfolio.grossLeverage.toFixed(2)}x
+              {safeFixed(portfolio.data?.grossLeverage ?? 0, 2)}x
             </div>
           </div>
 
@@ -475,13 +476,13 @@ const ExposureMatrix: React.FC<ExposureMatrixProps> = ({ exposure, portfolio }) 
           <div>
             <div style={{ fontSize: '10px', color: C.textFaint, marginBottom: '4px', fontFamily: C.mono }}>Net Leverage</div>
             <div style={{ fontSize: '16px', fontWeight: 700, color: C.purple, fontFamily: C.mono }}>
-              {portfolio.netLeverage.toFixed(2)}x
+              {safeFixed(portfolio.data?.netLeverage ?? 0, 2)}x
             </div>
           </div>
           <div>
             <div style={{ fontSize: '10px', color: C.textFaint, marginBottom: '4px', fontFamily: C.mono }}>HHI (Concentration)</div>
             <div style={{ fontSize: '16px', fontWeight: 700, color: C.amber, fontFamily: C.mono }}>
-              {(portfolio.concentration * 10000).toFixed(0)}
+              {((portfolio.data?.concentration ?? 0) * 10000).toFixed(0)}
             </div>
           </div>
         </div>
@@ -942,7 +943,7 @@ const OvernightPanel: React.FC<OvernightPanelProps> = ({ rules }) => {
         <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: '6px', padding: '12px' }}>
           <div style={{ fontSize: '10px', color: C.textFaint, marginBottom: '8px', fontFamily: C.mono }}>Max Leverage</div>
           <div style={{ fontSize: '18px', fontWeight: 700, color: C.blue, fontFamily: C.mono }}>
-            {rules.maxLeverage.toFixed(2)}x
+            {(rules?.maxLeverage ?? 0).toFixed(2)}x
           </div>
           <div style={{ fontSize: '10px', color: C.textMuted, fontFamily: C.mono }}>This session</div>
         </div>

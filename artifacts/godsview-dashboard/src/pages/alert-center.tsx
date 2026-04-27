@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
+import { toArray } from "@/lib/safe";
 
 const C = {
   bg: "#0e0e0f",
@@ -165,7 +166,7 @@ const ActiveAlertsFeed = () => {
     return () => clearInterval(interval);
   }, [refreshInterval, refetch]);
 
-  const filteredAlerts = alerts.filter((a: any) => {
+  const filteredAlerts = toArray(alerts).filter((a: any) => {
     const priorityMatch = filterPriority === 'All' || a.priority === filterPriority;
     const categoryMatch = filterCategory === 'All' || a.category === filterCategory;
     return priorityMatch && categoryMatch;

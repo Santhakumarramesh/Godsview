@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 const API = import.meta.env.VITE_API_BASE_URL ?? "";
@@ -89,11 +89,11 @@ export default function DOMDepth() {
   }, [rawAsks, previousAsks]);
 
   // Update previous data for flash detection
-  useMemo(() => {
+  useEffect(() => {
     if (bids.length > 0) setPreviousBids(bids.map(b => ({ price: b.price, size: b.size })));
   }, [bids]);
 
-  useMemo(() => {
+  useEffect(() => {
     if (asks.length > 0) setPreviousAsks(asks.map(a => ({ price: a.price, size: a.size })));
   }, [asks]);
 

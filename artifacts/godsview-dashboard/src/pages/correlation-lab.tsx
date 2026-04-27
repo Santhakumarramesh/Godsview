@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { ReactNode } from "react";
+import { toArray } from "@/lib/safe";
 
 const C = {
   bg: "#0e0e0f",
@@ -500,7 +501,7 @@ const DangerousPairsAlert = ({
       error={error ?? undefined}
     >
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "16px" }}>
-        {pairs.map((pair, idx) => (
+        {toArray(pairs).map((pair, idx) => (
           <div
             key={idx}
             style={{

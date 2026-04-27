@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toArray, safeNum, safeFixed } from "@/lib/safe";
 
 const API = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -46,7 +47,7 @@ export default function RiskPoliciesPage() {
     return <div style={{ padding: "32px", color: "#767576" }}>Loading risk policies...</div>;
   }
 
-  const policies: RiskPolicy[] = policiesData?.policies || [];
+  const policies: RiskPolicy[] = toArray<RiskPolicy>(policiesData, "policies");
 
   return (
     <div style={{ padding: "32px", backgroundColor: "#0e0e0f" }}>
@@ -111,7 +112,7 @@ export default function RiskPoliciesPage() {
                   {policy.description}
                 </td>
                 <td style={{ padding: "12px", textAlign: "right", color: "#9cff93" }}>
-                  {policy.current_value.toFixed(2)} {policy.unit}
+                  {safeFixed(policy.current_value, 2)} {policy.unit}
                 </td>
                 <td style={{ padding: "12px", textAlign: "right", color: "#ffffff" }}>
                   {editingPolicy === policy.policy_id ? (
@@ -141,7 +142,7 @@ export default function RiskPoliciesPage() {
                     />
                   ) : (
                     <>
-                      {policy.limit_value.toFixed(2)} {policy.unit}
+                      {safeFixed(policy.limit_value, 2)} {policy.unit}
                     </>
                   )}
                 </td>
@@ -254,7 +255,7 @@ export default function RiskPoliciesPage() {
                   fontFamily: "JetBrains Mono, monospace",
                 }}
               >
-                {policy.current_value.toFixed(2)} / {policy.limit_value.toFixed(2)} {policy.unit}
+                {safeFixed(policy.current_value, 2)} / {safeFixed(policy.limit_value, 2)} {policy.unit}
               </div>
             </div>
 
@@ -270,7 +271,7 @@ export default function RiskPoliciesPage() {
                 style={{
                   height: "100%",
                   backgroundColor: policy.is_violated ? "#ff6b6b" : "#9cff93",
-                  width: `${Math.min((policy.current_value / policy.limit_value) * 100, 100)}%`,
+                  width: `${Math.min((safeNum(policy.current_value) / Math.max(safeNum(policy.limit_value), 0.0001)) * 100, 100)}%`,
                 }}
               />
             </div>

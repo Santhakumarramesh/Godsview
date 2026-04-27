@@ -30,6 +30,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { TrendingUp, TrendingDown, AlertCircle, Star, ArrowUp, ArrowDown } from "lucide-react";
+import { safeNum } from "@/lib/safe";
 
 // Types
 interface Trade {
@@ -295,7 +296,7 @@ export default function Proof() {
                   className="text-5xl font-bold"
                   style={{ color: COLORS.primary, fontFamily: "JetBrains Mono" }}
                 >
-                  {(data.summary.overall_win_rate * 100).toFixed(1)}%
+                  {(data.safeNum(summary?.overall_win_rate) * 100).toFixed(1)}%
                 </div>
               </div>
 

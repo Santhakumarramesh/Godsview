@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
+import { toArray } from '@/lib/safe';
 const C = {
   bg: "#0e0e0f", card: "#1a191b", cardAlt: "#141316",
   border: "#2a2a2d", borderFocus: "#3a3a3f",
@@ -128,7 +129,7 @@ function EquityCurveChart() {
     staleTime: 60000,
   });
 
-  const data = curveData || defaultEquityCurve;
+  const data = toArray<EquityCurvePoint>(curveData) || defaultEquityCurve;
   const minPnL = Math.min(0, ...data.map(d => d.cumPnL));
   const maxPnL = Math.max(...data.map(d => d.cumPnL));
   const pnlRange = maxPnL - minPnL;

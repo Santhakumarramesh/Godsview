@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { toArray } from "@/lib/safe";
 
 const C = {
   bg: "#0e0e0f", card: "#1a191b", cardAlt: "#141316",

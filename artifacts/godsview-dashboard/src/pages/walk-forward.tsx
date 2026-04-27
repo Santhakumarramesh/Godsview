@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { safeFixed, safeNum } from "@/lib/safe";
 
 const API = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -99,7 +100,7 @@ export default function WalkForward() {
                 AVG PROFIT FACTOR
               </div>
               <div style={{ fontFamily: "JetBrains Mono", fontSize: "24px", color: C.accent }}>
-                {resultsData.avg_profit_factor.toFixed(2)}
+                {resultsData.safeFixed(avg_profit_factor, 2)}
               </div>
             </div>
             <div
@@ -114,7 +115,7 @@ export default function WalkForward() {
                 AVG SHARPE
               </div>
               <div style={{ fontFamily: "JetBrains Mono", fontSize: "24px", color: C.accent }}>
-                {resultsData.avg_sharpe.toFixed(2)}
+                {resultsData.safeFixed(avg_sharpe, 2)}
               </div>
             </div>
           </div>
@@ -182,10 +183,10 @@ export default function WalkForward() {
                         {fold.test_start} to {fold.test_end}
                       </td>
                       <td style={{ padding: "12px", textAlign: "right", color: C.text }}>
-                        {fold.profit_factor.toFixed(2)}
+                        {fold.safeFixed(profit_factor, 2)}
                       </td>
                       <td style={{ padding: "12px", textAlign: "right", color: C.text }}>
-                        {fold.sharpe_ratio.toFixed(2)}
+                        {fold.safeFixed(sharpe_ratio, 2)}
                       </td>
                       <td style={{ padding: "12px", textAlign: "right", color: C.text }}>
                         {(fold.win_rate * 100).toFixed(1)}%

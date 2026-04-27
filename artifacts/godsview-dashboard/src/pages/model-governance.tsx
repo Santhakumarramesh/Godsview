@@ -2,6 +2,7 @@
 
 import React, { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { toArray } from "@/lib/safe";
 
 // Design tokens
 const C = {
@@ -322,7 +323,7 @@ const ModelRegistryPanel: React.FC<{ models: Model[] }> = ({ models }) => (
       Model Registry
     </h2>
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
-      {models.map((model) => (
+      {toArray(models).map((model) => (
         <div
           key={model.id}
           style={{

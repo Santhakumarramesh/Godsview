@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { toArray } from "@/lib/safe";
 
 // Design tokens
 const C = {

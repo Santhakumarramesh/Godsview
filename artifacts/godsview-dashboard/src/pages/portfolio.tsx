@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { safeNum } from "@/lib/safe";
 import {
   usePortfolioAllocatorStatus,
   usePortfolioAllocations,
@@ -275,7 +276,7 @@ export default function PortfolioPage() {
             </div>
             <div style={{ padding: "16px", borderRadius: "8px", backgroundColor: "#1a191b", border: "1px solid rgba(72,72,73,0.15)", textAlign: "center" }}>
               <div style={{ fontSize: "9px", color: "#484849", fontFamily: "Space Grotesk", letterSpacing: "0.15em", marginBottom: "6px" }}>CASH</div>
-              <div style={{ fontSize: "20px", fontWeight: 700, color: pf.cash_weight >= pf.constraints.cash_min ? "#9cff93" : "#ff7162", fontFamily: "JetBrains Mono, monospace" }}>{(pf.cash_weight * 100).toFixed(1)}%</div>
+              <div style={{ fontSize: "20px", fontWeight: 700, color: pf.cash_weight >= safeNum(pf?.constraints?.cash_min) ? "#9cff93" : "#ff7162", fontFamily: "JetBrains Mono, monospace" }}>{(pf.cash_weight * 100).toFixed(1)}%</div>
             </div>
             <div style={{ padding: "16px", borderRadius: "8px", backgroundColor: "#1a191b", border: "1px solid rgba(72,72,73,0.15)", textAlign: "center" }}>
               <div style={{ fontSize: "9px", color: "#484849", fontFamily: "Space Grotesk", letterSpacing: "0.15em", marginBottom: "6px" }}>POSITIONS</div>
@@ -338,7 +339,7 @@ export default function PortfolioPage() {
                 { label: "SINGLE CAP", value: `${(pf.constraints.single_cap * 100).toFixed(0)}%` },
                 { label: "SECTOR CAP", value: `${(pf.constraints.sector_cap * 100).toFixed(0)}%` },
                 { label: "TOTAL CAP", value: `${(pf.constraints.total_cap * 100).toFixed(0)}%` },
-                { label: "CASH MIN", value: `${(pf.constraints.cash_min * 100).toFixed(0)}%` },
+                { label: "CASH MIN", value: `${(safeNum(pf?.constraints?.cash_min) * 100).toFixed(0)}%` },
               ].map((c) => (
                 <div key={c.label} style={{ padding: "10px", borderRadius: "6px", backgroundColor: "#1a191b", border: "1px solid rgba(72,72,73,0.1)", textAlign: "center" }}>
                   <div style={{ fontSize: "8px", color: "#484849", fontFamily: "Space Grotesk", letterSpacing: "0.12em", marginBottom: "4px" }}>{c.label}</div>

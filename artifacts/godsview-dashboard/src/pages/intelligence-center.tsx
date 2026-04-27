@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { safeObj } from "@/lib/safe";
 
 // ── Design Tokens ──────────────────────────────────────────────────────────
 const C = {
@@ -90,7 +91,7 @@ function StatusDot({ status }: { status: Status }) {
 
 // ── Component Card ─────────────────────────────────────────────────────────
 function ComponentCard({ row }: { row: ComponentRow }) {
-  const color = statusColor(row.status);
+  const color = statusColor(safeObj(row).status ?? "unknown");
   return (
     <div className="rounded-lg p-5" style={{
       background: C.card, border: `1px solid ${C.border}`,
@@ -104,9 +105,9 @@ function ComponentCard({ row }: { row: ComponentRow }) {
           <span style={{ fontFamily: "Space Grotesk", fontWeight: 600, fontSize: 13, color: "#fff" }}>{row.name}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <StatusDot status={row.status} />
+          <StatusDot status={safeObj(row).status ?? "unknown"} />
           <span style={{ fontSize: "10px", color, fontWeight: 600, letterSpacing: "0.08em" }}>
-            {statusLabel(row.status)}
+            {statusLabel(safeObj(row).status ?? "unknown")}
           </span>
         </div>
       </div>
@@ -188,7 +189,7 @@ function HealthBar({ components }: { components: Status[] }) {
 export default function IntelligenceCenterPage() {
   const { data, isLoading, error, dataUpdatedAt } = useQuery<IntelligenceCenterData>({
     queryKey: ["intelligence-center"],
-    queryFn: () => fetch("/api/system/intelligence-center").then(r => r.ok ? r.json() : Promise.reject(r.statusText)),
+    queryFn: () => fetch("/api/system/intelligence-center").then(r => r.ok ? r.json() : Promise.reject(safeObj(r).status ?? "unknown"Text)),
     refetchInterval: 10_000,
     retry: 2,
   });
@@ -197,7 +198,7 @@ export default function IntelligenceCenterPage() {
     {
       name: "API Server",
       icon: "dns",
-      status: data.server.status,
+      status: data.safeObj(server).status ?? "unknown",
       primary_metric: data.server.uptime_human,
       primary_label: "Uptime",
       secondary_metric: data.server.system_mode.toUpperCase(),
@@ -209,8 +210,8 @@ export default function IntelligenceCenterPage() {
     {
       name: "Database",
       icon: "storage",
-      status: data.database.status,
-      primary_metric: data.database.status === "online" ? "CONNECTED" : "ERROR",
+      status: data.safeObj(database).status ?? "unknown",
+      primary_metric: data.safeObj(database).status ?? "unknown" === "online" ? "CONNECTED" : "ERROR",
       primary_label: "State",
       secondary_metric: `${data.database.latency_ms}ms`,
       secondary_label: "Latency",
@@ -219,7 +220,7 @@ export default function IntelligenceCenterPage() {
     {
       name: "ML Model",
       icon: "model_training",
-      status: data.ml_model.status as Status,
+      status: data.safeObj(ml_model).status ?? "unknown" as Status,
       primary_metric: data.ml_model.accuracy !== null ? `${fmt(data.ml_model.accuracy * 100, 1)}%` : "–",
       primary_label: "Accuracy",
       secondary_metric: data.ml_model.sample_count.toLocaleString(),
@@ -231,7 +232,7 @@ export default function IntelligenceCenterPage() {
     {
       name: "Super Intelligence",
       icon: "auto_awesome",
-      status: data.super_intelligence.status as Status,
+      status: data.safeObj(super_intelligence).status ?? "unknown" as Status,
       primary_metric: data.super_intelligence.ensemble_accuracy !== null
         ? `${fmt(data.super_intelligence.ensemble_accuracy * 100, 1)}%`
         : "–",
@@ -245,7 +246,7 @@ export default function IntelligenceCenterPage() {
     {
       name: "Risk Engine",
       icon: "shield",
-      status: data.risk_engine.status as Status,
+      status: data.safeObj(risk_engine).status ?? "unknown" as Status,
       primary_metric: data.risk_engine.kill_switch_active ? "ARMED" : "SAFE",
       primary_label: "Kill Switch",
       secondary_metric: data.risk_engine.open_positions.toString(),
@@ -259,19 +260,19 @@ export default function IntelligenceCenterPage() {
     {
       name: "Alpaca Broker",
       icon: "account_balance",
-      status: data.alpaca.status as Status,
+      status: data.safeObj(alpaca).status ?? "unknown" as Status,
       primary_metric: data.alpaca.account_value !== null ? `$${data.alpaca.account_value.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "–",
       primary_label: "Portfolio",
       secondary_metric: data.alpaca.can_write_orders ? "YES" : "NO",
       secondary_label: "Can Trade",
       tertiary_metric: data.alpaca.is_live_mode ? "LIVE" : "PAPER",
       tertiary_label: "Mode",
-      detail: data.alpaca.status === "connected" ? "API keys valid · ready" : "API keys not configured",
+      detail: data.safeObj(alpaca).status ?? "unknown" === "connected" ? "API keys valid · ready" : "API keys not configured",
     },
     {
       name: "Retrain Scheduler",
       icon: "schedule",
-      status: data.scheduler.status as Status,
+      status: data.safeObj(scheduler).status ?? "unknown" as Status,
       primary_metric: String(data.scheduler.retrain_count),
       primary_label: "Retrains",
       secondary_metric: timeAgo(data.scheduler.last_retrain_at),
@@ -283,7 +284,7 @@ export default function IntelligenceCenterPage() {
     {
       name: "Signal Stream",
       icon: "sensors",
-      status: data.signal_stream.status as Status,
+      status: data.safeObj(signal_stream).status ?? "unknown" as Status,
       primary_metric: String(data.signal_stream.connected_clients),
       primary_label: "SSE Clients",
       secondary_metric: data.signal_stream.signals_last_24h.toLocaleString(),
@@ -293,7 +294,7 @@ export default function IntelligenceCenterPage() {
     {
       name: "Brain / Knowledge Graph",
       icon: "neurology",
-      status: data.brain.status as Status,
+      status: data.safeObj(brain).status ?? "unknown" as Status,
       primary_metric: data.brain.entity_count.toLocaleString(),
       primary_label: "Entities",
       secondary_metric: data.trading.trades_today.toString(),
@@ -302,7 +303,7 @@ export default function IntelligenceCenterPage() {
     },
   ] : [];
 
-  const allStatuses = rows.map(r => r.status);
+  const allStatuses = rows.map(r => safeObj(r).status ?? "unknown");
 
   return (
     <div style={{ background: C.bg, minHeight: "100vh", padding: "24px", fontFamily: "Space Grotesk, sans-serif" }}>

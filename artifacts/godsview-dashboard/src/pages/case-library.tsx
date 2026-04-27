@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { toArray } from "@/lib/safe";
 
 const API = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -41,7 +42,7 @@ export default function CaseLibrary() {
     },
   });
 
-  const filteredCases = caseData?.cases.filter((c) => {
+  const filteredCases = caseData?.toArray(cases).filter((c) => {
     if (filterType === "all") return true;
     if (filterType === "winners") return c.outcome === "win";
     if (filterType === "losers") return c.outcome === "loss";
