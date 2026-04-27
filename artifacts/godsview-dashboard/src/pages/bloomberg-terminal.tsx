@@ -125,13 +125,32 @@ function fmtMoney(v: any): string {
   return `${sign}$${Math.round(n).toLocaleString()}`;
 }
 
+/**
+ * Defensive array extractor. The lib/api.ts hooks declare TypeScript types
+ * like `AlpacaPosition[]` or `AlpacaOrder[]`, but several backend endpoints
+ * actually return wrapper objects: `{ positions: [...] }`, `{ orders: [...] }`,
+ * `{ signals: [...] }`. Calling `.map()` on those crashes.
+ *
+ * Pull whatever array we can find from the response, regardless of shape.
+ */
+function toArray(data: any, ...keys: string[]): any[] {
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === "object") {
+    for (const k of keys) {
+      if (Array.isArray(data[k])) return data[k];
+    }
+    if (Array.isArray((data as any).data)) return (data as any).data;
+  }
+  return [];
+}
+
 // ─── Per-panel components (each fetches its own data) ───────────────────────
 
 function PositionsPanel() {
   const { data, isLoading, error } = useAlpacaPositionsLive();
   if (isLoading) return <div style={loadingStyle}>Loading positions…</div>;
   if (error) return <div style={emptyStyle}><div>⚠ Couldn't load positions</div><div style={{ fontSize: 10 }}>{String((error as any)?.message ?? error)}</div></div>;
-  const rows = (data ?? []) as any[];
+  const rows = toArray(data, "positions");
   if (rows.length === 0) return <div style={emptyStyle}><div>No open positions</div><div style={{ fontSize: 10 }}>Connect a broker or run paper signals to populate</div></div>;
   return (
     <div style={panelStyle}>
@@ -170,7 +189,7 @@ function OrdersPanel() {
   const { data, isLoading, error } = useAlpacaOrders();
   if (isLoading) return <div style={loadingStyle}>Loading orders…</div>;
   if (error) return <div style={emptyStyle}><div>⚠ Couldn't load orders</div></div>;
-  const rows = (data ?? []) as any[];
+  const rows = toArray(data, "orders");
   if (rows.length === 0) return <div style={emptyStyle}><div>No active orders</div></div>;
   return (
     <div style={panelStyle}>
@@ -206,7 +225,7 @@ function SignalsPanel() {
   const { data, isLoading, error } = useSignals();
   if (isLoading) return <div style={loadingStyle}>Loading signals…</div>;
   if (error) return <div style={emptyStyle}><div>⚠ Couldn't load signals</div></div>;
-  const rows = (data ?? []) as any[];
+  const rows = toArray(data, "signals");
   if (rows.length === 0) return <div style={emptyStyle}><div>No live signals yet</div><div style={{ fontSize: 10 }}>Scanner runs every minute — wait or trigger a webhook</div></div>;
   return (
     <div style={panelStyle}>
