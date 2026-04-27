@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { ReactNode } from "react";
-import { toArray } from "@/lib/safe";
+import { toArray, safeFixed, safeNum } from "@/lib/safe";
 
 const C = {
   bg: "#0e0e0f",
@@ -299,8 +299,13 @@ const CorrelationMatrix = ({
   loading: boolean;
   error: string | null;
 }) => {
-  const mockData = data || generateMockCorrelationMatrix();
-  const { strategies, values } = mockData;
+  const fallback = generateMockCorrelationMatrix();
+  const safeData: CorrelationMatrixData =
+    data && Array.isArray((data as any).strategies) && Array.isArray((data as any).values)
+      ? (data as CorrelationMatrixData)
+      : fallback;
+  const strategies = toArray<string>(safeData?.strategies);
+  const values = Array.isArray(safeData?.values) ? safeData.values : [];
   const cellSize = 50;
   const labelWidth = 140;
 
@@ -382,7 +387,7 @@ const CorrelationMatrix = ({
 
           {/* Cells */}
           {values.map((row, i) =>
-            row.map((value, j) => {
+            (Array.isArray(row) ? row : []).map((value, j) => {
               const x = labelWidth + j * cellSize;
               const y = labelWidth + i * cellSize;
               const dangerous = isDangerous(value);
@@ -410,7 +415,7 @@ const CorrelationMatrix = ({
                       pointerEvents: "none",
                     }}
                   >
-                    {value.toFixed(2)}
+                    {safeFixed(value, 2)}
                   </text>
                 </g>
               );
@@ -479,7 +484,8 @@ const DangerousPairsAlert = ({
   loading: boolean;
   error: string | null;
 }) => {
-  const pairs = data || generateMockDangerousPairs();
+  const pairsArr = toArray<DangerousPair>(data, "pairs");
+  const pairs = pairsArr.length > 0 ? pairsArr : generateMockDangerousPairs();
 
   const getRiskColor = (level: string): string => {
     switch (level) {
@@ -501,7 +507,7 @@ const DangerousPairsAlert = ({
       error={error ?? undefined}
     >
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "16px" }}>
-        {toArray(pairs).map((pair, idx) => (
+        {toArray<DangerousPair>(pairs).map((pair, idx) => (
           <div
             key={idx}
             style={{
@@ -517,7 +523,7 @@ const DangerousPairsAlert = ({
                 position: "absolute",
                 top: "12px",
                 right: "12px",
-                backgroundColor: getRiskColor(pair.riskLevel),
+                backgroundColor: getRiskColor(pair?.riskLevel),
                 color: C.bg,
                 padding: "4px 8px",
                 borderRadius: "4px",
@@ -527,7 +533,7 @@ const DangerousPairsAlert = ({
                 letterSpacing: "0.5px",
               }}
             >
-              {pair.riskLevel}
+              {pair?.riskLevel ?? "—"}
             </div>
 
             <div style={{ marginBottom: "12px", paddingRight: "80px" }}>
@@ -539,7 +545,7 @@ const DangerousPairsAlert = ({
                   marginBottom: "4px",
                 }}
               >
-                {pair.strategy1} ↔ {pair.strategy2}
+                {pair?.strategy1 ?? "—"} ↔ {pair?.strategy2 ?? "—"}
               </div>
               <div
                 style={{
@@ -548,7 +554,7 @@ const DangerousPairsAlert = ({
                 }}
               >
                 Correlation: <span style={{ color: C.red, fontWeight: 600 }}>
-                  {pair.correlation.toFixed(2)}
+                  {safeFixed(pair?.correlation, 2)}
                 </span>
               </div>
             </div>
@@ -561,10 +567,10 @@ const DangerousPairsAlert = ({
                 fontSize: "12px",
                 color: C.textDim,
                 lineHeight: "1.5",
-                borderLeft: `3px solid ${getRiskColor(pair.riskLevel)}`,
+                borderLeft: `3px solid ${getRiskColor(pair?.riskLevel)}`,
               }}
             >
-              {pair.recommendation}
+              {pair?.recommendation ?? "—"}
             </div>
           </div>
         ))}
@@ -583,8 +589,14 @@ const PortfolioHeatMap = ({
   loading: boolean;
   error: string | null;
 }) => {
-  const heatmapData = data || generateMockHeatmap();
-  const { sectors, timeframes, values } = heatmapData;
+  const fallbackHm = generateMockHeatmap();
+  const heatmapData: HeatmapData =
+    data && Array.isArray((data as any).sectors) && Array.isArray((data as any).timeframes) && Array.isArray((data as any).values)
+      ? (data as HeatmapData)
+      : fallbackHm;
+  const sectors = toArray<string>(heatmapData?.sectors);
+  const timeframes = toArray<string>(heatmapData?.timeframes);
+  const values = toArray<HeatmapData["values"][number]>(heatmapData?.values);
   const cellWidth = 90;
   const cellHeight = 60;
 
@@ -729,27 +741,29 @@ const DrawdownTracker = ({
   loading: boolean;
   error: string | null;
 }) => {
-  const drawdownData = data || generateMockDrawdown();
-  const {
-    currentDrawdown,
-    peakEquity,
-    currentEquity,
-    equityHistory,
-    recoveryDays,
-    circuitBreakerStatus,
-    maxDrawdown,
-  } = drawdownData;
+  const fallbackDd = generateMockDrawdown();
+  const drawdownData: DrawdownData = (data && typeof data === "object")
+    ? { ...fallbackDd, ...(data as DrawdownData) }
+    : fallbackDd;
+  const currentDrawdown = safeNum(drawdownData?.currentDrawdown);
+  const peakEquity = safeNum(drawdownData?.peakEquity);
+  const currentEquity = safeNum(drawdownData?.currentEquity);
+  const equityHistoryRaw = toArray<number>(drawdownData?.equityHistory);
+  const equityHistory = equityHistoryRaw.length > 0 ? equityHistoryRaw : fallbackDd.equityHistory;
+  const recoveryDays = safeNum(drawdownData?.recoveryDays);
+  const circuitBreakerStatus = drawdownData?.circuitBreakerStatus ?? "active";
+  const maxDrawdown = safeNum(drawdownData?.maxDrawdown);
 
   // Normalize equity history for chart (0-100 scale)
   const minEquity = Math.min(...equityHistory);
   const maxEquity = Math.max(...equityHistory);
-  const equityRange = maxEquity - minEquity;
-  const normalizedHistory = equityHistory.map((eq) => ((eq - minEquity) / equityRange) * 100);
+  const equityRange = (maxEquity - minEquity) || 1;
+  const normalizedHistory = equityHistory.map((eq) => ((safeNum(eq) - minEquity) / equityRange) * 100);
 
   // Generate polyline points
   const chartWidth = 400;
   const chartHeight = 120;
-  const pointSpacing = chartWidth / (equityHistory.length - 1);
+  const pointSpacing = equityHistory.length > 1 ? chartWidth / (equityHistory.length - 1) : chartWidth;
   const points = normalizedHistory
     .map((normalized, idx) => `${idx * pointSpacing},${chartHeight - (normalized / 100) * chartHeight}`)
     .join(" ");
@@ -805,13 +819,13 @@ const DrawdownTracker = ({
                   color: drawdownColor,
                 }}
               >
-                {currentDrawdown.toFixed(1)}%
+                {safeFixed(currentDrawdown, 1)}%
               </div>
               <div style={{ fontSize: "13px", color: C.textDim }}>
                 <div style={{ marginBottom: "4px" }}>
-                  Peak: ${(peakEquity / 1000000).toFixed(2)}M
+                  Peak: ${safeFixed(peakEquity / 1000000, 2)}M
                 </div>
-                <div>Current: ${(currentEquity / 1000000).toFixed(2)}M</div>
+                <div>Current: ${safeFixed(currentEquity / 1000000, 2)}M</div>
               </div>
             </div>
           </div>
@@ -845,7 +859,7 @@ const DrawdownTracker = ({
               justifyContent: "space-between",
             }}
           >
-            <span>Max Drawdown: {maxDrawdown.toFixed(1)}%</span>
+            <span>Max Drawdown: {safeFixed(maxDrawdown, 1)}%</span>
             <span>Recovery: {recoveryDays}d</span>
           </div>
         </div>

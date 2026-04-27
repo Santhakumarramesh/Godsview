@@ -194,10 +194,10 @@ export default function AbsorptionDetector() {
           }}
         >
           <h2 style={{ fontFamily: "Space Grotesk", fontSize: "16px", color: "#ffffff", marginBottom: "16px" }}>
-            Absorption Signals ({absorptionSignals.length})
+            Absorption Signals ({toArray<any>(absorptionSignals, "signals").length})
           </h2>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "12px" }}>
-            {absorptionSignals.map((signal: any, idx: number) => (
+            {toArray<any>(absorptionSignals, "signals").map((signal: any, idx: number) => (
               <div
                 key={idx}
                 style={{
@@ -208,13 +208,13 @@ export default function AbsorptionDetector() {
                 }}
               >
                 <p style={{ fontFamily: "Space Grotesk", fontSize: "13px", color: "#ffffff", margin: "0 0 8px 0" }}>
-                  {signal.description || `Signal ${idx}`}
+                  {signal?.description ?? `Signal ${idx}`}
                 </p>
                 <p style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "11px", color: "#767576", margin: "0 0 4px 0" }}>
-                  Strength: {signal.strength || "—"}
+                  Strength: {signal?.strength ?? "—"}
                 </p>
                 <p style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "11px", color: "#9cff93", margin: 0 }}>
-                  Confidence: {signal.confidence || "—"}%
+                  Confidence: {signal?.confidence ?? "—"}%
                 </p>
               </div>
             ))}

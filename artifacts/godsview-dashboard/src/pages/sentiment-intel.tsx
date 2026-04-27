@@ -165,17 +165,22 @@ function SymbolSentimentGrid() {
     queryFn: () => fetch('/api/sentiment/snapshot').then(r => r.json()),
   });
 
-  const symbols = data?.symbols || mockSnapshot.symbols;
+  const symbolsArr = Array.isArray(data?.symbols) ? data.symbols : (Array.isArray(data) ? data : []);
+  const symbols = symbolsArr.length > 0 ? symbolsArr : mockSnapshot.symbols;
 
   return (
     <div style={{ marginBottom: "32px" }}>
       <h3 style={{ color: C.text, fontSize: "20px", fontWeight: "bold", margin: "0 0 16px 0" }}>Top Symbols</h3>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px" }}>
-        {symbols.slice(0, 8).map((sym: any) => {
-          const scoreColor = sym.score > 0.2 ? C.green : sym.score < -0.2 ? C.red : C.yellow;
-          const total = sym.news + sym.social + sym.analyst;
+        {symbols.slice(0, 8).map((sym: any, symIdx: number) => {
+          const score = Number(sym?.score ?? 0);
+          const scoreColor = score > 0.2 ? C.green : score < -0.2 ? C.red : C.yellow;
+          const news = Number(sym?.news ?? 0);
+          const social = Number(sym?.social ?? 0);
+          const analyst = Number(sym?.analyst ?? 0);
+          const total = (news + social + analyst) || 1;
           return (
-            <div key={sym.symbol} style={{
+            <div key={`${sym?.symbol ?? "sym"}-${symIdx}`} style={{
               background: C.card,
               border: `1px solid ${C.border}`,
               borderRadius: "8px",
@@ -190,16 +195,16 @@ function SymbolSentimentGrid() {
               e.currentTarget.style.borderColor = C.border;
             }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-                <h4 style={{ color: C.text, fontSize: "16px", fontWeight: "bold", margin: 0 }}>{sym.symbol}</h4>
+                <h4 style={{ color: C.text, fontSize: "16px", fontWeight: "bold", margin: 0 }}>{sym?.symbol ?? "—"}</h4>
                 <span style={{
-                  background: sym.score > 0.2 ? `${C.green}20` : sym.score < -0.2 ? `${C.red}20` : `${C.yellow}20`,
+                  background: score > 0.2 ? `${C.green}20` : score < -0.2 ? `${C.red}20` : `${C.yellow}20`,
                   color: scoreColor,
                   padding: "4px 8px",
                   borderRadius: "4px",
                   fontSize: "12px",
                   fontWeight: "600",
                 }}>
-                  {sym.direction}
+                  {sym?.direction ?? "—"}
                 </span>
               </div>
 
@@ -207,28 +212,28 @@ function SymbolSentimentGrid() {
                 <p style={{ color: C.textMuted, fontSize: "11px", margin: "0 0 6px 0" }}>Score</p>
                 <div style={{ background: C.bg, borderRadius: "4px", height: "8px", overflow: "hidden" }}>
                   <div style={{
-                    width: `${((sym.score + 1) / 2) * 100}%`,
+                    width: `${((score + 1) / 2) * 100}%`,
                     height: "100%",
                     background: scoreColor,
                     transition: "width 0.3s",
                   }} />
                 </div>
-                <p style={{ color: scoreColor, fontSize: "12px", fontWeight: "600", margin: "4px 0 0 0" }}>{(sym.score * 100).toFixed(0)}</p>
+                <p style={{ color: scoreColor, fontSize: "12px", fontWeight: "600", margin: "4px 0 0 0" }}>{(score * 100).toFixed(0)}</p>
               </div>
 
               <div style={{ marginBottom: "12px" }}>
                 <p style={{ color: C.textMuted, fontSize: "11px", margin: "0 0 6px 0" }}>Sources</p>
                 <div style={{ display: "flex", gap: "4px", fontSize: "12px" }}>
-                  <span style={{ color: C.textDim }}>News <strong style={{ color: C.text }}>{((sym.news / total) * 100).toFixed(0)}%</strong></span>
-                  <span style={{ color: C.textDim }}>Social <strong style={{ color: C.text }}>{((sym.social / total) * 100).toFixed(0)}%</strong></span>
-                  <span style={{ color: C.textDim }}>Analyst <strong style={{ color: C.text }}>{((sym.analyst / total) * 100).toFixed(0)}%</strong></span>
+                  <span style={{ color: C.textDim }}>News <strong style={{ color: C.text }}>{((news / total) * 100).toFixed(0)}%</strong></span>
+                  <span style={{ color: C.textDim }}>Social <strong style={{ color: C.text }}>{((social / total) * 100).toFixed(0)}%</strong></span>
+                  <span style={{ color: C.textDim }}>Analyst <strong style={{ color: C.text }}>{((analyst / total) * 100).toFixed(0)}%</strong></span>
                 </div>
               </div>
 
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: C.textDim }}>
-                <span>{sym.signals} signals</span>
-                <span style={{ color: sym.trend > 0 ? C.green : sym.trend < 0 ? C.red : C.textDim }}>
-                  {sym.trend > 0 ? "↑" : sym.trend < 0 ? "↓" : "→"}
+                <span>{Number(sym?.signals ?? 0)} signals</span>
+                <span style={{ color: Number(sym?.trend ?? 0) > 0 ? C.green : Number(sym?.trend ?? 0) < 0 ? C.red : C.textDim }}>
+                  {Number(sym?.trend ?? 0) > 0 ? "↑" : Number(sym?.trend ?? 0) < 0 ? "↓" : "→"}
                 </span>
               </div>
             </div>
@@ -247,7 +252,8 @@ function NewsFeed() {
     queryFn: () => fetch('/api/sentiment/news').then(r => r.json()),
   });
 
-  const news = data || mockNews;
+  const newsArr = Array.isArray(data) ? data : (Array.isArray(data?.news) ? data.news : []);
+  const news = newsArr.length > 0 ? newsArr : mockNews;
   const filtered = filter === "All" ? news : news.filter((n: any) => {
     if (filter === "Bullish") return n.sentiment > 0.3;
     if (filter === "Bearish") return n.sentiment < -0.3;
@@ -340,8 +346,15 @@ function SocialPulse() {
     queryFn: () => fetch('/api/sentiment/social').then(r => r.json()),
   });
 
-  const social = data || mockSocial;
-  const maxMentions = Math.max(...social.trending.map((t: any) => t.mentions));
+  const fallbackSocial = mockSocial;
+  const socialIn: any = (data && typeof data === "object" && !Array.isArray(data)) ? data : null;
+  const social = {
+    trending: Array.isArray(socialIn?.trending) && socialIn.trending.length > 0 ? socialIn.trending : fallbackSocial.trending,
+    alerts: Array.isArray(socialIn?.alerts) && socialIn.alerts.length > 0 ? socialIn.alerts : fallbackSocial.alerts,
+    platforms: (socialIn?.platforms && typeof socialIn.platforms === "object") ? socialIn.platforms : fallbackSocial.platforms,
+    volumeSpikes: Array.isArray(socialIn?.volumeSpikes) && socialIn.volumeSpikes.length > 0 ? socialIn.volumeSpikes : fallbackSocial.volumeSpikes,
+  };
+  const maxMentions = Math.max(...social.trending.map((t: any) => Number(t?.mentions ?? 0))) || 1;
 
   return (
     <div style={{ marginBottom: "32px" }}>
@@ -355,14 +368,14 @@ function SocialPulse() {
           padding: "16px",
         }}>
           <h4 style={{ color: C.text, fontSize: "14px", fontWeight: "bold", margin: "0 0 12px 0" }}>Trending Symbols</h4>
-          {social.trending.map((t: any) => (
-            <div key={t.symbol} style={{ marginBottom: "12px" }}>
+          {social.trending.map((t: any, tIdx: number) => (
+            <div key={`${t?.symbol ?? "trend"}-${tIdx}`} style={{ marginBottom: "12px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", marginBottom: "4px" }}>
-                <span style={{ color: C.text, fontWeight: "600" }}>{t.symbol}</span>
-                <span style={{ color: C.textDim }}>{t.mentions} mentions</span>
+                <span style={{ color: C.text, fontWeight: "600" }}>{t?.symbol ?? "—"}</span>
+                <span style={{ color: C.textDim }}>{Number(t?.mentions ?? 0)} mentions</span>
               </div>
               <div style={{ background: C.bg, borderRadius: "3px", height: "6px", overflow: "hidden" }}>
-                <div style={{ width: `${(t.mentions / maxMentions) * 100}%`, height: "100%", background: C.accent }} />
+                <div style={{ width: `${(Number(t?.mentions ?? 0) / maxMentions) * 100}%`, height: "100%", background: C.accent }} />
               </div>
             </div>
           ))}
@@ -477,7 +490,8 @@ function TopMovers() {
     queryFn: () => fetch('/api/sentiment/movers').then(r => r.json()),
   });
 
-  const movers = data || mockMovers;
+  const moversIn: any = (data && typeof data === "object" && !Array.isArray(data)) ? data : null;
+  const movers = moversIn ? { ...mockMovers, ...moversIn } : mockMovers;
 
   return (
     <div style={{ marginBottom: "32px" }}>

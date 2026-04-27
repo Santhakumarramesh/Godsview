@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { toArray } from "@/lib/safe";
+import { toArray, safeNum, safeFixed } from "@/lib/safe";
 
 const C = {
   bg: "#0e0e0f",
@@ -221,11 +221,14 @@ const mockFills: Fill[] = [
 function ExecutionModeBanner() {
   const [selectedMode, setSelectedMode] = useState<"LIVE" | "PAPER" | "SHADOW">("LIVE");
 
-  const { data: status = mockStatus, isLoading } = useQuery({
+  const { data: statusRaw, isLoading } = useQuery({
     queryKey: ["executionStatus"],
     queryFn: () => fetch("/api/execution/status").then((r) => r.json()),
     refetchInterval: 5000,
   });
+  const status = (statusRaw && typeof statusRaw === "object" && !Array.isArray(statusRaw))
+    ? (statusRaw as ExecutionStatus)
+    : mockStatus;
 
   const modeColor = {
     LIVE: C.red,
@@ -281,15 +284,15 @@ function ExecutionModeBanner() {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px" }}>
         <div>
           <div style={{ fontSize: "12px", color: C.textMuted, marginBottom: "4px" }}>Fill Rate</div>
-          <div style={{ fontSize: "24px", fontWeight: 600, color: C.green }}>{status.fillRate}%</div>
+          <div style={{ fontSize: "24px", fontWeight: 600, color: C.green }}>{safeNum(status?.fillRate)}%</div>
         </div>
         <div>
           <div style={{ fontSize: "12px", color: C.textMuted, marginBottom: "4px" }}>Avg Slippage</div>
-          <div style={{ fontSize: "24px", fontWeight: 600, color: C.orange }}>{status.avgSlippage} bps</div>
+          <div style={{ fontSize: "24px", fontWeight: 600, color: C.orange }}>{safeNum(status?.avgSlippage)} bps</div>
         </div>
         <div>
           <div style={{ fontSize: "12px", color: C.textMuted, marginBottom: "4px" }}>Active Orders</div>
-          <div style={{ fontSize: "24px", fontWeight: 600, color: C.blue }}>{status.activeOrdersCount}</div>
+          <div style={{ fontSize: "24px", fontWeight: 600, color: C.blue }}>{safeNum(status?.activeOrdersCount)}</div>
         </div>
       </div>
 
@@ -306,11 +309,13 @@ function ActiveOrdersTable() {
   const [sortKey, setSortKey] = useState<keyof Order>("time");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
-  const { data: orders = mockOrders, isLoading } = useQuery({
+  const { data: ordersRaw, isLoading } = useQuery({
     queryKey: ["activeOrders"],
     queryFn: () => fetch("/api/execution/orders/active").then((r) => r.json()),
     refetchInterval: 2000,
   });
+  const ordersArr = toArray<Order>(ordersRaw, "orders");
+  const orders: Order[] = ordersArr.length > 0 ? ordersArr : mockOrders;
 
   const sorted = [...orders].sort((a, b) => {
     const aVal = a[sortKey];
@@ -384,39 +389,39 @@ function ActiveOrdersTable() {
             {sorted.map((order) => (
               <tr key={order.id} style={{ borderBottom: `1px solid ${C.border}`, background: C.card }}>
                 <td style={{ padding: "12px 16px", fontSize: "12px", color: C.textDim }}>
-                  {order.id.substring(0, 8)}...
+                  {String(order?.id ?? "—").substring(0, 8)}...
                 </td>
                 <td style={{ padding: "12px 16px", fontSize: "12px", color: C.text, fontWeight: 500 }}>
-                  {order.symbol}
+                  {order?.symbol ?? "—"}
                 </td>
                 <td
                   style={{
                     padding: "12px 16px",
                     fontSize: "12px",
                     fontWeight: 600,
-                    color: sideColor(order.side),
+                    color: sideColor(order?.side),
                   }}
                 >
-                  {order.side}
+                  {order?.side ?? "—"}
                 </td>
-                <td style={{ padding: "12px 16px", fontSize: "12px", color: C.textDim }}>{order.type}</td>
-                <td style={{ padding: "12px 16px", fontSize: "12px", color: C.text }}>{order.qty}</td>
-                <td style={{ padding: "12px 16px", fontSize: "12px", color: C.text }}>{order.fillPercent}%</td>
-                <td style={{ padding: "12px 16px", fontSize: "12px", color: C.text }}>${order.price.toFixed(2)}</td>
+                <td style={{ padding: "12px 16px", fontSize: "12px", color: C.textDim }}>{order?.type ?? "—"}</td>
+                <td style={{ padding: "12px 16px", fontSize: "12px", color: C.text }}>{safeNum(order?.qty)}</td>
+                <td style={{ padding: "12px 16px", fontSize: "12px", color: C.text }}>{safeNum(order?.fillPercent)}%</td>
+                <td style={{ padding: "12px 16px", fontSize: "12px", color: C.text }}>${safeFixed(order?.price, 2)}</td>
                 <td style={{ padding: "12px 16px", fontSize: "12px" }}>
                   <span
                     style={{
-                      background: statusColor(order.status),
+                      background: statusColor(order?.status),
                       color: C.bg,
                       padding: "4px 8px",
                       borderRadius: "3px",
                       fontWeight: 600,
                     }}
                   >
-                    {order.status}
+                    {order?.status ?? "—"}
                   </span>
                 </td>
-                <td style={{ padding: "12px 16px", fontSize: "12px", color: C.textMuted }}>{order.time}</td>
+                <td style={{ padding: "12px 16px", fontSize: "12px", color: C.textMuted }}>{order?.time ?? "—"}</td>
               </tr>
             ))}
           </tbody>
@@ -436,14 +441,16 @@ function ActiveOrdersTable() {
 // ============================================================================
 
 function PositionBook() {
-  const { data: positions = mockPositions, isLoading } = useQuery({
+  const { data: positionsRaw, isLoading } = useQuery({
     queryKey: ["positions"],
     queryFn: () => fetch("/api/execution/positions").then((r) => r.json()),
     refetchInterval: 3000,
   });
+  const positionsArr = toArray<Position>(positionsRaw, "positions");
+  const positions: Position[] = positionsArr.length > 0 ? positionsArr : mockPositions;
 
-  const totalSize = positions.reduce((sum: any, p: any) => sum + p.size, 0);
-  const totalPnL = positions.reduce((sum: any, p: any) => sum + p.unrealizedPnL, 0);
+  const totalSize = positions.reduce((sum: number, p: any) => sum + safeNum(p?.size), 0);
+  const totalPnL = positions.reduce((sum: number, p: any) => sum + safeNum(p?.unrealizedPnL), 0);
 
   const pnlColor = (pnl: number) => (pnl >= 0 ? C.green : C.red);
 
@@ -482,40 +489,40 @@ function PositionBook() {
             </tr>
           </thead>
           <tbody>
-            {positions.map((pos: any) => (
-              <tr key={pos.symbol} style={{ borderBottom: `1px solid ${C.border}`, background: C.card }}>
+            {positions.map((pos: any, posIdx: number) => (
+              <tr key={`${pos?.symbol ?? "row"}-${posIdx}`} style={{ borderBottom: `1px solid ${C.border}`, background: C.card }}>
                 <td style={{ padding: "12px 16px", fontSize: "12px", color: C.text, fontWeight: 600 }}>
-                  {pos.symbol}
+                  {pos?.symbol ?? "—"}
                 </td>
                 <td
                   style={{
                     padding: "12px 16px",
                     fontSize: "12px",
                     fontWeight: 600,
-                    color: pos.side === "LONG" ? C.green : C.red,
+                    color: pos?.side === "LONG" ? C.green : C.red,
                   }}
                 >
-                  {pos.side}
+                  {pos?.side ?? "—"}
                 </td>
-                <td style={{ padding: "12px 16px", fontSize: "12px", color: C.text }}>{pos.size}</td>
-                <td style={{ padding: "12px 16px", fontSize: "12px", color: C.text }}>${pos.entryPrice.toFixed(2)}</td>
-                <td style={{ padding: "12px 16px", fontSize: "12px", color: C.text }}>${pos.currentPrice.toFixed(2)}</td>
-                <td style={{ padding: "12px 16px", fontSize: "12px", fontWeight: 600, color: pnlColor(pos.unrealizedPnL) }}>
-                  ${pos.unrealizedPnL.toFixed(0)}
+                <td style={{ padding: "12px 16px", fontSize: "12px", color: C.text }}>{safeNum(pos?.size)}</td>
+                <td style={{ padding: "12px 16px", fontSize: "12px", color: C.text }}>${safeFixed(pos?.entryPrice, 2)}</td>
+                <td style={{ padding: "12px 16px", fontSize: "12px", color: C.text }}>${safeFixed(pos?.currentPrice, 2)}</td>
+                <td style={{ padding: "12px 16px", fontSize: "12px", fontWeight: 600, color: pnlColor(safeNum(pos?.unrealizedPnL)) }}>
+                  ${safeFixed(pos?.unrealizedPnL, 0)}
                 </td>
-                <td style={{ padding: "12px 16px", fontSize: "12px", color: C.textMuted }}>${pos.stopLoss.toFixed(2)}</td>
-                <td style={{ padding: "12px 16px", fontSize: "12px", color: C.textMuted }}>${pos.takeProfit.toFixed(2)}</td>
-                <td style={{ padding: "12px 16px", fontSize: "12px", color: C.textMuted }}>{pos.duration}</td>
+                <td style={{ padding: "12px 16px", fontSize: "12px", color: C.textMuted }}>${safeFixed(pos?.stopLoss, 2)}</td>
+                <td style={{ padding: "12px 16px", fontSize: "12px", color: C.textMuted }}>${safeFixed(pos?.takeProfit, 2)}</td>
+                <td style={{ padding: "12px 16px", fontSize: "12px", color: C.textMuted }}>{pos?.duration ?? "—"}</td>
               </tr>
             ))}
             <tr style={{ background: C.cardAlt, borderTop: `2px solid ${C.border}`, fontWeight: 600 }}>
               <td colSpan={2} style={{ padding: "12px 16px", fontSize: "12px", color: C.text }}>
                 TOTAL
               </td>
-              <td style={{ padding: "12px 16px", fontSize: "12px", color: C.text }}>{totalSize}</td>
+              <td style={{ padding: "12px 16px", fontSize: "12px", color: C.text }}>{safeNum(totalSize)}</td>
               <td colSpan={2} />
-              <td style={{ padding: "12px 16px", fontSize: "12px", fontWeight: 700, color: pnlColor(totalPnL) }}>
-                ${totalPnL.toFixed(0)}
+              <td style={{ padding: "12px 16px", fontSize: "12px", fontWeight: 700, color: pnlColor(safeNum(totalPnL)) }}>
+                ${safeFixed(totalPnL, 0)}
               </td>
               <td colSpan={3} />
             </tr>
@@ -533,11 +540,13 @@ function PositionBook() {
 // ============================================================================
 
 function VenueHealthGrid() {
-  const { data: venues = mockVenues, isLoading } = useQuery({
+  const { data: venuesRaw, isLoading } = useQuery({
     queryKey: ["venues"],
     queryFn: () => fetch("/api/execution/venues").then((r) => r.json()),
     refetchInterval: 5000,
   });
+  const venuesArr = toArray<Venue>(venuesRaw, "venues");
+  const venues: Venue[] = venuesArr.length > 0 ? venuesArr : mockVenues;
 
   const statusColor = (status: string) => {
     switch (status) {
@@ -556,9 +565,9 @@ function VenueHealthGrid() {
     <div style={{ marginBottom: "24px" }}>
       <h3 style={{ margin: "0 0 16px 0", fontSize: "14px", fontWeight: 600, color: C.text }}>Venue Health</h3>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "16px" }}>
-        {venues.map((venue: any) => (
+        {venues.map((venue: any, vIdx: number) => (
           <div
-            key={venue.name}
+            key={`${venue?.name ?? "venue"}-${vIdx}`}
             style={{
               background: C.card,
               border: `1px solid ${C.border}`,
@@ -572,15 +581,15 @@ function VenueHealthGrid() {
                   width: "8px",
                   height: "8px",
                   borderRadius: "50%",
-                  background: statusColor(venue.status),
+                  background: statusColor(venue?.status),
                 }}
               />
-              <span style={{ fontSize: "13px", fontWeight: 600, color: C.text }}>{venue.name}</span>
+              <span style={{ fontSize: "13px", fontWeight: 600, color: C.text }}>{venue?.name ?? "—"}</span>
             </div>
 
             <div style={{ fontSize: "12px", marginBottom: "8px" }}>
               <div style={{ color: C.textMuted, marginBottom: "4px" }}>Latency</div>
-              <div style={{ color: C.text, fontWeight: 500 }}>{venue.latency.toFixed(1)}ms</div>
+              <div style={{ color: C.text, fontWeight: 500 }}>{safeFixed(venue?.latency, 1)}ms</div>
             </div>
 
             <div style={{ fontSize: "12px", marginBottom: "8px" }}>
@@ -598,16 +607,16 @@ function VenueHealthGrid() {
                   style={{
                     height: "100%",
                     background: C.green,
-                    width: `${venue.fillRate}%`,
+                    width: `${safeNum(venue?.fillRate)}%`,
                   }}
                 />
               </div>
-              <div style={{ color: C.text, fontWeight: 500 }}>{venue.fillRate}%</div>
+              <div style={{ color: C.text, fontWeight: 500 }}>{safeNum(venue?.fillRate)}%</div>
             </div>
 
             <div style={{ fontSize: "12px", marginBottom: "8px" }}>
-              <div style={{ color: C.textMuted }}>Orders: {venue.orderCount}</div>
-              <div style={{ color: C.textMuted }}>Fees: {(venue.fees * 100).toFixed(3)}%</div>
+              <div style={{ color: C.textMuted }}>Orders: {safeNum(venue?.orderCount)}</div>
+              <div style={{ color: C.textMuted }}>Fees: {(safeNum(venue?.fees) * 100).toFixed(3)}%</div>
             </div>
           </div>
         ))}
@@ -623,17 +632,20 @@ function VenueHealthGrid() {
 // ============================================================================
 
 function ExecutionStats() {
-  const { data: report = mockReport, isLoading } = useQuery({
+  const { data: reportRaw, isLoading } = useQuery({
     queryKey: ["executionReport"],
     queryFn: () => fetch("/api/execution/report").then((r) => r.json()),
     refetchInterval: 5000,
   });
+  const report: ExecutionReport = (reportRaw && typeof reportRaw === "object" && !Array.isArray(reportRaw))
+    ? (reportRaw as ExecutionReport)
+    : mockReport;
 
   const stats = [
-    { label: "Fill Rate", value: report.fillRate, unit: "%", color: C.green },
-    { label: "Avg Slippage", value: report.avgSlippage, unit: " bps", color: C.orange },
-    { label: "Total Fees", value: report.totalFees, unit: " $", color: C.text },
-    { label: "Avg Fill Time", value: report.avgFillTime, unit: " ms", color: C.blue },
+    { label: "Fill Rate", value: safeNum(report?.fillRate), unit: "%", color: C.green },
+    { label: "Avg Slippage", value: safeNum(report?.avgSlippage), unit: " bps", color: C.orange },
+    { label: "Total Fees", value: safeNum(report?.totalFees), unit: " $", color: C.text },
+    { label: "Avg Fill Time", value: safeNum(report?.avgFillTime), unit: " ms", color: C.blue },
   ];
 
   return (
@@ -652,7 +664,7 @@ function ExecutionStats() {
           >
             <div style={{ fontSize: "12px", color: C.textMuted, marginBottom: "8px" }}>{stat.label}</div>
             <div style={{ fontSize: "28px", fontWeight: 700, color: stat.color, marginBottom: "4px" }}>
-              {stat.value.toFixed(stat.label === "Total Fees" ? 2 : 1)}
+              {safeFixed(stat.value, stat.label === "Total Fees" ? 2 : 1)}
               <span style={{ fontSize: "16px" }}>{stat.unit}</span>
             </div>
             <div
@@ -677,11 +689,13 @@ function ExecutionStats() {
 // ============================================================================
 
 function RecentFillsFeed() {
-  const { data: fills = mockFills, isLoading } = useQuery({
+  const { data: fillsRaw, isLoading } = useQuery({
     queryKey: ["fills"],
     queryFn: () => fetch("/api/execution/fills").then((r) => r.json()),
     refetchInterval: 3000,
   });
+  const fillsArr = toArray<Fill>(fillsRaw, "fills");
+  const fills: Fill[] = fillsArr.length > 0 ? fillsArr : mockFills;
 
   const sideColor = (side: "BUY" | "SELL") => (side === "BUY" ? C.green : C.red);
 
@@ -712,18 +726,18 @@ function RecentFillsFeed() {
             }}
           >
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: "12px", color: C.textMuted, marginBottom: "4px" }}>{fill.time}</div>
+              <div style={{ fontSize: "12px", color: C.textMuted, marginBottom: "4px" }}>{fill?.time ?? "—"}</div>
               <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-                <span style={{ fontSize: "13px", fontWeight: 600, color: C.text }}>{fill.symbol}</span>
-                <span style={{ fontSize: "12px", fontWeight: 600, color: sideColor(fill.side) }}>{fill.side}</span>
+                <span style={{ fontSize: "13px", fontWeight: 600, color: C.text }}>{fill?.symbol ?? "—"}</span>
+                <span style={{ fontSize: "12px", fontWeight: 600, color: sideColor(fill?.side) }}>{fill?.side ?? "—"}</span>
                 <span style={{ fontSize: "12px", color: C.textDim }}>
-                  {fill.qty} @ ${fill.price.toFixed(2)}
+                  {safeNum(fill?.qty)} @ ${safeFixed(fill?.price, 2)}
                 </span>
               </div>
             </div>
             <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
               <span style={{ fontSize: "11px", color: C.textMuted, minWidth: "50px", textAlign: "right" }}>
-                {fill.venue}
+                {fill?.venue ?? "—"}
               </span>
               <span
                 style={{
@@ -735,7 +749,7 @@ function RecentFillsFeed() {
                   fontWeight: 500,
                 }}
               >
-                {fill.slippage.toFixed(1)} bps
+                {safeFixed(fill?.slippage, 1)} bps
               </span>
             </div>
           </div>

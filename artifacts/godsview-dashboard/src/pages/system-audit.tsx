@@ -144,10 +144,10 @@ const Header: React.FC<{ readiness: ReadinessData }> = ({ readiness }) => (
 // Readiness Score Cards
 const ReadinessScoreCards: React.FC<{ scores: ScoreCard }> = ({ scores }) => {
   const cards = [
-    { label: 'Implementation Coverage', value: scores.implementationCoverage, icon: '◆' },
-    { label: 'Test Coverage', value: scores.testCoverage, icon: '✓' },
-    { label: 'Live Exercise Rate', value: scores.liveExerciseRate, icon: '▶' },
-    { label: 'Config Safety', value: scores.configSafety, icon: '🔒' },
+    { label: 'Implementation Coverage', value: Number(scores?.implementationCoverage ?? 0), icon: '◆' },
+    { label: 'Test Coverage', value: Number(scores?.testCoverage ?? 0), icon: '✓' },
+    { label: 'Live Exercise Rate', value: Number(scores?.liveExerciseRate ?? 0), icon: '▶' },
+    { label: 'Config Safety', value: Number(scores?.configSafety ?? 0), icon: '🔒' },
   ];
 
   return (
@@ -202,24 +202,26 @@ const CapabilityMatrix: React.FC<{ capabilities: Capability[] }> = ({ capabiliti
   const [statusFilter, setStatusFilter] = useState<'all' | 'gaps' | 'stubs'>('all');
   const [sortBy, setSortBy] = useState<string>('category');
 
+  const safeCaps = Array.isArray(capabilities) ? capabilities : [];
+
   const categories = useMemo(() => {
-    return Array.from(new Set(capabilities.map((c) => c.category))).sort();
+    return Array.from(new Set(safeCaps.map((c: any) => c?.category).filter(Boolean))).sort();
   }, [capabilities]);
 
   const filtered = useMemo(() => {
-    let result = capabilities;
+    let result = safeCaps;
     if (categoryFilter !== 'all') {
-      result = result.filter((c) => c.category === categoryFilter);
+      result = result.filter((c: any) => c?.category === categoryFilter);
     }
     if (statusFilter === 'gaps') {
-      result = result.filter((c) => c.implemented !== 'full');
+      result = result.filter((c: any) => c?.implemented !== 'full');
     }
     if (statusFilter === 'stubs') {
-      result = result.filter((c) => c.implemented === 'stub' || c.implemented === 'missing');
+      result = result.filter((c: any) => c?.implemented === 'stub' || c?.implemented === 'missing');
     }
-    return result.sort((a, b) => {
-      if (sortBy === 'category') return a.category.localeCompare(b.category);
-      if (sortBy === 'name') return a.name.localeCompare(b.name);
+    return [...result].sort((a: any, b: any) => {
+      if (sortBy === 'category') return String(a?.category ?? "").localeCompare(String(b?.category ?? ""));
+      if (sortBy === 'name') return String(a?.name ?? "").localeCompare(String(b?.name ?? ""));
       return 0;
     });
   }, [capabilities, categoryFilter, statusFilter, sortBy]);
@@ -358,7 +360,7 @@ const CapabilityMatrix: React.FC<{ capabilities: Capability[] }> = ({ capabiliti
         </table>
       </div>
       <div style={{ marginTop: '12px', fontSize: '13px', color: C.textMuted, fontFamily: C.font }}>
-        Showing {filtered.length} of {capabilities.length} capabilities
+        Showing {filtered.length} of {safeCaps.length} capabilities
       </div>
     </div>
   );
@@ -377,20 +379,20 @@ const EndpointAuditPanel: React.FC<{ data: EndpointAudit }> = ({ data }) => (
         <h3 style={{ fontSize: '16px', fontWeight: 600, margin: '0 0 16px 0', color: C.text, fontFamily: C.font }}>
           Route Group Health
         </h3>
-        {data.routes.map((route) => (
-          <div key={route.group} style={{ marginBottom: '12px' }}>
+        {(Array.isArray(data?.routes) ? data.routes : []).map((route, rIdx) => (
+          <div key={`${route?.group ?? "g"}-${rIdx}`} style={{ marginBottom: '12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-              <span style={{ fontSize: '13px', color: C.textDim, fontFamily: C.mono }}>{route.group}</span>
-              <span style={{ fontSize: '13px', fontWeight: 600, color: route.health >= 80 ? C.green : route.health >= 60 ? C.amber : C.red, fontFamily: C.mono }}>
-                {route.health}%
+              <span style={{ fontSize: '13px', color: C.textDim, fontFamily: C.mono }}>{route?.group ?? "—"}</span>
+              <span style={{ fontSize: '13px', fontWeight: 600, color: Number(route?.health ?? 0) >= 80 ? C.green : Number(route?.health ?? 0) >= 60 ? C.amber : C.red, fontFamily: C.mono }}>
+                {Number(route?.health ?? 0)}%
               </span>
             </div>
             <div style={{ height: '6px', backgroundColor: C.borderLight, borderRadius: '3px', overflow: 'hidden' }}>
               <div
                 style={{
                   height: '100%',
-                  width: `${route.health}%`,
-                  backgroundColor: route.health >= 80 ? C.green : route.health >= 60 ? C.amber : C.red,
+                  width: `${Number(route?.health ?? 0)}%`,
+                  backgroundColor: Number(route?.health ?? 0) >= 80 ? C.green : Number(route?.health ?? 0) >= 60 ? C.amber : C.red,
                 }}
               />
             </div>
@@ -427,11 +429,11 @@ const EndpointAuditPanel: React.FC<{ data: EndpointAudit }> = ({ data }) => (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
       {/* Orphan Endpoints */}
       <div style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, borderRadius: '12px', padding: '20px' }}>
-        <h3 style={{ fontSize: '16px', fontWeight: 600, margin: '0 0 12px 0', color: data.orphanEndpoints.length > 0 ? C.red : C.green, fontFamily: C.font }}>
-          Orphan Endpoints {data.orphanEndpoints.length > 0 && <span style={{ color: C.red }}>({data.orphanEndpoints.length})</span>}
+        <h3 style={{ fontSize: '16px', fontWeight: 600, margin: '0 0 12px 0', color: (Array.isArray(data?.orphanEndpoints) && data.orphanEndpoints.length > 0) ? C.red : C.green, fontFamily: C.font }}>
+          Orphan Endpoints {Array.isArray(data?.orphanEndpoints) && data.orphanEndpoints.length > 0 && <span style={{ color: C.red }}>({data.orphanEndpoints.length})</span>}
         </h3>
         <div style={{ fontSize: '13px', color: C.textMuted }}>
-          {data.orphanEndpoints.length === 0 ? (
+          {(!Array.isArray(data?.orphanEndpoints) || data.orphanEndpoints.length === 0) ? (
             <span style={{ color: C.green }}>✓ All endpoints have consumers</span>
           ) : (
             <ul style={{ margin: '0', paddingLeft: '20px' }}>
@@ -440,7 +442,7 @@ const EndpointAuditPanel: React.FC<{ data: EndpointAudit }> = ({ data }) => (
                   {ep}
                 </li>
               ))}
-              {data.orphanEndpoints.length > 5 && <li style={{ color: C.textMuted }}>...and {data.orphanEndpoints.length - 5} more</li>}
+              {Array.isArray(data?.orphanEndpoints) && data.orphanEndpoints.length > 5 && <li style={{ color: C.textMuted }}>...and {data.orphanEndpoints.length - 5} more</li>}
             </ul>
           )}
         </div>
@@ -448,11 +450,11 @@ const EndpointAuditPanel: React.FC<{ data: EndpointAudit }> = ({ data }) => (
 
       {/* Orphan Pages */}
       <div style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, borderRadius: '12px', padding: '20px' }}>
-        <h3 style={{ fontSize: '16px', fontWeight: 600, margin: '0 0 12px 0', color: data.orphanPages.length > 0 ? C.red : C.green, fontFamily: C.font }}>
-          Orphan Pages {data.orphanPages.length > 0 && <span style={{ color: C.red }}>({data.orphanPages.length})</span>}
+        <h3 style={{ fontSize: '16px', fontWeight: 600, margin: '0 0 12px 0', color: (Array.isArray(data?.orphanPages) && data.orphanPages.length > 0) ? C.red : C.green, fontFamily: C.font }}>
+          Orphan Pages {Array.isArray(data?.orphanPages) && data.orphanPages.length > 0 && <span style={{ color: C.red }}>({data.orphanPages.length})</span>}
         </h3>
         <div style={{ fontSize: '13px', color: C.textMuted }}>
-          {data.orphanPages.length === 0 ? (
+          {(!Array.isArray(data?.orphanPages) || data.orphanPages.length === 0) ? (
             <span style={{ color: C.green }}>✓ All pages have backend support</span>
           ) : (
             <ul style={{ margin: '0', paddingLeft: '20px' }}>
@@ -469,7 +471,7 @@ const EndpointAuditPanel: React.FC<{ data: EndpointAudit }> = ({ data }) => (
     </div>
 
     {/* Duplicate Routes Warning */}
-    {data.duplicateRoutes.length > 0 && (
+    {Array.isArray(data?.duplicateRoutes) && data.duplicateRoutes.length > 0 && (
       <div style={{ backgroundColor: '#3d2424', border: `1px solid ${C.red}`, borderRadius: '12px', padding: '16px', marginTop: '20px' }}>
         <div style={{ fontSize: '14px', fontWeight: 600, color: C.red, marginBottom: '8px', fontFamily: C.font }}>
           ⚠ Duplicate Route Warnings ({data.duplicateRoutes.length})
@@ -490,9 +492,10 @@ const EndpointAuditPanel: React.FC<{ data: EndpointAudit }> = ({ data }) => (
 // Dead Code Report
 const DeadCodeReport: React.FC<{ entries: DeadCodeEntry[] }> = ({ entries }) => {
   const grouped = useMemo(() => {
-    const critical = entries.filter((e) => e.severity === 'critical');
-    const warning = entries.filter((e) => e.severity === 'warning');
-    const info = entries.filter((e) => e.severity === 'info');
+    const arr = Array.isArray(entries) ? entries : [];
+    const critical = arr.filter((e) => e?.severity === 'critical');
+    const warning = arr.filter((e) => e?.severity === 'warning');
+    const info = arr.filter((e) => e?.severity === 'info');
     return { critical, warning, info };
   }, [entries]);
 

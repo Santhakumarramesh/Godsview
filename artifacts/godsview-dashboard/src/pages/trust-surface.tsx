@@ -226,9 +226,9 @@ export default function TrustSurfaceDashboard() {
           }}
         >
           <option value="">-- Choose a strategy --</option>
-          {toArray(strategies).map((strategy) => (
-            <option key={strategy.id} value={strategy.id}>
-              {strategy.name}
+          {toArray<Strategy>(strategies).map((strategy: any) => (
+            <option key={strategy?.id} value={strategy?.id}>
+              {strategy?.name}
             </option>
           ))}
         </select>

@@ -91,7 +91,8 @@ function StatusDot({ status }: { status: Status }) {
 
 // ── Component Card ─────────────────────────────────────────────────────────
 function ComponentCard({ row }: { row: ComponentRow }) {
-  const color = statusColor(safeObj(row).status ?? "unknown");
+  const rowStatus = String((safeObj(row).status as unknown) ?? "unknown");
+  const color = statusColor(rowStatus);
   return (
     <div className="rounded-lg p-5" style={{
       background: C.card, border: `1px solid ${C.border}`,
@@ -105,9 +106,9 @@ function ComponentCard({ row }: { row: ComponentRow }) {
           <span style={{ fontFamily: "Space Grotesk", fontWeight: 600, fontSize: 13, color: "#fff" }}>{row.name}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <StatusDot status={safeObj(row).status ?? "unknown"} />
+          <StatusDot status={rowStatus} />
           <span style={{ fontSize: "10px", color, fontWeight: 600, letterSpacing: "0.08em" }}>
-            {statusLabel(safeObj(row).status ?? "unknown")}
+            {statusLabel(rowStatus)}
           </span>
         </div>
       </div>

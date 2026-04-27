@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { safeObj } from "@/lib/safe";
+import { safeObj, toArray, safeNum, safeFixed } from "@/lib/safe";
 
 const API = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -120,7 +120,7 @@ export default function PromotionPipeline() {
               </h2>
 
               {/* Gating Rules */}
-              {governanceData && governanceData.rules[selectedStage] && (
+              {governanceData && Array.isArray(governanceData?.rules?.[selectedStage]) && (
                 <div
                   style={{
                     backgroundColor: "#0e0e0f",
@@ -141,7 +141,7 @@ export default function PromotionPipeline() {
                       fontSize: "12px",
                     }}
                   >
-                    {governanceData.rules[selectedStage].map((rule, idx) => (
+                    {toArray<string>(governanceData?.rules?.[selectedStage]).map((rule, idx) => (
                       <li key={idx} style={{ marginBottom: "8px", color: C.muted }}>
                         • {rule}
                       </li>
@@ -153,20 +153,21 @@ export default function PromotionPipeline() {
               {/* Strategy Cards */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "16px" }}>
                 {governanceData &&
-                  governanceData.stages
-                    .find((s) => s.name.toLowerCase().replace(" ", "_") === selectedStage)
-                    ?.strategies.map((strategy) => (
+                  toArray<any>(toArray<PipelineStage>(governanceData?.stages)
+                    .find((s) => String(s?.name ?? "").toLowerCase().replace(" ", "_") === selectedStage)
+                    ?.strategies)
+                    .map((strategy: any) => (
                       <div
-                        key={strategy.id}
+                        key={strategy?.id ?? `s-${Math.random()}`}
                         style={{
                           backgroundColor: "#0e0e0f",
-                          border: `1px solid ${strategy.blockerReason ? "#ff7162" : C.border}`,
+                          border: `1px solid ${strategy?.blockerReason ? "#ff7162" : C.border}`,
                           borderRadius: "8px",
                           padding: "16px",
                         }}
                       >
                         <h3 style={{ fontFamily: "Space Grotesk", fontSize: "14px", marginBottom: "8px" }}>
-                          {strategy.name}
+                          {strategy?.name ?? "—"}
                         </h3>
 
                         {/* Metrics */}
@@ -179,7 +180,7 @@ export default function PromotionPipeline() {
                               marginBottom: "4px",
                             }}
                           >
-                            Sharpe: <span style={{ color: C.accent }}>{strategy.metrics.sharpe.toFixed(2)}</span>
+                            Sharpe: <span style={{ color: C.accent }}>{safeFixed(safeObj<any>(strategy?.metrics).sharpe, 2)}</span>
                           </div>
                           <div
                             style={{
@@ -189,7 +190,7 @@ export default function PromotionPipeline() {
                               marginBottom: "4px",
                             }}
                           >
-                            PF: <span style={{ color: C.accent }}>{strategy.metrics.pf.toFixed(2)}</span>
+                            PF: <span style={{ color: C.accent }}>{safeFixed(safeObj<any>(strategy?.metrics).pf, 2)}</span>
                           </div>
                           <div
                             style={{
@@ -199,12 +200,12 @@ export default function PromotionPipeline() {
                             }}
                           >
                             Win Rate:{" "}
-                            <span style={{ color: C.accent }}>{(strategy.metrics.winRate * 100).toFixed(0)}%</span>
+                            <span style={{ color: C.accent }}>{(safeNum(safeObj<any>(strategy?.metrics).winRate) * 100).toFixed(0)}%</span>
                           </div>
                         </div>
 
                         {/* Blocker */}
-                        {strategy.blockerReason && (
+                        {strategy?.blockerReason && (
                           <div
                             style={{
                               backgroundColor: "#ff71621a",
@@ -223,9 +224,9 @@ export default function PromotionPipeline() {
 
                         {/* Actions */}
                         <div style={{ display: "flex", gap: "8px" }}>
-                          {strategy.canPromote && (
+                          {strategy?.canPromote && (
                             <button
-                              onClick={() => handlePromote(strategy.id)}
+                              onClick={() => handlePromote(strategy?.id)}
                               style={{
                                 flex: 1,
                                 padding: "8px",
@@ -242,9 +243,9 @@ export default function PromotionPipeline() {
                               Promote
                             </button>
                           )}
-                          {strategy.canDemote && (
+                          {strategy?.canDemote && (
                             <button
-                              onClick={() => handleDemote(strategy.id)}
+                              onClick={() => handleDemote(strategy?.id)}
                               style={{
                                 flex: 1,
                                 padding: "8px",

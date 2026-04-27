@@ -82,7 +82,9 @@ const AlertSummaryBanner = () => {
     retry: false,
   });
 
-  const summary = data || getMockSummary();
+  const summary = (data && typeof data === "object" && !Array.isArray(data))
+    ? { ...getMockSummary(), ...data }
+    : getMockSummary();
 
   return (
     <div style={{ padding: '20px', marginBottom: '24px' }}>
@@ -159,7 +161,8 @@ const ActiveAlertsFeed = () => {
     retry: false,
   });
 
-  const alerts = data || getMockActiveAlerts();
+  const alertsArr = toArray<any>(data, "alerts");
+  const alerts = alertsArr.length > 0 ? alertsArr : getMockActiveAlerts();
 
   useEffect(() => {
     const interval = setInterval(() => refetch(), refreshInterval);
@@ -300,7 +303,8 @@ const AlertRulesManager = () => {
     retry: false,
   });
 
-  const rules = data || getMockRules();
+  const rulesArr = toArray<any>(data, "rules");
+  const rules = rulesArr.length > 0 ? rulesArr : getMockRules();
 
   const handleAddRule = () => {
     setShowAddForm(false);
@@ -455,7 +459,8 @@ const NotificationChannels = () => {
     retry: false,
   });
 
-  const channels = data || getMockChannels();
+  const channelsArr = toArray<any>(data, "channels");
+  const channels = channelsArr.length > 0 ? channelsArr : getMockChannels();
 
   const getChannelIcon = (type: string) => {
     switch (type) {
@@ -504,7 +509,7 @@ const NotificationChannels = () => {
               </div>
               <div>
                 <div style={{ color: C.textMuted, marginBottom: '2px' }}>Failure Rate</div>
-                <div style={{ color: ch.failureRate > 1 ? C.red : C.green, fontWeight: '600' }}>{ch.failureRate.toFixed(1)}%</div>
+                <div style={{ color: (ch?.failureRate ?? 0) > 1 ? C.red : C.green, fontWeight: '600' }}>{Number(ch?.failureRate ?? 0).toFixed(1)}%</div>
               </div>
             </div>
 
@@ -535,7 +540,11 @@ const AnomalyDetectionPanel = () => {
     retry: false,
   });
 
-  const anomalies = data || getMockAnomalies();
+  const anomaliesRaw: any = (data && typeof data === "object" && !Array.isArray(data)) ? data : null;
+  const anomalies = {
+    metrics: toArray<any>(anomaliesRaw?.metrics).length > 0 ? toArray<any>(anomaliesRaw?.metrics) : getMockAnomalies().metrics,
+    recent: toArray<any>(anomaliesRaw?.recent).length > 0 ? toArray<any>(anomaliesRaw?.recent) : getMockAnomalies().recent,
+  };
 
   return (
     <div style={{ padding: '20px', marginBottom: '24px' }}>
@@ -584,7 +593,7 @@ const AnomalyDetectionPanel = () => {
                     background: m.anomalous ? C.red : C.green,
                   }} />
                 </div>
-                <div style={{ color: C.textMuted, fontSize: '10px', marginTop: '4px' }}>z-score: {m.zScore.toFixed(2)}</div>
+                <div style={{ color: C.textMuted, fontSize: '10px', marginTop: '4px' }}>z-score: {Number(m?.zScore ?? 0).toFixed(2)}</div>
               </div>
             ))}
           </div>

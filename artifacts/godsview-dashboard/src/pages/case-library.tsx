@@ -205,7 +205,7 @@ export default function CaseLibrary() {
                           fontSize: "12px",
                         }}
                       >
-                        {caseItem.lessons.map((lesson, idx) => (
+                        {caseItem.lessons.map((lesson: any, idx: number) => (
                           <li key={idx} style={{ marginBottom: "4px", color: C.text }}>
                             • {lesson}
                           </li>
@@ -217,7 +217,7 @@ export default function CaseLibrary() {
                   {/* Tags */}
                   {caseItem.tags.length > 0 && (
                     <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                      {caseItem.tags.map((tag) => (
+                      {caseItem.tags.map((tag: any) => (
                         <span
                           key={tag}
                           style={{

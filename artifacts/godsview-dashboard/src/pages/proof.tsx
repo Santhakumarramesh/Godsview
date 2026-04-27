@@ -123,13 +123,14 @@ const StarRating = ({ rating }: { rating: number }) => {
   );
 };
 
-const MarketReadinessIndicator = ({ market_readiness }: { market_readiness: MarketReadiness }) => {
-  const statusConfig = {
+const MarketReadinessIndicator = ({ market_readiness }: { market_readiness?: MarketReadiness }) => {
+  const statusConfig: Record<string, { bg: string; border: string; dot: string; text: string }> = {
     green: { bg: "bg-emerald-500/20", border: "border-emerald-400/40", dot: "bg-emerald-500", text: "text-emerald-200" },
     yellow: { bg: "bg-yellow-500/20", border: "border-yellow-400/40", dot: "bg-yellow-500", text: "text-yellow-200" },
     red: { bg: "bg-red-500/20", border: "border-red-400/40", dot: "bg-red-500", text: "text-red-200" },
   };
-  const config = statusConfig[market_readiness.status];
+  const status = market_readiness?.status ?? "yellow";
+  const config = statusConfig[status] ?? statusConfig.yellow;
 
   return (
     <div className={`${config.bg} border ${config.border} rounded-lg p-6`}>
@@ -140,11 +141,11 @@ const MarketReadinessIndicator = ({ market_readiness }: { market_readiness: Mark
       <div className="space-y-2">
         <div>
           <span className="text-gray-400 text-sm">Regime: </span>
-          <span className={`${config.text} font-semibold`}>{market_readiness.regime}</span>
+          <span className={`${config.text} font-semibold`}>{market_readiness?.regime ?? "—"}</span>
         </div>
         <div>
           <span className="text-gray-400 text-sm">Recommended Position Size: </span>
-          <span className={`${config.text} font-semibold`}>{(market_readiness.recommended_position_size * 100).toFixed(1)}%</span>
+          <span className={`${config.text} font-semibold`}>{(safeNum(market_readiness?.recommended_position_size) * 100).toFixed(1)}%</span>
         </div>
       </div>
     </div>
@@ -152,8 +153,11 @@ const MarketReadinessIndicator = ({ market_readiness }: { market_readiness: Mark
 };
 
 const TradeProofCard = ({ trade }: { trade: Trade }) => {
-  const isLong = trade.position_type === "long";
-  const riskRewardColor = trade.risk_reward_ratio >= 2 ? "text-emerald-400" : "text-yellow-400";
+  const isLong = trade?.position_type === "long";
+  const riskRewardColor = safeNum(trade?.risk_reward_ratio) >= 2 ? "text-emerald-400" : "text-yellow-400";
+  const chartData = toArray<any>(trade?.chart_data);
+  const entryTime = trade?.entry_time ? new Date(trade.entry_time) : null;
+  const exitTime = trade?.exit_time ? new Date(trade.exit_time) : null;
 
   return (
     <div className="bg-[#1a191b] border border-gray-700/30 rounded-lg p-6 hover:border-gray-600/50 transition-colors">
@@ -169,15 +173,15 @@ const TradeProofCard = ({ trade }: { trade: Trade }) => {
               )}
             </div>
             <div>
-              <h4 className="font-semibold text-gray-100">{trade.description}</h4>
-              <p className="text-xs text-gray-400">{new Date(trade.entry_time).toLocaleDateString()}</p>
+              <h4 className="font-semibold text-gray-100">{trade?.description ?? "—"}</h4>
+              <p className="text-xs text-gray-400">{entryTime ? entryTime.toLocaleDateString() : "—"}</p>
             </div>
           </div>
           <div className="text-right">
-            <div className={`text-lg font-bold ${trade.win ? "text-emerald-400" : "text-red-400"}`}>
-              {trade.win ? "+" : ""}{trade.pnl.toFixed(2)}
+            <div className={`text-lg font-bold ${trade?.win ? "text-emerald-400" : "text-red-400"}`}>
+              {trade?.win ? "+" : ""}{safeFixed(trade?.pnl, 2)}
             </div>
-            <div className="text-xs text-gray-400">{trade.win ? "Win" : "Loss"}</div>
+            <div className="text-xs text-gray-400">{trade?.win ? "Win" : "Loss"}</div>
           </div>
         </div>
 
@@ -185,15 +189,15 @@ const TradeProofCard = ({ trade }: { trade: Trade }) => {
         <div className="grid grid-cols-3 gap-3 text-center text-sm">
           <div>
             <span className="text-gray-400 text-xs block mb-1">Entry</span>
-            <span className="text-gray-100 font-mono font-semibold">${trade.entry_price.toFixed(2)}</span>
+            <span className="text-gray-100 font-mono font-semibold">${safeFixed(trade?.entry_price, 2)}</span>
           </div>
           <div>
             <span className="text-gray-400 text-xs block mb-1">Stop Loss</span>
-            <span className="text-red-400 font-mono font-semibold">${trade.stop_loss.toFixed(2)}</span>
+            <span className="text-red-400 font-mono font-semibold">${safeFixed(trade?.stop_loss, 2)}</span>
           </div>
           <div>
             <span className="text-gray-400 text-xs block mb-1">Take Profit</span>
-            <span className="text-emerald-400 font-mono font-semibold">${trade.take_profit.toFixed(2)}</span>
+            <span className="text-emerald-400 font-mono font-semibold">${safeFixed(trade?.take_profit, 2)}</span>
           </div>
         </div>
 
@@ -201,15 +205,15 @@ const TradeProofCard = ({ trade }: { trade: Trade }) => {
         <div className="flex justify-between items-center text-sm bg-gray-800/30 rounded px-3 py-2">
           <span className="text-gray-400">Risk:Reward</span>
           <span className={`font-semibold font-mono ${riskRewardColor}`}>
-            1:{trade.risk_reward_ratio.toFixed(2)}
+            1:{safeFixed(trade?.risk_reward_ratio, 2)}
           </span>
         </div>
 
         {/* Mini chart */}
-        {trade.chart_data.length > 0 && (
+        {chartData.length > 0 && (
           <div className="h-32 -mx-2">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={trade.chart_data}>
+              <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
                 <Tooltip
                   contentStyle={{ backgroundColor: "#2a2a2d", border: "1px solid #444" }}
@@ -221,7 +225,7 @@ const TradeProofCard = ({ trade }: { trade: Trade }) => {
                 <Line
                   type="monotone"
                   dataKey="price"
-                  stroke={trade.win ? "#9cff93" : "#ff7162"}
+                  stroke={trade?.win ? "#9cff93" : "#ff7162"}
                   dot={false}
                   strokeWidth={2}
                   isAnimationActive={false}
@@ -233,8 +237,8 @@ const TradeProofCard = ({ trade }: { trade: Trade }) => {
 
         {/* Time */}
         <div className="text-xs text-gray-500">
-          {new Date(trade.entry_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-          {trade.exit_time && ` - ${new Date(trade.exit_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}
+          {entryTime ? entryTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}
+          {exitTime && ` - ${exitTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}
         </div>
       </div>
     </div>
@@ -405,7 +409,7 @@ export default function Proof() {
               <h2 className="text-2xl font-semibold mb-6 text-gray-100" style={{ fontFamily: "Space Grotesk" }}>
                 Market Conditions
               </h2>
-              <MarketReadinessIndicator market_readiness={data.market_readiness} />
+              <MarketReadinessIndicator market_readiness={data?.market_readiness} />
             </div>
 
             {/* Strategy Comparison Section */}
@@ -470,29 +474,29 @@ export default function Proof() {
                       <tbody>
                         {toArray<any>(data?.strategy_comparison?.strategies).map((strategy: any, idx: number) => (
                           <tr
-                            key={strategy.id}
+                            key={strategy?.id ?? `s-${idx}`}
                             className="border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors"
                           >
                             <td className="py-4 px-6 text-gray-300 font-semibold">#{idx + 1}</td>
-                            <td className="py-4 px-6 text-gray-100">{strategy.name}</td>
+                            <td className="py-4 px-6 text-gray-100">{strategy?.name ?? "—"}</td>
                             <td className="py-4 px-6 text-center">
                               <span className="text-emerald-400 font-semibold font-mono">
-                                {(strategy.win_rate * 100).toFixed(1)}%
+                                {(safeNum(strategy?.win_rate) * 100).toFixed(1)}%
                               </span>
                             </td>
                             <td className="py-4 px-6 text-center">
                               <span
                                 className={`font-semibold font-mono ${
-                                  strategy.profit_factor >= 1.5 ? "text-emerald-400" : "text-yellow-400"
+                                  safeNum(strategy?.profit_factor) >= 1.5 ? "text-emerald-400" : "text-yellow-400"
                                 }`}
                               >
-                                {strategy.profit_factor.toFixed(2)}
+                                {safeFixed(strategy?.profit_factor, 2)}
                               </span>
                             </td>
-                            <td className="py-4 px-6 text-center text-gray-400">{strategy.trades}</td>
+                            <td className="py-4 px-6 text-center text-gray-400">{safeNum(strategy?.trades)}</td>
                             <td className="py-4 px-6 text-center">
                               <div className="flex justify-center">
-                                <StarRating rating={strategy.accuracy} />
+                                <StarRating rating={safeNum(strategy?.accuracy)} />
                               </div>
                             </td>
                           </tr>

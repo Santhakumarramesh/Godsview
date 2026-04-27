@@ -101,16 +101,19 @@ interface TradeGateResult {
 // Utility Functions
 // ============================================================================
 
-const formatMoney = (val: number, decimals = 0) => {
-  const abs = Math.abs(val);
-  if (abs >= 1e9) return (val / 1e9).toFixed(decimals) + 'B';
-  if (abs >= 1e6) return (val / 1e6).toFixed(decimals) + 'M';
-  if (abs >= 1e3) return (val / 1e3).toFixed(decimals) + 'K';
-  return val.toFixed(decimals);
+const formatMoney = (val: number | undefined | null, decimals = 0) => {
+  const v = typeof val === "number" && Number.isFinite(val) ? val : 0;
+  const abs = Math.abs(v);
+  if (abs >= 1e9) return (v / 1e9).toFixed(decimals) + 'B';
+  if (abs >= 1e6) return (v / 1e6).toFixed(decimals) + 'M';
+  if (abs >= 1e3) return (v / 1e3).toFixed(decimals) + 'K';
+  return v.toFixed(decimals);
 };
 
-const formatPercent = (val: number, decimals = 2) =>
-  (val * 100).toFixed(decimals) + '%';
+const formatPercent = (val: number | undefined | null, decimals = 2) => {
+  const v = typeof val === "number" && Number.isFinite(val) ? val : 0;
+  return (v * 100).toFixed(decimals) + '%';
+};
 
 const getRiskColor = (risk: number) => {
   if (risk > 0.06) return C.red;
@@ -254,7 +257,7 @@ const Header: React.FC<HeaderProps> = ({ portfolio }) => {
           >
             <div style={{ fontSize: '10px', color: C.textMuted, fontFamily: C.mono }}>Portfolio VaR (95%)</div>
             <div style={{ fontSize: '18px', fontWeight: 700, color: C.blue, fontFamily: C.mono }}>
-              ${formatMoney(portfolio.varValue, 1)}M
+              ${formatMoney(portfolio?.varValue, 1)}M
             </div>
           </div>
 
@@ -275,11 +278,11 @@ const Header: React.FC<HeaderProps> = ({ portfolio }) => {
               style={{
                 fontSize: '18px',
                 fontWeight: 700,
-                color: portfolio.data?.grossLeverage ?? 0 > 2 ? C.red : portfolio.data?.grossLeverage ?? 0 > 1.5 ? C.amber : C.green,
+                color: safeNum(portfolio?.grossLeverage) > 2 ? C.red : safeNum(portfolio?.grossLeverage) > 1.5 ? C.amber : C.green,
                 fontFamily: C.mono,
               }}
             >
-              {safeFixed(portfolio.data?.grossLeverage ?? 0, 2)}x
+              {safeFixed(portfolio?.grossLeverage, 2)}x
             </div>
           </div>
 
@@ -301,14 +304,14 @@ const Header: React.FC<HeaderProps> = ({ portfolio }) => {
               <div
                 style={{
                   height: '100%',
-                  width: `${portfolio.riskBudgetUsed * 100}%`,
-                  background: portfolio.riskBudgetUsed > 0.8 ? C.red : portfolio.riskBudgetUsed > 0.5 ? C.amber : C.green,
+                  width: `${safeNum(portfolio?.riskBudgetUsed) * 100}%`,
+                  background: safeNum(portfolio?.riskBudgetUsed) > 0.8 ? C.red : safeNum(portfolio?.riskBudgetUsed) > 0.5 ? C.amber : C.green,
                   transition: 'width 0.3s ease',
                 }}
               />
             </div>
             <div style={{ fontSize: '11px', color: C.textDim, fontFamily: C.mono }}>
-              {formatPercent(portfolio.riskBudgetUsed)}
+              {formatPercent(portfolio?.riskBudgetUsed)}
             </div>
           </div>
         </div>
@@ -476,13 +479,13 @@ const ExposureMatrix: React.FC<ExposureMatrixProps> = ({ exposure, portfolio }) 
           <div>
             <div style={{ fontSize: '10px', color: C.textFaint, marginBottom: '4px', fontFamily: C.mono }}>Net Leverage</div>
             <div style={{ fontSize: '16px', fontWeight: 700, color: C.purple, fontFamily: C.mono }}>
-              {safeFixed(portfolio.data?.netLeverage ?? 0, 2)}x
+              {safeFixed(portfolio?.netLeverage, 2)}x
             </div>
           </div>
           <div>
             <div style={{ fontSize: '10px', color: C.textFaint, marginBottom: '4px', fontFamily: C.mono }}>HHI (Concentration)</div>
             <div style={{ fontSize: '16px', fontWeight: 700, color: C.amber, fontFamily: C.mono }}>
-              {((portfolio.data?.concentration ?? 0) * 10000).toFixed(0)}
+              {(safeNum(portfolio?.concentration) * 10000).toFixed(0)}
             </div>
           </div>
         </div>
@@ -959,7 +962,7 @@ const OvernightPanel: React.FC<OvernightPanelProps> = ({ rules }) => {
       </div>
 
       {/* Restricted Sectors */}
-      {rules.restrictedSectors.length > 0 && (
+      {Array.isArray(rules?.restrictedSectors) && rules.restrictedSectors.length > 0 && (
         <div style={{ marginTop: '16px', padding: '12px', background: `${C.red}10`, border: `1px solid ${C.red}`, borderRadius: '6px' }}>
           <div style={{ fontSize: '10px', color: C.red, fontWeight: 700, fontFamily: C.mono, marginBottom: '8px' }}>
             RESTRICTED SECTORS THIS SESSION

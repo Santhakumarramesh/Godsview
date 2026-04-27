@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { safeObj, safeNum, safeFixed } from "@/lib/safe";
+import { safeObj, safeNum, safeFixed, toArray } from "@/lib/safe";
 
 const API = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -134,7 +134,7 @@ export default function ExecutionPressure() {
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
                       <span style={{ fontFamily: "Space Grotesk" }}>Sellers</span>
                       <span style={{ fontFamily: "JetBrains Mono", color: "#ff7162" }}>
-                        {(featureData.dominance.sellers * 100).toFixed(1)}%
+                        {safeFixed(safeNum(safeObj<any>(featureData?.dominance).sellers) * 100, 1)}%
                       </span>
                     </div>
                     <div
@@ -149,7 +149,7 @@ export default function ExecutionPressure() {
                         style={{
                           height: "100%",
                           backgroundColor: "#ff7162",
-                          width: `${featureData.dominance.sellers * 100}%`,
+                          width: `${safeNum(safeObj<any>(featureData?.dominance).sellers) * 100}%`,
                         }}
                       />
                     </div>
@@ -175,13 +175,13 @@ export default function ExecutionPressure() {
                   <div style={{ marginBottom: "12px" }}>
                     <span style={{ fontFamily: "Space Grotesk", fontSize: "12px" }}>Level</span>
                     <div style={{ fontFamily: "JetBrains Mono", fontSize: "18px", color: C.accent, marginTop: "4px" }}>
-                      {featureData.exhaustion.level.toFixed(2)}
+                      {safeFixed(safeObj<any>(featureData?.exhaustion).level, 2)}
                     </div>
                   </div>
                   <div>
                     <span style={{ fontFamily: "Space Grotesk", fontSize: "12px" }}>Signal</span>
                     <div style={{ fontFamily: "JetBrains Mono", fontSize: "14px", color: C.muted, marginTop: "4px" }}>
-                      {featureData.exhaustion.signal}
+                      {safeObj<any>(featureData?.exhaustion).signal ?? "—"}
                     </div>
                   </div>
                 </div>
@@ -201,9 +201,9 @@ export default function ExecutionPressure() {
               <h3 style={{ fontFamily: "Space Grotesk", fontSize: "14px", color: C.muted, marginBottom: "16px" }}>
                 TRANSITION ZONES
               </h3>
-              {featureData && featureData.transitions.length > 0 && (
+              {featureData && toArray<any>(featureData, "transitions").length > 0 && (
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px" }}>
-                  {featureData.transitions.map((t, i) => (
+                  {toArray<any>(featureData, "transitions").map((t, i) => (
                     <div
                       key={i}
                       style={{
@@ -215,10 +215,10 @@ export default function ExecutionPressure() {
                     >
                       <div style={{ fontFamily: "Space Grotesk", fontSize: "12px", color: C.muted }}>Zone</div>
                       <div style={{ fontFamily: "JetBrains Mono", fontSize: "14px", color: C.accent }}>
-                        {t.zone}
+                        {t?.zone ?? "—"}
                       </div>
                       <div style={{ fontFamily: "Space Grotesk", fontSize: "11px", color: C.muted, marginTop: "4px" }}>
-                        Confidence: {(t.confidence * 100).toFixed(0)}%
+                        Confidence: {(safeNum(t?.confidence) * 100).toFixed(0)}%
                       </div>
                     </div>
                   ))}
@@ -244,19 +244,19 @@ export default function ExecutionPressure() {
                   <div>
                     <span style={{ fontFamily: "Space Grotesk", fontSize: "11px", color: C.muted }}>Total Score</span>
                     <div style={{ fontFamily: "JetBrains Mono", fontSize: "20px", color: C.accent, marginTop: "8px" }}>
-                      {featureData.score.toFixed(2)}
+                      {safeFixed(featureData?.score, 2)}
                     </div>
                   </div>
                   <div>
                     <span style={{ fontFamily: "Space Grotesk", fontSize: "11px", color: C.muted }}>Buyer Pressure</span>
                     <div style={{ fontFamily: "JetBrains Mono", fontSize: "20px", color: C.accent, marginTop: "8px" }}>
-                      {featureData.buyer_pressure.toFixed(2)}
+                      {safeFixed(featureData?.buyer_pressure, 2)}
                     </div>
                   </div>
                   <div>
                     <span style={{ fontFamily: "Space Grotesk", fontSize: "11px", color: C.muted }}>Seller Pressure</span>
                     <div style={{ fontFamily: "JetBrains Mono", fontSize: "20px", color: "#ff7162", marginTop: "8px" }}>
-                      {featureData.seller_pressure.toFixed(2)}
+                      {safeFixed(featureData?.seller_pressure, 2)}
                     </div>
                   </div>
                 </div>

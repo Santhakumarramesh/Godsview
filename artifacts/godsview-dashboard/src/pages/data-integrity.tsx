@@ -237,7 +237,7 @@ const HeaderSection = ({
                 fontFamily: C.mono,
               }}
             >
-              {rejectionRate.toFixed(2)}%
+              {safeFixed(rejectionRate, 2)}%
             </div>
             <p
               style={{
@@ -357,7 +357,7 @@ const FeedHealthPanel = ({ feeds }: { feeds: FeedHealth[] }) => {
                     fontFamily: C.mono,
                   }}
                 >
-                  {feed.uptime.toFixed(2)}%
+                  {safeFixed(feed?.uptime, 2)}%
                 </div>
               </div>
 
@@ -380,7 +380,7 @@ const FeedHealthPanel = ({ feeds }: { feeds: FeedHealth[] }) => {
                     fontFamily: C.mono,
                   }}
                 >
-                  {feed.latencyMs.toFixed(1)}ms
+                  {safeFixed(feed?.latencyMs, 1)}ms
                 </div>
               </div>
 
@@ -403,7 +403,7 @@ const FeedHealthPanel = ({ feeds }: { feeds: FeedHealth[] }) => {
                     fontFamily: C.mono,
                   }}
                 >
-                  {feed.ticksPerSec.toFixed(0)}
+                  {safeFixed(feed?.ticksPerSec, 0)}
                 </div>
               </div>
 
@@ -505,8 +505,9 @@ const ValidationStatsSection = ({ stats }: { stats: ValidationStats }) => {
 
 // Component: Rejection Breakdown Chart
 const RejectionBreakdownChart = ({ breakdown }: { breakdown: ValidationStats['breakdown'] }) => {
-  const total = breakdown.reduce((sum, item) => sum + item.count, 0);
-  const maxCount = Math.max(...breakdown.map((b) => b.count));
+  const breakdownArr = Array.isArray(breakdown) ? breakdown : [];
+  const total = breakdownArr.reduce((sum, item: any) => sum + Number(item?.count ?? 0), 0);
+  const maxCount = Math.max(0, ...breakdownArr.map((b: any) => Number(b?.count ?? 0))) || 1;
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {
@@ -541,7 +542,7 @@ const RejectionBreakdownChart = ({ breakdown }: { breakdown: ValidationStats['br
         }}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {breakdown.map((item, i) => (
+          {breakdownArr.map((item: any, i: number) => (
             <div key={i}>
               <div
                 style={{
@@ -558,7 +559,7 @@ const RejectionBreakdownChart = ({ breakdown }: { breakdown: ValidationStats['br
                     fontFamily: C.font,
                   }}
                 >
-                  {item.type}
+                  {item?.type ?? "—"}
                 </span>
                 <span
                   style={{
@@ -567,7 +568,7 @@ const RejectionBreakdownChart = ({ breakdown }: { breakdown: ValidationStats['br
                     fontFamily: C.mono,
                   }}
                 >
-                  {item.count} ({item.percentage.toFixed(1)}%)
+                  {Number(item?.count ?? 0)} ({safeFixed(item?.percentage, 1)}%)
                 </span>
               </div>
               <svg width="100%" height="24" style={{ display: 'block' }}>
@@ -648,11 +649,11 @@ const StaleSymbolMonitor = ({ symbols }: { symbols: StaleSymbol[] }) => {
               </span>
               <span
                 style={{
-                  color: getStalenessColor(sym.stalenessPercent),
+                  color: getStalenessColor(Number(sym?.stalenessPercent ?? 0)),
                   fontWeight: 600,
                 }}
               >
-                {sym.stalenessPercent.toFixed(0)}%
+                {safeFixed(sym?.stalenessPercent, 0)}%
               </span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
@@ -661,7 +662,7 @@ const StaleSymbolMonitor = ({ symbols }: { symbols: StaleSymbol[] }) => {
                   Price
                 </div>
                 <div style={{ color: C.text, fontWeight: 500 }}>
-                  ${sym.lastPrice.toFixed(2)}
+                  ${safeFixed(sym?.lastPrice, 2)}
                 </div>
               </div>
               <div>
@@ -879,7 +880,7 @@ const SnapshotBrowser = ({ snapshots }: { snapshots: Snapshot[] }) => {
               </div>
             </div>
 
-            {expandedId === snap.id && snap.symbols && (
+            {expandedId === snap.id && Array.isArray(snap?.symbols) && (
               <div
                 style={{
                   padding: 12,
@@ -916,8 +917,9 @@ const SnapshotBrowser = ({ snapshots }: { snapshots: Snapshot[] }) => {
 
 // Component: Event Store Stats
 const EventStoreStats = ({ stats }: { stats: StoreStats }) => {
-  const integrityPassCount = stats.integrityStatus.filter((s) => s.status === 'pass').length;
-  const integrityFailCount = stats.integrityStatus.filter((s) => s.status === 'fail').length;
+  const integrityList = Array.isArray(stats?.integrityStatus) ? stats.integrityStatus : [];
+  const integrityPassCount = integrityList.filter((s: any) => s?.status === 'pass').length;
+  const integrityFailCount = integrityList.filter((s: any) => s?.status === 'fail').length;
 
   return (
     <div style={{ marginBottom: 40 }}>
@@ -968,19 +970,19 @@ const EventStoreStats = ({ stats }: { stats: StoreStats }) => {
                 fontFamily: C.mono,
               }}
             >
-              {stats.bufferUtilization.toFixed(1)}%
+              {safeFixed(stats?.bufferUtilization, 1)}%
             </div>
             <svg width="100%" height="8" style={{ display: 'block' }}>
               <rect x="0" y="0" width="100%" height="8" fill={C.borderLight} rx="4" />
               <rect
                 x="0"
                 y="0"
-                width={Math.min(stats.bufferUtilization, 100) + '%'}
+                width={Math.min(Number(stats?.bufferUtilization ?? 0), 100) + '%'}
                 height="8"
                 fill={
-                  stats.bufferUtilization > 80
+                  Number(stats?.bufferUtilization ?? 0) > 80
                     ? C.red
-                    : stats.bufferUtilization > 50
+                    : Number(stats?.bufferUtilization ?? 0) > 50
                       ? C.amber
                       : C.green
                 }
@@ -1031,7 +1033,7 @@ const EventStoreStats = ({ stats }: { stats: StoreStats }) => {
                 fontFamily: C.mono,
               }}
             >
-              {stats.throughput.toFixed(0)} evt/s
+              {safeFixed(stats?.throughput, 0)} evt/s
             </div>
           </div>
 

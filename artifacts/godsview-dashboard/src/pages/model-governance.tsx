@@ -323,7 +323,7 @@ const ModelRegistryPanel: React.FC<{ models: Model[] }> = ({ models }) => (
       Model Registry
     </h2>
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
-      {toArray(models).map((model) => (
+      {toArray<Model>(models).map((model: any) => (
         <div
           key={model.id}
           style={{
@@ -400,7 +400,7 @@ const ModelRegistryPanel: React.FC<{ models: Model[] }> = ({ models }) => (
               Lineage ({model.lineage.length})
             </summary>
             <div style={{ marginTop: '0.5rem', paddingLeft: '1rem' }}>
-              {model.lineage.map((item, i) => (
+              {model.lineage.map((item: any, i: number) => (
                 <div key={i} style={{ marginBottom: '0.25rem', color: C.textFaint }}>
                   v{item.version} • {new Date(item.date).toLocaleDateString()}
                 </div>

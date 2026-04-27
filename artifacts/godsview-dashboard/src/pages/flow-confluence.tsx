@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { toArray } from "@/lib/safe";
+import { toArray, safeFixed, safeNum } from "@/lib/safe";
 
 const API = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -162,39 +162,38 @@ export default function FlowConfluence() {
                 </tr>
               </thead>
               <tbody>
-                {confluenceData &&
-                  confluenceData.setups.map((setup, idx) => (
+                {toArray<ConfluenceSetup>(confluenceData, "setups").map((setup, idx) => (
                     <tr
                       key={idx}
                       style={{ borderBottom: `1px solid ${C.border}`, backgroundColor: idx % 2 === 0 ? "" : "rgba(26,25,27,0.5)" }}
                     >
-                      <td style={{ padding: "12px", color: C.accent, fontWeight: "500" }}>{setup.symbol}</td>
+                      <td style={{ padding: "12px", color: C.accent, fontWeight: "500" }}>{setup?.symbol ?? "—"}</td>
                       <td style={{ padding: "12px", textAlign: "right", color: C.text }}>
-                        {setup.structure_score.toFixed(3)}
+                        {safeFixed(setup?.structure_score, 3)}
                       </td>
                       <td style={{ padding: "12px", textAlign: "right", color: C.text }}>
-                        {setup.flow_score.toFixed(3)}
+                        {safeFixed(setup?.flow_score, 3)}
                       </td>
                       <td
                         style={{
                           padding: "12px",
                           textAlign: "right",
-                          color: setup.combined_confidence > 0.85 ? "#52ff00" : C.accent,
+                          color: safeNum(setup?.combined_confidence) > 0.85 ? "#52ff00" : C.accent,
                           fontWeight: "500",
                         }}
                       >
-                        {(setup.combined_confidence * 100).toFixed(1)}%
+                        {(safeNum(setup?.combined_confidence) * 100).toFixed(1)}%
                       </td>
-                      <td style={{ padding: "12px", color: C.muted }}>{setup.setup_type}</td>
+                      <td style={{ padding: "12px", color: C.muted }}>{setup?.setup_type ?? "—"}</td>
                       <td
                         style={{
                           padding: "12px",
                           textAlign: "center",
-                          color: setup.direction === "long" ? C.accent : "#ff7162",
+                          color: setup?.direction === "long" ? C.accent : "#ff7162",
                           fontWeight: "600",
                         }}
                       >
-                        {setup.direction.toUpperCase()}
+                        {String(setup?.direction ?? "—").toUpperCase()}
                       </td>
                     </tr>
                   ))}

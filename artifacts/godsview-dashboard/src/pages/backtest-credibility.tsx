@@ -217,13 +217,14 @@ const OverfitGauge: React.FC<{ score: number }> = ({ score }) => {
 
 // Assumption Grid Cell
 const AssumptionCell: React.FC<{ check: AssumptionCheck }> = ({ check }) => {
-  const severityColor = {
+  const severityMap: Record<string, string> = {
     low: C.green,
     medium: C.amber,
     high: C.red,
-  }[check.impactSeverity];
+  };
+  const severityColor = severityMap[String(check?.impactSeverity ?? "")] ?? C.amber;
 
-  const color = check.realistic ? C.green : severityColor;
+  const color = check?.realistic ? C.green : severityColor;
 
   return (
     <div
@@ -244,7 +245,7 @@ const AssumptionCell: React.FC<{ check: AssumptionCheck }> = ({ check }) => {
           letterSpacing: '0.5px',
         }}
       >
-        {check.name}
+        {check?.name ?? "—"}
       </div>
       <div
         style={{
@@ -255,9 +256,9 @@ const AssumptionCell: React.FC<{ check: AssumptionCheck }> = ({ check }) => {
           fontWeight: 500,
         }}
       >
-        {typeof check.value === 'number'
+        {typeof check?.value === 'number'
           ? check.value.toFixed(2)
-          : check.value}
+          : (check?.value ?? "—")}
       </div>
       <div
         style={{
@@ -273,7 +274,7 @@ const AssumptionCell: React.FC<{ check: AssumptionCheck }> = ({ check }) => {
           letterSpacing: '0.3px',
         }}
       >
-        {check.realistic ? '✓ Realistic' : '⚠ ' + check.impactSeverity.toUpperCase()}
+        {check?.realistic ? '✓ Realistic' : '⚠ ' + String(check?.impactSeverity ?? "—").toUpperCase()}
       </div>
     </div>
   );
@@ -281,7 +282,8 @@ const AssumptionCell: React.FC<{ check: AssumptionCheck }> = ({ check }) => {
 
 // Walk-Forward Chart
 const WalkForwardChart: React.FC<{ data: WalkForwardResult[] }> = ({ data }) => {
-  if (!data || data.length === 0) return null;
+  const arr = Array.isArray(data) ? data : [];
+  if (arr.length === 0) return null;
 
   const width = 600;
   const height = 200;
@@ -290,17 +292,17 @@ const WalkForwardChart: React.FC<{ data: WalkForwardResult[] }> = ({ data }) => 
   const plotHeight = height - padding * 2;
 
   const minSharpe = Math.min(
-    ...data.map(d => Math.min(d.inSampleSharpe, d.outOfSampleSharpe))
+    ...arr.map(d => Math.min(Number(d?.inSampleSharpe ?? 0), Number(d?.outOfSampleSharpe ?? 0)))
   );
   const maxSharpe = Math.max(
-    ...data.map(d => Math.max(d.inSampleSharpe, d.outOfSampleSharpe))
+    ...arr.map(d => Math.max(Number(d?.inSampleSharpe ?? 0), Number(d?.outOfSampleSharpe ?? 0)))
   );
-  const range = maxSharpe - minSharpe || 1;
+  const range = (maxSharpe - minSharpe) || 1;
 
   const yScale = (value: number) =>
-    height - padding - ((value - minSharpe) / range) * plotHeight;
+    height - padding - ((Number(value) - minSharpe) / range) * plotHeight;
   const xScale = (index: number) =>
-    padding + (index / (data.length - 1 || 1)) * plotWidth;
+    padding + (index / (arr.length - 1 || 1)) * plotWidth;
 
   return (
     <svg
@@ -324,8 +326,8 @@ const WalkForwardChart: React.FC<{ data: WalkForwardResult[] }> = ({ data }) => 
 
       {/* In-Sample Sharpe (dashed line) */}
       <polyline
-        points={data
-          .map((d, i) => `${xScale(i)},${yScale(d.inSampleSharpe)}`)
+        points={arr
+          .map((d, i) => `${xScale(i)},${yScale(Number(d?.inSampleSharpe ?? 0))}`)
           .join(' ')}
         fill="none"
         stroke={C.blue}
@@ -335,8 +337,8 @@ const WalkForwardChart: React.FC<{ data: WalkForwardResult[] }> = ({ data }) => 
 
       {/* Out-of-Sample Sharpe (solid line) */}
       <polyline
-        points={data
-          .map((d, i) => `${xScale(i)},${yScale(d.outOfSampleSharpe)}`)
+        points={arr
+          .map((d, i) => `${xScale(i)},${yScale(Number(d?.outOfSampleSharpe ?? 0))}`)
           .join(' ')}
         fill="none"
         stroke={C.green}
@@ -344,17 +346,17 @@ const WalkForwardChart: React.FC<{ data: WalkForwardResult[] }> = ({ data }) => 
       />
 
       {/* Data points */}
-      {data.map((d, i) => (
+      {arr.map((d, i) => (
         <g key={`point-${i}`}>
           <circle
             cx={xScale(i)}
-            cy={yScale(d.inSampleSharpe)}
+            cy={yScale(Number(d?.inSampleSharpe ?? 0))}
             r="3"
             fill={C.blue}
           />
           <circle
             cx={xScale(i)}
-            cy={yScale(d.outOfSampleSharpe)}
+            cy={yScale(Number(d?.outOfSampleSharpe ?? 0))}
             r="3"
             fill={C.green}
           />

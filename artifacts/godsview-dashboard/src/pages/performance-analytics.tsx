@@ -129,10 +129,11 @@ function EquityCurveChart() {
     staleTime: 60000,
   });
 
-  const data = toArray<EquityCurvePoint>(curveData) || defaultEquityCurve;
-  const minPnL = Math.min(0, ...data.map(d => d.cumPnL));
-  const maxPnL = Math.max(...data.map(d => d.cumPnL));
-  const pnlRange = maxPnL - minPnL;
+  const fetched = toArray<EquityCurvePoint>(curveData);
+  const data = fetched.length > 0 ? fetched : defaultEquityCurve;
+  const minPnL = Math.min(0, ...data.map(d => Number(d?.cumPnL) || 0));
+  const maxPnL = Math.max(...data.map(d => Number(d?.cumPnL) || 0));
+  const pnlRange = (maxPnL - minPnL) || 1;
 
   const width = 1000;
   const height = 300;
@@ -140,17 +141,22 @@ function EquityCurveChart() {
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
 
-  const xStep = chartWidth / (data.length - 1);
+  const xStep = data.length > 1 ? chartWidth / (data.length - 1) : chartWidth;
   const points = data.map((d, i) => ({
     x: padding.left + i * xStep,
-    y: padding.top + chartHeight - ((d.cumPnL - minPnL) / pnlRange) * chartHeight,
-    ...d,
+    y: padding.top + chartHeight - ((Number(d?.cumPnL) || 0) - minPnL) / pnlRange * chartHeight,
+    date: d?.date ?? "",
+    cumPnL: Number(d?.cumPnL) || 0,
+    drawdown: Number(d?.drawdown) || 0,
   }));
 
   const pathData = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
-  const fillPathData = pathData + ` L ${points[points.length - 1].x} ${padding.top + chartHeight} L ${padding.left} ${padding.top + chartHeight} Z`;
+  const lastPoint = points[points.length - 1];
+  const fillPathData = lastPoint
+    ? pathData + ` L ${lastPoint.x} ${padding.top + chartHeight} L ${padding.left} ${padding.top + chartHeight} Z`
+    : "";
 
-  const highWaterMark = Math.max(...data.map(d => d.cumPnL));
+  const highWaterMark = Math.max(...data.map(d => Number(d?.cumPnL) || 0));
   const hwmY = padding.top + chartHeight - ((highWaterMark - minPnL) / pnlRange) * chartHeight;
 
   return (
@@ -619,7 +625,10 @@ function RiskMetricsPanel() {
   });
 
   const data = riskData || defaultRiskMetrics;
-  const maxCount = Math.max(...data.distribution.map(d => d.count));
+  const distribution = Array.isArray(data?.distribution) && data.distribution.length > 0
+    ? data.distribution
+    : defaultRiskMetrics.distribution;
+  const maxCount = Math.max(...distribution.map(d => Number(d?.count) || 0)) || 1;
 
   return (
     <div style={{ marginBottom: '32px' }}>
