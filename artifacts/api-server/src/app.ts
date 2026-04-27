@@ -33,6 +33,21 @@ const allowedCorsOrigins = runtimeConfig.corsOrigins;
 
 app.set("trust proxy", runtimeConfig.trustProxy);
 
+// ── Liveness probe (must be before all middleware) ───────────────────────
+// /healthz and /api/healthz are mounted FIRST, ahead of pinoHttp / metrics
+// instrumentation / rate-limiter / auth, so a process that's up always
+// returns 200 immediately. Anything heavier belongs in /readyz, not here.
+const livenessStartedAt = new Date().toISOString();
+const livenessHandler = (_req: Request, res: Response): void => {
+  res.status(200).json({
+    status: "ok",
+    uptime: process.uptime(),
+    startedAt: livenessStartedAt,
+  });
+};
+app.get("/healthz", livenessHandler);
+app.get("/api/healthz", livenessHandler);
+
 app.use(
   pinoHttp({
     logger,

@@ -4,7 +4,12 @@ import { and, desc, eq, gte, isNotNull, or, sql } from "drizzle-orm";
 import { readFile } from "node:fs/promises";
 import * as path from "node:path";
 import { StockBrainStateSchema, type StockBrainState } from "@workspace/common-types";
-import { getTypedPositions, getAccount, hasValidTradingKey, isBrokerKey } from "../lib/alpaca";
+import { getTypedPositions, getAccount, getHasValidTradingKey, getIsBrokerKey } from "../lib/alpaca";
+
+// Backwards-compatible aliases — getters, not captured constants, so
+// credential changes propagate without a process restart.
+const hasValidTradingKey = (): boolean => getHasValidTradingKey();
+const isBrokerKey = (): boolean => getIsBrokerKey();
 import { getModelDiagnostics, getModelStatus, retrainModel } from "../lib/ml_model";
 import { resolveSystemMode, canWriteOrders, isLiveMode } from "@workspace/strategy-core";
 import { getCurrentTradingSession, getRiskEngineSnapshot, isKillSwitchActive, isSessionAllowed, resetRiskEngineRuntime, setKillSwitchActive, updateRiskConfig } from "../lib/risk_engine";
@@ -416,7 +421,7 @@ router.get("/system/status", async (req, res) => {
     const active_session = getCurrentTradingSession();
     const session_allowed = isSessionAllowed(active_session, controls);
     const killSwitchActive = isKillSwitchActive();
-    const tradingApiStatus = hasValidTradingKey ? "active" : isBrokerKey ? "warning" : "error";
+    const tradingApiStatus = hasValidTradingKey() ? "active" : isBrokerKey() ? "warning" : "error";
     const riskLayerStatus = killSwitchActive || !canWriteOrders(SYSTEM_MODE)
       ? ("warning" as const)
       : tradingApiStatus;
@@ -459,9 +464,9 @@ router.get("/system/status", async (req, res) => {
           ? `Session allowlist blocked current '${active_session}' window`
           : !canWriteOrders(SYSTEM_MODE)
           ? `System mode '${SYSTEM_MODE}' is read-only — trading writes are disabled`
-          : hasValidTradingKey
+          : hasValidTradingKey()
           ? "Position sizing, daily loss limits, and execution controls active"
-          : isBrokerKey
+          : isBrokerKey()
           ? "Broker keys detected — switch to Trading API keys for full execution controls"
           : "Trading API keys missing — execution routes remain restricted",
         last_update: new Date().toISOString(),

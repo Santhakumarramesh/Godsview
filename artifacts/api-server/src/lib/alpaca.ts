@@ -5,12 +5,30 @@
 
 import { normalizeMarketSymbol, toAlpacaSlash } from "./market/symbols";
 import { sanitizeUpstreamErrorBody } from "./error_body_sanitizer";
-const KEY_ID = process.env.ALPACA_API_KEY ?? "";
-const SECRET_KEY = process.env.ALPACA_SECRET_KEY ?? "";
+// Read credentials dynamically on every call. Prior code captured these
+// at module load — that became stale when the .env was rotated mid-session
+// (or when the api container started before .env was fully populated by
+// docker-compose), surfacing as 401s upstream → 503s here → occasional 502s
+// at nginx when the connection got reset on the way out.
+function readKeyId(): string {
+  return (process.env.ALPACA_API_KEY ?? "").trim();
+}
+function readSecretKey(): string {
+  return (process.env.ALPACA_SECRET_KEY ?? "").trim();
+}
 
-const isBrokerKey = KEY_ID.startsWith("CK");
-const isPaperKey = KEY_ID.startsWith("PK");
-const hasValidTradingKey = KEY_ID.startsWith("PK") || KEY_ID.startsWith("AK");
+// Backwards-compatible getters used elsewhere in this file. Anyone destructuring
+// or comparing the previous module-load constants gets the live value.
+function getIsBrokerKey(): boolean {
+  return readKeyId().startsWith("CK");
+}
+function getIsPaperKey(): boolean {
+  return readKeyId().startsWith("PK");
+}
+function getHasValidTradingKey(): boolean {
+  const k = readKeyId();
+  return k.startsWith("PK") || k.startsWith("AK");
+}
 
 const PAPER_BASE = "https://paper-api.alpaca.markets";
 const LIVE_BASE = "https://api.alpaca.markets";
@@ -53,9 +71,10 @@ export type AlpacaCredentialStatus = {
 };
 
 export function getAlpacaCredentialStatus(): AlpacaCredentialStatus {
-  const keyConfigured = KEY_ID.trim().length > 0;
-  const secretConfigured = SECRET_KEY.trim().length > 0;
-  const prefix = keyConfigured ? KEY_ID.slice(0, 2).toUpperCase() : null;
+  const KEY_ID_NOW = readKeyId();
+  const keyConfigured = KEY_ID_NOW.length > 0;
+  const secretConfigured = readSecretKey().length > 0;
+  const prefix = keyConfigured ? KEY_ID_NOW.slice(0, 2).toUpperCase() : null;
 
   let keyKind: AlpacaCredentialKind = "missing";
   if (prefix === "PK") keyKind = "paper";
@@ -157,8 +176,8 @@ function isCryptoSymbol(symbol: string) {
 
 function tradingHeaders(): Record<string, string> {
   return {
-    "APCA-API-KEY-ID": KEY_ID,
-    "APCA-API-SECRET-KEY": SECRET_KEY,
+    "APCA-API-KEY-ID": readKeyId(),
+    "APCA-API-SECRET-KEY": readSecretKey(),
     "Content-Type": "application/json",
     Accept: "application/json",
   };
@@ -184,7 +203,7 @@ async function alpacaFetch(url: string, withAuth = true): Promise<unknown> {
     }
 
     const headers: Record<string, string> = { Accept: "application/json" };
-    if (withAuth && KEY_ID) Object.assign(headers, tradingHeaders());
+    if (withAuth && readKeyId()) Object.assign(headers, tradingHeaders());
 
     for (let attempt = 0; attempt <= MAX_RETRIES_429; attempt++) {
       const now = Date.now();
@@ -386,7 +405,7 @@ export async function getBars(
       return result;
     }
 
-    if (!hasValidTradingKey) {
+    if (!getHasValidTradingKey()) {
       throw new Error(
         "Stock market data requires Trading API keys (starting with PK or AK). " +
         "Please generate keys from app.alpaca.markets → API Keys."
@@ -487,7 +506,7 @@ export async function getLatestTrade(symbol: string): Promise<{ price: number; t
       return trade ? { price: trade.p, timestamp: trade.t } : null;
     }
 
-    if (!hasValidTradingKey) return null;
+    if (!getHasValidTradingKey()) return null;
 
     const url = `${DATA_BASE}/v2/stocks/${normalizedSymbol}/trades/latest?feed=iex`;
     const data = await alpacaFetch(url, true) as {
@@ -520,7 +539,7 @@ export async function getLatestBar(symbol: string): Promise<AlpacaBar | null> {
       return bar ? normaliseBar(bar) : null;
     }
 
-    if (!hasValidTradingKey) return null;
+    if (!getHasValidTradingKey()) return null;
     const url = `${DATA_BASE}/v2/stocks/${normalizedSymbol}/bars/latest?feed=iex`;
     const data = await alpacaFetch(url, true) as { bar: Record<string, unknown> };
     return data.bar ? normaliseBar(data.bar) : null;
@@ -530,24 +549,24 @@ export async function getLatestBar(symbol: string): Promise<AlpacaBar | null> {
 }
 
 export async function getAccount(): Promise<unknown> {
-  if (!KEY_ID) {
+  if (!readKeyId()) {
     return { error: "No API key configured" };
   }
-  if (isBrokerKey) {
+  if (getIsBrokerKey()) {
     return {
       error: "broker_key",
       message: "Broker API keys (CK...) do not have trading account access. Please generate Trading API keys from app.alpaca.markets.",
     };
   }
-  const base = isPaperKey ? PAPER_BASE : LIVE_BASE;
+  const base = getIsPaperKey() ? PAPER_BASE : LIVE_BASE;
   return alpacaFetch(`${base}/v2/account`, true);
 }
 
 export async function getPositions(): Promise<unknown> {
-  if (!hasValidTradingKey) {
+  if (!getHasValidTradingKey()) {
     return { error: "Trading API keys required for positions" };
   }
-  const base = isPaperKey ? PAPER_BASE : LIVE_BASE;
+  const base = getIsPaperKey() ? PAPER_BASE : LIVE_BASE;
   return alpacaFetch(`${base}/v2/positions`, true);
 }
 
@@ -639,11 +658,11 @@ async function alpacaDelete(url: string): Promise<unknown> {
 }
 
 export async function placeOrder(req: PlaceOrderRequest): Promise<AlpacaOrder> {
-  if (!hasValidTradingKey) {
+  if (!getHasValidTradingKey()) {
     throw new Error("Trading API keys required to place orders. Generate PK/AK keys from app.alpaca.markets.");
   }
 
-  const base = isPaperKey ? PAPER_BASE : LIVE_BASE;
+  const base = getIsPaperKey() ? PAPER_BASE : LIVE_BASE;
   const symbol = toAlpacaSlash(req.symbol);
 
   const body: Record<string, unknown> = {
@@ -674,35 +693,35 @@ export async function placeOrder(req: PlaceOrderRequest): Promise<AlpacaOrder> {
 }
 
 export async function getOrders(status: "open" | "closed" | "all" = "open", limit = 50): Promise<AlpacaOrder[]> {
-  if (!hasValidTradingKey) return [];
-  const base = isPaperKey ? PAPER_BASE : LIVE_BASE;
+  if (!getHasValidTradingKey()) return [];
+  const base = getIsPaperKey() ? PAPER_BASE : LIVE_BASE;
   const params = new URLSearchParams({ status, limit: String(limit) });
   const data = await alpacaFetch(`${base}/v2/orders?${params}`, true);
   return (data as AlpacaOrder[]) ?? [];
 }
 
 export async function cancelOrder(orderId: string): Promise<unknown> {
-  if (!hasValidTradingKey) throw new Error("Trading API keys required.");
-  const base = isPaperKey ? PAPER_BASE : LIVE_BASE;
+  if (!getHasValidTradingKey()) throw new Error("Trading API keys required.");
+  const base = getIsPaperKey() ? PAPER_BASE : LIVE_BASE;
   return alpacaDelete(`${base}/v2/orders/${orderId}`);
 }
 
 export async function cancelAllOrders(): Promise<unknown> {
-  if (!hasValidTradingKey) throw new Error("Trading API keys required.");
-  const base = isPaperKey ? PAPER_BASE : LIVE_BASE;
+  if (!getHasValidTradingKey()) throw new Error("Trading API keys required.");
+  const base = getIsPaperKey() ? PAPER_BASE : LIVE_BASE;
   return alpacaDelete(`${base}/v2/orders`);
 }
 
 export async function closePosition(symbol: string): Promise<unknown> {
-  if (!hasValidTradingKey) throw new Error("Trading API keys required.");
-  const base = isPaperKey ? PAPER_BASE : LIVE_BASE;
+  if (!getHasValidTradingKey()) throw new Error("Trading API keys required.");
+  const base = getIsPaperKey() ? PAPER_BASE : LIVE_BASE;
   const alpacaSymbol = toAlpacaSlash(symbol).replace("/", "%2F");
   return alpacaDelete(`${base}/v2/positions/${alpacaSymbol}`);
 }
 
 export async function getTypedPositions(): Promise<AlpacaPosition[]> {
-  if (!hasValidTradingKey) return [];
-  const base = isPaperKey ? PAPER_BASE : LIVE_BASE;
+  if (!getHasValidTradingKey()) return [];
+  const base = getIsPaperKey() ? PAPER_BASE : LIVE_BASE;
   const data = await alpacaFetch(`${base}/v2/positions`, true);
   return (data as AlpacaPosition[]) ?? [];
 }
@@ -722,8 +741,8 @@ export async function getPortfolioHistory(
   period = "1D",
   timeframe = "5Min"
 ): Promise<AlpacaPortfolioHistory | null> {
-  if (!hasValidTradingKey) return null;
-  const base = isPaperKey ? PAPER_BASE : LIVE_BASE;
+  if (!getHasValidTradingKey()) return null;
+  const base = getIsPaperKey() ? PAPER_BASE : LIVE_BASE;
   const params = new URLSearchParams({ period, timeframe });
   try {
     const data = await alpacaFetch(`${base}/v2/account/portfolio/history?${params}`, true);
@@ -751,8 +770,8 @@ export type AlpacaFillActivity = {
 
 /** Returns fill events for a given date (YYYY-MM-DD) or today if omitted. */
 export async function getTodayFills(dateStr?: string): Promise<AlpacaFillActivity[]> {
-  if (!hasValidTradingKey) return [];
-  const base = isPaperKey ? PAPER_BASE : LIVE_BASE;
+  if (!getHasValidTradingKey()) return [];
+  const base = getIsPaperKey() ? PAPER_BASE : LIVE_BASE;
   const date = dateStr ?? new Date().toISOString().split("T")[0];
   const params = new URLSearchParams({ activity_type: "FILL", date });
   try {
@@ -837,4 +856,4 @@ export function calcPositionSize(equity: number, riskPct: number, entry: number,
   return Math.round(qty * 1e6) / 1e6;
 }
 
-export { isBrokerKey, isPaperKey, hasValidTradingKey };
+export { getIsBrokerKey, getIsPaperKey, getHasValidTradingKey };

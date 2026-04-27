@@ -1,7 +1,14 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { createHash, timingSafeEqual as cryptoTimingSafeEqual } from "node:crypto";
 import { claudeVeto, isClaudeAvailable, type ClaudeVetoResult, type SetupContext } from "../lib/claude";
-import { getBars, getBarsHistorical, getLatestBar, getLatestTrade, getAccount, getPositions, hasValidTradingKey, isBrokerKey, placeOrder, getOrders, cancelOrder, cancelAllOrders, closePosition, getTypedPositions, calcPositionSize, getTodayFills, computeRoundTrips, type AlpacaBar, type AlpacaTimeframe, type AlpacaPosition, type AlpacaFillActivity, type PlaceOrderRequest } from "../lib/alpaca";
+import { getBars, getBarsHistorical, getLatestBar, getLatestTrade, getAccount, getPositions, getHasValidTradingKey, getIsBrokerKey, placeOrder, getOrders, cancelOrder, cancelAllOrders, closePosition, getTypedPositions, calcPositionSize, getTodayFills, computeRoundTrips, type AlpacaBar, type AlpacaTimeframe, type AlpacaPosition, type AlpacaFillActivity, type PlaceOrderRequest } from "../lib/alpaca";
+
+// Backwards-compatible aliases — these used to be module-load constants.
+// Now they're getters so credential changes (key rotation, paper↔live swap,
+// or .env populated after the api container started) take effect without
+// a process restart.
+const hasValidTradingKey = (): boolean => getHasValidTradingKey();
+const isBrokerKey = (): boolean => getIsBrokerKey();
 import { alpacaStream, type TickListener } from "../lib/alpaca_stream";
 import { isCryptoSymbol } from "../lib/market/symbols";
 import { getCurrentTradingSession, getRiskEngineSnapshot, isKillSwitchActive, isSessionAllowed } from "../lib/risk_engine";
@@ -1344,7 +1351,7 @@ router.get("/alpaca/positions", async (req, res) => {
 router.post("/alpaca/orders", async (req, res) => {
   try {
     if (!ensureTradingWriteAccess(req, res)) return;
-    if (!hasValidTradingKey) {
+    if (!hasValidTradingKey()) {
       void writeAuditEvent(req, {
         eventType: "ORDER_WRITE_BLOCKED",
         decisionState: "BLOCKED_BY_RISK",
@@ -1467,7 +1474,7 @@ router.get("/alpaca/risk/status", async (req, res) => {
 // ─── GET /api/alpaca/orders — list open/recent orders ────────────────────────
 router.get("/alpaca/orders", async (req, res) => {
   try {
-    if (!hasValidTradingKey) {
+    if (!hasValidTradingKey()) {
       res.json({ orders: [], message: "Trading API keys required" });
       return;
     }
@@ -1485,7 +1492,7 @@ router.get("/alpaca/orders", async (req, res) => {
 router.delete("/alpaca/orders/:id", async (req, res) => {
   try {
     if (!ensureTradingWriteAccess(req, res)) return;
-    if (!hasValidTradingKey) { res.status(403).json({ error: "no_trading_key" }); return; }
+    if (!hasValidTradingKey()) { res.status(403).json({ error: "no_trading_key" }); return; }
     const result = await cancelOrder(String(req.params.id));
     res.json({ success: true, result });
   } catch (err) {
@@ -1498,7 +1505,7 @@ router.delete("/alpaca/orders/:id", async (req, res) => {
 router.delete("/alpaca/orders", async (req, res) => {
   try {
     if (!ensureTradingWriteAccess(req, res)) return;
-    if (!hasValidTradingKey) { res.status(403).json({ error: "no_trading_key" }); return; }
+    if (!hasValidTradingKey()) { res.status(403).json({ error: "no_trading_key" }); return; }
     const result = await cancelAllOrders();
     res.json({ success: true, result });
   } catch (err) {
@@ -1520,7 +1527,7 @@ router.get("/alpaca/positions/live", async (req, res) => {
 router.delete("/alpaca/positions/:symbol", async (req, res) => {
   try {
     if (!ensureTradingWriteAccess(req, res)) return;
-    if (!hasValidTradingKey) { res.status(403).json({ error: "no_trading_key" }); return; }
+    if (!hasValidTradingKey()) { res.status(403).json({ error: "no_trading_key" }); return; }
     const result = await closePosition(String(req.params.symbol ?? ""));
     res.json({ success: true, result });
   } catch (err) {
@@ -3168,9 +3175,9 @@ router.get("/system/diagnostics", async (req, res) => {
   }
 
   // Layer 2: Trading API (stocks)
-  layers.trading_api = hasValidTradingKey
+  layers.trading_api = hasValidTradingKey()
     ? { status: "live", detail: "Trading API keys present (PK/AK)" }
-    : isBrokerKey
+    : isBrokerKey()
     ? { status: "degraded", detail: "Broker API keys detected — stock data unavailable, use Trading API keys" }
     : { status: "offline", detail: "No API keys configured" };
 
@@ -3256,7 +3263,7 @@ router.get("/system/diagnostics", async (req, res) => {
     trading_kill_switch: killSwitchActive,
     layers,
     recommendations: [
-      ...(!hasValidTradingKey ? ["Add Trading API keys (PK/AK) from app.alpaca.markets to unlock stock data"] : []),
+      ...(!hasValidTradingKey() ? ["Add Trading API keys (PK/AK) from app.alpaca.markets to unlock stock data"] : []),
       ...(layers.recall_engine.status === "degraded" ? ["Run 'Build Recall' to populate accuracy database with historical data"] : []),
       ...(layers.ml_model.status !== "live" ? ["Train ML model on recall data to upgrade scoring from heuristic to learned"] : []),
       ...(layers.claude_reasoning.status !== "live" ? ["Add ANTHROPIC_API_KEY to enable Claude reasoning veto layer"] : []),

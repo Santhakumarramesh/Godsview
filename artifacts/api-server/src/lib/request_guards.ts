@@ -11,7 +11,15 @@ interface BucketState {
 }
 
 function shouldSkipRateLimit(pathname: string): boolean {
-  return pathname === "/healthz" || pathname === "/readyz";
+  // Inside a middleware mounted at "/api", req.path strips the prefix,
+  // so /api/healthz appears here as "/healthz". We accept both shapes
+  // for safety in case the limiter is moved to a global mount later.
+  return (
+    pathname === "/healthz" ||
+    pathname === "/readyz" ||
+    pathname === "/api/healthz" ||
+    pathname === "/api/readyz"
+  );
 }
 
 export function createRateLimiter(options: RateLimiterOptions): RequestHandler {
