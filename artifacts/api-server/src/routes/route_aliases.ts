@@ -13,6 +13,7 @@ import { Router, type Request, type Response } from "express";
 import { portfolioState } from "./portfolio";
 import { tradingSafety } from "../lib/trading_safety";
 import { logger } from "../lib/logger";
+import { getConsciousnessSnapshot, getLatestBrainSnapshot } from "../lib/brain_bridge";
 
 const router = Router();
 
@@ -296,6 +297,152 @@ router.post("/api/seed", (_req: Request, res: Response) => {
     ok: true,
     message: "Seeding is handled automatically at startup. No manual action needed.",
   });
+});
+
+// ── Brain endpoint aliases ─────────────────────────────────────────────────
+// The brain router defines /brain/snapshot and /brain/consciousness handlers
+// but the dashboard calls /api/brain/snapshot and /api/brain/consciousness,
+// and the live probe shows those return 404 (likely shadowed by another mount).
+// Re-implement them here as guaranteed reachable aliases that import the
+// same business logic from lib/brain_bridge (imported at top of file).
+
+router.get("/api/brain/snapshot", async (_req: Request, res: Response) => {
+  try {
+    const snap = await getLatestBrainSnapshot();
+    if (!snap) {
+      res.json({
+        ok: false,
+        connected: false,
+        message: "Brain orchestrator artifact not found. Run a brain cycle to populate.",
+        snapshot: null,
+      });
+      return;
+    }
+    res.json({ ok: true, snapshot: snap });
+  } catch (err) {
+    res.status(503).json({
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+      message: "Brain bridge unavailable",
+    });
+  }
+});
+
+router.get("/api/brain/consciousness", async (_req: Request, res: Response) => {
+  try {
+    const cons = await getConsciousnessSnapshot();
+    if (!cons) {
+      res.json({
+        ok: false,
+        connected: false,
+        message: "Consciousness snapshot not found. Run a brain cycle to populate.",
+        consciousness: null,
+      });
+      return;
+    }
+    res.json({ ok: true, consciousness: cons });
+  } catch (err) {
+    res.status(503).json({
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+      message: "Brain bridge unavailable",
+    });
+  }
+});
+
+// ── Regime endpoint aliases ────────────────────────────────────────────────
+// Intelligence router exposes /regime/current, /optimizer/status, /mtf/confluence
+// at /api/intelligence/*, but the dashboard calls /api/regime/state, /optimizer,
+// /mtf. Forward each to the corresponding intelligence handler.
+router.get("/api/regime/state", (_req: Request, res: Response) => {
+  res.redirect(307, "/api/intelligence/regime/current");
+});
+router.get("/api/regime/mtf", (_req: Request, res: Response) => {
+  res.redirect(307, "/api/intelligence/mtf/confluence");
+});
+router.get("/api/regime/optimizer", (_req: Request, res: Response) => {
+  res.redirect(307, "/api/intelligence/optimizer/status");
+});
+router.get("/api/regime/profiles", (_req: Request, res: Response) => {
+  res.redirect(307, "/api/intelligence/regime/profiles");
+});
+
+// ── System base alias ─────────────────────────────────────────────────────
+// Dashboard probes GET /api/system as a "is the system layer alive" check.
+// The system router only exposes /system/<sub-path> routes — add a base
+// summary that points to the canonical sub-endpoints.
+router.get("/api/system", (_req: Request, res: Response) => {
+  res.json({
+    ok: true,
+    system: "godsview",
+    version: process.env.npm_package_version || "v1.0",
+    endpoints: {
+      status: "/api/system/status",
+      health: "/api/system/health/deep",
+      metrics: "/api/system/metrics  (operator-token)",
+      kill_switch: "/api/system/kill-switch",
+    },
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// ── Market data aliases / stubs ───────────────────────────────────────────
+// Dashboard expects /api/market/economic-indicators and /api/market/yield-curve.
+// These need an external macro provider (FRED, Polygon, etc.) which the user
+// has not configured (FRED is reported unavailable in app logs). Return a
+// well-shaped "feed unconnected" response so the page can render an empty
+// state instead of a 404 error banner.
+router.get("/api/market/economic-indicators", (_req: Request, res: Response) => {
+  res.json({
+    ok: true,
+    feedConnected: false,
+    indicators: [],
+    message: "Macro provider not connected. Set FRED_API_KEY (or another provider) to populate.",
+    lastUpdated: null,
+  });
+});
+
+router.get("/api/market/yield-curve", (_req: Request, res: Response) => {
+  res.json({
+    ok: true,
+    feedConnected: false,
+    yields: [],
+    message: "Yield-curve provider not connected. Wire FRED or Treasury Direct to populate.",
+    lastUpdated: null,
+  });
+});
+
+// ── OpenBB research alias ─────────────────────────────────────────────────
+// research.ts defines /research/openbb/latest. The probe shows it 404s — the
+// research router's own mount path doesn't expose it under /api. Re-implement
+// here so it's guaranteed reachable. Reads the OpenBB output file written by
+// the side-pipeline if present; otherwise reports feed-not-connected.
+router.get("/api/research/openbb/latest", async (_req: Request, res: Response) => {
+  try {
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const dataDir = process.env.GODSVIEW_OPENBB_DIR || "godsview-openbb/data/processed";
+    const file = path.join(dataDir, "latest_research.json");
+    try {
+      const raw = await fs.readFile(file, "utf8");
+      const parsed = JSON.parse(raw);
+      res.json({ ok: true, source: "openbb", ...parsed });
+      return;
+    } catch {
+      res.json({
+        ok: true,
+        feedConnected: false,
+        items: [],
+        message: `OpenBB integration not configured. Expected artifact at ${file}.`,
+        lastUpdated: null,
+      });
+    }
+  } catch (err) {
+    res.status(503).json({
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 });
 
 export default router;

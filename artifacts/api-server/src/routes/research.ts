@@ -32,8 +32,13 @@ router.get("/research/openbb/latest", async (_req, res) => {
   ]);
 
   const hasAny = Boolean(latestSignal || latestDecision || backtestSummary);
-  res.status(hasAny ? 200 : 404).json({
+  // Always 200. When no artifacts are present, return a well-shaped empty
+  // payload with `connected: false` so the dashboard can render an explicit
+  // "OpenBB integration not set up" panel instead of treating this as a
+  // missing endpoint (404).
+  res.json({
     status: hasAny ? "ok" : "not_found",
+    connected: hasAny,
     base_dir: baseDir,
     latest_signal: latestSignal,
     latest_decision: latestDecision,

@@ -31,7 +31,15 @@ const router = Router();
 router.get("/api/side-by-side/snapshot", (_req, res) => {
   const snapshot = getSideBySideSnapshot();
   if (!snapshot) {
-    res.status(404).json({ error: "not_running", message: "No active side-by-side run" });
+    // Route exists, no active run — return 200 with empty state so the
+    // dashboard renders an "idle" panel instead of treating this as a
+    // missing endpoint (404).
+    res.json({
+      ok: true,
+      running: false,
+      message: "No active side-by-side run. POST /api/side-by-side/start to begin.",
+      snapshot: null,
+    });
     return;
   }
   res.json(snapshot);
@@ -98,7 +106,8 @@ router.post("/api/side-by-side/start", (req, res) => {
 router.post("/api/side-by-side/stop", (_req, res) => {
   const snapshot = stopSideBySide();
   if (!snapshot) {
-    res.status(404).json({ error: "not_running" });
+    // No-op stop — already idle. Return 200 (the goal state is achieved).
+    res.json({ ok: true, running: false, message: "Already stopped" });
     return;
   }
   res.json(snapshot);
@@ -111,7 +120,7 @@ router.post("/api/side-by-side/stop", (_req, res) => {
 router.post("/api/side-by-side/pause", (_req, res) => {
   const snapshot = pauseSideBySide();
   if (!snapshot) {
-    res.status(404).json({ error: "not_running" });
+    res.json({ ok: false, running: false, message: "No active run to pause" });
     return;
   }
   res.json(snapshot);
@@ -124,7 +133,7 @@ router.post("/api/side-by-side/pause", (_req, res) => {
 router.post("/api/side-by-side/resume", (_req, res) => {
   const snapshot = resumeSideBySide();
   if (!snapshot) {
-    res.status(404).json({ error: "not_running" });
+    res.json({ ok: false, running: false, message: "No paused run to resume" });
     return;
   }
   res.json(snapshot);

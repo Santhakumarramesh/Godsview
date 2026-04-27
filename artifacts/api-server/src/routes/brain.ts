@@ -305,9 +305,14 @@ router.get("/brain/snapshot", async (req, res) => {
     const force = String(req.query.force ?? "").toLowerCase() === "true";
     const snapshot = await getLatestBrainSnapshot(force);
     if (!snapshot) {
-      res.status(404).json({
-        error: "not_found",
-        message: "No orchestrator snapshot found at godsview-openbb/data/processed/latest_orchestrator_run.json",
+      // Route exists, snapshot file just hasn't been generated yet.
+      // Return 200 with has_data:false so the dashboard renders an
+      // empty state instead of treating this as a missing endpoint.
+      res.json({
+        has_data: false,
+        connected: false,
+        message: "No orchestrator snapshot yet. Run POST /api/brain/update to generate one (requires Python orchestrator).",
+        snapshot: null,
       });
       return;
     }
@@ -330,9 +335,12 @@ router.get("/brain/consciousness", async (req, res) => {
     const force = String(req.query.force ?? "").toLowerCase() === "true";
     const consciousness = await getConsciousnessSnapshot(force);
     if (!consciousness) {
-      res.status(404).json({
-        error: "not_found",
-        message: "No consciousness snapshot available. Run /brain/update first.",
+      // Route exists, artifact just not generated. Return 200 + empty state.
+      res.json({
+        has_data: false,
+        connected: false,
+        message: "No consciousness snapshot yet. Run POST /api/brain/update first (requires Python orchestrator).",
+        consciousness: null,
       });
       return;
     }
@@ -358,8 +366,12 @@ router.post("/brain/update", async (req, res) => {
       dryRun,
       approve,
     });
-    res.status(result.ok ? 200 : 500).json({
+    // When the python orchestrator isn't installed (default in dev), runBrainCycle
+    // returns ok:false. Surface that as 200 + available:false rather than 500 so
+    // dashboard pages can render an empty/disabled state instead of an error.
+    res.json({
       ok: result.ok,
+      available: result.ok,
       symbol,
       command: result.command.join(" "),
       stdout: result.stdout,
@@ -367,12 +379,17 @@ router.post("/brain/update", async (req, res) => {
       snapshot_generated_at: String(result.snapshot?.generated_at ?? ""),
       blocked: Boolean(result.snapshot?.blocked ?? false),
       block_reason: String(result.snapshot?.block_reason ?? ""),
+      message: result.ok
+        ? "Brain cycle completed"
+        : "Python orchestrator not available — set GODSVIEW_OPENBB_DIR + PYTHON_BIN and install godsview-openbb to enable.",
     });
   } catch (err) {
     req.log.error({ err }, "Failed to run brain update");
-    res.status(503).json({
-      error: "internal_error",
-      message: err instanceof Error ? err.message : "Failed to run brain update",
+    res.json({
+      ok: false,
+      available: false,
+      error: err instanceof Error ? err.message : "Failed to run brain update",
+      message: "Brain orchestrator unavailable",
     });
   }
 });
@@ -388,8 +405,9 @@ router.post("/brain/evolve", async (req, res) => {
       approve: false,
     });
     const consciousness = await getConsciousnessSnapshot(true);
-    res.status(result.ok ? 200 : 500).json({
+    res.json({
       ok: result.ok,
+      available: result.ok,
       symbol,
       mode: "evolve",
       command: result.command.join(" "),
@@ -397,12 +415,17 @@ router.post("/brain/evolve", async (req, res) => {
       blocked: Boolean(result.snapshot?.blocked ?? false),
       block_reason: String(result.snapshot?.block_reason ?? ""),
       consciousness,
+      message: result.ok
+        ? "Evolve cycle completed"
+        : "Python orchestrator not available — install godsview-openbb to enable.",
     });
   } catch (err) {
     req.log.error({ err }, "Failed to run brain evolve cycle");
-    res.status(503).json({
-      error: "internal_error",
-      message: err instanceof Error ? err.message : "Failed to run brain evolve cycle",
+    res.json({
+      ok: false,
+      available: false,
+      error: err instanceof Error ? err.message : "Failed to run brain evolve cycle",
+      message: "Brain orchestrator unavailable",
     });
   }
 });

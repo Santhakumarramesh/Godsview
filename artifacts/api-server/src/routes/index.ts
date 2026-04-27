@@ -160,8 +160,11 @@ router.use(positionSizingRouter);
 router.use("/trade-journal", tradeJournalRouter);
 router.use(systemOrchestratorRouter);
 router.use(apiGatewayRouter);
-router.use("/api", dailyReviewRouter);
-router.use("/api", sideBySideRouter);
+// dailyReviewRouter and sideBySideRouter define their handler paths with an
+// explicit `/api/...` prefix, so we mount them at root (NOT under /api) to
+// avoid /api/api/... double-prefix bugs.
+router.use(dailyReviewRouter);
+router.use(sideBySideRouter);
 router.use(persistenceRouter);
 router.use("/api", marketStructureRouter);
 router.use(siSupervisorRouter);

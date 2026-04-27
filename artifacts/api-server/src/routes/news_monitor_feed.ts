@@ -89,6 +89,24 @@ r.get("/news/monitor", (_req: Request, res: Response) => {
 /* ── Sentiment summary ────────────────────────────────── */
 r.get("/news/sentiment", (_req: Request, res: Response) => {
   const feed = generateNewsFeed();
+  // Empty-feed safety: when no news provider is connected, generateNewsFeed
+  // returns []. Reducing/dividing on an empty array previously threw and
+  // returned 500. Now we report a well-shaped empty summary so the dashboard
+  // can render a valid "no news" state.
+  if (!feed || feed.length === 0) {
+    res.json({
+      overall: 0,
+      bullish: 0,
+      bearish: 0,
+      neutral: 0,
+      byCategory: {},
+      topMover: null,
+      feedConnected: false,
+      message: "No news provider configured — connect an RSS/Polygon/Alpaca News feed to populate /api/news/*",
+      timestamp: new Date().toISOString(),
+    });
+    return;
+  }
   const byCategory: Record<string, { count: number; avgSentiment: number }> = {};
   feed.forEach((n) => {
     if (!byCategory[n.category]) byCategory[n.category] = { count: 0, avgSentiment: 0 };
@@ -99,11 +117,16 @@ r.get("/news/sentiment", (_req: Request, res: Response) => {
   const bullish = feed.filter((n) => n.sentiment > 0.2).length;
   const bearish = feed.filter((n) => n.sentiment < -0.2).length;
   const neutral = feed.length - bullish - bearish;
+  const topMoverItem = feed.reduce(
+    (a, b) => Math.abs(a.sentiment) > Math.abs(b.sentiment) ? a : b,
+    feed[0],
+  );
   res.json({
     overall: +(feed.reduce((s, n) => s + n.sentiment, 0) / feed.length).toFixed(3),
     bullish, bearish, neutral,
     byCategory,
-    topMover: feed.reduce((a, b) => Math.abs(a.sentiment) > Math.abs(b.sentiment) ? a : b).title,
+    topMover: topMoverItem ? topMoverItem.title : null,
+    feedConnected: true,
     timestamp: new Date().toISOString(),
   });
 });
