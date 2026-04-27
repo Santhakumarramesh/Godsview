@@ -490,7 +490,7 @@ export default function SuperIntelligencePage() {
               <div className="flex justify-between" style={{ fontSize: "11px" }}>
                 <span style={{ color: C.outline }}>Profit Factor</span>
                 <span style={{ color: C.secondary, fontFamily: "JetBrains Mono, monospace", fontWeight: 600 }}>
-                  {systemMetrics.profit_factor.toFixed ? .toFixed(2) : "—"}
+                  {safeFixed(systemMetrics?.profit_factor, 2)}
                 </span>
               </div>
               <div className="flex justify-between" style={{ fontSize: "11px" }}>
@@ -515,19 +515,19 @@ export default function SuperIntelligencePage() {
           sub={imp ? `${imp.win_rate_delta >= 0 ? "+" : ""}${(imp.win_rate_delta * 100).toFixed(1)}% vs baseline` : ""}
           color={imp && imp.win_rate_delta > 0 ? C.primary : C.tertiary} />
         <StatCard label="Profit Factor"
-          value={si ? si.profit_factor.toFixed ? .toFixed(2) : "—" : "—"}
-          sub={bl ? `Baseline: ${bl.profit_factor.toFixed ? .toFixed(2) : "—"}` : ""}
+          value={si ? safeFixed(si.profit_factor, 2) : "—"}
+          sub={bl ? `Baseline: ${safeFixed(bl.profit_factor, 2)}` : ""}
           color={si && si.profit_factor >= 1.5 ? C.primary : si && si.profit_factor >= 1.0 ? C.gold : C.tertiary} />
         <StatCard label="Sharpe Ratio"
-          value={si ? si.sharpe_ratio.toFixed ? .toFixed(2) : "—" : "—"}
-          sub={imp ? `${imp.sharpe_delta >= 0 ? "+" : ""}${imp.sharpe_delta.toFixed ? .toFixed(2) : "—"} vs baseline` : ""}
+          value={si ? safeFixed(si.sharpe_ratio, 2) : "—"}
+          sub={imp ? `${imp.sharpe_delta >= 0 ? "+" : ""}${safeFixed(imp.sharpe_delta, 2)} vs baseline` : ""}
           color={si && si.sharpe_ratio >= 1.5 ? C.primary : si && si.sharpe_ratio >= 0.5 ? C.gold : C.tertiary} />
         <StatCard label="Max Drawdown"
-          value={si ? `${si.safeFixed(max_drawdown_pct, 1)}%` : "—"}
-          sub={imp ? `${imp.max_dd_improvement >= 0 ? "" : "+"}${(-imp.max_dd_improvement).toFixed(1)}% vs baseline` : ""}
+          value={si ? `${safeFixed(si.max_drawdown_pct, 1)}%` : "—"}
+          sub={imp ? `${imp.max_dd_improvement >= 0 ? "" : "+"}${safeFixed(-imp.max_dd_improvement, 1)}% vs baseline` : ""}
           color={si && si.max_drawdown_pct < 5 ? C.primary : si && si.max_drawdown_pct < 10 ? C.gold : C.tertiary} />
         <StatCard label="Signals Filtered"
-          value={imp ? `${imp.safeFixed(signals_filtered_pct, 0)}%` : "—"}
+          value={imp ? `${safeFixed(imp.signals_filtered_pct, 0)}%` : "—"}
           sub={si && bl ? `${si.trades_taken} of ${bl.trades_taken} trades` : ""}
           color={C.secondary} />
       </div>
@@ -582,14 +582,14 @@ export default function SuperIntelligencePage() {
             <div className="mt-3 space-y-2">
               {bl && si && ([
                 ["Win Rate", `${(bl.win_rate * 100).toFixed(1)}%`, `${(si.win_rate * 100).toFixed(1)}%`, si.win_rate > bl.win_rate],
-                ["Profit Factor", bl.profit_factor.toFixed ? .toFixed(2) : "—", si.profit_factor.toFixed ? .toFixed(2) : "—", si.profit_factor > bl.profit_factor],
-                ["Sharpe Ratio", bl.sharpe_ratio.toFixed ? .toFixed(2) : "—", si.sharpe_ratio.toFixed ? .toFixed(2) : "—", si.sharpe_ratio > bl.sharpe_ratio],
-                ["Max Drawdown", `${bl.safeFixed(max_drawdown_pct, 1)}%`, `${si.safeFixed(max_drawdown_pct, 1)}%`, si.max_drawdown_pct < bl.max_drawdown_pct],
-                ["Avg Win", `${bl.avg_win_pct.toFixed ? .toFixed(2) : "—"}%`, `${si.avg_win_pct.toFixed ? .toFixed(2) : "—"}%`, si.avg_win_pct > bl.avg_win_pct],
-                ["Avg Loss", `${bl.avg_loss_pct.toFixed ? .toFixed(2) : "—"}%`, `${si.avg_loss_pct.toFixed ? .toFixed(2) : "—"}%`, si.avg_loss_pct < bl.avg_loss_pct],
-                ["Total PnL", `${bl.safeFixed(total_pnl_pct, 1)}%`, `${si.safeFixed(total_pnl_pct, 1)}%`, si.total_pnl_pct > bl.total_pnl_pct],
+                ["Profit Factor", safeFixed(bl.profit_factor, 2), safeFixed(si.profit_factor, 2), si.profit_factor > bl.profit_factor],
+                ["Sharpe Ratio", safeFixed(bl.sharpe_ratio, 2), safeFixed(si.sharpe_ratio, 2), si.sharpe_ratio > bl.sharpe_ratio],
+                ["Max Drawdown", `${safeFixed(bl.max_drawdown_pct, 1)}%`, `${safeFixed(si.max_drawdown_pct, 1)}%`, si.max_drawdown_pct < bl.max_drawdown_pct],
+                ["Avg Win", `${safeFixed(bl.avg_win_pct, 2)}%`, `${safeFixed(si.avg_win_pct, 2)}%`, si.avg_win_pct > bl.avg_win_pct],
+                ["Avg Loss", `${safeFixed(bl.avg_loss_pct, 2)}%`, `${safeFixed(si.avg_loss_pct, 2)}%`, si.avg_loss_pct < bl.avg_loss_pct],
+                ["Total PnL", `${safeFixed(bl.total_pnl_pct, 1)}%`, `${safeFixed(si.total_pnl_pct, 1)}%`, si.total_pnl_pct > bl.total_pnl_pct],
                 ["Trades", String(bl.trades_taken), String(si.trades_taken), true],
-                ["Avg Edge", bl.safeFixed(avg_edge_score, 3), si.safeFixed(avg_edge_score, 3), si.avg_edge_score > bl.avg_edge_score],
+                ["Avg Edge", safeFixed(bl.avg_edge_score, 3), safeFixed(si.avg_edge_score, 3), si.avg_edge_score > bl.avg_edge_score],
               ] as [string, string, string, boolean][]).map(([label, baseVal, siVal, better]) => (
                 <div key={label} className="flex items-center justify-between py-1"
                   style={{ borderBottom: `1px solid ${C.outlineVar}`, fontSize: "11px" }}>
@@ -615,13 +615,13 @@ export default function SuperIntelligencePage() {
                   <div className="flex justify-between" style={{ fontSize: "11px" }}>
                     <span style={{ color: C.outline }}>Z-Score</span>
                     <span style={{ color: C.secondary, fontFamily: "JetBrains Mono, monospace" }}>
-                      {bt.significance.safeFixed(z_score, 3)}
+                      {safeFixed(bt.significance?.z_score, 3)}
                     </span>
                   </div>
                   <div className="flex justify-between" style={{ fontSize: "11px" }}>
                     <span style={{ color: C.outline }}>P-Value</span>
                     <span style={{ color: C.secondary, fontFamily: "JetBrains Mono, monospace" }}>
-                      {bt.significance.safeFixed(p_value, 4)}
+                      {safeFixed(bt.significance?.p_value, 4)}
                     </span>
                   </div>
                   <div className="flex justify-between" style={{ fontSize: "11px" }}>
@@ -708,7 +708,7 @@ export default function SuperIntelligencePage() {
                 tickFormatter={(v: number) => `$${(v / 1000).toFixed(1)}k`} />
               <Tooltip contentStyle={{ backgroundColor: C.cardHigh, border: `1px solid ${C.border}`,
                 fontSize: "11px", fontFamily: "JetBrains Mono, monospace" }}
-                formatter={(v: number) => [`$${v.toFixed ? .toFixed(2) : "—"}`, ""]}
+                formatter={(v: number) => [`$${safeFixed(v, 2)}`, ""]}
                 labelFormatter={(l) => `Trade #${l}`} />
               <Area type="monotone" dataKey="baseline" stroke={C.muted} fill="url(#gradBaseline)"
                 strokeWidth={1.5} dot={false} name="Baseline" />
@@ -830,10 +830,10 @@ export default function SuperIntelligencePage() {
                       padding: "8px", textAlign: "right",
                       color: item.profit_factor > 1.2 ? C.primary : item.profit_factor > 0.9 ? C.gold : C.tertiary,
                     }}>
-                      {item.profit_factor.toFixed ? .toFixed(2) : "—"}
+                      {safeFixed(item.profit_factor, 2)}
                     </td>
                     <td style={{ padding: "8px", textAlign: "right", color: C.secondary }}>
-                      {item.sharpe.toFixed ? .toFixed(2) : "—"}
+                      {safeFixed(item.sharpe, 2)}
                     </td>
                     <td style={{ padding: "8px", textAlign: "right", color: C.muted }}>
                       {item.trades}
@@ -890,10 +890,10 @@ export default function SuperIntelligencePage() {
                   </span>
                   <span style={{ color: evt.edge_score > 0 ? C.primary : C.tertiary,
                     fontFamily: "JetBrains Mono, monospace", width: "55px" }}>
-                    E:{evt.safeFixed(edge_score, 3)}
+                    E:{safeFixed(evt?.edge_score, 3)}
                   </span>
                   <span style={{ color: C.gold, fontFamily: "JetBrains Mono, monospace", width: "50px" }}>
-                    K:{evt.safeFixed(kelly_pct, 1)}%
+                    K:{safeFixed(evt?.kelly_pct, 1)}%
                   </span>
                   <span style={{ color: C.outline, width: "70px" }}>
                     {evt.regime?.replace(/_/g, " ") ?? "—"}

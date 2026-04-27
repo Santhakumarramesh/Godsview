@@ -2,7 +2,7 @@
 
 import React, { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { safeLocale } from "@/lib/safe";
+import { safeLocale, safeFixed } from "@/lib/safe";
 
 // Design tokens
 const C = {
@@ -494,7 +494,7 @@ const ValidationStatsSection = ({ stats }: { stats: ValidationStats }) => {
                 fontFamily: C.mono,
               }}
             >
-              {card.safeLocale(value)}
+              {safeLocale(card.value)}
             </div>
           </div>
         ))}
@@ -1008,7 +1008,7 @@ const EventStoreStats = ({ stats }: { stats: StoreStats }) => {
                 fontFamily: C.mono,
               }}
             >
-              {stats.safeLocale(eventsStored)}
+              {safeLocale(stats?.eventsStored)}
             </div>
           </div>
 
@@ -1228,7 +1228,7 @@ const CandleIntegrityChecker = ({ candles }: { candles: CandleCheck[] }) => {
                     fontFamily: C.mono,
                   }}
                 >
-                  C:{candle.close.toFixed(2)} V:{candle.safeLocale(volume)}
+                  C:{safeFixed(candle.close, 2)} V:{safeLocale(candle.volume)}
                 </div>
               </div>
             </div>

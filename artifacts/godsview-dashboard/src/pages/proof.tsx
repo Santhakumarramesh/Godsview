@@ -30,7 +30,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { TrendingUp, TrendingDown, AlertCircle, Star, ArrowUp, ArrowDown } from "lucide-react";
-import { safeNum } from "@/lib/safe";
+import { safeNum, safeFixed, toArray } from "@/lib/safe";
 
 // Types
 interface Trade {
@@ -296,7 +296,7 @@ export default function Proof() {
                   className="text-5xl font-bold"
                   style={{ color: COLORS.primary, fontFamily: "JetBrains Mono" }}
                 >
-                  {(data.safeNum(summary?.overall_win_rate) * 100).toFixed(1)}%
+                  {(safeNum(data?.summary?.overall_win_rate) * 100).toFixed(1)}%
                 </div>
               </div>
 
@@ -306,7 +306,7 @@ export default function Proof() {
                   className="text-5xl font-bold"
                   style={{ color: COLORS.secondary, fontFamily: "JetBrains Mono" }}
                 >
-                  {data.summary.total_trades}
+                  {safeNum(data?.summary?.total_trades)}
                 </div>
               </div>
 
@@ -316,7 +316,7 @@ export default function Proof() {
                   className="text-5xl font-bold"
                   style={{ color: COLORS.accent1, fontFamily: "JetBrains Mono" }}
                 >
-                  {data.summary.profit_factor.toFixed(2)}
+                  {safeFixed(data?.summary?.profit_factor, 2)}
                 </div>
               </div>
 
@@ -326,7 +326,7 @@ export default function Proof() {
                   className="text-5xl font-bold"
                   style={{ color: COLORS.accent2, fontFamily: "JetBrains Mono" }}
                 >
-                  {data.summary.sharpe_ratio.toFixed(2)}
+                  {safeFixed(data?.summary?.sharpe_ratio, 2)}
                 </div>
               </div>
             </div>
@@ -336,7 +336,7 @@ export default function Proof() {
               <div style={{ backgroundColor: COLORS.card }} className="border border-gray-700/30 rounded-lg p-6">
                 <div className="mb-4">
                   <span className="text-gray-400 text-sm">Best Strategy</span>
-                  <h3 className="text-2xl font-bold text-gray-100">{data.summary.best_strategy.name}</h3>
+                  <h3 className="text-2xl font-bold text-gray-100">{data?.summary?.best_strategy?.name ?? "—"}</h3>
                 </div>
                 <div className="flex items-end justify-between">
                   <span className="text-gray-400">Win Rate:</span>
@@ -344,7 +344,7 @@ export default function Proof() {
                     className="text-3xl font-bold"
                     style={{ color: COLORS.primary, fontFamily: "JetBrains Mono" }}
                   >
-                    {(data.summary.best_strategy.win_rate * 100).toFixed(1)}%
+                    {(safeNum(data?.summary?.best_strategy?.win_rate) * 100).toFixed(1)}%
                   </span>
                 </div>
               </div>
@@ -355,20 +355,20 @@ export default function Proof() {
                   className="text-5xl font-bold text-red-400"
                   style={{ fontFamily: "JetBrains Mono" }}
                 >
-                  {data.summary.worst_drawdown.toFixed(2)}%
+                  {safeFixed(data?.summary?.worst_drawdown, 2)}%
                 </div>
               </div>
             </div>
 
             {/* Equity Curve */}
-            {data.summary.equity_curve.length > 0 && (
+            {toArray(data?.summary?.equity_curve).length > 0 && (
               <div>
                 <h2 className="text-2xl font-semibold mb-6 text-gray-100" style={{ fontFamily: "Space Grotesk" }}>
                   Equity Curve
                 </h2>
                 <div style={{ backgroundColor: COLORS.card }} className="border border-gray-700/30 rounded-lg p-6 h-80">
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={data.summary.equity_curve}>
+                    <LineChart data={toArray(data?.summary?.equity_curve)}>
                       <defs>
                         <linearGradient id="equityGradient" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="5%" stopColor={COLORS.primary} stopOpacity={0.8} />
@@ -409,19 +409,19 @@ export default function Proof() {
             </div>
 
             {/* Strategy Comparison Section */}
-            {data.strategy_comparison.strategies.length > 0 && (
+            {toArray(data?.strategy_comparison?.strategies).length > 0 && (
               <div className="space-y-8">
                 <h2 className="text-2xl font-semibold text-gray-100" style={{ fontFamily: "Space Grotesk" }}>
                   Strategy Analysis
                 </h2>
 
                 {/* Win Rate Bar Chart */}
-                {data.strategy_comparison.comparison_data.length > 0 && (
+                {toArray(data?.strategy_comparison?.comparison_data).length > 0 && (
                   <div>
                     <h3 className="text-lg font-semibold mb-4 text-gray-200">Win Rate Comparison</h3>
                     <div style={{ backgroundColor: COLORS.card }} className="border border-gray-700/30 rounded-lg p-6 h-80">
                       <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={data.strategy_comparison.comparison_data}>
+                        <BarChart data={toArray(data?.strategy_comparison?.comparison_data)}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#333" />
                           <XAxis dataKey="name" stroke="#666" style={{ fontSize: "12px" }} />
                           <YAxis stroke="#666" style={{ fontSize: "12px" }} />
@@ -434,12 +434,12 @@ export default function Proof() {
                 )}
 
                 {/* Radar Chart */}
-                {data.strategy_comparison.comparison_data.length > 0 && (
+                {toArray(data?.strategy_comparison?.comparison_data).length > 0 && (
                   <div>
                     <h3 className="text-lg font-semibold mb-4 text-gray-200">Strategy Attributes</h3>
                     <div style={{ backgroundColor: COLORS.card }} className="border border-gray-700/30 rounded-lg p-6 h-80">
                       <ResponsiveContainer width="100%" height="100%">
-                        <RadarChart data={data.strategy_comparison.comparison_data.slice(0, 1)}>
+                        <RadarChart data={toArray<any>(data?.strategy_comparison?.comparison_data).slice(0, 1)}>
                           <PolarGrid stroke="#444" />
                           <PolarAngleAxis dataKey="name" stroke="#666" style={{ fontSize: "12px" }} />
                           <PolarRadiusAxis stroke="#666" />
@@ -468,7 +468,7 @@ export default function Proof() {
                         </tr>
                       </thead>
                       <tbody>
-                        {data.strategy_comparison.strategies.map((strategy, idx) => (
+                        {toArray<any>(data?.strategy_comparison?.strategies).map((strategy: any, idx: number) => (
                           <tr
                             key={strategy.id}
                             className="border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors"
@@ -505,13 +505,13 @@ export default function Proof() {
             )}
 
             {/* Trade Proof Cards */}
-            {data.trades.length > 0 && (
+            {toArray(data?.trades).length > 0 && (
               <div>
                 <h2 className="text-2xl font-semibold mb-6 text-gray-100" style={{ fontFamily: "Space Grotesk" }}>
-                  Trade Details ({data.trades.length} trades)
+                  Trade Details ({toArray(data?.trades).length} trades)
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {data.trades.map((trade) => (
+                  {toArray<any>(data?.trades).map((trade: any) => (
                     <TradeProofCard key={trade.id} trade={trade} />
                   ))}
                 </div>

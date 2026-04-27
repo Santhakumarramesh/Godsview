@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { safeObj } from "@/lib/safe";
+import { safeObj, safeNum, safeLocale } from "@/lib/safe";
 
 // ── Design Tokens ──────────────────────────────────────────────────────────
 const C = {
@@ -189,7 +189,7 @@ function HealthBar({ components }: { components: Status[] }) {
 export default function IntelligenceCenterPage() {
   const { data, isLoading, error, dataUpdatedAt } = useQuery<IntelligenceCenterData>({
     queryKey: ["intelligence-center"],
-    queryFn: () => fetch("/api/system/intelligence-center").then(r => r.ok ? r.json() : Promise.reject(safeObj(r).status ?? "unknown"Text)),
+    queryFn: () => fetch("/api/system/intelligence-center").then(r => r.ok ? r.json() : Promise.reject(r.statusText)),
     refetchInterval: 10_000,
     retry: 2,
   });
@@ -198,112 +198,112 @@ export default function IntelligenceCenterPage() {
     {
       name: "API Server",
       icon: "dns",
-      status: data.safeObj(server).status ?? "unknown",
-      primary_metric: data.server.uptime_human,
+      status: data?.server?.status ?? "unknown",
+      primary_metric: data?.server?.uptime_human,
       primary_label: "Uptime",
-      secondary_metric: data.server.system_mode.toUpperCase(),
+      secondary_metric: String(data?.server?.system_mode ?? "—").toUpperCase(),
       secondary_label: "Mode",
-      tertiary_metric: data.server.node_version,
+      tertiary_metric: data?.server?.node_version,
       tertiary_label: "Node",
-      detail: `Started ${timeAgo(data.server.started_at)}`,
+      detail: `Started ${timeAgo(data?.server?.started_at)}`,
     },
     {
       name: "Database",
       icon: "storage",
-      status: data.safeObj(database).status ?? "unknown",
-      primary_metric: data.safeObj(database).status ?? "unknown" === "online" ? "CONNECTED" : "ERROR",
+      status: data?.database?.status ?? "unknown",
+      primary_metric: (data?.database?.status ?? "unknown") === "online" ? "CONNECTED" : "ERROR",
       primary_label: "State",
-      secondary_metric: `${data.database.latency_ms}ms`,
+      secondary_metric: `${data?.database?.latency_ms}ms`,
       secondary_label: "Latency",
-      detail: data.database.latency_ms < 10 ? "Sub-10ms · Excellent" : data.database.latency_ms < 100 ? "Normal latency" : "High latency",
+      detail: data?.database?.latency_ms < 10 ? "Sub-10ms · Excellent" : data?.database?.latency_ms < 100 ? "Normal latency" : "High latency",
     },
     {
       name: "ML Model",
       icon: "model_training",
-      status: data.safeObj(ml_model).status ?? "unknown" as Status,
-      primary_metric: data.ml_model.accuracy !== null ? `${fmt(data.ml_model.accuracy * 100, 1)}%` : "–",
+      status: (data?.ml_model?.status ?? "unknown") as Status,
+      primary_metric: data?.ml_model?.accuracy !== null ? `${fmt(data?.ml_model?.accuracy * 100, 1)}%` : "–",
       primary_label: "Accuracy",
-      secondary_metric: data.ml_model.sample_count.toLocaleString(),
+      secondary_metric: safeLocale(data?.ml_model?.sample_count),
       secondary_label: "Samples",
-      tertiary_metric: timeAgo(data.ml_model.last_trained_at),
+      tertiary_metric: timeAgo(data?.ml_model?.last_trained_at),
       tertiary_label: "Last Train",
-      detail: data.ml_model.message,
+      detail: data?.ml_model?.message,
     },
     {
       name: "Super Intelligence",
       icon: "auto_awesome",
-      status: data.safeObj(super_intelligence).status ?? "unknown" as Status,
-      primary_metric: data.super_intelligence.ensemble_accuracy !== null
-        ? `${fmt(data.super_intelligence.ensemble_accuracy * 100, 1)}%`
+      status: (data?.super_intelligence?.status ?? "unknown") as Status,
+      primary_metric: data?.super_intelligence?.ensemble_accuracy !== null
+        ? `${fmt(data?.super_intelligence?.ensemble_accuracy * 100, 1)}%`
         : "–",
       primary_label: "Ensemble Acc",
-      secondary_metric: String(data.super_intelligence.ensemble_size),
+      secondary_metric: String(data?.super_intelligence?.ensemble_size),
       secondary_label: "Models",
-      tertiary_metric: data.super_intelligence.total_processed.toLocaleString(),
+      tertiary_metric: safeLocale(data?.super_intelligence?.total_processed),
       tertiary_label: "Processed",
-      detail: data.super_intelligence.message,
+      detail: data?.super_intelligence?.message,
     },
     {
       name: "Risk Engine",
       icon: "shield",
-      status: data.safeObj(risk_engine).status ?? "unknown" as Status,
-      primary_metric: data.risk_engine.kill_switch_active ? "ARMED" : "SAFE",
+      status: (data?.risk_engine?.status ?? "unknown") as Status,
+      primary_metric: data?.risk_engine?.kill_switch_active ? "ARMED" : "SAFE",
       primary_label: "Kill Switch",
-      secondary_metric: data.risk_engine.open_positions.toString(),
+      secondary_metric: String(data?.risk_engine?.open_positions ?? 0),
       secondary_label: "Positions",
-      tertiary_metric: data.risk_engine.daily_pnl_pct !== null
-        ? `${data.risk_engine.daily_pnl_pct >= 0 ? "+" : ""}${fmt(data.risk_engine.daily_pnl_pct, 2)}%`
+      tertiary_metric: data?.risk_engine?.daily_pnl_pct !== null
+        ? `${data?.risk_engine?.daily_pnl_pct >= 0 ? "+" : ""}${fmt(data?.risk_engine?.daily_pnl_pct, 2)}%`
         : "–",
       tertiary_label: "Daily PnL",
-      detail: `Session: ${data.risk_engine.session ?? "–"} · Max DD: ${data.risk_engine.max_drawdown_pct !== null ? `${fmt(data.risk_engine.max_drawdown_pct, 1)}%` : "–"}`,
+      detail: `Session: ${data?.risk_engine?.session ?? "–"} · Max DD: ${data?.risk_engine?.max_drawdown_pct !== null ? `${fmt(data?.risk_engine?.max_drawdown_pct, 1)}%` : "–"}`,
     },
     {
       name: "Alpaca Broker",
       icon: "account_balance",
-      status: data.safeObj(alpaca).status ?? "unknown" as Status,
-      primary_metric: data.alpaca.account_value !== null ? `$${data.alpaca.account_value.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "–",
+      status: (data?.alpaca?.status ?? "unknown") as Status,
+      primary_metric: data?.alpaca?.account_value != null ? `$${safeNum(data?.alpaca?.account_value).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "–",
       primary_label: "Portfolio",
-      secondary_metric: data.alpaca.can_write_orders ? "YES" : "NO",
+      secondary_metric: data?.alpaca?.can_write_orders ? "YES" : "NO",
       secondary_label: "Can Trade",
-      tertiary_metric: data.alpaca.is_live_mode ? "LIVE" : "PAPER",
+      tertiary_metric: data?.alpaca?.is_live_mode ? "LIVE" : "PAPER",
       tertiary_label: "Mode",
-      detail: data.safeObj(alpaca).status ?? "unknown" === "connected" ? "API keys valid · ready" : "API keys not configured",
+      detail: (data?.alpaca?.status ?? "unknown") === "connected" ? "API keys valid · ready" : "API keys not configured",
     },
     {
       name: "Retrain Scheduler",
       icon: "schedule",
-      status: data.safeObj(scheduler).status ?? "unknown" as Status,
-      primary_metric: String(data.scheduler.retrain_count),
+      status: (data?.scheduler?.status ?? "unknown") as Status,
+      primary_metric: String(data?.scheduler?.retrain_count),
       primary_label: "Retrains",
-      secondary_metric: timeAgo(data.scheduler.last_retrain_at),
+      secondary_metric: timeAgo(data?.scheduler?.last_retrain_at),
       secondary_label: "Last Run",
-      tertiary_metric: data.scheduler.next_retrain_at ? timeAgo(data.scheduler.next_retrain_at).replace(" ago", "") : "–",
+      tertiary_metric: data?.scheduler?.next_retrain_at ? timeAgo(data?.scheduler?.next_retrain_at).replace(" ago", "") : "–",
       tertiary_label: "Next Run",
-      detail: data.scheduler.retrain_interval_h ? `Every ${data.scheduler.retrain_interval_h}h` : "Manual retrain only",
+      detail: data?.scheduler?.retrain_interval_h ? `Every ${data?.scheduler?.retrain_interval_h}h` : "Manual retrain only",
     },
     {
       name: "Signal Stream",
       icon: "sensors",
-      status: data.safeObj(signal_stream).status ?? "unknown" as Status,
-      primary_metric: String(data.signal_stream.connected_clients),
+      status: (data?.signal_stream?.status ?? "unknown") as Status,
+      primary_metric: String(data?.signal_stream?.connected_clients),
       primary_label: "SSE Clients",
-      secondary_metric: data.signal_stream.signals_last_24h.toLocaleString(),
+      secondary_metric: safeLocale(data?.signal_stream?.signals_last_24h),
       secondary_label: "Signals 24h",
       detail: "Server-sent events · real-time push",
     },
     {
       name: "Brain / Knowledge Graph",
       icon: "neurology",
-      status: data.safeObj(brain).status ?? "unknown" as Status,
-      primary_metric: data.brain.entity_count.toLocaleString(),
+      status: (data?.brain?.status ?? "unknown") as Status,
+      primary_metric: safeLocale(data?.brain?.entity_count),
       primary_label: "Entities",
-      secondary_metric: data.trading.trades_today.toString(),
+      secondary_metric: String(data?.trading?.trades_today ?? 0),
       secondary_label: "Trades Today",
-      detail: data.brain.entity_count > 0 ? "Knowledge graph populated" : "Knowledge graph empty — run brain cycle",
+      detail: data?.brain?.entity_count > 0 ? "Knowledge graph populated" : "Knowledge graph empty — run brain cycle",
     },
   ] : [];
 
-  const allStatuses = rows.map(r => safeObj(r).status ?? "unknown");
+  const allStatuses = rows.map(r => r?.status ?? "unknown");
 
   return (
     <div style={{ background: C.bg, minHeight: "100vh", padding: "24px", fontFamily: "Space Grotesk, sans-serif" }}>
@@ -352,9 +352,9 @@ export default function IntelligenceCenterPage() {
       {/* System Info Footer */}
       {data && (
         <div className="mt-6 flex items-center gap-6" style={{ fontSize: "10px", color: C.outline }}>
-          <span>System Mode: <span style={{ color: C.gold }}>{data.server.system_mode.toUpperCase()}</span></span>
-          <span>Node: {data.server.node_version}</span>
-          <span>Snapshot: {new Date(data.generated_at).toLocaleString()}</span>
+          <span>System Mode: <span style={{ color: C.gold }}>{String(data?.server?.system_mode ?? "—").toUpperCase()}</span></span>
+          <span>Node: {data?.server?.node_version}</span>
+          <span>Snapshot: {data?.generated_at ? new Date(data.generated_at).toLocaleString() : "—"}</span>
         </div>
       )}
     </div>

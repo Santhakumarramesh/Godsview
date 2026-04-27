@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { safeObj } from "@/lib/safe";
+import { safeObj, safeNum, safeFixed } from "@/lib/safe";
 
 const API = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -110,7 +110,7 @@ export default function ExecutionPressure() {
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
                       <span style={{ fontFamily: "Space Grotesk" }}>Buyers</span>
                       <span style={{ fontFamily: "JetBrains Mono", color: C.accent }}>
-                        {(featureData.safeObj(dominance).buyers ?? [] * 100).toFixed(1)}%
+                        {safeFixed(safeNum(safeObj<any>(featureData?.dominance).buyers) * 100, 1)}%
                       </span>
                     </div>
                     <div
@@ -125,7 +125,7 @@ export default function ExecutionPressure() {
                         style={{
                           height: "100%",
                           backgroundColor: C.accent,
-                          width: `${featureData.safeObj(dominance).buyers ?? [] * 100}%`,
+                          width: `${safeNum(safeObj<any>(featureData?.dominance).buyers) * 100}%`,
                         }}
                       />
                     </div>

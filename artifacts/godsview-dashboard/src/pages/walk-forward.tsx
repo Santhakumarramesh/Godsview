@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { safeFixed, safeNum } from "@/lib/safe";
+import { safeFixed, safeNum, toArray } from "@/lib/safe";
 
 const API = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -100,7 +100,7 @@ export default function WalkForward() {
                 AVG PROFIT FACTOR
               </div>
               <div style={{ fontFamily: "JetBrains Mono", fontSize: "24px", color: C.accent }}>
-                {resultsData.safeFixed(avg_profit_factor, 2)}
+                {safeFixed(resultsData?.avg_profit_factor, 2)}
               </div>
             </div>
             <div
@@ -115,7 +115,7 @@ export default function WalkForward() {
                 AVG SHARPE
               </div>
               <div style={{ fontFamily: "JetBrains Mono", fontSize: "24px", color: C.accent }}>
-                {resultsData.safeFixed(avg_sharpe, 2)}
+                {safeFixed(resultsData?.avg_sharpe, 2)}
               </div>
             </div>
           </div>
@@ -164,8 +164,7 @@ export default function WalkForward() {
                 </tr>
               </thead>
               <tbody>
-                {resultsData &&
-                  resultsData.folds.map((fold, idx) => (
+                {toArray<any>(resultsData, "folds").map((fold: any, idx: number) => (
                     <tr
                       key={idx}
                       style={{
@@ -183,13 +182,13 @@ export default function WalkForward() {
                         {fold.test_start} to {fold.test_end}
                       </td>
                       <td style={{ padding: "12px", textAlign: "right", color: C.text }}>
-                        {fold.safeFixed(profit_factor, 2)}
+                        {safeFixed(fold?.profit_factor, 2)}
                       </td>
                       <td style={{ padding: "12px", textAlign: "right", color: C.text }}>
-                        {fold.safeFixed(sharpe_ratio, 2)}
+                        {safeFixed(fold?.sharpe_ratio, 2)}
                       </td>
                       <td style={{ padding: "12px", textAlign: "right", color: C.text }}>
-                        {(fold.win_rate * 100).toFixed(1)}%
+                        {(safeNum(fold?.win_rate) * 100).toFixed(1)}%
                       </td>
                       <td
                         style={{

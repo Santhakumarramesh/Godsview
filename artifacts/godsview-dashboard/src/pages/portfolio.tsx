@@ -44,7 +44,7 @@ const SECTOR_COLORS: Record<string, string> = {
 };
 
 function SectorBar({ sectors, total }: { sectors: Record<string, number>; total: number }) {
-  const entries = Object.entries(sectors).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+  const entries = Object.entries(sectors ?? {}).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
   if (entries.length === 0) return null;
   return (
     <div style={{ marginBottom: "24px" }}>
@@ -284,12 +284,12 @@ export default function PortfolioPage() {
             </div>
             <div style={{ padding: "16px", borderRadius: "8px", backgroundColor: "#1a191b", border: "1px solid rgba(72,72,73,0.15)", textAlign: "center" }}>
               <div style={{ fontSize: "9px", color: "#484849", fontFamily: "Space Grotesk", letterSpacing: "0.15em", marginBottom: "6px" }}>VOL TARGET</div>
-              <div style={{ fontSize: "20px", fontWeight: 700, color: "#f0e442", fontFamily: "JetBrains Mono, monospace" }}>{(pf.constraints.vol_target * 100).toFixed(0)}%</div>
+              <div style={{ fontSize: "20px", fontWeight: 700, color: "#f0e442", fontFamily: "JetBrains Mono, monospace" }}>{(safeNum(pf?.constraints?.vol_target) * 100).toFixed(0)}%</div>
             </div>
           </div>
 
           {/* Sector exposure bar */}
-          <SectorBar sectors={pf.sector_exposure} total={pf.total_weight} />
+          <SectorBar sectors={pf.sector_exposure ?? {}} total={safeNum(pf.total_weight)} />
 
           {/* Positions table */}
           <h3 style={{ fontFamily: "Space Grotesk", fontSize: "12px", fontWeight: 700, letterSpacing: "0.12em", color: "#adaaab", marginBottom: "12px" }}>
@@ -335,10 +335,10 @@ export default function PortfolioPage() {
             </h3>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "10px" }}>
               {[
-                { label: "VOL TARGET", value: `${(pf.constraints.vol_target * 100).toFixed(0)}%` },
-                { label: "SINGLE CAP", value: `${(pf.constraints.single_cap * 100).toFixed(0)}%` },
-                { label: "SECTOR CAP", value: `${(pf.constraints.sector_cap * 100).toFixed(0)}%` },
-                { label: "TOTAL CAP", value: `${(pf.constraints.total_cap * 100).toFixed(0)}%` },
+                { label: "VOL TARGET", value: `${(safeNum(pf?.constraints?.vol_target) * 100).toFixed(0)}%` },
+                { label: "SINGLE CAP", value: `${(safeNum(pf?.constraints?.single_cap) * 100).toFixed(0)}%` },
+                { label: "SECTOR CAP", value: `${(safeNum(pf?.constraints?.sector_cap) * 100).toFixed(0)}%` },
+                { label: "TOTAL CAP", value: `${(safeNum(pf?.constraints?.total_cap) * 100).toFixed(0)}%` },
                 { label: "CASH MIN", value: `${(safeNum(pf?.constraints?.cash_min) * 100).toFixed(0)}%` },
               ].map((c) => (
                 <div key={c.label} style={{ padding: "10px", borderRadius: "6px", backgroundColor: "#1a191b", border: "1px solid rgba(72,72,73,0.1)", textAlign: "center" }}>

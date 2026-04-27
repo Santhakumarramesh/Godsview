@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { toArray } from "@/lib/safe";
+import { toArray, safeNum, safeFixed } from "@/lib/safe";
 
 const C = {
   bg: '#0e0e0f',
@@ -359,11 +359,11 @@ const MarketQualityBanner: React.FC<{ symbol: string }> = ({ symbol }) => {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, paddingTop: 16, borderTop: `1px solid ${C.border}` }}>
         <div>
           <p style={{ color: C.textMuted, fontSize: 11, margin: '0 0 4px 0' }}>SPREAD</p>
-          <p style={{ color: C.text, fontSize: 16, fontWeight: 600, margin: 0 }}>${data.spread.toFixed(4)}</p>
+          <p style={{ color: C.text, fontSize: 16, fontWeight: 600, margin: 0 }}>${safeFixed(data?.spread, 4)}</p>
         </div>
         <div>
           <p style={{ color: C.textMuted, fontSize: 11, margin: '0 0 4px 0' }}>VWAP</p>
-          <p style={{ color: C.text, fontSize: 16, fontWeight: 600, margin: 0 }}>${data.vwap.toFixed(2)}</p>
+          <p style={{ color: C.text, fontSize: 16, fontWeight: 600, margin: 0 }}>${safeFixed(data?.vwap, 2)}</p>
         </div>
       </div>
     </div>
@@ -377,8 +377,10 @@ const OrderBookDepth: React.FC<{ symbol: string }> = ({ symbol }) => {
     queryFn: () => fetch(`/api/microstructure/book?symbol=${symbol}`).then(r => r.json()).catch(() => mockBook),
   });
 
-  const maxSize = Math.max(...data.bids.map((b: any) => b.size), ...data.asks.map((a: any) => a.size));
-  const imbalancePercent = ((data.imbalance + 1) / 2) * 100;
+  const _bids = toArray<any>(data?.bids);
+  const _asks = toArray<any>(data?.asks);
+  const maxSize = Math.max(1, ..._bids.map((b: any) => b.size), ..._asks.map((a: any) => a.size));
+  const imbalancePercent = ((safeNum(data?.imbalance) + 1) / 2) * 100;
 
   return (
     <div style={{
@@ -397,7 +399,7 @@ const OrderBookDepth: React.FC<{ symbol: string }> = ({ symbol }) => {
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
           <span style={{ color: C.textMuted, fontSize: 11 }}>IMBALANCE</span>
           <span style={{ color: C.accent, fontSize: 11, fontWeight: 600 }}>
-            {data.imbalance > 0 ? '↑ BULLISH' : '↓ BEARISH'} {Math.abs(data.imbalance * 100).toFixed(1)}%
+            {safeNum(data?.imbalance) > 0 ? '↑ BULLISH' : '↓ BEARISH'} {Math.abs(safeNum(data?.imbalance) * 100).toFixed(1)}%
           </span>
         </div>
         <div style={{
@@ -411,7 +413,7 @@ const OrderBookDepth: React.FC<{ symbol: string }> = ({ symbol }) => {
           <div style={{
             width: `${imbalancePercent}%`,
             height: '100%',
-            background: data.imbalance > 0 ? C.green : C.red,
+            background: safeNum(data?.imbalance) > 0 ? C.green : C.red,
             transition: 'width 0.3s ease',
           }} />
         </div>
@@ -434,17 +436,17 @@ const OrderBookDepth: React.FC<{ symbol: string }> = ({ symbol }) => {
         ))}
 
         {/* Bids (left side - green) */}
-        {data.bids.map((bid: any, i: any) => {
+        {_bids.map((bid: any, i: any) => {
           const width = (bid.size / maxSize) * 50;
           const x = 50 - width;
-          const y = (i * 250) / data.bids.length;
+          const y = (i * 250) / _bids.length;
           return (
             <g key={`bid-${i}`}>
               <rect
                 x={`${x}%`}
                 y={y}
                 width={`${width}%`}
-                height={(250 / data.bids.length) * 0.8}
+                height={(250 / _bids.length) * 0.8}
                 fill={C.green}
                 opacity={0.7}
                 stroke={bid.isWall ? C.orange : 'none'}
@@ -465,16 +467,16 @@ const OrderBookDepth: React.FC<{ symbol: string }> = ({ symbol }) => {
         })}
 
         {/* Asks (right side - red) */}
-        {data.asks.map((ask: any, i: any) => {
+        {_asks.map((ask: any, i: any) => {
           const width = (ask.size / maxSize) * 50;
-          const y = (i * 250) / data.asks.length;
+          const y = (i * 250) / _asks.length;
           return (
             <g key={`ask-${i}`}>
               <rect
                 x="50%"
                 y={y}
                 width={`${width}%`}
-                height={(250 / data.asks.length) * 0.8}
+                height={(250 / _asks.length) * 0.8}
                 fill={C.red}
                 opacity={0.7}
                 stroke={ask.isWall ? C.orange : 'none'}
@@ -502,13 +504,13 @@ const OrderBookDepth: React.FC<{ symbol: string }> = ({ symbol }) => {
         <div>
           <p style={{ color: C.textMuted, fontSize: 11, margin: '0 0 4px 0' }}>BID SIDE</p>
           <p style={{ color: C.green, fontSize: 14, fontWeight: 600, margin: 0 }}>
-            {data.bids.reduce((a: any, b: any) => a + b.size, 0).toLocaleString()}
+            {_bids.reduce((a: any, b: any) => a + b.size, 0).toLocaleString()}
           </p>
         </div>
         <div>
           <p style={{ color: C.textMuted, fontSize: 11, margin: '0 0 4px 0' }}>ASK SIDE</p>
           <p style={{ color: C.red, fontSize: 14, fontWeight: 600, margin: 0 }}>
-            {data.asks.reduce((a: any, b: any) => a + b.size, 0).toLocaleString()}
+            {_asks.reduce((a: any, b: any) => a + b.size, 0).toLocaleString()}
           </p>
         </div>
       </div>
@@ -544,7 +546,7 @@ const TradeFlowPanel: React.FC<{ symbol: string }> = ({ symbol }) => {
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
           <span style={{ color: C.textMuted, fontSize: 11 }}>BUY vs SELL VOLUME</span>
           <span style={{ color: C.accent, fontSize: 11, fontWeight: 600 }}>
-            {(data.imbalance * 100).toFixed(1)}% {data.imbalance > 0 ? 'BULLISH' : 'BEARISH'}
+            {(safeNum(data?.imbalance) * 100).toFixed(1)}% {safeNum(data?.imbalance) > 0 ? 'BULLISH' : 'BEARISH'}
           </span>
         </div>
         <div style={{
@@ -623,19 +625,19 @@ const TradeFlowPanel: React.FC<{ symbol: string }> = ({ symbol }) => {
       }}>
         <p style={{ color: C.textMuted, fontSize: 11, margin: '0 0 4px 0' }}>NET FLOW</p>
         <p style={{
-          color: data.imbalance > 0 ? C.green : C.red,
+          color: safeNum(data?.imbalance) > 0 ? C.green : C.red,
           fontSize: 18,
           fontWeight: 700,
           margin: 0,
         }}>
-          {data.imbalance > 0 ? '↑' : '↓'} {Math.abs(data.imbalance).toFixed(3)}
+          {safeNum(data?.imbalance) > 0 ? '↑' : '↓'} {Math.abs(safeNum(data?.imbalance)).toFixed(3)}
         </p>
         <p style={{
-          color: data.imbalance > 0 ? C.green : C.red,
+          color: safeNum(data?.imbalance) > 0 ? C.green : C.red,
           fontSize: 11,
           margin: '4px 0 0 0',
         }}>
-          {data.imbalance > 0 ? 'BULLISH DOMINANCE' : 'BEARISH DOMINANCE'}
+          {safeNum(data?.imbalance) > 0 ? 'BULLISH DOMINANCE' : 'BEARISH DOMINANCE'}
         </p>
       </div>
     </div>
@@ -708,7 +710,7 @@ const LiquidityHeatmap: React.FC<{ symbol: string }> = ({ symbol }) => {
           ))}
 
           {/* Heatmap cells */}
-          {data.cells.map((cell: any, idx: any) => (
+          {toArray<any>(data?.cells).map((cell: any, idx: any) => (
             <rect
               key={`cell-${idx}`}
               x={cell.time * (cellSize + cellPadding) + 30}
@@ -789,7 +791,7 @@ const ImbalanceSignalsFeed: React.FC<{ symbol: string }> = ({ symbol }) => {
       </h3>
 
       <div style={{ maxHeight: 500, overflowY: 'auto' }}>
-        {data.signals.map((signal: any) => (
+        {toArray<any>(data?.signals).map((signal: any) => (
           <div
             key={signal.id}
             style={{

@@ -42,7 +42,7 @@ export default function CaseLibrary() {
     },
   });
 
-  const filteredCases = caseData?.toArray(cases).filter((c) => {
+  const filteredCases = toArray<any>(caseData, "cases").filter((c: any) => {
     if (filterType === "all") return true;
     if (filterType === "winners") return c.outcome === "win";
     if (filterType === "losers") return c.outcome === "loss";

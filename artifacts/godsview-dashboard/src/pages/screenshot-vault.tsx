@@ -154,7 +154,7 @@ export default function ScreenshotVault() {
         {/* Screenshots Grid */}
         {isLoading ? (
           <div style={{ textAlign: "center", padding: "40px" }}>Loading screenshots...</div>
-        ) : screenshotData && screenshotData.safeLen(screenshots) > 0 ? (
+        ) : screenshotData && safeLen(screenshotData?.screenshots) > 0 ? (
           <div
             style={{
               display: "grid",
@@ -233,7 +233,7 @@ export default function ScreenshotVault() {
                   )}
 
                   {/* Tags */}
-                  {screenshot.safeLen(tags) > 0 && (
+                  {safeLen(screenshot?.tags) > 0 && (
                     <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
                       {screenshot.tags.map((tag) => (
                         <span
