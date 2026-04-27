@@ -503,15 +503,59 @@ router.get("/api/market-structure", async (req: Request, res: Response) => {
 });
 
 // ── 3. /api/context-fusion/evaluate → /api/context/fusion/evaluate ──
-// Used by: flow-confluence (note: hyphen vs slash in path)
+// Used by: flow-confluence (note: hyphen vs slash in path).
+// Page POSTs { min_confidence }; underlying GET requires ?symbol=. We
+// support both methods: for the probe (GET, no params) we default to
+// BTCUSD; for the page (POST) we evaluate confluence across a sensible
+// default symbol set and shape the response.
+const CONTEXT_FUSION_DEFAULT_SYMBOLS = ["BTCUSD", "ETHUSD", "AAPL", "TSLA", "SPY"];
+
 router.get("/api/context-fusion/evaluate", async (req: Request, res: Response) => {
-  const qs = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+  const symbol = String(req.query.symbol || "BTCUSD").toUpperCase();
+  const direction = String(req.query.direction || "long");
   try {
-    const { status, body } = await internalGet(`/api/context/fusion/evaluate${qs}`);
+    const { status, body } = await internalGet(
+      `/api/context/fusion/evaluate?symbol=${encodeURIComponent(symbol)}&direction=${encodeURIComponent(direction)}`,
+    );
     res.status(status).json(body);
   } catch (err) {
-    logger.error(`[alias /api/context-fusion/evaluate] ${err instanceof Error ? err.message : err}`);
+    logger.error(`[alias GET /api/context-fusion/evaluate] ${err instanceof Error ? err.message : err}`);
     res.status(503).json({ error: "context_fusion_unavailable" });
+  }
+});
+
+router.post("/api/context-fusion/evaluate", async (req: Request, res: Response) => {
+  const minConfidence = Number(req.body?.min_confidence ?? 0);
+  const direction = String(req.body?.direction ?? "long");
+  const symbols: string[] = Array.isArray(req.body?.symbols) && req.body.symbols.length > 0
+    ? req.body.symbols.map((s: unknown) => String(s).toUpperCase())
+    : CONTEXT_FUSION_DEFAULT_SYMBOLS;
+
+  try {
+    const evaluations = await Promise.all(
+      symbols.map(async (sym) => {
+        const { status, body } = await internalGet(
+          `/api/context/fusion/evaluate?symbol=${encodeURIComponent(sym)}&direction=${encodeURIComponent(direction)}`,
+        );
+        if (status >= 400 || !body?.ok) return { symbol: sym, error: body?.error ?? `status_${status}` };
+        return { symbol: sym, ...body.result };
+      }),
+    );
+    const filtered = evaluations.filter((e: any) =>
+      typeof e?.confidence === "number" ? e.confidence >= minConfidence : true,
+    );
+    res.json({
+      ok: true,
+      generated_at: new Date().toISOString(),
+      min_confidence: minConfidence,
+      direction,
+      symbols_evaluated: symbols.length,
+      symbols_passed: filtered.length,
+      results: filtered,
+    });
+  } catch (err) {
+    logger.error(`[alias POST /api/context-fusion/evaluate] ${err instanceof Error ? err.message : err}`);
+    res.status(503).json({ ok: false, error: "context_fusion_unavailable" });
   }
 });
 
