@@ -14,6 +14,7 @@ import { portfolioState } from "./portfolio";
 import { tradingSafety } from "../lib/trading_safety";
 import { logger } from "../lib/logger";
 import { getConsciousnessSnapshot, getLatestBrainSnapshot } from "../lib/brain_bridge";
+import { getLatestTrade, getLatestBar } from "../lib/alpaca";
 
 const router = Router();
 
@@ -442,6 +443,244 @@ router.get("/api/research/openbb/latest", async (_req: Request, res: Response) =
       ok: false,
       error: err instanceof Error ? err.message : String(err),
     });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 10 — final dashboard URL aliases (2026-04-27)
+//
+// Each entry below makes a dashboard fetch land on a real handler. Some
+// rewrite to an existing internal route (via `internalGet`); others call
+// the underlying lib function directly. The result: every page on the
+// dashboard receives real data instead of a 4xx/5xx fallback.
+// ─────────────────────────────────────────────────────────────────────────
+
+// Internal HTTP helper: re-issues a GET against ourselves so we don't
+// duplicate handler logic. Uses the loopback (the api process is bound
+// on :3001 inside the container).
+const INTERNAL_BASE = process.env.INTERNAL_API_BASE || "http://127.0.0.1:3001";
+
+async function internalGet(path: string, headers?: Record<string, string>) {
+  const url = path.startsWith("http") ? path : `${INTERNAL_BASE}${path}`;
+  const r = await fetch(url, {
+    method: "GET",
+    headers: { accept: "application/json", ...(headers ?? {}) },
+  });
+  const text = await r.text();
+  let body: any;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    body = { raw: text };
+  }
+  return { status: r.status, body };
+}
+
+// ── 1. /api/market/orderbook?symbol=X → /api/orderbook/snapshot?symbol=X ──
+// Used by: heatmap-liquidity, liquidity-environment
+router.get("/api/market/orderbook", async (req: Request, res: Response) => {
+  const symbol = String(req.query.symbol || "BTCUSD").toUpperCase();
+  try {
+    const { status, body } = await internalGet(`/api/orderbook/snapshot?symbol=${encodeURIComponent(symbol)}`);
+    res.status(status).json(body);
+  } catch (err) {
+    logger.error(`[alias /api/market/orderbook] ${err instanceof Error ? err.message : err}`);
+    res.status(503).json({ error: "orderbook_unavailable", symbol });
+  }
+});
+
+// ── 2. /api/market-structure?symbol=X → /api/market-structure/:symbol/analyze ──
+// Used by: order-blocks
+router.get("/api/market-structure", async (req: Request, res: Response) => {
+  const symbol = String(req.query.symbol || "BTCUSD").toUpperCase();
+  try {
+    const { status, body } = await internalGet(`/api/market-structure/${encodeURIComponent(symbol)}/analyze`);
+    res.status(status).json(body);
+  } catch (err) {
+    logger.error(`[alias /api/market-structure] ${err instanceof Error ? err.message : err}`);
+    res.status(503).json({ error: "market_structure_unavailable", symbol });
+  }
+});
+
+// ── 3. /api/context-fusion/evaluate → /api/context/fusion/evaluate ──
+// Used by: flow-confluence (note: hyphen vs slash in path)
+router.get("/api/context-fusion/evaluate", async (req: Request, res: Response) => {
+  const qs = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+  try {
+    const { status, body } = await internalGet(`/api/context/fusion/evaluate${qs}`);
+    res.status(status).json(body);
+  } catch (err) {
+    logger.error(`[alias /api/context-fusion/evaluate] ${err instanceof Error ? err.message : err}`);
+    res.status(503).json({ error: "context_fusion_unavailable" });
+  }
+});
+
+// ── 4. /api/backtest/walk-forward → /api/backtest-v2/walk-forward ──
+// Used by: walk-forward
+router.get("/api/backtest/walk-forward", async (_req: Request, res: Response) => {
+  try {
+    const { status, body } = await internalGet("/api/backtest-v2/walk-forward");
+    res.status(status).json(body);
+  } catch (err) {
+    logger.error(`[alias /api/backtest/walk-forward] ${err instanceof Error ? err.message : err}`);
+    res.status(503).json({ error: "walk_forward_unavailable" });
+  }
+});
+
+// ── 5. /api/signal-engine/order-flow — local order-flow summary ──
+// Used by: order-flow page. The Python signal engine doesn't expose
+// /order-flow directly; we synthesize from microstructure for the
+// requested symbol so the page always renders real data.
+router.get("/api/signal-engine/order-flow", async (req: Request, res: Response) => {
+  const symbol = String(req.query.symbol || "BTCUSD").toUpperCase();
+  try {
+    const { status, body } = await internalGet(`/api/microstructure/${encodeURIComponent(symbol)}/score`);
+    if (status >= 400) {
+      res.status(status).json(body);
+      return;
+    }
+    res.json({
+      symbol: body.symbol ?? symbol,
+      generated_at: body.generated_at ?? new Date().toISOString(),
+      delta: body.tape_summary?.normalized_delta ?? 0,
+      bias: body.tape_summary?.bias ?? "neutral",
+      score: body.score ?? 0,
+      imbalance: body.imbalance ?? null,
+      absorption: body.absorption ?? null,
+      heatmap_zone_score: body.heatmap_summary?.zone_score ?? null,
+      source: "microstructure_synth",
+    });
+  } catch (err) {
+    logger.error(`[alias /api/signal-engine/order-flow] ${err instanceof Error ? err.message : err}`);
+    res.status(503).json({ error: "order_flow_unavailable", symbol });
+  }
+});
+
+// ── 6. /api/microstructure/quality?symbol=X — wraps :symbol/score ──
+// Used by: microstructure
+router.get("/api/microstructure/quality", async (req: Request, res: Response) => {
+  const symbol = String(req.query.symbol || "BTCUSD").toUpperCase();
+  try {
+    const { status, body } = await internalGet(`/api/microstructure/${encodeURIComponent(symbol)}/score`);
+    res.status(status).json(body);
+  } catch (err) {
+    logger.error(`[alias /api/microstructure/quality] ${err instanceof Error ? err.message : err}`);
+    res.status(503).json({ error: "microstructure_quality_unavailable", symbol });
+  }
+});
+
+// ── 7. /api/alpaca/quote/:symbol — single-symbol quote via getLatestTrade ──
+// Used by: dom-depth
+router.get("/api/alpaca/quote/:symbol", async (req: Request, res: Response) => {
+  const symbol = String(req.params.symbol || "").toUpperCase();
+  if (!symbol) {
+    res.status(400).json({ error: "symbol required" });
+    return;
+  }
+  try {
+    const trade = await getLatestTrade(symbol);
+    if (!trade) {
+      const bar = await getLatestBar(symbol);
+      if (!bar) {
+        res.status(503).json({ error: "no_quote_available", symbol });
+        return;
+      }
+      res.json({
+        symbol,
+        price: bar.close,
+        timestamp: bar.timestamp,
+        source: "latest_bar",
+      });
+      return;
+    }
+    res.json({
+      symbol,
+      price: trade.price,
+      timestamp: trade.timestamp,
+      source: "latest_trade",
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error(`[alias /api/alpaca/quote/:symbol] ${symbol} → ${msg}`);
+    res.status(503).json({ error: "quote_unavailable", symbol, message: msg });
+  }
+});
+
+// ── 8. /api/analytics/execution — aggregate exec metrics ──
+// Used by: slippage-quality. Pulls from existing analytics endpoints
+// rather than introducing a new service.
+router.get("/api/analytics/execution", async (_req: Request, res: Response) => {
+  try {
+    const [summary, equity, daily] = await Promise.all([
+      internalGet("/api/analytics/summary"),
+      internalGet("/api/analytics/equity"),
+      internalGet("/api/analytics/daily-pnl"),
+    ]);
+    const s = summary.body ?? {};
+    const e = equity.body ?? {};
+    const d = daily.body ?? {};
+    res.json({
+      generated_at: new Date().toISOString(),
+      summary: {
+        total_trades: s.total_trades ?? 0,
+        win_rate: s.win_rate ?? null,
+        avg_pnl: s.avg_pnl ?? null,
+        sharpe: s.sharpe ?? null,
+        profit_factor: s.profit_factor ?? null,
+        max_drawdown: s.max_drawdown ?? null,
+      },
+      equity: {
+        current: e.current ?? null,
+        starting: e.starting ?? null,
+        return_pct: e.return_pct ?? null,
+      },
+      daily: {
+        pnl: d.pnl ?? null,
+        trades: d.trades ?? null,
+      },
+      // Slippage panels need these — surface from summary if present.
+      slippage_bps: s.slippage_bps ?? null,
+      avg_fill_latency_ms: s.avg_fill_latency_ms ?? null,
+      reject_rate: s.reject_rate ?? null,
+    });
+  } catch (err) {
+    logger.error(`[alias /api/analytics/execution] ${err instanceof Error ? err.message : err}`);
+    res.status(503).json({ error: "execution_analytics_unavailable" });
+  }
+});
+
+// ── 9. /api/system/intelligence-center — aggregate intelligence health ──
+// Used by: intelligence-center. Combines the working intelligence
+// subsystem reads (regime, mtf, optimizer) into a single payload.
+router.get("/api/system/intelligence-center", async (_req: Request, res: Response) => {
+  try {
+    const [regime, mtf, optimizer] = await Promise.all([
+      internalGet("/api/intelligence/regime/current"),
+      internalGet("/api/intelligence/mtf/confluence"),
+      internalGet("/api/intelligence/optimizer/status"),
+    ]);
+    res.json({
+      generated_at: new Date().toISOString(),
+      status: "operational",
+      subsystems: {
+        regime: {
+          status: regime.status === 200 ? "ok" : "degraded",
+          data: regime.body ?? null,
+        },
+        mtf_confluence: {
+          status: mtf.status === 200 ? "ok" : "degraded",
+          data: mtf.body ?? null,
+        },
+        adaptive_optimizer: {
+          status: optimizer.status === 200 ? "ok" : "degraded",
+          data: optimizer.body ?? null,
+        },
+      },
+      uptime_s: Math.round(process.uptime()),
+    });
+  } catch (err) {
+    logger.error(`[alias /api/system/intelligence-center] ${err instanceof Error ? err.message : err}`);
+    res.status(503).json({ error: "intelligence_center_unavailable" });
   }
 });
 
