@@ -129,6 +129,11 @@ if (dbUrl) {
       forward_bars_checked INTEGER,
       regime TEXT,
       direction TEXT,
+      source TEXT DEFAULT 'live',
+      entry_price NUMERIC(14,6),
+      stop_loss NUMERIC(14,6),
+      take_profit NUMERIC(14,6),
+      realized_pnl NUMERIC(14,4),
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     CREATE TABLE IF NOT EXISTS audit_events (

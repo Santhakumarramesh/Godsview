@@ -15,7 +15,7 @@ set -u
 
 N="${1:-100}"
 CONC="${2:-10}"
-API="${API:-http://localhost:3001}"
+API="${API:-http://localhost}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
@@ -28,10 +28,18 @@ mkdir -p "$OUT_DIR"
 
 log() { printf "\033[1;36m[stress]\033[0m %s\n" "$*"; }
 
-# Ensure API is up
-HEALTH=$(curl -s -o /dev/null -w "%{http_code}" "${API}/health" || echo 000)
-if [ "$HEALTH" != "200" ]; then
-  echo "API not healthy at ${API}/health (got $HEALTH). Boot the stack first." >&2
+# Ensure API is up — wait up to 30s for /api/system/status JSON.
+# /health is too shallow; status confirms route registry is live.
+ready=0
+for i in $(seq 1 30); do
+  body=$(curl -sS --max-time 2 "${API}/api/system/status" 2>/dev/null || true)
+  if printf "%s" "$body" | head -c 1 | grep -q '{'; then
+    ready=1; break
+  fi
+  sleep 1
+done
+if [ "$ready" -ne 1 ]; then
+  echo "API not ready at ${API}/api/system/status. Boot the stack first." >&2
   exit 2
 fi
 
@@ -95,19 +103,25 @@ TOTAL=$(wc -l < "$OUT_DIR/results.csv")
 ACCEPTED=$(awk -F, '$4 ~ /^20[01]$/ && $6=="true"  {c++} END{print c+0}' "$OUT_DIR/results.csv")
 REJECTED=$(awk -F, '$6=="false" {c++} END{print c+0}' "$OUT_DIR/results.csv")
 HTTP400=$(awk -F, '$4=="400" {c++} END{print c+0}' "$OUT_DIR/results.csv")
+HTTP409=$(awk -F, '$4=="409" {c++} END{print c+0}' "$OUT_DIR/results.csv")
+HTTP423=$(awk -F, '$4=="423" {c++} END{print c+0}' "$OUT_DIR/results.csv")
+HTTP429=$(awk -F, '$4=="429" {c++} END{print c+0}' "$OUT_DIR/results.csv")
 HTTP5XX=$(awk -F, '$4 ~ /^5/ {c++} END{print c+0}' "$OUT_DIR/results.csv")
 FAILED=$(awk -F, '$4=="000" {c++} END{print c+0}' "$OUT_DIR/results.csv")
 P50=$(awk -F, '{print $5}' "$OUT_DIR/results.csv" | sort -n | awk '{a[NR]=$1} END{print a[int(NR/2)]}')
 P95=$(awk -F, '{print $5}' "$OUT_DIR/results.csv" | sort -n | awk '{a[NR]=$1} END{print a[int(NR*0.95)]}')
 
 printf "\n"
-printf "Total requests:     %s\n" "$TOTAL"
-printf "Accepted (200/201): %s\n" "$ACCEPTED"
-printf "Rejected (risk):    %s\n" "$REJECTED"
-printf "HTTP 400:           %s\n" "$HTTP400"
-printf "HTTP 5xx:           %s\n" "$HTTP5XX"
-printf "Connection failed:  %s\n" "$FAILED"
-printf "Latency p50/p95 ms: %s / %s\n" "${P50:-?}" "${P95:-?}"
+printf "Total requests:        %s\n" "$TOTAL"
+printf "Accepted (200/201):    %s\n" "$ACCEPTED"
+printf "Rejected (risk gate):  %s\n" "$REJECTED"
+printf "HTTP 400 (malformed/stale): %s\n" "$HTTP400"
+printf "HTTP 409 (idempotency):     %s\n" "$HTTP409"
+printf "HTTP 423 (kill-switch):     %s\n" "$HTTP423"
+printf "HTTP 429 (rate-limited):    %s   <- expected when load > 60/min/IP\n" "$HTTP429"
+printf "HTTP 5xx (CRASH):      %s   <- must be 0\n" "$HTTP5XX"
+printf "Connection failed:     %s\n" "$FAILED"
+printf "Latency p50/p95 ms:    %s / %s\n" "${P50:-?}" "${P95:-?}"
 
 # Pass criteria: no 5xx, no connection failures
 EXIT=0

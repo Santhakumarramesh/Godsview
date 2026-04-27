@@ -405,6 +405,46 @@ router.post("/tradingview",
 
   const alert = parsed.data;
 
+  // Stale-timestamp gate. TradingView fires alerts at bar close, so payloads
+  // older than WEBHOOK_MAX_AGE_SECONDS are almost certainly replays of stored
+  // alerts (common pentest/replay vector) or stuck-clock client errors.
+  // Default: 60s. Set WEBHOOK_MAX_AGE_SECONDS=0 to disable (dev only).
+  const maxAgeSec = parseInt(process.env.WEBHOOK_MAX_AGE_SECONDS ?? "60", 10);
+  if (Number.isFinite(maxAgeSec) && maxAgeSec > 0) {
+    // Tolerate either seconds (date +%s) or millis (Date.now()) — anything past
+    // year 2286 in seconds (>1e13) we assume is millis and divide.
+    const tsSec = alert.timestamp > 1e12 ? Math.floor(alert.timestamp / 1000) : alert.timestamp;
+    const nowSec = Math.floor(Date.now() / 1000);
+    const ageSec = nowSec - tsSec;
+    if (ageSec > maxAgeSec) {
+      systemMetrics.recordWebhook(Date.now() - t0, false, "stale_timestamp");
+      systemMetrics.log("warn", "webhook.stale_timestamp", { symbol: alert.symbol, ageSec, maxAgeSec });
+      res.status(400).json({
+        ok: false,
+        mode: "paper",
+        receivedAt,
+        error: `Stale alert: payload timestamp is ${ageSec}s old, max allowed ${maxAgeSec}s`,
+        ageSec,
+        maxAgeSec,
+      });
+      return;
+    }
+    // Future-dated payloads (clock skew or forged) are also suspicious — accept
+    // up to 30s of skew, beyond that reject.
+    if (ageSec < -30) {
+      systemMetrics.recordWebhook(Date.now() - t0, false, "future_timestamp");
+      systemMetrics.log("warn", "webhook.future_timestamp", { symbol: alert.symbol, ageSec });
+      res.status(400).json({
+        ok: false,
+        mode: "paper",
+        receivedAt,
+        error: `Future-dated alert: payload timestamp is ${-ageSec}s in the future`,
+        ageSec,
+      });
+      return;
+    }
+  }
+
   // Passphrase auth (env-controlled). In production, secret MUST be set.
   const expected = process.env.TRADINGVIEW_WEBHOOK_SECRET || "";
   if (PROD_REQUIRES_SECRET && !expected) {
