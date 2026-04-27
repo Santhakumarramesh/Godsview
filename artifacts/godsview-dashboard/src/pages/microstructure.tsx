@@ -156,14 +156,17 @@ const mockFlow: FlowData = {
   timestamp: new Date().toISOString(),
 };
 
+// Empty heatmap placeholder. Real volume-by-time-by-price grid will populate
+// once /api/microstructure/heatmap returns data. We deliberately avoid
+// Math.random fill so empty cells render dark (honest empty state).
 const mockHeatmap: HeatmapData = {
   symbol: 'AAPL',
   cells: Array.from({ length: 400 }, (_, i) => ({
     time: i % 20,
     price: Math.floor(i / 20),
-    volume: Math.random() * 1000000,
+    volume: 0,
   })),
-  maxVolume: 1000000,
+  maxVolume: 1,
   timestamp: new Date().toISOString(),
 };
 
@@ -870,13 +873,16 @@ const SlippageEstimator: React.FC<{ symbol: string }> = ({ symbol }) => {
     queryKey: ['slippage', selectedSymbol, side, quantity],
     queryFn: () =>
       fetch(`/api/microstructure/slippage?symbol=${selectedSymbol}&side=${side}&quantity=${quantity}`)
-        .then(r => r.json())
+        .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
         .catch(() => ({
-          slippageBps: Math.random() * 5 + 1,
-          avgFillPrice: 189.45,
-          liquidityScore: 0.85,
-          levelsConsumed: Math.floor(Math.random() * 3) + 1,
-          recommendation: ['proceed', 'split', 'delay', 'abort'][Math.floor(Math.random() * 4)] as any,
+          // No fake fallback: when the slippage analyzer isn't reachable,
+          // surface zeros + 'unavailable' so the UI doesn't recommend
+          // a fabricated trade decision.
+          slippageBps: 0,
+          avgFillPrice: 0,
+          liquidityScore: 0,
+          levelsConsumed: 0,
+          recommendation: 'unavailable' as any,
         })),
   });
 

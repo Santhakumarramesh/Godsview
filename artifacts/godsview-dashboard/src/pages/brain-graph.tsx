@@ -679,8 +679,15 @@ export default function BrainGraphPage() {
   const lastProcessedIdRef = useRef<number>(0);
 
   useEffect(() => {
-    const rows = signalsQuery.data;
-    if (!rows || !Array.isArray(rows) || rows.length === 0) return;
+    // /api/signals returns { signals: [...], count } at runtime even though
+    // the hook's TS type says AlpacaPosition[]-style flat array. Defensive
+    // unwrap so we don't crash on .sort()/.filter().
+    const raw = signalsQuery.data as any;
+    const rows: any[] = Array.isArray(raw)
+      ? raw
+      : (raw && Array.isArray(raw.signals) ? raw.signals
+        : (raw && Array.isArray(raw.data) ? raw.data : []));
+    if (!rows || rows.length === 0) return;
     // Sort newest first, then play any rows whose ID is greater than the
     // last one we processed (so on first mount we play the most recent few,
     // and on subsequent polls only genuinely new signals).

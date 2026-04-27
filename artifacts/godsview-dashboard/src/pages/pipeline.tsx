@@ -53,68 +53,10 @@ const LAYERS: PipelineLayer[] = [
   { id: "risk", step: 6, name: "Risk Engine", shortName: "RISK", icon: "shield", weight: 0, status: "OPTIMAL", latencyMs: 3, score: 1.0, details: "Gate: ALLOW · Daily P&L: +$142 · Exposure: 28% · Positions: 1/3 · No cooldown", lastUpdate: Date.now() - 1000 },
 ];
 
-const SYMBOLS = ["BTC/USD", "ETH/USD", "NVDA", "AAPL", "TSLA", "SPY", "QQQ", "META", "AMZN", "SOL/USD"];
-const DIRECTIONS: ("LONG" | "SHORT")[] = ["LONG", "SHORT"];
-const DECISIONS: PipelineSignal["decision"][] = ["TRADE", "PASS", "REJECTED", "BLOCKED_BY_RISK"];
-
-function generateSignal(idx: number): PipelineSignal {
-  const sym = SYMBOLS[idx % SYMBOLS.length];
-  const dir = DIRECTIONS[Math.random() > 0.45 ? 0 : 1];
-  const scores: Record<string, number> = {};
-  const layers: LayerTrace[] = [];
-  let composite = 0;
-
-  LAYERS.forEach((l) => {
-    const s = +(Math.random() * 0.4 + 0.55).toFixed(2);
-    scores[l.id] = s;
-    composite += s * l.weight;
-    layers.push({
-      layerId: l.id,
-      score: s,
-      latencyMs: l.latencyMs + Math.floor(Math.random() * 20),
-      passed: l.id === "risk" ? Math.random() > 0.15 : s > 0.5,
-      detail: l.details.split("·")[0].trim(),
-    });
-  });
-
-  const decision = composite > 0.75 ? "TRADE" : composite > 0.6 ? "PASS" : DECISIONS[Math.floor(Math.random() * DECISIONS.length)];
-  const reasons: Record<string, string> = {
-    TRADE: "All layers approved — executing",
-    PASS: "Below quality threshold (0.75)",
-    REJECTED: "Claude veto: conflicting macro signals",
-    BLOCKED_BY_RISK: "Daily loss limit proximity",
-    DEGRADED_DATA: "Insufficient tick data",
-  };
-
-  return {
-    id: `SIG-${Date.now().toString(36).toUpperCase()}-${idx}`,
-    symbol: sym,
-    direction: dir,
-    scores,
-    compositeScore: +composite.toFixed(3),
-    decision,
-    reason: reasons[decision],
-    timestamp: Date.now() - idx * 45000,
-    layers,
-  };
-}
-function generateConsoleEntries(): ConsoleEntry[] {
-  const now = Date.now();
-  return [
-    { timestamp: now - 1200, level: "INFO", source: "STRUCTURE", message: "SK zone recalculated — 3 active swing levels on NVDA 15m" },
-    { timestamp: now - 3400, level: "SIGNAL", source: "PIPELINE", message: "New candidate: BTC/USD LONG — composite 0.812 — routing to risk gate" },
-    { timestamp: now - 5800, level: "WARN", source: "ML", message: "Feature drift detected on ETH/USD model — AUC dropped 0.74 → 0.71" },
-    { timestamp: now - 8200, level: "DECISION", source: "RISK", message: "ALLOW — BTC/USD LONG — daily P&L +$142 — exposure 28% — position 1/3" },
-    { timestamp: now - 12500, level: "INFO", source: "RECALL", message: "Pattern match: sweep_reclaim on NVDA — 81% historical win rate (n=47)" },
-    { timestamp: now - 18000, level: "INFO", source: "ORDERFLOW", message: "CVD divergence forming on ETH/USD — price ↓ but cumulative delta ↑" },
-    { timestamp: now - 24000, level: "ERROR", source: "CLAUDE", message: "Circuit breaker OPEN — 3 consecutive timeouts — fallback heuristic active" },
-    { timestamp: now - 28000, level: "INFO", source: "CLAUDE", message: "Circuit breaker CLOSED — Claude API recovered — resuming normal reasoning" },
-    { timestamp: now - 35000, level: "DECISION", source: "PIPELINE", message: "REJECTED — ETH/USD SHORT — Claude veto: macro regime contradicts setup" },
-    { timestamp: now - 42000, level: "SIGNAL", source: "STRUCTURE", message: "Breakout failure detected: AAPL tested resistance $198.40 — snap-back confirmed" },
-    { timestamp: now - 48000, level: "WARN", source: "RISK", message: "Approaching daily loss limit — $212/$250 used — tightening position sizing" },
-    { timestamp: now - 55000, level: "INFO", source: "ML", message: "Model retrained on 136K+ outcomes — new AUC: 0.76 — deploying to inference" },
-  ];
-}
+// Mock-generator functions (generateSignal, generateConsoleEntries) and
+// their helper constants (SYMBOLS, DIRECTIONS, DECISIONS) removed after
+// Phase 8c. Signals now come from /api/system/pipeline/latest, console
+// entries from /api/system/logs/recent.
 
 // ─── Color Helpers ───────────────────────────────────────────────────────────
 const statusColor: Record<string, string> = {
@@ -635,9 +577,19 @@ export default function PipelinePage() {
         timestamp: new Date(pipelineData.generated_at).getTime() || Date.now(),
         layers: [],
       }]
-    : Array.from({ length: 8 }, (_, i) => generateSignal(i));
+    : []; // No fake fallback — when /api/system/pipeline/latest has no data, signals stay empty.
 
-  const consoleEntries: ConsoleEntry[] = generateConsoleEntries();
+  // Real console entries fetched from /api/system/logs/recent (operator-token
+  // gated — falls back to empty when not authorized rather than fake logs).
+  const { data: logsData } = useQuery<{ logs?: ConsoleEntry[] }>({
+    queryKey: ["system", "logs", "recent"],
+    queryFn: () => fetch("/api/system/logs/recent")
+      .then(r => r.ok ? r.json() : { logs: [] })
+      .catch(() => ({ logs: [] })),
+    refetchInterval: 30_000,
+    retry: 0,
+  });
+  const consoleEntries: ConsoleEntry[] = Array.isArray(logsData?.logs) ? logsData!.logs : [];
   const totalLatency = layers.reduce((s, l) => s + l.latencyMs, 0);
   const activeNodes = layers.filter((l) => l.status !== "OFFLINE").length;
 

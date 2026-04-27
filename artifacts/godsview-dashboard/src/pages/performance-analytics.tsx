@@ -505,14 +505,15 @@ interface DailyPnL {
   winRate: number;
 }
 
+// Empty 30-day calendar — used when /api/analytics/daily-pnl returns nothing.
+// All cells render as zero (honest empty state) instead of randomized fake P&L.
 const defaultDailyPnL: DailyPnL[] = Array.from({ length: 30 }, (_, i) => {
   const daysAgo = 29 - i;
-  const randomPnL = Math.random() * 20000 - 5000;
   return {
     date: new Date(Date.now() - daysAgo * 86400000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-    pnl: randomPnL,
-    trades: Math.floor(Math.random() * 20) + 5,
-    winRate: Math.random() * 0.3 + 0.5,
+    pnl: 0,
+    trades: 0,
+    winRate: 0,
   };
 });
 
@@ -523,7 +524,9 @@ function DailyPnLCalendar() {
     staleTime: 60000,
   });
 
-  const data = dailyData || defaultDailyPnL;
+  // Use real data when present (and an array), otherwise fall back to the
+  // zero-filled calendar so the page renders without fabricating returns.
+  const data = Array.isArray(dailyData) && dailyData.length > 0 ? dailyData : defaultDailyPnL;
 
   return (
     <div style={{ marginBottom: '32px' }}>

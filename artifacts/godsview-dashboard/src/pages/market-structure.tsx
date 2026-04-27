@@ -32,12 +32,31 @@ function useMultiTimeframeStructure(symbol: string, timeframe: string) {
   return useQuery({
     queryKey: ["market-structure", symbol, timeframe],
     queryFn: async () => {
-      // Mock market structure data
+      // Real candle data from /api/alpaca/bars. The order-blocks /
+      // key-levels / patterns / swing fields below are placeholders —
+      // wire them to a proper structure-analysis endpoint when ready.
+      let candles: any[] = [];
+      try {
+        const r = await fetch(`/api/alpaca/bars?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}&limit=80`);
+        if (r.ok) {
+          const data = await r.json();
+          const bars: any[] = Array.isArray(data) ? data : (data?.bars ?? data?.data ?? []);
+          candles = bars.map((b: any, i: number) => ({
+            idx: i,
+            open: Math.round(Number(b.open ?? b.o ?? 0)),
+            high: Math.round(Number(b.high ?? b.h ?? 0)),
+            low: Math.round(Number(b.low ?? b.l ?? 0)),
+            close: Math.round(Number(b.close ?? b.c ?? 0)),
+          })).filter((c) => c.close > 0);
+        }
+      } catch {
+        candles = [];
+      }
       return {
         symbol,
         timeframe,
         htf_bias: "BULLISH",
-        candles: generateMockCandles(40),
+        candles,
         order_blocks: [
           {
             id: "ob-1",
@@ -88,26 +107,7 @@ function useMultiTimeframeStructure(symbol: string, timeframe: string) {
   });
 }
 
-// ── Mock Data Generator ────────────────────────────────────────────────────
-function generateMockCandles(count: number) {
-  const candles = [];
-  let close = 42000;
-  for (let i = 0; i < count; i++) {
-    const change = (Math.random() - 0.5) * 400;
-    close += change;
-    const open = close - (Math.random() - 0.5) * 200;
-    const high = Math.max(open, close) + Math.random() * 100;
-    const low = Math.min(open, close) - Math.random() * 100;
-    candles.push({
-      idx: i,
-      open: Math.round(open),
-      high: Math.round(high),
-      low: Math.round(low),
-      close: Math.round(close),
-    });
-  }
-  return candles;
-}
+// generateMockCandles removed — candles now come from /api/alpaca/bars.
 
 // ── Reusable Components ────────────────────────────────────────────────────
 function Label({ children }: { children: React.ReactNode }) {

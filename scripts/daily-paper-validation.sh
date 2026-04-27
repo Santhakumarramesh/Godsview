@@ -26,7 +26,7 @@ cd "$ROOT"
 
 DATE="${DATE:-$(date +%Y-%m-%d)}"
 OUT="$ROOT/logs/daily/$DATE"
-API="${API:-http://localhost:3001}"
+API="${API:-http://localhost}"
 mkdir -p "$OUT"
 
 PASS=0; FAIL=0

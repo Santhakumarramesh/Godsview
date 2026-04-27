@@ -31,39 +31,31 @@ function useSideBySideSnapshot(symbols: string[], historicalDays: number) {
   return useQuery({
     queryKey: ["side-by-side", symbols, historicalDays],
     queryFn: async () => {
-      // Mock backtest vs live data
+      // Real snapshot from /api/side-by-side/snapshot. When no run is active,
+      // backend now returns { running: false, snapshot: null } — return that
+      // through and let the UI render an "idle" state instead of fabricating
+      // a fake comparison.
+      try {
+        const r = await fetch("/api/side-by-side/snapshot");
+        if (r.ok) {
+          const data = await r.json();
+          if (data?.snapshot) return data.snapshot;
+          // No active run — return shaped null so UI shows idle state.
+          return {
+            config: { symbols, historical_days: historicalDays },
+            historical: null,
+            live: null,
+            comparison: null,
+            running: false,
+          };
+        }
+      } catch { /* fall through */ }
       return {
         config: { symbols, historical_days: historicalDays },
-        historical: {
-          progress: 75,
-          stats: {
-            trades: 24,
-            win_rate: 62.5,
-            pnl_pct: 5.8,
-            sharpe: 1.45,
-            max_drawdown: -8.2,
-          },
-          equity_curve: generateEquityCurve(75),
-        },
-        live: {
-          status: "running",
-          stats: {
-            trades: 18,
-            win_rate: 61.1,
-            pnl_pct: 4.9,
-            unrealized: 1.2,
-            open_positions: 3,
-          },
-          equity_curve: generateEquityCurve(60),
-        },
-        comparison: {
-          win_rate_delta: 1.4,
-          pnl_delta: 0.9,
-          signal_overlap: 88,
-          divergence_score: 0.12,
-          verdict:
-            "Backtest and live trading are closely aligned. Minor divergence within expected parameters.",
-        },
+        historical: null,
+        live: null,
+        comparison: null,
+        running: false,
       };
     },
     enabled: symbols.length > 0,
@@ -71,15 +63,8 @@ function useSideBySideSnapshot(symbols: string[], historicalDays: number) {
   });
 }
 
-function generateEquityCurve(points: number) {
-  const curve = [];
-  let value = 100;
-  for (let i = 0; i < points; i++) {
-    value += (Math.random() - 0.45) * 5;
-    curve.push({ idx: i, equity: Math.round(value * 100) / 100 });
-  }
-  return curve;
-}
+// generateEquityCurve removed after Phase 8c — real curves come from the
+// /api/side-by-side/snapshot payload (when a run is active).
 
 function useStartSideBySide() {
   return useMutation({

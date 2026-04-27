@@ -65,20 +65,13 @@ const BOOK_BIDS: OrderBookLevel[] = [
   { price: 894.60, size: 3800, total: 14420, side: "bid" },
 ];
 
+// generateTape removed — the time-and-sales tape was synthesized via
+// Math.random which is dishonest in a candle "x-ray" view. Real tape data
+// requires a streaming order-flow feed (Polygon, Databento, broker WS) that
+// isn't wired through the dashboard yet. Until then this returns an empty
+// tape so the panel renders an explicit empty state.
 function generateTape(): TapeEntry[] {
-  const entries: TapeEntry[] = [];
-  const basePrice = 895.60;
-  for (let i = 0; i < 40; i++) {
-    const side = Math.random() > 0.48 ? "buy" : "sell";
-    entries.push({
-      price: +(basePrice + (Math.random() - 0.5) * 2).toFixed(2),
-      size: Math.floor(Math.random() * 500) + 10,
-      side,
-      timestamp: Date.now() - i * 250,
-      aggressor: Math.random() > 0.6,
-    });
-  }
-  return entries;
+  return [];
 }
 
 const HEATMAP_ZONES: HeatmapZone[] = [

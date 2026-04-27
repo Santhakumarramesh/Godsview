@@ -15,19 +15,20 @@ export default function FootprintDelta() {
     },
   });
 
-  const generateClusters = () => {
-    const clusters = [];
-    for (let i = 0; i < 8; i++) {
-      clusters.push({
+  // Pull real delta clusters from the features payload when available;
+  // otherwise show empty (zeros) — no fabricated direction or magnitude.
+  const featuresAny = features as any;
+  const realClusters: Array<{ level: number; delta: number; bullish: boolean }> =
+    Array.isArray(featuresAny?.delta_clusters) ? featuresAny.delta_clusters
+      : Array.isArray(featuresAny?.clusters) ? featuresAny.clusters
+      : [];
+  const clusters = realClusters.length > 0
+    ? realClusters
+    : Array.from({ length: 8 }, (_, i) => ({
         level: 150 + i * 0.5,
-        delta: Math.random() * 100 - 50,
-        bullish: Math.random() > 0.5,
-      });
-    }
-    return clusters;
-  };
-
-  const clusters = generateClusters();
+        delta: 0,
+        bullish: false,
+      }));
 
   return (
     <div style={{ backgroundColor: "#0e0e0f", minHeight: "100vh", padding: "24px" }}>

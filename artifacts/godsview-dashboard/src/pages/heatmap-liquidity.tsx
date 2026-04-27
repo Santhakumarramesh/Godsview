@@ -46,31 +46,15 @@ interface HiddenSignal {
   color: string;
 }
 
-// Generate placeholder orderbook data when API returns empty
-const generatePlaceholderOrderbook = (): OrderbookData => {
-  const mid = 150;
-  const bids: OrderbookLevel[] = [];
-  const asks: OrderbookLevel[] = [];
-
-  for (let i = 0; i < 8; i++) {
-    const size = Math.random() * 5000 + 1000;
-    bids.push({
-      price: mid - (i + 1) * 0.5,
-      size,
-    });
-    asks.push({
-      price: mid + (i + 1) * 0.5,
-      size,
-    });
-  }
-
-  return {
-    bids: bids.sort((a, b) => b.price - a.price),
-    asks: asks.sort((a, b) => a.price - b.price),
-    spread: 0.5,
-    mid,
-  };
-};
+// Empty-orderbook placeholder — returned when the API has no live book yet.
+// We deliberately do NOT synthesize fake bids/asks; the page renders an
+// "orderbook unavailable" state when this is the result.
+const generatePlaceholderOrderbook = (): OrderbookData => ({
+  bids: [],
+  asks: [],
+  spread: 0,
+  mid: 0,
+});
 
 // Detect liquidity walls from orderbook
 const detectWalls = (orderbook: OrderbookData): LiquidityWall[] => {
@@ -121,7 +105,8 @@ const generateHeatmapCells = (orderbook: OrderbookData, gridSize: number = 100) 
 
   for (let i = 0; i < gridSize; i++) {
     const level = allLevels[Math.floor((i / gridSize) * allLevels.length)];
-    const intensity = level ? level.size / maxSize : Math.random() * 0.3;
+    // No random fill for empty cells — they stay dark.
+    const intensity = level ? level.size / maxSize : 0;
 
     let color = COLORS.bg;
     if (intensity > 0.7) color = "rgba(156,255,147,0.8)";
@@ -172,44 +157,45 @@ const calculateStats = (orderbook: OrderbookData) => {
     askLiquidity: askDepth.toLocaleString(),
     spread,
     imbalance: imbalanceRatio,
-    spoofAlerts: Math.floor(Math.random() * 3).toString(),
+    // Spoof detection requires order-flow analysis we don't expose yet.
+    // Show "—" instead of fabricating a count.
+    spoofAlerts: "—",
   };
 };
 
-// Generate hidden signals
-const generateHiddenSignals = (orderbook: OrderbookData): HiddenSignal[] => {
+// Hidden-signals placeholder. Real implementations require an order-flow
+// analyzer (depth-shift detection, iceberg order recognizer, spoof event
+// classifier) which is not wired through the dashboard yet. Until that's
+// done we render "—" rather than fabricating values via Math.random.
+const generateHiddenSignals = (_orderbook: OrderbookData): HiddenSignal[] => {
   const signals: HiddenSignal[] = [];
-  const depthShift = Math.floor(Math.random() * 20 - 10);
 
   signals.push({
     type: "depth_shift",
     label: "Depth Shift",
-    value: `${depthShift > 0 ? "+" : ""}${depthShift}% (5m)`,
-    color: depthShift > 0 ? COLORS.bid : COLORS.ask,
-  });
-
-  const icebergCount = Math.floor(Math.random() * 5);
-  signals.push({
-    type: "iceberg",
-    label: "Iceberg Orders",
-    value: `${icebergCount} detected`,
+    value: "— (analyzer not connected)",
     color: COLORS.accent,
   });
 
-  const momentumWalls = Math.floor(Math.random() * 4);
+  signals.push({
+    type: "iceberg",
+    label: "Iceberg Orders",
+    value: "— (analyzer not connected)",
+    color: COLORS.accent,
+  });
+
   signals.push({
     type: "momentum",
     label: "Momentum Walls",
-    value: `${momentumWalls} walls`,
-    color: momentumWalls > 2 ? COLORS.ask : COLORS.accent,
+    value: "— (analyzer not connected)",
+    color: COLORS.accent,
   });
 
-  const spoofAlerts = Math.floor(Math.random() * 2);
   signals.push({
     type: "spoof",
     label: "Spoof-like Events",
-    value: `${spoofAlerts} alert${spoofAlerts !== 1 ? "s" : ""}`,
-    color: spoofAlerts > 0 ? COLORS.ask : COLORS.accent,
+    value: "— (analyzer not connected)",
+    color: COLORS.accent,
   });
 
   return signals;

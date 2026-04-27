@@ -87,24 +87,29 @@ function useDailyReview(symbol: string, date: string) {
   });
 }
 
+interface DailyReviewRow {
+  date: string;
+  pnl_pct?: number;
+  trades?: number;
+  bias?: string;
+}
+
 function useDailyReviews(symbol: string) {
-  return useQuery({
+  return useQuery<DailyReviewRow[]>({
     queryKey: ["daily-reviews", symbol],
-    queryFn: async () => {
-      // Mock review history
-      const today = new Date();
-      return Array.from({ length: 10 }).map((_, i) => {
-        const d = new Date(today);
-        d.setDate(d.getDate() - i);
-        return {
-          date: d.toISOString().split("T")[0],
-          pnl_pct: (Math.random() - 0.4) * 5,
-          trades: Math.floor(Math.random() * 8),
-          bias: ["BULLISH", "BEARISH", "RANGING"][
-            Math.floor(Math.random() * 3)
-          ],
-        };
-      });
+    queryFn: async (): Promise<DailyReviewRow[]> => {
+      // Real history: GET /api/daily-review/:symbol returns the saved reviews
+      // for that symbol. If none exist, return empty array — no fake history.
+      try {
+        const r = await fetch(`/api/daily-review/${encodeURIComponent(symbol)}`);
+        if (!r.ok) return [];
+        const data = await r.json();
+        if (Array.isArray(data)) return data as DailyReviewRow[];
+        if (Array.isArray(data?.reviews)) return data.reviews as DailyReviewRow[];
+        return [];
+      } catch {
+        return [];
+      }
     },
     enabled: !!symbol,
     staleTime: 60_000,
@@ -789,14 +794,18 @@ export default function DailyReviewPage() {
                     fontSize: "12px",
                     fontWeight: "bold",
                     color:
-                      review.pnl_pct > 0 ? C.green : review.pnl_pct < 0 ? C.red : C.textMuted,
+                      (review.pnl_pct ?? 0) > 0
+                        ? C.green
+                        : (review.pnl_pct ?? 0) < 0
+                          ? C.red
+                          : C.textMuted,
                     marginTop: "2px",
                     textAlign: "left",
                     fontFamily: "JetBrains Mono, monospace",
                   }}
                 >
-                  {review.pnl_pct > 0 ? "+" : ""}
-                  {review.pnl_pct.toFixed(2)}%
+                  {(review.pnl_pct ?? 0) > 0 ? "+" : ""}
+                  {(review.pnl_pct ?? 0).toFixed(2)}%
                 </div>
                 <div
                   style={{
