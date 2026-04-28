@@ -133,7 +133,10 @@ async function autoStartBackgroundWorkers(): Promise<void> {
   try {
     if (process.env.STRATEGY_ALLOCATOR_AUTO_START !== "false") {
       const { startStrategyAllocator } = await import("./strategy_allocator.js");
-      await startWith("strategy_allocator", () => startStrategyAllocator());
+      // runImmediate:false → don't run a heavy first cycle inline at boot.
+      // The interval-based scheduler still starts; first cycle fires on its
+      // normal cadence (default 8min) instead of blocking the event loop now.
+      await startWith("strategy_allocator", () => startStrategyAllocator({ runImmediate: false }));
     }
   } catch (err) {
     logger.warn({ err: String(err) }, "Could not load strategy_allocator module");
@@ -141,7 +144,7 @@ async function autoStartBackgroundWorkers(): Promise<void> {
   try {
     if (process.env.STRATEGY_GOVERNOR_AUTO_START !== "false") {
       const { startStrategyGovernor } = await import("./strategy_governor.js");
-      await startWith("strategy_governor", () => startStrategyGovernor());
+      await startWith("strategy_governor", () => startStrategyGovernor({ runImmediate: false }));
     }
   } catch (err) {
     logger.warn({ err: String(err) }, "Could not load strategy_governor module");

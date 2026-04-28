@@ -37,27 +37,40 @@ router.get("/ops/strategy/governor/status", (_req, res) => {
   }
 });
 
+function safeGovernorSnapshot(): unknown {
+  try {
+    return getStrategyGovernorSnapshot();
+  } catch (err) {
+    return { running: false, error: "snapshot_unavailable", message: String(err) };
+  }
+}
+
 router.post("/brain/strategy/governor/start", async (req, res) => {
   try {
     const intervalMs = parseNum(req.body?.interval_ms);
-    const runImmediate = parseBool(req.body?.run_immediate, true);
+    // Default run_immediate to FALSE so /start never blocks the event loop.
+    const runImmediate = parseBool(req.body?.run_immediate, false);
     const result = await startStrategyGovernor({ intervalMs, runImmediate });
     res.json({
       ...result,
-      snapshot: getStrategyGovernorSnapshot(),
+      snapshot: safeGovernorSnapshot(),
     });
   } catch (err) {
     req.log.error({ err }, "Strategy governor start failed");
-    res.status(503).json({ error: "strategy_governor_start_failed", message: String(err) });
+    res.json({ success: false, error: "strategy_governor_start_failed", message: String(err) });
   }
 });
 
 router.post("/brain/strategy/governor/stop", (_req, res) => {
-  const result = stopStrategyGovernor();
-  res.json({
-    ...result,
-    snapshot: getStrategyGovernorSnapshot(),
-  });
+  try {
+    const result = stopStrategyGovernor();
+    res.json({
+      ...result,
+      snapshot: safeGovernorSnapshot(),
+    });
+  } catch (err) {
+    res.json({ success: false, error: "strategy_governor_stop_failed", message: String(err) });
+  }
 });
 
 router.post("/brain/strategy/governor/run-once", async (_req, res) => {
@@ -65,7 +78,7 @@ router.post("/brain/strategy/governor/run-once", async (_req, res) => {
     const snapshot = await runStrategyGovernorCycle("manual_route");
     res.json({ ok: true, snapshot });
   } catch (err) {
-    res.status(503).json({ error: "strategy_governor_cycle_failed", message: String(err) });
+    res.json({ ok: false, error: "strategy_governor_cycle_failed", message: String(err) });
   }
 });
 

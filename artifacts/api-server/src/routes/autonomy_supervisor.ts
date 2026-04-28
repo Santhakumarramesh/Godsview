@@ -40,24 +40,30 @@ router.get("/ops/autonomy/supervisor/status", (_req, res) => {
 router.post("/brain/autonomy/supervisor/start", async (req, res) => {
   try {
     const intervalMs = parseNum(req.body?.interval_ms);
-    const runImmediate = parseBool(req.body?.run_immediate, true);
+    // Default run_immediate to FALSE so /start never blocks the event loop
+    // on the heavy first cycle. Operators can still pass run_immediate:true.
+    const runImmediate = parseBool(req.body?.run_immediate, false);
     const result = await startAutonomySupervisor({ intervalMs, runImmediate });
     res.json({
       ...result,
-      snapshot: getAutonomySupervisorSnapshot(),
+      snapshot: safeSupervisorSnapshot(),
     });
   } catch (err) {
     req.log.error({ err }, "Autonomy supervisor start failed");
-    res.status(503).json({ error: "autonomy_supervisor_start_failed", message: String(err) });
+    res.json({ success: false, error: "autonomy_supervisor_start_failed", message: String(err) });
   }
 });
 
 router.post("/brain/autonomy/supervisor/stop", (_req, res) => {
-  const result = stopAutonomySupervisor();
-  res.json({
-    ...result,
-    snapshot: getAutonomySupervisorSnapshot(),
-  });
+  try {
+    const result = stopAutonomySupervisor();
+    res.json({
+      ...result,
+      snapshot: safeSupervisorSnapshot(),
+    });
+  } catch (err) {
+    res.json({ success: false, error: "autonomy_supervisor_stop_failed", message: String(err) });
+  }
 });
 
 router.post("/brain/autonomy/supervisor/tick", async (_req, res) => {
@@ -65,8 +71,16 @@ router.post("/brain/autonomy/supervisor/tick", async (_req, res) => {
     const snapshot = await runAutonomySupervisorTick("manual_route");
     res.json({ ok: true, snapshot });
   } catch (err) {
-    res.status(503).json({ error: "autonomy_supervisor_tick_failed", message: String(err) });
+    res.json({ ok: false, error: "autonomy_supervisor_tick_failed", message: String(err) });
   }
 });
+
+function safeSupervisorSnapshot(): unknown {
+  try {
+    return getAutonomySupervisorSnapshot();
+  } catch (err) {
+    return { running: false, error: "snapshot_unavailable", message: String(err) };
+  }
+}
 
 export default router;
