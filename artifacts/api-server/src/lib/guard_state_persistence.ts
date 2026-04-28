@@ -12,36 +12,32 @@ interface ResolveGuardStateDataDirOptions {
   moduleDir?: string;
 }
 
-function findApiServerRoot(from: string): string | null {
-  let current = path.resolve(from);
-  for (let i = 0; i < 8; i++) {
-    const parent = path.dirname(current);
-    if (path.basename(current) === "api-server" && path.basename(parent) === "artifacts") {
-      return current;
-    }
-    if (parent === current) break;
-    current = parent;
-  }
-  return null;
-}
+// Production runtime directory baked into the container image and chown'd to
+// the godsview user (see Dockerfile). This is the canonical writable location
+// for guard state in deployed containers.
+const PRODUCTION_DATA_DIR = "/app/.runtime/persistent";
 
-function resolveDefaultGuardStateDataDir(cwd: string, moduleDir: string): string {
-  const rootFromCwd = findApiServerRoot(cwd);
-  if (rootFromCwd) return path.join(rootFromCwd, ".runtime");
-
-  const rootFromModule = findApiServerRoot(moduleDir);
-  if (rootFromModule) return path.join(rootFromModule, ".runtime");
-
+function resolveDefaultGuardStateDataDir(cwd: string): string {
+  // In production containers /app/.runtime/persistent is mkdir'd + chown'd
+  // by the Dockerfile and is the canonical home for runtime state. We
+  // previously walked up to artifacts/api-server and used ".runtime" there,
+  // but that path is owned by root from the COPY layer and EACCES'd on
+  // every supervisor cycle. Removed.
+  if (existsSync(PRODUCTION_DATA_DIR)) return PRODUCTION_DATA_DIR;
+  // Dev fallback — when running pnpm dev outside Docker, drop a hidden
+  // dir in the current working directory.
   return path.join(cwd, ".godsview-runtime");
 }
 
 export function resolveGuardStateDataDir(options?: ResolveGuardStateDataDirOptions): string {
   const cwd = options?.cwd ? path.resolve(options.cwd) : process.cwd();
+  // Always prefer GODSVIEW_DATA_DIR if set — this is how docker-compose pins
+  // the path explicitly. resolveGuardStateDataDir is the single entry point
+  // every persistence call goes through.
   const envDataDir = (options?.envDataDir ?? process.env.GODSVIEW_DATA_DIR ?? "").trim();
   if (envDataDir) return path.resolve(cwd, envDataDir);
 
-  const moduleDir = options?.moduleDir ? path.resolve(options.moduleDir) : MODULE_DIR;
-  return resolveDefaultGuardStateDataDir(cwd, moduleDir);
+  return resolveDefaultGuardStateDataDir(cwd);
 }
 
 export function getGuardStateDataDirStatus(): { directory: string; writable: boolean; error: string | null } {
