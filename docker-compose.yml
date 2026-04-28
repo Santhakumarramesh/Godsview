@@ -108,6 +108,12 @@ services:
       DATABASE_URL: postgresql://godsview:${POSTGRES_PASSWORD:-godsview_secret}@postgres:5432/godsview
       REDIS_URL: "redis://redis:6379"
       MEMORY_STORE_PATH: "/data/memory"
+      # Guard state persistence — point at the chown'd /app/.runtime/persistent
+      # so the autonomy_supervisor / execution_safety_supervisor / market_guard
+      # cycles can write state. Without this they EACCES on every cycle and
+      # cascade into 502s on /api/brain/{autonomy,strategy/governor}/* and
+      # /api/paper/validation/* and /api/backtest/continuous/*.
+      GODSVIEW_DATA_DIR: "/app/.runtime/persistent"
       DB_POOL_MAX: "${DB_POOL_MAX:-10}"
       # Trading keys (inject via .env file)
       ALPACA_API_KEY: "${ALPACA_API_KEY:-}"

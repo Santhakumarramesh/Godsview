@@ -99,12 +99,19 @@ RUN chmod +x /app/docker-entrypoint.sh
 
 # Create runtime directories (writable by non-root user)
 RUN mkdir -p /app/.runtime/persistent && chown -R godsview:godsview /app/.runtime
+# Also create the path the guard_state_persistence module resolves to by default
+# (it walks up looking for artifacts/api-server, so it lands here). Without this
+# the supervisor cycles EACCES on every persist call.
+RUN mkdir -p /app/artifacts/api-server/.runtime && chown -R godsview:godsview /app/artifacts/api-server/.runtime
 # Create memory store directory (Docker volume mount point — must be writable)
 RUN mkdir -p /data/memory && chown -R godsview:godsview /data/memory
 
 # Switch to non-root user
 USER godsview
 
+# Default the guard state dir to the persistent runtime path so background
+# workers can write their state files without walking parent dirs.
+ENV GODSVIEW_DATA_DIR=/app/.runtime/persistent
 ENV NODE_ENV=production
 ENV PORT=3001
 
