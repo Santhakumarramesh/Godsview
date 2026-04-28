@@ -73,6 +73,17 @@ TOTAL=$(wc -l < "$TMP/calls.tsv" | tr -d ' ')
 echo "Probing $TOTAL endpoints (method-aware) against $API ..." >&2
 
 > "$TMP/out"
+
+# Throttle between requests so the probe doesn't fire ~17 req/sec at the same
+# nginx upstream and trigger transient socket-recycling 502s that don't reflect
+# real endpoint health. The api server is single-process Node and our nginx
+# config disables upstream keepalive (proxy_set_header Connection ""), so each
+# request opens a fresh socket. A 50ms gap is cheap (≈9s overhead for 176
+# endpoints) and brings false-502 noise to ~zero. Override with PROBE_SLEEP_MS=0
+# to revert to no-throttle behaviour for stress-testing.
+PROBE_SLEEP_MS="${PROBE_SLEEP_MS:-50}"
+PROBE_SLEEP_S=$(awk -v ms="$PROBE_SLEEP_MS" 'BEGIN{printf "%.3f", ms/1000}')
+
 while IFS=$'\t' read -r METHOD RAW; do
   [ -z "$METHOD" ] && continue
   if [[ "$RAW" == /api/* ]]; then URL="$RAW"; else URL="/api${RAW}"; fi
@@ -94,6 +105,8 @@ while IFS=$'\t' read -r METHOD RAW; do
       -w "%{http_code}" "${API}${URL}" 2>/dev/null || echo 000)
   fi
   printf "%-5s  %-6s  %s\n" "$CODE" "$METHOD" "$URL" >> "$TMP/out"
+  # Per-request throttle (see PROBE_SLEEP_MS above)
+  [ "$PROBE_SLEEP_MS" != "0" ] && sleep "$PROBE_SLEEP_S"
 done < "$TMP/calls.tsv"
 
 # Print verbose (sorted) and summary
