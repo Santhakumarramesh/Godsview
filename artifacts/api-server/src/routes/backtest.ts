@@ -133,7 +133,8 @@ router.post("/backtest/continuous/start", async (_req: Request, res: Response): 
     const result = await startContinuousBacktest();
     res.json(result);
   } catch (err) {
-    res.status(503).json({ error: "continuous_start_failed", message: String(err) });
+    // Return 200 with structured failure so dashboards never error-boundary on this.
+    res.json({ success: false, error: "continuous_start_failed", message: String(err) });
   }
 });
 
@@ -144,7 +145,7 @@ router.post("/backtest/continuous/stop", async (_req: Request, res: Response): P
     const result = stopContinuousBacktest();
     res.json(result);
   } catch (err) {
-    res.status(503).json({ error: "continuous_stop_failed", message: String(err) });
+    res.json({ success: false, error: "continuous_stop_failed", message: String(err) });
   }
 });
 
@@ -155,7 +156,7 @@ router.get("/backtest/continuous/status", async (_req: Request, res: Response): 
     const status = getContinuousBacktestStatus();
     res.json(status);
   } catch (err) {
-    res.status(503).json({ error: "internal_error", message: "Failed to get continuous backtest status" });
+    res.json({ running: false, error: "status_unavailable", message: String(err) });
   }
 });
 

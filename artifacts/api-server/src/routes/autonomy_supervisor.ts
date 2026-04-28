@@ -22,11 +22,19 @@ function parseBool(value: unknown, fallback: boolean): boolean {
 }
 
 router.get("/brain/autonomy/supervisor/status", (_req, res) => {
-  res.json(getAutonomySupervisorSnapshot());
+  try {
+    res.json(getAutonomySupervisorSnapshot());
+  } catch (err) {
+    res.json({ running: false, error: "snapshot_unavailable", message: String(err) });
+  }
 });
 
 router.get("/ops/autonomy/supervisor/status", (_req, res) => {
-  res.json(getAutonomySupervisorSnapshot());
+  try {
+    res.json(getAutonomySupervisorSnapshot());
+  } catch (err) {
+    res.json({ running: false, error: "snapshot_unavailable", message: String(err) });
+  }
 });
 
 router.post("/brain/autonomy/supervisor/start", async (req, res) => {

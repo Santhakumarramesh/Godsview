@@ -17,29 +17,47 @@ function parseNum(value: unknown): number | undefined {
 }
 
 router.get("/paper/validation/status", (_req, res) => {
-  res.json(getPaperValidationStatus());
+  try {
+    res.json(getPaperValidationStatus());
+  } catch (err) {
+    res.json({ running: false, error: "status_unavailable", message: String(err) });
+  }
 });
 
 router.get("/brain/paper/validation/status", (_req, res) => {
-  res.json(getPaperValidationStatus());
+  try {
+    res.json(getPaperValidationStatus());
+  } catch (err) {
+    res.json({ running: false, error: "status_unavailable", message: String(err) });
+  }
 });
 
 router.get("/paper/validation/latest", (_req, res) => {
-  const latest = getLatestPaperValidationReport();
-  if (!latest) {
-    res.status(404).json({ error: "not_found", message: "No validation report has been generated yet" });
-    return;
+  try {
+    const latest = getLatestPaperValidationReport();
+    if (!latest) {
+      // Never 404 — dashboards consume this with useQuery and 404 trips
+      // their error boundary. Return a structured 200 with no-data flag.
+      res.json({ available: false, message: "No validation report has been generated yet" });
+      return;
+    }
+    res.json(latest);
+  } catch (err) {
+    res.json({ available: false, error: "latest_unavailable", message: String(err) });
   }
-  res.json(latest);
 });
 
 router.get("/brain/paper/validation/latest", (_req, res) => {
-  const latest = getLatestPaperValidationReport();
-  if (!latest) {
-    res.status(404).json({ error: "not_found", message: "No validation report has been generated yet" });
-    return;
+  try {
+    const latest = getLatestPaperValidationReport();
+    if (!latest) {
+      res.json({ available: false, message: "No validation report has been generated yet" });
+      return;
+    }
+    res.json(latest);
+  } catch (err) {
+    res.json({ available: false, error: "latest_unavailable", message: String(err) });
   }
-  res.json(latest);
 });
 
 router.get("/paper/validation/history", (req, res) => {

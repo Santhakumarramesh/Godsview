@@ -23,11 +23,19 @@ function parseBool(value: unknown, fallback: boolean): boolean {
 }
 
 router.get("/brain/strategy/evolution/status", (_req, res) => {
-  res.json(getStrategyEvolutionSnapshot());
+  try {
+    res.json(getStrategyEvolutionSnapshot());
+  } catch (err) {
+    res.json({ running: false, error: "snapshot_unavailable", message: String(err) });
+  }
 });
 
 router.get("/ops/strategy/evolution/status", (_req, res) => {
-  res.json(getStrategyEvolutionSnapshot());
+  try {
+    res.json(getStrategyEvolutionSnapshot());
+  } catch (err) {
+    res.json({ running: false, error: "snapshot_unavailable", message: String(err) });
+  }
 });
 
 router.post("/brain/strategy/evolution/start", async (req, res) => {

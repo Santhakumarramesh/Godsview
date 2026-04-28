@@ -23,11 +23,19 @@ function parseBool(value: unknown, fallback: boolean): boolean {
 }
 
 router.get("/brain/strategy/allocator/status", (_req, res) => {
-  res.json(getStrategyAllocatorSnapshot());
+  try {
+    res.json(getStrategyAllocatorSnapshot());
+  } catch (err) {
+    res.json({ running: false, error: "snapshot_unavailable", message: String(err) });
+  }
 });
 
 router.get("/ops/strategy/allocator/status", (_req, res) => {
-  res.json(getStrategyAllocatorSnapshot());
+  try {
+    res.json(getStrategyAllocatorSnapshot());
+  } catch (err) {
+    res.json({ running: false, error: "snapshot_unavailable", message: String(err) });
+  }
 });
 
 router.get("/brain/strategy/allocator/lookup", (req, res) => {

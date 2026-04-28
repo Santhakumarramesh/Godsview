@@ -22,11 +22,19 @@ function parseBool(value: unknown, fallback: boolean): boolean {
 }
 
 router.get("/brain/strategy/governor/status", (_req, res) => {
-  res.json(getStrategyGovernorSnapshot());
+  try {
+    res.json(getStrategyGovernorSnapshot());
+  } catch (err) {
+    res.json({ running: false, error: "snapshot_unavailable", message: String(err) });
+  }
 });
 
 router.get("/ops/strategy/governor/status", (_req, res) => {
-  res.json(getStrategyGovernorSnapshot());
+  try {
+    res.json(getStrategyGovernorSnapshot());
+  } catch (err) {
+    res.json({ running: false, error: "snapshot_unavailable", message: String(err) });
+  }
 });
 
 router.post("/brain/strategy/governor/start", async (req, res) => {
