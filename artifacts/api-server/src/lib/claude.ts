@@ -161,6 +161,33 @@ function markClaudeFailure(): void {
   }
 }
 
+// Anthropic returns 429 with a Retry-After header. We pin the circuit open
+// for at least RATE_LIMIT_COOLDOWN_MS so a request burst doesn't keep firing
+// veto calls and saturating both the API quota AND our event loop with
+// synchronous error logging.
+const RATE_LIMIT_COOLDOWN_MS = Math.max(
+  60_000,
+  Number.parseInt(process.env.CLAUDE_VETO_RATE_LIMIT_COOLDOWN_MS ?? "75000", 10) || 75_000,
+);
+
+function markClaudeRateLimited(retryAfterSec?: number): void {
+  const cooldown = retryAfterSec && retryAfterSec > 0
+    ? Math.max(retryAfterSec * 1000, RATE_LIMIT_COOLDOWN_MS)
+    : RATE_LIMIT_COOLDOWN_MS;
+  claudeCircuitOpenUntil = Math.max(claudeCircuitOpenUntil, nowMs() + cooldown);
+  claudeConsecutiveFailures = Math.max(claudeConsecutiveFailures, CLAUDE_CIRCUIT_FAIL_THRESHOLD);
+}
+
+function isRateLimitError(err: unknown): { isRateLimit: boolean; retryAfter?: number } {
+  if (!err || typeof err !== "object") return { isRateLimit: false };
+  const anyErr = err as { status?: number; error?: { type?: string }; headers?: Record<string, string> };
+  const isRateLimit = anyErr.status === 429 || anyErr.error?.type === "rate_limit_error";
+  if (!isRateLimit) return { isRateLimit: false };
+  const retryHeader = anyErr.headers?.["retry-after"];
+  const retryAfter = retryHeader ? Number.parseInt(retryHeader, 10) : undefined;
+  return { isRateLimit, retryAfter: Number.isFinite(retryAfter) ? retryAfter : undefined };
+}
+
 function markClaudeSuccess(): void {
   claudeConsecutiveFailures = 0;
   claudeCircuitOpenUntil = 0;
@@ -453,7 +480,33 @@ Run through your veto checklist. Issue your verdict.`.trim();
       validation_status: "schema_invalid_fallback",
     };
   } catch (err) {
-    console.error("[claude] veto error:", err);
+    // Special-case 429 rate limit: open the circuit aggressively so we stop
+    // hammering the API and stop blasting console.error onto stderr (which is
+    // synchronous I/O and starves the event loop, causing /api/backtest/*,
+    // /api/brain/*, /api/paper/validation/* requests to time out at nginx → 502).
+    const { isRateLimit, retryAfter } = isRateLimitError(err);
+    if (isRateLimit) {
+      markClaudeRateLimited(retryAfter);
+      // Single throttled log per cooldown window — no per-request stderr spam.
+      // We use console.warn (one line, no stack) so the log layer can buffer it.
+      if (claudeConsecutiveFailures === CLAUDE_CIRCUIT_FAIL_THRESHOLD) {
+        // Only the *first* time we trip the breaker each cooldown window.
+        console.warn(
+          `[claude] rate limit hit — circuit open for ${Math.round(
+            (claudeCircuitOpenUntil - nowMs()) / 1000,
+          )}s; veto layer falling back to heuristic mode.`,
+        );
+      }
+      return {
+        verdict: "CAUTION",
+        confidence: 0.4,
+        claude_score: ctx.final_quality * 0.75,
+        reasoning: "Claude reasoning rate-limited — falling back to CAUTION via heuristic. Circuit will retry after cooldown.",
+        key_factors: ["rate_limited", "circuit_open"],
+        latency_ms: Date.now() - t0,
+        validation_status: "circuit_open",
+      };
+    }
     markClaudeFailure();
     return {
       verdict: "CAUTION",
