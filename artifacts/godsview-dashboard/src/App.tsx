@@ -11,6 +11,7 @@ import ModeBadge from "@/components/ModeBadge";
 // ── Eager: primary landing page (fastest first paint) ───────────────────────
 import Dashboard from "@/pages/dashboard";
 import ProductionProofPage from "@/pages/production-proof";
+import BrainConsoleV1Page from "@/pages/brain-console-v1";
 
 // ── Lazy: all other pages (each becomes its own JS chunk) ───────────────────
 const Signals            = React.lazy(() => import("@/pages/signals"));
@@ -241,6 +242,13 @@ function Router() {
         <Route path="/production-proof">
           <AppErrorBoundary scope="page:production-proof">
             <ProductionProofPage />
+          </AppErrorBoundary>
+        </Route>
+
+        {/* Brain Console v1 — honest aggregator over /api/brain-state. */}
+        <Route path="/brain-console-v1">
+          <AppErrorBoundary scope="page:brain-console-v1">
+            <BrainConsoleV1Page />
           </AppErrorBoundary>
         </Route>
 

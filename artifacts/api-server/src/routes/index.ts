@@ -458,4 +458,16 @@ router.use("/api/monetization", monetizationRouter);
 import signalEngineBridgeRouter from "./signal_engine_bridge";
 router.use("/api/signal-engine", signalEngineBridgeRouter);
 
+// ── Brain Console v1 — honest aggregator (NOT a re-enable of /api/brain/*) ──
+//
+// This mounts a NEW endpoint at `/api/brain-state` (singular, hyphenated).
+// It is intentionally distinct from the 410'd `/api/brain/*` mock routes:
+//   - 410 middleware blocks paths starting with "/brain" or "/api/brain"
+//     followed by "/" (see MOCK_DISABLED_PREFIXES + pathStartsWith above).
+//   - "/api/brain-state" does NOT match either prefix (next char is "-",
+//     not "/"), so it bypasses the 410 cleanly without re-enabling any
+//     mock data.
+import brainStateRouter from "./brain_state";
+router.use("/api", brainStateRouter);
+
 export default router;

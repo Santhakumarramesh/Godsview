@@ -314,6 +314,7 @@ const navSections: NavSection[] = [
   {
     section: "Production",
     items: [
+      { href: "/brain-console-v1", label: "Brain Console v1", icon: "psychology", sub: "Honest Aggregator" },
       { href: "/production-proof", label: "Production Proof", icon: "verified", sub: "Live Real Data Only" },
     ],
   },
