@@ -323,9 +323,8 @@ const navSections: NavSection[] = [
       { href: "/", label: "Mission Control", icon: "dashboard", sub: "Overview" },
       { href: "/command-center", label: "Command Center", icon: "security", sub: "Unified Control" },
       { href: "/bloomberg-terminal", label: "Bloomberg Terminal", icon: "terminal", sub: "Multi-Panel" },
-      { href: "/brain", label: "Brain", icon: "neurology", sub: "Intelligence" },
-      { href: "/brain-graph", label: "God Brain", icon: "neurology", sub: "Live Neural Graph" },
-      { href: "/brain-nodes", label: "Brain Nodes", icon: "hub", sub: "Subsystem Map" },
+      // Hidden by Commit 3 (depends on /api/brain/* — now 410):
+      //   /brain (Brain), /brain-graph (God Brain), /brain-nodes (Brain Nodes)
       { href: "/infinity", label: "Infinity Screen", icon: "grid_view", sub: "Multi-Chart" },
       { href: "/daily-briefing", label: "Daily Briefing", icon: "today", sub: "Start-of-Day" },
       { href: "/session-control", label: "Session Control", icon: "schedule", sub: "Trading Sessions" },
@@ -340,9 +339,8 @@ const navSections: NavSection[] = [
       { href: "/institutional-intelligence", label: "Inst. Intelligence", icon: "trending_up", sub: "Macro · Sentiment" },
       { href: "/regime-intelligence", label: "Regime Intel", icon: "psychology", sub: "Adaptive Strategy" },
       { href: "/sentiment-intel", label: "Sentiment", icon: "trending_up", sub: "News & Social Intel" },
-      { href: "/decision-loop", label: "Decision Loop", icon: "route", sub: "Strategy Pipeline" },
-      { href: "/decision-replay", label: "Decision Replay", icon: "travel_explore", sub: "Explainability" },
-      { href: "/decision-explainability", label: "Explainability", icon: "lightbulb", sub: "Decision Trace" },
+      // Hidden by Commit 3 (depend on /api/decision-loop/run, /api/ude — now 410, or known-mock pages):
+      //   /decision-loop, /decision-replay, /decision-explainability
     ],
   },
   {
@@ -396,7 +394,8 @@ const navSections: NavSection[] = [
       { href: "/footprint-delta", label: "Footprint Delta", icon: "bar_chart", sub: "Aggression" },
       { href: "/absorption-detector", label: "Absorption", icon: "shield", sub: "Defended Levels" },
       { href: "/imbalance-engine", label: "Imbalance Engine", icon: "trending_flat", sub: "Flow Asymmetry" },
-      { href: "/execution-pressure", label: "Exec Pressure", icon: "speed", sub: "Control Map" },
+      // Hidden by Commit 3 (depends on /api/execution-control/* — now 410):
+      //   /execution-pressure
       { href: "/flow-confluence", label: "Flow Confluence", icon: "merge_type", sub: "Structure + Flow" },
       { href: "/microstructure", label: "Microstructure", icon: "candlestick_chart", sub: "Order Flow & Depth" },
       { href: "/c4-strategy", label: "C4 Strategy", icon: "verified", sub: "4-Confirmation" },
@@ -408,7 +407,8 @@ const navSections: NavSection[] = [
       { href: "/signals", label: "Signal Feed", icon: "sensors", sub: "Pipeline" },
       { href: "/mcp-signals", label: "MCP Signals", icon: "swap_vert", sub: "Signal Flow" },
       { href: "/pipeline-status", label: "Pipeline Status", icon: "hub", sub: "Live Pipeline" },
-      { href: "/autonomous-brain", label: "Autonomous Brain", icon: "psychology", sub: "Per-Symbol AI" },
+      // Hidden by Commit 3 (depends on /api/autonomous/* — now 410):
+      //   /autonomous-brain
       { href: "/correlation-lab", label: "Correlation Lab", icon: "grid_view", sub: "Portfolio Risk Map" },
       { href: "/data-integrity", label: "Data Integrity", icon: "fact_check", sub: "Feed & Tick Health" },
     ],
@@ -417,17 +417,21 @@ const navSections: NavSection[] = [
     section: "Execution",
     items: [
       { href: "/execution", label: "Execution Center", icon: "bolt", sub: "Live Orders" },
-      { href: "/execution-control", label: "Exec Control", icon: "tune", sub: "Orders & Venues" },
+      // Hidden by Commit 3 (depends on /api/execution-control/* — now 410):
+      //   /execution-control
       { href: "/exec-reliability", label: "Exec Reliability", icon: "security", sub: "Failsafe & Recon" },
       { href: "/paper-trading", label: "Paper Trading", icon: "description", sub: "Safe Testing" },
       { href: "/assisted-trading", label: "Assisted Trading", icon: "handshake", sub: "Human-in-Loop" },
       { href: "/semi-autonomous", label: "Semi-Autonomous", icon: "auto_mode", sub: "Mixed Exec" },
-      { href: "/autonomous-mode", label: "Autonomous Mode", icon: "smart_toy", sub: "Trusted Strategies" },
+      // Hidden by Commit 3 (mock — depends on /api/autonomous/* — now 410):
+      //   /autonomous-mode
       { href: "/trades", label: "Trade Log", icon: "receipt_long", sub: "Order History" },
-      { href: "/trade-journal", label: "Trade Journal", icon: "book", sub: "PnL Attribution" },
+      // Hidden by Commit 3 (depends on /api/journal/* — now 410):
+      //   /trade-journal
       { href: "/slippage-quality", label: "Slippage Quality", icon: "speed", sub: "Fill Analysis" },
       { href: "/emergency-controls", label: "Emergency Controls", icon: "emergency", sub: "Kill Switch" },
-      { href: "/crypto-backtests", label: "Crypto Backtests", icon: "currency_bitcoin", sub: "BTC/ETH/SOL Results" },
+      // Hidden by Commit 3 (depends on /api/backtest/* — now 410):
+      //   /crypto-backtests
       { href: "/paper-trading-live", label: "Paper Trading Live", icon: "play_circle", sub: "Signal Engine" },
     ],
   },
@@ -435,14 +439,12 @@ const navSections: NavSection[] = [
     section: "Quant Lab & Backtesting",
     items: [
       { href: "/quant-lab", label: "Quant Lab Home", icon: "science", sub: "Research Hub" },
-      { href: "/backtester", label: "Backtester", icon: "bar_chart_4_bars", sub: "Multi-TF Replay" },
+      // Hidden by Commit 3 (depend on /api/backtest/*, /api/mcp-backtest/* — now 410, or mock pages):
+      //   /backtester, /experiment-tracker, /mcp-backtester, /backtest-credibility
       { href: "/strategy-builder", label: "Strategy Builder", icon: "build", sub: "Build Strategies" },
       { href: "/walk-forward", label: "Walk-Forward", icon: "fast_forward", sub: "OOS Validation" },
       { href: "/regime-matrix", label: "Regime Matrix", icon: "grid_on", sub: "Context Performance" },
-      { href: "/experiment-tracker", label: "Experiments", icon: "science", sub: "Track Runs" },
       { href: "/promotion-pipeline", label: "Promotion Pipeline", icon: "arrow_upward", sub: "Lab → Live" },
-      { href: "/mcp-backtester", label: "MCP Backtester", icon: "compare", sub: "MCP vs Raw" },
-      { href: "/backtest-credibility", label: "Backtest Lab", icon: "biotech", sub: "Credibility & Overfit" },
       { href: "/side-by-side", label: "Side-by-Side", icon: "compare_arrows", sub: "Comparison Tool" },
     ],
   },
@@ -450,10 +452,10 @@ const navSections: NavSection[] = [
     section: "Memory & Recall",
     items: [
       { href: "/recall-engine", label: "Recall Engine", icon: "history_edu", sub: "Past Setups" },
-      { href: "/case-library", label: "Case Library", icon: "library_books", sub: "Trade Cases" },
+      // Hidden by Commit 3 (mock pages):
+      //   /case-library, /learning-loop
       { href: "/screenshot-vault", label: "Screenshot Vault", icon: "photo_library", sub: "Visual Memory" },
       { href: "/setup-similarity", label: "Setup Similarity", icon: "compare", sub: "Pattern Match" },
-      { href: "/learning-loop", label: "Learning Loop", icon: "loop", sub: "Continuous Learning" },
     ],
   },
   {
@@ -502,7 +504,8 @@ const navSections: NavSection[] = [
       { href: "/model-governance", label: "Model Gov", icon: "model_training", sub: "Registry & Drift" },
       { href: "/trust-surface", label: "Trust Surface", icon: "verified_user", sub: "Operator View" },
       { href: "/calibration", label: "Calibration", icon: "tune", sub: "Live Truth" },
-      { href: "/eval-harness", label: "Eval Harness", icon: "science", sub: "Benchmarks" },
+      // Hidden by Commit 3 (mock — depends on disabled backtest/eval routes):
+      //   /eval-harness
       { href: "/audit", label: "Audit Trail", icon: "history", sub: "Event Log" },
       { href: "/system-audit", label: "Truth Audit", icon: "verified", sub: "System Integrity" },
     ],
