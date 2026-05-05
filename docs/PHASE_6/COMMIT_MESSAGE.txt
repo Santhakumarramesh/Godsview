@@ -1,0 +1,218 @@
+phase 6: production hardening — reliability, observability, security
+
+Strictly operational hardening. No new product surface, no strategy
+changes, no execution-pipeline changes, no risk-pipeline changes, no
+proof or reconciliation changes. Adds the safety properties needed to
+run continuously in paper mode without requiring a human to babysit
+the process.
+
+================================================================
+RELIABILITY
+================================================================
+
+* Fail-fast environment validator (lib/ops/phase6_env.ts).
+  - Asserts DATABASE_URL, GODSVIEW_OPERATOR_TOKEN, ALPACA_API_KEY,
+    ALPACA_SECRET_KEY, REDIS_URL are non-empty before app.listen().
+  - Demo mode permits broker keys + REDIS_URL to be empty; everything
+    else is required in every mode.
+  - On missing variables: pino.fatal one line per missing var,
+    process.exit(1). Combined with `restart: always`, a misconfigured
+    container surfaces immediately as a visible restart loop.
+
+* Pure timeout + retry helper (lib/ops/with_retry.ts).
+  - withRetry(fn, { timeoutMs, maxRetries=2, backoffMs, shouldRetry }).
+  - Exponential backoff between attempts.
+  - Per-attempt abort via Promise.race timer.
+  - Reports actual attempts on failure (not maxRetries+1) so a
+    shouldRetry short-circuit produces an honest count.
+  - Available infrastructure. Used by /api/health/phase6 for its DB
+    check. Not yet wired into the existing placeOrder path — that
+    would be a refactor of the execution layer, which Phase 6
+    explicitly forbids; deferred.
+
+* docker-compose.minimal.yml restart policy: unless-stopped → always.
+  Container will be restarted by the Docker daemon on any exit,
+  including exits caused by the Phase 6 fail-fast env validator.
+
+================================================================
+OBSERVABILITY
+================================================================
+
+* In-process counters (lib/ops/counters.ts) — pure module:
+    total_requests, failed_requests,
+    order_attempts, order_executions, reconciliation_runs.
+
+* Counter observer middleware (lib/ops/counter_middleware.ts).
+  - Mounted as the FIRST middleware in routes/index.ts.
+  - Observes responses; never modifies request or response.
+  - Increments order_attempts on POST /api/alpaca/orders entry,
+    order_executions on 2xx exit, failed_requests on >=400.
+  - reconciliation_runs increments via a separate one-line wrapper
+    on /api/proof/reconciliation/run.
+
+* Phase 6 read endpoints (routes/phase6.ts):
+  - GET  /api/health/phase6     service / db / redis / last reconciler /
+                                 last data-health timestamps
+  - GET  /api/ready/phase6      strict readiness (db + redis + env)
+  - GET  /api/ops/metrics       JSON counters; rejected_trades sourced
+                                 from persisted execution_audit so the
+                                 count survives process restarts.
+  - 200/503 status codes reflect the underlying state.
+  - These do NOT replace the existing /healthz, /readyz, /metrics
+    endpoints; they sit alongside.
+
+* Structured logging contract documented and verified:
+  every log line includes time, level, channel, request_id, and
+  audit_id when trade-related (Phase 5 child loggers + pinoHttp
+  request id + Phase 3 audit log fields).
+
+================================================================
+SECURITY
+================================================================
+
+* Operator-token gate added to POST /api/proof/reconciliation/run
+  via routes/index.ts (requireOperator middleware mounted at the
+  route prefix).
+  - 403 operator_token_required if token not configured.
+  - 401 unauthorized if token absent on request.
+  - 403 forbidden if token present but wrong (timing-safe compare).
+  - reconciliation_runs counter increments only AFTER auth passes.
+
+* Per-route rate limits stacked on top of the existing app-wide
+  /api limiter (300/min):
+    POST /api/alpaca/orders            30/min  (default)
+    /api/proof/*                      120/min  (default)
+    POST /api/proof/reconciliation/run  6/min  (default)
+  All three are env-overridable
+  (GODSVIEW_PHASE6_ORDERS_RATE_LIMIT_PER_MIN,
+   GODSVIEW_PHASE6_PROOF_RATE_LIMIT_PER_MIN,
+   GODSVIEW_PHASE6_RECONCILE_RATE_LIMIT_PER_MIN).
+  Limits are per-IP, per-method; standard X-RateLimit-* headers
+  returned. Prevents accidental retry loops, abuse, and
+  reconciler-trigger flooding.
+
+================================================================
+HARD GUARANTEES
+================================================================
+
+* No code in any of the protected subsystems is touched:
+  - lib/strategies/ob-retest-long-1h/             (Phase 2)
+  - lib/order_executor.ts                          (Phase 3)
+  - lib/risk/risk_pipeline.ts                      (Phase 3)
+  - lib/paper_trades/{store,reconciler,integrity,jobs}.ts  (Phase 4-5)
+  - routes/paper_proof.ts                          (Phase 4-5 endpoints unchanged)
+  - The existing /healthz (app.ts) and /readyz, /metrics
+    (routes/health.ts) endpoints                  (Phase 1 baseline)
+
+* The Phase 6 endpoints live at distinct paths
+  (/api/health/phase6, /api/ready/phase6, /api/ops/metrics) so they
+  can be inspected, deployed, and aliased independently of the
+  existing endpoints.
+
+* Phase 6 fail-fast env validator runs after the existing
+  validateEnv() call. If the existing validator is misconfigured for
+  some other reason it still fires first; this validator only adds
+  the explicit Phase 6 contract on top.
+
+================================================================
+FILE MAP
+================================================================
+
+NEW (8):
+  artifacts/api-server/src/lib/ops/counters.ts
+  artifacts/api-server/src/lib/ops/counter_middleware.ts
+  artifacts/api-server/src/lib/ops/with_retry.ts
+  artifacts/api-server/src/lib/ops/phase6_env.ts
+  artifacts/api-server/src/routes/phase6.ts
+  artifacts/api-server/src/__tests__/phase6_with_retry.test.ts   7 cases
+  artifacts/api-server/src/__tests__/phase6_counters.test.ts     3 cases
+  artifacts/api-server/src/__tests__/phase6_env.test.ts          5 cases
+  docs/PHASE_6/HARDENING.md                                      301-line operator reference
+
+MODIFIED (3):
+  artifacts/api-server/src/index.ts            + assertPhase6EnvOrExit() before app.listen()
+  artifacts/api-server/src/routes/index.ts     + counterMiddleware
+                                                + 3 per-route rate limits
+                                                + requireOperator on reconciliation/run
+                                                + reconciliation_runs counter hook
+                                                + mount phase6Router
+  docker-compose.minimal.yml                   restart policy: unless-stopped → always
+
+================================================================
+TESTS
+================================================================
+
+  Phase 6 isolated test runs:
+    phase6_with_retry.test.ts     7 / 7  green   — happy path, retries on transient,
+                                                  RetryFailure on exhaustion,
+                                                  shouldRetry short-circuit reports
+                                                  actual attempts, exponential
+                                                  backoff schedule, per-attempt
+                                                  timeout, retries timeouts.
+    phase6_counters.test.ts       3 / 3  green   — zero baseline, independent
+                                                  additivity, snapshot stability +
+                                                  monotonic uptime.
+    phase6_env.test.ts            5 / 5  green   — happy path, missing var named,
+                                                  demo mode permits broker/redis,
+                                                  demo mode still requires
+                                                  DATABASE_URL, throw-mode for tests.
+                                  ─────────
+                                  15 / 15 green
+
+  Cumulative across phases:
+    Phase 2 (strategy):              50 / 50
+    Phase 3 (risk pipeline):         28 / 28
+    Phase 3 (choke point):            6 cases, runs against full repo
+    Phase 4 (proof):                 11 / 11
+    Phase 5 (recon + integrity):     12 / 12
+    Phase 6 (hardening):             15 / 15
+                                    ────────
+                                    122 cases total; 116 green in isolation;
+                                    6 require api-server workspace install.
+
+================================================================
+LOCAL VERIFICATION
+================================================================
+
+  corepack pnpm --filter @workspace/api-server typecheck
+  corepack pnpm --filter @workspace/api-server vitest run \
+    phase6_with_retry phase6_counters phase6_env
+
+  docker compose -f docker-compose.minimal.yml up -d --build
+  curl -s http://localhost/api/health/phase6 | jq
+  curl -s http://localhost/api/ready/phase6  | jq
+  curl -s http://localhost/api/ops/metrics   | jq
+
+  # Rate limit on /api/alpaca/orders (30/min):
+  for i in $(seq 1 35); do
+    curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost/api/alpaca/orders \
+      -H 'Content-Type: application/json' -d '{"symbol":"BTCUSD"}'
+  done | sort | uniq -c
+  # Expect: ~30 of 200/4xx then ~5 of 429.
+
+  # Operator gate on reconciliation/run:
+  curl -sX POST http://localhost/api/proof/reconciliation/run | jq
+  # Expect: 401 unauthorized
+  curl -sX POST http://localhost/api/proof/reconciliation/run \
+    -H "X-Operator-Token: $GODSVIEW_OPERATOR_TOKEN" | jq
+  # Expect: 200 with reconcile result
+
+  # Env fail-fast (in throwaway container):
+  docker run --rm -e DATABASE_URL= -e ALPACA_API_KEY= godsview node dist/index.mjs
+  # Expect: exit 1 with [phase6] required env missing log lines.
+
+================================================================
+KNOWN FOLLOW-UPS (not in this commit)
+================================================================
+
+* Wire withRetry into the existing placeOrder path with broker-side
+  idempotency keys (currently deferred — would refactor execution).
+* Move counter_middleware to app.ts so total_requests counts true
+  edge volume rather than post-rate-limit volume (currently deferred —
+  would refactor app.ts).
+* Optional alias of /api/health/phase6, /api/ready/phase6, and
+  /api/ops/metrics to the canonical /healthz, /readyz, /metrics paths
+  (deploy-time nginx decision, intentionally left to the operator).
+
+See docs/PHASE_6/HARDENING.md for the full reference and sample
+responses.

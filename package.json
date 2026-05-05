@@ -4,9 +4,9 @@
   "private": true,
   "license": "MIT",
   "scripts": {
-    "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
+    "preinstall": "node -e \"if(!(process.env.npm_config_user_agent||'').startsWith('pnpm/')){console.error('Use pnpm instead');process.exit(1)}\"",
     "setup": "corepack enable && corepack pnpm install && corepack pnpm run db:push && corepack pnpm run seed",
-    "dev": "corepack pnpm -r --parallel --filter @workspace/api-server --filter @gv/web run dev",
+    "dev": "corepack pnpm -r --parallel --filter @workspace/api-server --filter @workspace/godsview-dashboard run dev",
     "build": "corepack pnpm run typecheck && corepack pnpm --filter @workspace/api-server run build && corepack pnpm --filter @gv/web run build",
     "clean:generated": "git restore artifacts/api-server/dist artifacts/api-server/public/index.html artifacts/api-server/public/assets && git clean -fd artifacts/api-server/public/assets",
     "clean:runtime": "rm -rf artifacts/api-server/.runtime && rm -f execution_autonomy_guard_state*.json execution_incident_guard_state*.json execution_market_guard_state*.json execution_idempotency_state*.json artifacts/api-server/execution_autonomy_guard_state*.json artifacts/api-server/execution_incident_guard_state*.json artifacts/api-server/execution_market_guard_state*.json artifacts/api-server/execution_idempotency_state*.json",

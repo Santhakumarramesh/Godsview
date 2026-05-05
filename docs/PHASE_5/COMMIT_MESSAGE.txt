@@ -1,0 +1,207 @@
+phases 1–5: single execution choke point, paper-trade proof system, reconciliation
+
+Replaces five parallel order-submission paths and two parallel risk gates
+with a single audit-logged execution choke point, an isolated 1H Order
+Block Retest Long strategy module, a paper-trade proof endpoint surface,
+and a background reconciliation system that keeps the trade journal
+consistent with the broker.
+
+================================================================
+ARCHITECTURE
+================================================================
+
+Five subsystems, each isolated, each individually testable:
+
+  STRATEGY      — pure-function 1H OB Retest Long. Inputs:
+                  candles + optional news. Output: a Signal that is
+                  either { kind:"long", timestamp, entry, stop, target,
+                  invalidation } or { kind:"no_trade", timestamp, reason }.
+                  No I/O, no clock, no random, no ML, no probability,
+                  no fake metrics. Lives in lib/strategies/ob-retest-long-1h/.
+
+  EXECUTION     — sole choke point at lib/order_executor.executeOrder().
+                  Every caller — routes, scanners, paper-trading engine,
+                  brain bridge, position monitor (close paths) — funnels
+                  here. The only call site of alpaca.placeOrder() in the
+                  entire repo is inside this function.
+
+  RISK          — unified pipeline at lib/risk/risk_pipeline.evaluatePipeline()
+                  with nine sequential, fail-closed gates:
+                    1. system_mode      (paper / live_enabled only)
+                    2. kill_switch
+                    3. operator_token   (live only)
+                    4. data_staleness   (≤ 30s, configurable)
+                    5. session
+                    6. news_lockout
+                    7. daily_loss_limit (bypassable: stop_out)
+                    8. max_exposure     (bypassable: stop_out)
+                    9. order_sanity
+                  The pipeline is a pure function over (request, snapshot).
+                  The snapshot collector is a thin layer over existing
+                  risk_engine + kill_switch state.
+
+  PROOF         — every accepted order writes a paper_trades row; every
+                  closed position updates it with realized PnL, R-multiple,
+                  and pnl_pct (computed from equity_at_entry, never
+                  fabricated). Read endpoints under /api/proof/{trades,
+                  metrics, equity, trades.csv, trades?status=rejected}.
+                  All metrics — win_rate, avg_R, drawdown, profit_factor,
+                  equity_curve — are computed from real trade rows. No
+                  hardcoded baselines, no smoothing, no interpolation.
+
+  RECONCILIATION — orphan-detection job (default 5 min) that lists open
+                  DB rows, fetches Alpaca positions, and closes any DB
+                  row whose symbol is no longer held by the broker
+                  (subject to a configurable grace window for race-
+                  protection). Companion data-health job (default 1 min)
+                  runs eight integrity rules over the trade journal and
+                  reports violations via /api/proof/integrity. Both jobs
+                  are opt-in via env, error-isolated per tick, and
+                  .unref()'d so they never block shutdown.
+
+================================================================
+HARD GUARANTEES (enforced by grep, asserted in tests)
+================================================================
+
+* Every order to Alpaca traverses executeOrder. Verified by:
+
+    grep -rn 'placeOrder\b' artifacts/api-server/src --include='*.ts' \
+      | grep -v __tests__ | grep -v '\.test\.' \
+      | grep -v '//.*placeOrder\|^[^:]*: \* '
+    # → only lib/order_executor.ts:401 + lib/alpaca.ts:660 (definition)
+
+    grep -rnE 'alpacaPost\(.*v2/orders|fetch\([^)]*v2/orders' \
+      artifacts/api-server/src --include='*.ts' | grep -v __tests__
+    # → only lib/alpaca.ts:692 (the placeOrder body)
+
+    grep -rn 'enforceTradeRiskRails' artifacts/api-server/src --include='*.ts'
+    # → empty (function deleted)
+
+* Every accepted, rejected, errored, or fallback execution writes an
+  ExecutionAuditEntry with: audit_id, timestamp, full input payload,
+  per-gate decisions, outcome, blocking_gate, fallback_used,
+  original_blocking_gate, bypass_reasons, priority, and a snapshot of
+  system state. Even rejected attempts are persisted.
+
+* The position_monitor close-path fallback to DELETE /v2/positions is
+  STRICTLY gated: it runs ONLY when the executeOrder request had
+  (closing === true) AND bypassReasons.includes("stop_out") AND a gate
+  blocked the attempt (not a validation error, not a broker error).
+  When it fires, a HIGH PRIORITY paired audit row is written with
+  outcome="fallback_close_position" and original_blocking_gate set.
+
+* Stop-out exception bypasses ONLY daily_loss_limit and max_exposure.
+  system_mode, kill_switch, operator_token, data_staleness, session,
+  news_lockout, and order_sanity always apply — verified in the
+  risk_pipeline test suite.
+
+* No metric is fabricated. win_rate is null when there are no closed
+  trades. profit_factor is null when there are no losses.
+  max_drawdown_pct is null when there is no equity history.
+  pnl_pct is null when equity_at_entry was not captured.
+
+================================================================
+SUBSYSTEM FILE MAP
+================================================================
+
+Strategy module (Phase 2):
+  lib/strategies/ob-retest-long-1h/{src,tests,README.md,package.json,
+                                    tsconfig.json,vitest.config.ts}
+
+Execution + risk (Phase 3):
+  artifacts/api-server/src/lib/risk/{risk_pipeline,risk_snapshot,audit_log}.ts
+  artifacts/api-server/src/lib/order_executor.ts                    [modified]
+  artifacts/api-server/src/routes/alpaca.ts                          [modified]
+  artifacts/api-server/src/lib/scanner_scheduler.ts                  [modified]
+  artifacts/api-server/src/lib/position_monitor.ts                   [modified]
+  artifacts/api-server/src/lib/broker/index.ts                       [AlpacaAdapter export removed]
+  artifacts/api-server/src/lib/broker/alpaca_adapter.ts              [DELETED — production-orphan]
+
+Proof (Phase 4):
+  artifacts/api-server/src/lib/paper_trades/{types,metrics,equity,csv,
+                                             store,index}.ts
+  artifacts/api-server/src/routes/paper_proof.ts
+  artifacts/api-server/src/routes/index.ts                           [mount only]
+
+Reconciliation + data correctness (Phase 5):
+  artifacts/api-server/src/lib/log_channels.ts
+  artifacts/api-server/src/lib/paper_trades/{reconciler,integrity,jobs}.ts
+  artifacts/api-server/src/index.ts                                  [start/stop hooks]
+
+Tests:
+  artifacts/api-server/src/__tests__/risk_pipeline.test.ts                    28 cases
+  artifacts/api-server/src/__tests__/order_executor_choke_point.test.ts        6 cases
+  artifacts/api-server/src/__tests__/paper_trades_metrics.test.ts             11 cases
+  artifacts/api-server/src/__tests__/paper_trades_phase5.test.ts              12 cases
+  lib/strategies/ob-retest-long-1h/tests/                                     50 cases
+
+Packaging:
+  docker-compose.minimal.yml                       single-EC2 stack (api+pg+redis+nginx)
+  deploy/ec2-bootstrap.sh                          idempotent EC2 init
+  docs/PHASE_5/{ENV_MATRIX,DEPLOY_SINGLE_EC2,
+                RUNBOOK,PROOF_EXPOSURE,CHANGELOG}.md
+
+================================================================
+WHAT IS NOT CHANGED
+================================================================
+
+* No frontend / dashboard / UI code is modified.
+* No machine-learning, super-intelligence, brain, quant_lab, or
+  autonomous-mode logic is touched.
+* Existing route surface outside the execution + proof scope is
+  untouched.
+* The full 18-service docker-compose.yml is preserved for callers
+  who need the Python microservices; docker-compose.minimal.yml is
+  added alongside for paper-mode single-EC2 deployments.
+* lib/db/src/schema/trades.ts is unchanged. New paper-trade fields
+  (audit_id, broker_order_id, mode, bypass_reasons, closing,
+  equity_at_entry) are packed into the existing notes JSON column;
+  pnl_pct is computed and written into the existing pnl_pct column.
+
+================================================================
+TESTS
+================================================================
+
+  Phase 2 (strategy module):     50 / 50  green (isolated)
+  Phase 3 (risk pipeline):       28 / 28  green (isolated)
+  Phase 3 (choke point):          6 cases — runs against full repo
+  Phase 4 (proof system):        11 / 11  green (isolated)
+  Phase 5 (reconciler+integrity):12 / 12  green (isolated)
+  ────────────────────────────────────────
+                                 91 cases total; 85 green in isolation;
+                                 6 require the api-server workspace to
+                                 typecheck against installed deps.
+
+================================================================
+LOCAL VERIFICATION LADDER
+================================================================
+
+  corepack pnpm install
+  cd lib/strategies/ob-retest-long-1h && npm install && npx vitest run && npx tsc --noEmit && cd -
+  corepack pnpm --filter @workspace/api-server typecheck
+  corepack pnpm --filter @workspace/api-server vitest run \
+    risk_pipeline order_executor_choke_point paper_trades_metrics paper_trades_phase5
+  corepack pnpm --filter @workspace/api-server test
+  grep -rn "placeOrder\b" artifacts/api-server/src --include="*.ts" \
+    | grep -v __tests__ | grep -v "\.test\." \
+    | grep -v "//.*placeOrder\|^[^:]*: \* "
+  grep -rnE "alpacaPost\(.*v2/orders|fetch\([^)]*v2/orders" \
+    artifacts/api-server/src --include="*.ts" | grep -v __tests__
+  grep -rn "enforceTradeRiskRails" artifacts/api-server/src --include="*.ts"
+  docker compose -f docker-compose.minimal.yml config > /dev/null
+  bash -n deploy/ec2-bootstrap.sh
+
+================================================================
+KNOWN FOLLOW-UPS (not in this commit)
+================================================================
+
+* Reconciler enrichment via Alpaca activity feed (real exit price
+  on orphan close instead of marking at entry).
+* Quantity-aware orphan classifier (today symbol-only).
+* Convert notes-packed JSON fields into dedicated trades columns.
+* Adopt log channels (execLog/proofLog/reconLog) across Phase 3
+  call sites that still use the base logger.
+* Switch existing risk_engine paths to read from the unified
+  pipeline snapshot instead of their own ad-hoc reads.
+
+See docs/PHASE_5/CHANGELOG.md for the full file-by-file change log.

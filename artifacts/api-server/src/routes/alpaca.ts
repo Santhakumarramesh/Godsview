@@ -1,7 +1,9 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { createHash, timingSafeEqual as cryptoTimingSafeEqual } from "node:crypto";
 import { claudeVeto, isClaudeAvailable, type ClaudeVetoResult, type SetupContext } from "../lib/claude";
-import { getBars, getBarsHistorical, getLatestBar, getLatestTrade, getAccount, getPositions, getHasValidTradingKey, getIsBrokerKey, placeOrder, getOrders, cancelOrder, cancelAllOrders, closePosition, getTypedPositions, calcPositionSize, getTodayFills, computeRoundTrips, type AlpacaBar, type AlpacaTimeframe, type AlpacaPosition, type AlpacaFillActivity, type PlaceOrderRequest } from "../lib/alpaca";
+import { getBars, getBarsHistorical, getLatestBar, getLatestTrade, getAccount, getPositions, getHasValidTradingKey, getIsBrokerKey, getOrders, cancelOrder, cancelAllOrders, closePosition, getTypedPositions, calcPositionSize, getTodayFills, computeRoundTrips, type AlpacaBar, type AlpacaTimeframe, type AlpacaPosition, type AlpacaFillActivity, type PlaceOrderRequest } from "../lib/alpaca";
+// Phase 3: route all order submissions through executeOrder() — the SOLE choke point.
+import { executeOrder } from "../lib/order_executor";
 
 // Backwards-compatible aliases — these used to be module-load constants.
 // Now they're getters so credential changes (key rotation, paper↔live swap,
@@ -695,223 +697,6 @@ async function estimateOrderNotionalUsd(orderReq: PlaceOrderRequest): Promise<nu
   return Math.abs(qty * latestTrade.price);
 }
 
-async function enforceTradeRiskRails(
-  req: Request,
-  res: Response,
-  orderReq: PlaceOrderRequest,
-): Promise<boolean> {
-  const snapshot = await computeTradingRiskSnapshot();
-  if (!snapshot) {
-    void writeAuditEvent(req, {
-      eventType: "ORDER_RISK_BLOCKED",
-      decisionState: "DEGRADED_DATA",
-      actor: "api",
-      instrument: orderReq.symbol,
-      symbol: orderReq.symbol,
-      reason: "risk_data_unavailable",
-    });
-    res.status(503).json({
-      error: "risk_data_unavailable",
-      message: "Unable to fetch account equity for risk checks. Trade blocked for safety.",
-      system_mode: SYSTEM_MODE,
-    });
-    return false;
-  }
-
-  const controls = getRiskEngineSnapshot().config;
-  const activeSession = getCurrentTradingSession();
-  const sessionAllowed = isSessionAllowed(activeSession, controls);
-  if (!sessionAllowed) {
-    void writeAuditEvent(req, {
-      eventType: "ORDER_RISK_BLOCKED",
-      decisionState: "BLOCKED_BY_RISK",
-      actor: "api",
-      instrument: orderReq.symbol,
-      symbol: orderReq.symbol,
-      reason: "session_not_allowed",
-      payload: {
-        active_session: activeSession,
-      },
-    });
-    res.status(403).json({
-      error: "session_not_allowed",
-      message: `Trading is disabled for session '${activeSession}'. Update runtime session allowlist controls to enable.`,
-      decision_state: "BLOCKED_BY_RISK",
-      system_mode: SYSTEM_MODE,
-      active_session: activeSession,
-      risk: snapshot,
-    });
-    return false;
-  }
-
-  if (controls.newsLockoutActive) {
-    void writeAuditEvent(req, {
-      eventType: "ORDER_RISK_BLOCKED",
-      decisionState: "BLOCKED_BY_RISK",
-      actor: "api",
-      instrument: orderReq.symbol,
-      symbol: orderReq.symbol,
-      reason: "news_lockout_active",
-      payload: {
-        active_session: activeSession,
-      },
-    });
-    res.status(403).json({
-      error: "news_lockout_active",
-      message: "News lockout is active. Trading is blocked by policy.",
-      decision_state: "BLOCKED_BY_RISK",
-      system_mode: SYSTEM_MODE,
-      active_session: activeSession,
-      risk: snapshot,
-    });
-    return false;
-  }
-
-  if (controls.blockOnDegradedData) {
-    const dataHealth = await assessDataHealth(orderReq.symbol, { req });
-    if (!dataHealth.healthy) {
-      void writeAuditEvent(req, {
-        eventType: "ORDER_RISK_BLOCKED",
-        decisionState: "DEGRADED_DATA",
-        actor: "api",
-        instrument: orderReq.symbol,
-        symbol: orderReq.symbol,
-        reason: "degraded_data_block",
-        payload: {
-          reasons: dataHealth.reasons,
-          data_health: dataHealth,
-        },
-      });
-      res.status(503).json({
-        error: "degraded_data_block",
-        message: "Market data health is degraded. Trade blocked by safety policy.",
-        decision_state: "DEGRADED_DATA",
-        system_mode: SYSTEM_MODE,
-        gate_reasons: dataHealth.reasons,
-        data_health: dataHealth,
-        risk: snapshot,
-      });
-      return false;
-    }
-  }
-
-  if (snapshot.limits.maxDailyLossUsd > 0 && snapshot.realizedPnlTodayUsd <= -snapshot.limits.maxDailyLossUsd) {
-    void writeAuditEvent(req, {
-      eventType: "ORDER_RISK_BLOCKED",
-      decisionState: "BLOCKED_BY_RISK",
-      actor: "api",
-      instrument: orderReq.symbol,
-      symbol: orderReq.symbol,
-      reason: "daily_loss_limit_reached",
-      payload: snapshot,
-    });
-    res.status(403).json({
-      error: "daily_loss_limit_reached",
-      message: "Daily realized loss limit reached. Trade blocked.",
-      decision_state: "BLOCKED_BY_RISK",
-      system_mode: SYSTEM_MODE,
-      risk: snapshot,
-    });
-    return false;
-  }
-
-  if (snapshot.cooldownActive) {
-    void writeAuditEvent(req, {
-      eventType: "ORDER_RISK_BLOCKED",
-      decisionState: "BLOCKED_BY_RISK",
-      actor: "api",
-      instrument: orderReq.symbol,
-      symbol: orderReq.symbol,
-      reason: "cooldown_active_after_loss_streak",
-      payload: snapshot,
-    });
-    res.status(403).json({
-      error: "cooldown_active_after_loss_streak",
-      message: "Cooldown active after consecutive losses. Trade blocked.",
-      decision_state: "BLOCKED_BY_RISK",
-      system_mode: SYSTEM_MODE,
-      risk: snapshot,
-    });
-    return false;
-  }
-
-  if (snapshot.limits.maxConcurrentPositions > 0 && snapshot.openPositions >= snapshot.limits.maxConcurrentPositions) {
-    void writeAuditEvent(req, {
-      eventType: "ORDER_RISK_BLOCKED",
-      decisionState: "BLOCKED_BY_RISK",
-      actor: "api",
-      instrument: orderReq.symbol,
-      symbol: orderReq.symbol,
-      reason: "max_concurrent_positions_reached",
-      payload: snapshot,
-    });
-    res.status(403).json({
-      error: "max_concurrent_positions_reached",
-      message: "Max concurrent positions limit reached. Trade blocked.",
-      decision_state: "BLOCKED_BY_RISK",
-      system_mode: SYSTEM_MODE,
-      risk: snapshot,
-    });
-    return false;
-  }
-
-  if (snapshot.limits.maxTradesPerSession > 0 && snapshot.closedTradesToday >= snapshot.limits.maxTradesPerSession) {
-    void writeAuditEvent(req, {
-      eventType: "ORDER_RISK_BLOCKED",
-      decisionState: "BLOCKED_BY_RISK",
-      actor: "api",
-      instrument: orderReq.symbol,
-      symbol: orderReq.symbol,
-      reason: "max_trades_per_session_reached",
-      payload: snapshot,
-    });
-    res.status(403).json({
-      error: "max_trades_per_session_reached",
-      message: "Max trades per session reached. Trade blocked.",
-      decision_state: "BLOCKED_BY_RISK",
-      system_mode: SYSTEM_MODE,
-      risk: snapshot,
-    });
-    return false;
-  }
-
-  const incomingNotionalUsd = await estimateOrderNotionalUsd(orderReq);
-  const projectedExposureUsd = snapshot.openExposureUsd + incomingNotionalUsd;
-  const projectedExposurePct = snapshot.accountEquityUsd > 0 ? projectedExposureUsd / snapshot.accountEquityUsd : 0;
-
-  if (snapshot.limits.maxOpenExposurePct > 0 && projectedExposurePct > snapshot.limits.maxOpenExposurePct) {
-    void writeAuditEvent(req, {
-      eventType: "ORDER_RISK_BLOCKED",
-      decisionState: "BLOCKED_BY_RISK",
-      actor: "api",
-      instrument: orderReq.symbol,
-      symbol: orderReq.symbol,
-      reason: "max_open_exposure_exceeded",
-      payload: {
-        ...snapshot,
-        incomingNotionalUsd,
-        projectedExposureUsd,
-        projectedExposurePct,
-      },
-    });
-    res.status(403).json({
-      error: "max_open_exposure_exceeded",
-      message: "Projected open exposure exceeds configured risk limit. Trade blocked.",
-      decision_state: "BLOCKED_BY_RISK",
-      system_mode: SYSTEM_MODE,
-      risk: {
-        ...snapshot,
-        incomingNotionalUsd,
-        projectedExposureUsd,
-        projectedExposurePct,
-      },
-    });
-    return false;
-  }
-
-  return true;
-}
-
 type BacktestTraceBar = {
   time: number;
   ts: string;
@@ -1349,6 +1134,10 @@ router.get("/alpaca/positions", async (req, res) => {
 
 // ─── POST /api/alpaca/orders — place a new order ─────────────────────────────
 router.post("/alpaca/orders", async (req, res) => {
+  // Phase 3: this route is now a thin wrapper around executeOrder().
+  // All risk gating (mode, kill switch, operator token, data staleness, session,
+  // news lockout, daily loss, exposure caps, sanity) is enforced inside
+  // executeOrder via the unified risk pipeline. There is no separate gate here.
   try {
     if (!ensureTradingWriteAccess(req, res)) return;
     if (!hasValidTradingKey()) {
@@ -1358,44 +1147,79 @@ router.post("/alpaca/orders", async (req, res) => {
         actor: "api",
         reason: "no_trading_key",
       });
-      res.status(403).json({ error: "no_trading_key", message: "Trading API keys (PK/AK) required. Paper keys from app.alpaca.markets." });
+      res.status(403).json({ error: "no_trading_key", message: "Trading API keys (PK/AK) required." });
       return;
     }
-    const orderReq: PlaceOrderRequest = {
-      symbol: String(req.body.symbol ?? "BTCUSD"),
-      side: req.body.side,
-      type: req.body.type ?? "market",
-      time_in_force: req.body.time_in_force ?? "gtc",
-    };
-    if (req.body.qty !== undefined) orderReq.qty = Number(req.body.qty);
-    if (req.body.notional !== undefined) orderReq.notional = Number(req.body.notional);
-    if (req.body.limit_price !== undefined) orderReq.limit_price = Number(req.body.limit_price);
-    if (req.body.stop_price !== undefined) orderReq.stop_price = Number(req.body.stop_price);
-    if (req.body.stop_loss_price !== undefined) orderReq.stop_loss_price = Number(req.body.stop_loss_price);
-    if (req.body.take_profit_price !== undefined) orderReq.take_profit_price = Number(req.body.take_profit_price);
 
-    if (!(await enforceTradeRiskRails(req, res, orderReq))) return;
+    const body = req.body ?? {};
+    const symbol = String(body.symbol ?? "BTCUSD");
+    const side: "buy" | "sell" = body.side === "sell" ? "sell" : "buy";
+    const direction: "long" | "short" = side === "buy" ? "long" : "short";
+    const quantity = Number(body.qty ?? 0);
+    const entry_price = Number(body.limit_price ?? body.price ?? 0);
+    const stop_loss = Number(body.stop_loss_price ?? 0);
+    const take_profit = Number(body.take_profit_price ?? 0);
 
-    const order = await placeOrder(orderReq);
+    const result = await executeOrder({
+      symbol,
+      side,
+      direction,
+      quantity,
+      setup_type: "manual_route",
+      regime: "unknown",
+      entry_price,
+      stop_loss,
+      take_profit,
+      // No SI ProductionDecision here — manual route.
+      operator_token: typeof body.operator_token === "string" ? body.operator_token : undefined,
+    });
+
+    if (!result.executed) {
+      void writeAuditEvent(req, {
+        eventType: result.blocking_gate ? "ORDER_RISK_BLOCKED" : "ORDER_PLACE_ERROR",
+        decisionState: result.blocking_gate ? "BLOCKED_BY_RISK" : "DEGRADED_DATA",
+        actor: "api",
+        instrument: symbol,
+        symbol,
+        reason: result.blocking_gate ?? result.error ?? "order_failed",
+        payload: {
+          blocking_gate: result.blocking_gate ?? null,
+          gate_decisions: result.gate_decisions ?? null,
+          audit_id: result.audit_id ?? null,
+          error: result.error ?? null,
+        },
+      });
+      const status = result.blocking_gate ? 403 : 503;
+      res.status(status).json({
+        error: result.blocking_gate ?? "order_failed",
+        message: result.error ?? "Order rejected",
+        blocking_gate: result.blocking_gate ?? null,
+        gate_decisions: result.gate_decisions ?? null,
+        audit_id: result.audit_id ?? null,
+      });
+      return;
+    }
+
     void writeAuditEvent(req, {
       eventType: "ORDER_PLACED",
       decisionState: "TRADE",
       actor: "operator",
-      instrument: orderReq.symbol,
-      symbol: orderReq.symbol,
+      instrument: symbol,
+      symbol,
       reason: "order_submitted",
       payload: {
-        order_id: order.id,
-        side: orderReq.side,
-        type: orderReq.type,
-        qty: orderReq.qty ?? null,
-        notional: orderReq.notional ?? null,
-        limit_price: orderReq.limit_price ?? null,
-        stop_price: orderReq.stop_price ?? null,
+        order_id: result.order_id ?? null,
+        side, qty: quantity, mode: result.mode,
+        audit_id: result.audit_id ?? null,
       },
     });
-    req.log.info({ order_id: order.id, symbol: order.symbol, side: order.side }, "Order placed");
-    res.json({ success: true, order });
+    req.log.info({ order_id: result.order_id, symbol, side, audit_id: result.audit_id }, "Order placed via executeOrder");
+    res.json({
+      success: true,
+      order_id: result.order_id,
+      mode: result.mode,
+      audit_id: result.audit_id,
+    });
   } catch (err) {
     void writeAuditEvent(req, {
       eventType: "ORDER_PLACE_ERROR",

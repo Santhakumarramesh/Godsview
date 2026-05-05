@@ -2,6 +2,8 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { trainModel } from "./lib/ml_model";
 import { validateEnv } from "./lib/env";
+// Phase 6: hard fail-fast env validator (broker keys, DB, Redis, operator token)
+import { assertPhase6EnvOrExit } from "./lib/ops/phase6_env";
 import { setupGracefulShutdown, onShutdown } from "./lib/shutdown";
 import { closePool, checkDbHealth } from "@workspace/db";
 import { runPreflight } from "./lib/preflight";
@@ -12,12 +14,16 @@ import { ScannerScheduler } from "./lib/scanner_scheduler";
 import { startReconciler, stopReconciler } from "./lib/fill_reconciler";
 import { alpacaAccountStream, wireAccountStreamToReconciler } from "./lib/alpaca_account_stream";
 import { startPaperValidationLoop, stopPaperValidationLoop } from "./lib/paper_validation_loop";
+// Phase 5: paper-trade reconciler + data health background jobs
+import { startProofJobs, stopProofJobs } from "./lib/paper_trades/jobs";
 import { startLearningLoop, stopLearningLoop } from "./lib/continuous_learning";
 import { validateOrExit } from "./lib/ops/startup_validator";
 import { initGracefulShutdown } from "./lib/ops/graceful_shutdown";
 
 // ── Validate environment before anything else ───────────────────
 validateEnv();
+// Phase 6: enforce required envs — process.exit(1) if any missing
+assertPhase6EnvOrExit();
 
 // ── Phase 6: Production startup validation ───────────────────
 try { validateOrExit(); } catch (e: any) { logger.warn({ err: e.message }, "Startup validator unavailable (non-fatal)"); }
@@ -57,6 +63,9 @@ const server = app.listen(port, (err) => {
   }
 
   // Run preflight checks (non-blocking — logs results)
+  // Phase 5: start proof-system background jobs (opt-in via env)
+  try { startProofJobs(); } catch (jobErr: any) { logger.warn({ err: jobErr.message }, "Phase5 jobs start failed (non-fatal)"); }
+
   runPreflight()
     .then((result) => {
       if (!!result.passed) {
@@ -233,6 +242,7 @@ onShutdown(async () => {
 onShutdown(async () => {
   logger.info("Stopping macro intelligence feed...");
   MacroContextService.getInstance().stop();
+  try { stopProofJobs(); } catch { /* ignore */ }
 });
 
 // Register cleanup: stop watchlist scanner

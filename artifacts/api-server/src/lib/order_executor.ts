@@ -1,14 +1,22 @@
 /**
  * Order Executor — Hardened execution layer between Production Gate and Alpaca.
  *
- * Responsibilities:
- * 1. Paper vs Live routing with explicit mode check
- * 2. Pre-flight validation (symbol, qty, price sanity)
- * 3. Persist SI decision to database BEFORE order placement
- * 4. Position reconciliation after fill
- * 5. Alert integration for execution failures
+ * Phase 3: SOLE choke point for any production order submission.
+ * Every caller (routes, scanners, brain bridges, position monitors) MUST
+ * route through `executeOrder()`. Direct `placeOrder()` usage outside this
+ * file is forbidden and enforced by grep in CI.
  *
- * This is the ONLY module that should call placeOrder().
+ * Responsibilities:
+ * 1. Pre-flight validation (symbol, qty, price sanity)
+ * 2. Run unified risk pipeline (9 gates, fail-closed, audit-logged)
+ * 3. Persist SI decision (when present) and execution audit row
+ * 4. Place order via Alpaca (the ONLY call site for placeOrder)
+ * 5. Record execution log + emit metrics
+ *
+ * Stop-out exception: ExecutionRequest.bypassReasons may include "stop_out"
+ * to bypass daily_loss_limit and max_exposure gates only. All other gates
+ * (system mode, kill switch, operator token, data staleness, session, news,
+ * order sanity) still apply.
  */
 
 import { logger } from "./logger";
@@ -22,6 +30,11 @@ import {
   resolveSystemMode,
 } from "@workspace/strategy-core";
 import { persistWrite, persistRead, persistAppend } from "./persistent_store";
+import { evaluatePipeline, type RiskRequest, type BypassReason, type GateName } from "./risk/risk_pipeline.js";
+import { buildRiskSnapshot } from "./risk/risk_snapshot.js";
+import { recordExecutionAudit } from "./risk/audit_log.js";
+// Phase 4: paper-trade lifecycle store.
+import { recordTradeOpen } from "./paper_trades/store.js";
 
 // ── Types ──────────────────────────────────────────────────────────
 export interface ExecutionRequest {
@@ -34,10 +47,28 @@ export interface ExecutionRequest {
   entry_price: number;
   stop_loss: number;
   take_profit: number;
-  /** Full production gate decision */
-  decision: ProductionDecision;
-  /** Operator token for live execution */
+  /** Full production gate decision (optional for non-SI callers like position_monitor stop-outs). */
+  decision?: ProductionDecision;
+  /** Operator token for live execution. */
   operator_token?: string;
+  /**
+   * Phase 3 stop-out exception. When this includes "stop_out", the
+   * daily_loss_limit and max_exposure gates are bypassed (audit-logged).
+   * No other gate is bypassable.
+   */
+  bypassReasons?: ReadonlyArray<BypassReason>;
+  /** Pre-measured market data age in ms (for data staleness gate). */
+  dataAgeMs?: number;
+  /** Pre-measured open position count (for max_exposure gate). */
+  openPositionCount?: number;
+  /** Pre-measured trades-today count (for max_exposure gate). */
+  tradesTodayCount?: number;
+  /** Pre-measured daily PnL as % of equity (for daily_loss_limit gate). */
+  dailyPnLPct?: number;
+  /** True when this request is closing an existing position (market exit). */
+  closing?: boolean;
+  /** Phase 5: account equity at moment of open (quote currency); used to compute pnl_pct on close. */
+  equity_at_entry?: number;
 }
 
 export interface ExecutionResult {
@@ -47,6 +78,12 @@ export interface ExecutionResult {
   si_decision_id?: number;
   error?: string;
   details: Record<string, unknown>;
+  /** Phase 3: which gate blocked, if any. */
+  blocking_gate?: GateName;
+  /** Phase 3: full pipeline decision trail. */
+  gate_decisions?: ReadonlyArray<{ gate: GateName; allowed: boolean; reason: string; bypassed?: boolean }>;
+  /** Phase 3: stable audit-row id for cross-reference. */
+  audit_id?: string;
 }
 
 export interface ExecutionLogEntry {
@@ -257,14 +294,39 @@ export function executionHealthCheck(): ExecutionHealthCheck {
 // ── Main Execution Function ────────────────────────────────────────
 
 export async function executeOrder(req: ExecutionRequest): Promise<ExecutionResult> {
-  const logCtx = { symbol: req.symbol, side: req.side, qty: req.quantity, setup: req.setup_type };
+  const logCtx = {
+    symbol: req.symbol,
+    side: req.side,
+    qty: req.quantity,
+    setup: req.setup_type,
+    bypass: req.bypassReasons ?? [],
+  };
   const startTime = Date.now();
 
-  // 1. Pre-flight validation
+  // ── Pre-flight validation (qty/price sanity, etc.) ─────────────────────
   const errors = validatePreFlight(req);
   if (errors.length > 0) {
     logger.warn({ ...logCtx, errors }, "Pre-flight validation failed");
-    const duration = Date.now() - startTime;
+    const snap = buildRiskSnapshot({
+      dataAgeMs: req.dataAgeMs ?? null,
+      operatorTokenProvided: req.operator_token,
+      dailyPnLPct: req.dailyPnLPct ?? null,
+      openPositionCount: req.openPositionCount,
+      tradesTodayCount: req.tradesTodayCount,
+    });
+    const fauxPipeline = {
+      allowed: false,
+      decisions: [],
+      blockingGate: undefined,
+      blockingReason: errors.join("; "),
+    };
+    const auditEntry = recordExecutionAudit({
+      req: toRiskRequest(req),
+      snap,
+      pipeline: fauxPipeline,
+      outcome: "validation_error",
+      brokerError: errors.join("; "),
+    });
     recordExecutionLog({
       timestamp: new Date().toISOString(),
       symbol: req.symbol,
@@ -273,92 +335,72 @@ export async function executeOrder(req: ExecutionRequest): Promise<ExecutionResu
       execution_mode: "dry_run",
       success: false,
       error_message: errors[0],
-      duration_ms: duration,
+      duration_ms: Date.now() - startTime,
     });
     return {
       executed: false,
       mode: "dry_run",
       error: errors.join("; "),
       details: { validation_errors: errors },
+      audit_id: auditEntry.audit_id,
     };
   }
-  // 2. Persist SI decision BEFORE placing order
-  const siDecisionId = await persistSIDecision(
-    req, req.decision.signal, req.decision.action, req.decision.block_reasons,
-  );
-  logger.info({ ...logCtx, siDecisionId }, "SI decision persisted");
 
-  // 3. Mode check — can we actually write orders?
-  if (!canWriteOrders(SYSTEM_MODE)) {
-    logger.info({ ...logCtx, mode: SYSTEM_MODE }, "Dry run — order writing disabled");
-    const duration = Date.now() - startTime;
+  // ── Unified risk pipeline (9 gates, fail-closed) ───────────────────────
+  const snap = buildRiskSnapshot({
+    dataAgeMs: req.dataAgeMs ?? null,
+    operatorTokenProvided: req.operator_token,
+    dailyPnLPct: req.dailyPnLPct ?? null,
+    openPositionCount: req.openPositionCount,
+    tradesTodayCount: req.tradesTodayCount,
+  });
+  const pipeline = evaluatePipeline(toRiskRequest(req), snap);
+
+  if (!pipeline.allowed) {
+    if (pipeline.blockingGate === "kill_switch") {
+      alertKillSwitch("Kill switch blocked order", "order_executor");
+    }
+    const audit = recordExecutionAudit({
+      req: toRiskRequest(req),
+      snap,
+      pipeline,
+      outcome: "rejected_by_gate",
+    });
     recordExecutionLog({
       timestamp: new Date().toISOString(),
       symbol: req.symbol,
       side: req.side,
       quantity: req.quantity,
-      execution_mode: "dry_run",
+      execution_mode: isLiveMode(SYSTEM_MODE) ? "live" : "dry_run",
       success: false,
-      error_message: "Order writing not enabled",
-      duration_ms: duration,
+      error_message: `gate:${pipeline.blockingGate ?? "?"}:${pipeline.blockingReason ?? "?"}`,
+      duration_ms: Date.now() - startTime,
     });
     return {
       executed: false,
-      mode: "dry_run",
-      si_decision_id: siDecisionId,
-      details: { system_mode: SYSTEM_MODE, reason: "Order writing not enabled" },
+      mode: canWriteOrders(SYSTEM_MODE) ? (isLiveMode(SYSTEM_MODE) ? "live" : "paper") : "dry_run",
+      error: pipeline.blockingReason,
+      details: { blocked_by_gate: pipeline.blockingGate ?? null },
+      blocking_gate: pipeline.blockingGate,
+      gate_decisions: pipeline.decisions,
+      audit_id: audit.audit_id,
     };
   }
 
-  // 4. Live mode requires operator token
-  if (isLiveMode(SYSTEM_MODE)) {
-    if (!OPERATOR_TOKEN) {
-      logger.error(logCtx, "Live mode but no GODSVIEW_OPERATOR_TOKEN configured");
-      alertKillSwitch("Live mode without operator token", "order_executor");
-      const duration = Date.now() - startTime;
-      recordExecutionLog({
-        timestamp: new Date().toISOString(),
-        symbol: req.symbol,
-        side: req.side,
-        quantity: req.quantity,
-        execution_mode: "live",
-        success: false,
-        error_message: "Operator token required for live trading",
-        duration_ms: duration,
-      });
-      return {
-        executed: false,
-        mode: "live",
-        si_decision_id: siDecisionId,
-        error: "Operator token required for live trading",
-        details: {},
-      };
-    }
-    if (req.operator_token !== OPERATOR_TOKEN) {
-      logger.warn(logCtx, "Invalid operator token for live execution");
-      const duration = Date.now() - startTime;
-      recordExecutionLog({
-        timestamp: new Date().toISOString(),
-        symbol: req.symbol,
-        side: req.side,
-        quantity: req.quantity,
-        execution_mode: "live",
-        success: false,
-        error_message: "Invalid operator token",
-        duration_ms: duration,
-      });
-      return {
-        executed: false,
-        mode: "live",
-        si_decision_id: siDecisionId,
-        error: "Invalid operator token",
-        details: {},
-      };
-    }
+  // ── SI decision persist (only if we have a full ProductionDecision) ────
+  let siDecisionId: number | undefined;
+  if (req.decision) {
+    siDecisionId = await persistSIDecision(
+      req,
+      req.decision.signal,
+      req.decision.action,
+      req.decision.block_reasons,
+    );
+    logger.info({ ...logCtx, siDecisionId }, "SI decision persisted");
   }
 
-  // 5. Place order via Alpaca
-  const mode = isLiveMode(SYSTEM_MODE) ? "live" as const : "paper" as const;
+  // ── Place order via Alpaca (the ONLY call site for placeOrder in Phase 3) ──
+  const mode: "paper" | "live" = isLiveMode(SYSTEM_MODE) ? "live" : "paper";
   try {
     const { placeOrder } = await import("./alpaca");
     const order = await placeOrder({
@@ -370,7 +412,38 @@ export async function executeOrder(req: ExecutionRequest): Promise<ExecutionResu
       time_in_force: "day",
     });
 
-    const duration = Date.now() - startTime;
+    const audit = recordExecutionAudit({
+      req: toRiskRequest(req),
+      snap,
+      pipeline,
+      outcome: "accepted_executed",
+      brokerOrderId: (order as any)?.id ?? null,
+    });
+
+    // Phase 4: persist a paper_trades row at the moment the broker accepts.
+    // Best-effort; failure here MUST NOT abort the executed trade.
+    try {
+      await recordTradeOpen({
+        audit_id:        audit.audit_id,
+        broker_order_id: (order as any)?.id ?? null,
+        symbol:          req.symbol,
+        strategy_id:     req.setup_type,
+        direction:       req.direction,
+        quantity:        req.quantity,
+        entry_price:     req.entry_price,
+        stop_loss:       req.stop_loss,
+        take_profit:     req.take_profit,
+        entry_time:      new Date().toISOString(),
+        mode,
+        bypass_reasons:  req.bypassReasons ?? [],
+        closing:         req.closing === true,
+        regime:          req.regime,
+        equity_at_entry: req.equity_at_entry ?? null,
+      });
+    } catch (e) {
+      logger.warn({ err: e, audit_id: audit.audit_id }, "recordTradeOpen failed (non-fatal)");
+    }
+
     recordExecutionLog({
       timestamp: new Date().toISOString(),
       symbol: req.symbol,
@@ -380,15 +453,11 @@ export async function executeOrder(req: ExecutionRequest): Promise<ExecutionResu
       execution_mode: mode,
       success: true,
       order_id: (order as any)?.id,
-      duration_ms: duration,
+      duration_ms: Date.now() - startTime,
     });
 
-    logger.info(
-      { ...logCtx, orderId: (order as any)?.id, mode },
-      "Order placed successfully",
-    );
+    logger.info({ ...logCtx, orderId: (order as any)?.id, mode }, "Order placed successfully");
 
-    // Update metrics
     try {
       const { tradesExecutedTotal } = await import("./metrics");
       tradesExecutedTotal.inc({ mode, symbol: req.symbol, setup: req.setup_type });
@@ -409,13 +478,18 @@ export async function executeOrder(req: ExecutionRequest): Promise<ExecutionResu
         broker_status: (order as any)?.status ?? null,
         stop_loss: req.stop_loss,
         take_profit: req.take_profit,
-        kelly_pct: (req.decision as any).meta.kelly_pct,
-        win_probability: (req.decision as any).meta.win_probability,
-        edge_score: (req.decision as any).meta.edge_score,
       },
+      gate_decisions: pipeline.decisions,
+      audit_id: audit.audit_id,
     };
   } catch (err: any) {
-    const duration = Date.now() - startTime;
+    const audit = recordExecutionAudit({
+      req: toRiskRequest(req),
+      snap,
+      pipeline,
+      outcome: "broker_error",
+      brokerError: (err as any)?.message ?? String(err),
+    });
     recordExecutionLog({
       timestamp: new Date().toISOString(),
       symbol: req.symbol,
@@ -424,7 +498,7 @@ export async function executeOrder(req: ExecutionRequest): Promise<ExecutionResu
       execution_mode: mode,
       success: false,
       error_message: (err as any).message ?? "Unknown execution error",
-      duration_ms: duration,
+      duration_ms: Date.now() - startTime,
     });
     logger.error({ ...logCtx, err, mode }, "Order placement failed");
     return {
@@ -433,8 +507,25 @@ export async function executeOrder(req: ExecutionRequest): Promise<ExecutionResu
       si_decision_id: siDecisionId,
       error: (err as any).message ?? "Unknown execution error",
       details: { raw_error: String(err) },
+      gate_decisions: pipeline.decisions,
+      audit_id: audit.audit_id,
     };
   }
+}
+
+/** Map an ExecutionRequest into the slim shape consumed by the risk pipeline. */
+function toRiskRequest(req: ExecutionRequest): RiskRequest {
+  return {
+    symbol: req.symbol,
+    side: req.side,
+    quantity: req.quantity,
+    entry_price: req.entry_price,
+    stop_loss: req.stop_loss,
+    take_profit: req.take_profit,
+    direction: req.direction,
+    bypassReasons: req.bypassReasons,
+    closing: req.closing,
+  };
 }
 
 /** Get the current execution mode */

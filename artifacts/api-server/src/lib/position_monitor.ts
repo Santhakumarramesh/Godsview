@@ -15,6 +15,8 @@
  */
 
 import { logger } from "./logger";
+// Phase 4: paper-trade lifecycle store.
+import { recordTradeClose } from "./paper_trades/store";
 import type { TrailingStopConfig, ProfitTarget } from "./super_intelligence";
 import { persistWrite, persistRead, persistAppend } from "./persistent_store";
 
@@ -350,10 +352,112 @@ async function evaluatePosition(pos: ManagedPosition, currentPrice: number): Pro
 
 // ── Execution Helpers ─────────────────────────────────
 async function closeFullPosition(pos: ManagedPosition, reason: string): Promise<void> {
+  // Phase 3 note: closePosition() uses DELETE /v2/positions/:symbol, not POST /v2/orders.
+  // It is therefore NOT covered by the placeOrder grep proof. We route a closing market
+  // order through executeOrder() with stop_out bypass + closing=true so all gates fire.
+  //
+  // STRICT FALLBACK POLICY (Phase 3 review tightening):
+  //   The DELETE /v2/positions fallback is ONLY allowed when:
+  //     (a) the executeOrder request was a true closing stop_out
+  //         (closing=true AND bypassReasons includes "stop_out"), AND
+  //     (b) executeOrder returned !executed (gate-blocked).
+  //   Any other failure mode (validation, broker error, etc.) is NOT fallback-eligible.
+  //   When the fallback fires, a HIGH PRIORITY audit row is written with
+  //   outcome="fallback_close_position", fallback_used=true, original_blocking_gate set.
   try {
-    const { closePosition } = await import("./alpaca");
-    await closePosition(pos.symbol);
-    logger.info({ symbol: pos.symbol, reason, direction: pos.direction }, "Position fully closed by monitor");
+    const { executeOrder } = await import("./order_executor");
+    const side: "buy" | "sell" = pos.direction === "long" ? "sell" : "buy";
+    const closeReq = {
+      symbol:      pos.symbol,
+      side,
+      direction:   pos.direction,
+      quantity:    pos.remaining_qty > 0 ? pos.remaining_qty : pos.quantity,
+      setup_type:  `monitor:full_close:${reason}`,
+      regime:      "exit",
+      entry_price: pos.entry_price,
+      stop_loss:   0,
+      take_profit: 0,
+      closing:     true as const,
+      bypassReasons: ["stop_out"] as const,
+    };
+    const result = await executeOrder(closeReq as Parameters<typeof executeOrder>[0]);
+
+    if (!result.executed) {
+      const fallbackEligible =
+        closeReq.closing === true &&
+        closeReq.bypassReasons.includes("stop_out") &&
+        Boolean(result.blocking_gate); // only gate-blocks (not validation/broker errors)
+
+      if (fallbackEligible) {
+        // HIGH PRIORITY: surface this so ops alerts fire.
+        logger.error({
+          symbol: pos.symbol,
+          reason,
+          original_blocking_gate: result.blocking_gate,
+          executeOrder_audit_id: result.audit_id,
+          fallback: "fallback_close_position",
+          priority: "high",
+        }, "[HIGH_PRIORITY] executeOrder full-close blocked by gate; using DELETE /v2/positions fallback");
+
+        // Write a SECOND audit row dedicated to the fallback. It carries
+        // fallback_used=true and original_blocking_gate so the audit log shows
+        // both the gate block AND the forced close.
+        try {
+          const { recordExecutionAudit } = await import("./risk/audit_log");
+          const { buildRiskSnapshot } = await import("./risk/risk_snapshot");
+          const snap = buildRiskSnapshot({ dataAgeMs: null });
+          recordExecutionAudit({
+            req: {
+              symbol:      pos.symbol,
+              side,
+              direction:   pos.direction,
+              quantity:    closeReq.quantity,
+              entry_price: pos.entry_price,
+              stop_loss:   0,
+              take_profit: 0,
+              closing:     true,
+              bypassReasons: ["stop_out"],
+            },
+            snap,
+            pipeline: { allowed: true, decisions: [], blockingGate: undefined, blockingReason: undefined },
+            outcome: "fallback_close_position",
+            fallbackUsed: true,
+            originalBlockingGate: result.blocking_gate ?? null,
+          });
+        } catch (auditErr) {
+          logger.error({ auditErr, symbol: pos.symbol }, "[HIGH_PRIORITY] fallback audit write failed");
+        }
+
+        const { closePosition } = await import("./alpaca");
+        await closePosition(pos.symbol);
+      } else {
+        // Not fallback-eligible: do NOT call closePosition. Leave the position
+        // and surface the failure for ops to investigate.
+        logger.error({
+          symbol: pos.symbol,
+          reason,
+          blocking_gate: result.blocking_gate,
+          error: result.error,
+          audit_id: result.audit_id,
+        }, "Full close NOT executed and fallback NOT eligible — manual intervention required");
+      }
+    }
+    // Phase 4: record the full close into paper_trades.
+    try {
+      await recordTradeClose({
+        broker_order_id: result.order_id ?? undefined,
+        exit_price: pos.peak_price > 0 ? pos.peak_price : pos.entry_price,
+        exit_time: new Date().toISOString(),
+        exit_reason: reason === "stop_hit" ? "stop_loss"
+                   : reason === "take_profit_hit" ? "take_profit"
+                   : reason === "expired" ? "expired"
+                   : !result.executed ? "fallback_close"
+                   : "manual_close",
+      });
+    } catch (e) {
+      logger.warn({ err: e, symbol: pos.symbol }, "recordTradeClose (full) failed (non-fatal)");
+    }
+    logger.info({ symbol: pos.symbol, reason, direction: pos.direction, audit_id: result.audit_id }, "Position fully closed by monitor");
 
     // Record lifecycle event
     try {
@@ -381,18 +485,41 @@ async function closePartialPosition(
   pos: ManagedPosition, qty: number, rTarget: number,
 ): Promise<void> {
   try {
-    const { placeOrder } = await import("./alpaca");
-    const side = pos.direction === "long" ? "sell" : "buy";
-    await placeOrder({
-      symbol: pos.symbol,
-      qty,
-      side: side as any,
-      type: "market",
-      time_in_force: "ioc",
+    // Phase 3: route through the SOLE choke point. Stop-out / partial-take-profit
+    // exits bypass daily_loss_limit and max_exposure (they MUST be allowed to fire
+    // even when those caps are hit) but still pass mode/kill_switch/data_staleness.
+    const { executeOrder } = await import("./order_executor");
+    const side: "buy" | "sell" = pos.direction === "long" ? "sell" : "buy";
+    const result = await executeOrder({
+      symbol:      pos.symbol,
+      side,
+      direction:   pos.direction,
+      quantity:    qty,
+      setup_type:  `monitor:partial_close@${rTarget}R`,
+      regime:      "exit",
+      entry_price: pos.entry_price,  // for audit only — actual fill is at market
+      stop_loss:   0,                // not meaningful for a close
+      take_profit: 0,
+      closing:     true,             // tells order_sanity to skip stop/TP checks
+      bypassReasons: ["stop_out"],
     });
+    if (!result.executed) {
+      throw new Error(`partial_close_blocked:${result.blocking_gate ?? "?"}:${result.error ?? ""}`);
+    }
+    // Phase 4: record the partial close into paper_trades as a fresh closed row.
+    try {
+      await recordTradeClose({
+        broker_order_id: result.order_id ?? undefined,
+        exit_price: pos.peak_price > 0 ? pos.peak_price : pos.entry_price,
+        exit_time: new Date().toISOString(),
+        exit_reason: "take_profit",
+      });
+    } catch (e) {
+      logger.warn({ err: e, symbol: pos.symbol }, "recordTradeClose (partial) failed (non-fatal)");
+    }
     logger.info({
-      symbol: pos.symbol, qty, rTarget, side,
-    }, "Partial profit taken by monitor");
+      symbol: pos.symbol, qty, rTarget, side, audit_id: result.audit_id,
+    }, "Partial profit taken by monitor (via executeOrder)");
 
     // Record lifecycle event
     try {

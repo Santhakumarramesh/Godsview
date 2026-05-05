@@ -16,6 +16,14 @@ import alertsRouter from "./alerts";
 import checklistRouter from "./checklist";
 import warRoomRouter from "./war_room";
 import proofRouter from "./proof";
+// Phase 4: paper-trading proof endpoints (trades / metrics / equity).
+import paperProofRouter from "./paper_proof";
+// Phase 6: production-hardening imports
+import { createRateLimiter } from "../lib/request_guards";
+import { requireOperator } from "../lib/auth_guard";
+import { counterMiddleware } from "../lib/ops/counter_middleware";
+import phase6Router from "./phase6";
+import { incReconciliationRun } from "../lib/ops/counters";
 import macroRouter from "./macro";
 import journalRouter from "./journal";
 import watchlistRouter from "./watchlist";
@@ -85,6 +93,22 @@ import riskPolicyRouter from "./risk_policy";
 
 const router: IRouter = Router();
 
+router.use(counterMiddleware); // Phase 6 observability
+
+// ── Phase 6: tighter per-route rate limits (in addition to the app-wide /api limiter) ──
+const PHASE6_ORDERS_RATE_LIMIT = Number(process.env.GODSVIEW_PHASE6_ORDERS_RATE_LIMIT_PER_MIN ?? 30);
+const PHASE6_PROOF_RATE_LIMIT  = Number(process.env.GODSVIEW_PHASE6_PROOF_RATE_LIMIT_PER_MIN ?? 120);
+const PHASE6_RECONCILE_RATE_LIMIT = Number(process.env.GODSVIEW_PHASE6_RECONCILE_RATE_LIMIT_PER_MIN ?? 6);
+router.use("/api/alpaca/orders",
+  createRateLimiter({ windowMs: 60_000, max: PHASE6_ORDERS_RATE_LIMIT }));
+router.use("/api/proof",
+  createRateLimiter({ windowMs: 60_000, max: PHASE6_PROOF_RATE_LIMIT }));
+router.use("/api/proof/reconciliation/run",
+  createRateLimiter({ windowMs: 60_000, max: PHASE6_RECONCILE_RATE_LIMIT }));
+// Operator-token gate on the reconciler manual trigger (Phase 6 hardening).
+router.use("/api/proof/reconciliation/run", requireOperator);
+router.use("/api/proof/reconciliation/run", (_req, _res, next) => { incReconciliationRun(); next(); });
+
 router.use(governanceRouter);
 router.use(healthRouter);
 router.use(signalsRouter);
@@ -107,6 +131,8 @@ router.use(alertsRouter);
 router.use("/api/checklist", checklistRouter);
 router.use("/api/war-room", warRoomRouter);
 router.use("/api/proof", proofRouter);
+router.use("/api", paperProofRouter); // Phase 4 proof endpoints (trades/metrics/equity)
+router.use(phase6Router); // Phase 6 health/ready/metrics
 router.use("/api/macro", macroRouter);
 router.use("/api/assisted-live", assistedLiveRouter);
 router.use("/api/webhooks", vcPipelineRouter);

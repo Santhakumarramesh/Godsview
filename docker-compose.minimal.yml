@@ -1,0 +1,85 @@
+# ─────────────────────────────────────────────────────────────────
+# GodsView — Minimal single-EC2 docker-compose
+#
+# A subset of docker-compose.yml that excludes the 12 Python
+# microservices (py-gateway, py-market-data, py-feature, etc.).
+# Use this for paper-trading deployments on a single EC2 box where
+# the Phase 1–5 backend is the entire surface and the microservices
+# are not needed.
+#
+# To use the full stack instead, run `docker compose -f docker-compose.yml up`.
+# ─────────────────────────────────────────────────────────────────
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: godsview
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: godsview
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U godsview -d godsview"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [godsview-net]
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [godsview-net]
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://godsview:${POSTGRES_PASSWORD}@postgres:5432/godsview
+      REDIS_URL: redis://redis:6379
+    volumes:
+      - api-memory:/data/memory
+      - ./logs:/app/logs
+    ports:
+      - "${PORT:-3001}:3001"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks: [godsview-net]
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: always
+    depends_on:
+      - api
+    volumes:
+      - ./nginx:/etc/nginx/conf.d:ro
+      - ./logs/nginx:/var/log/nginx
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    networks: [godsview-net]
+
+volumes:
+  pgdata:
+  api-memory:
+
+networks:
+  godsview-net:
+    driver: bridge

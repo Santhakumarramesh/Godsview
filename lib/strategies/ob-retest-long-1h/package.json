@@ -1,0 +1,18 @@
+{
+  "name": "@workspace/strategy-ob-retest-long-1h",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Pure-function 1H Order Block Retest Long strategy. No I/O, no ML, no UI.",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.2",
+    "vitest": "^2.1.9",
+    "@types/node": "^20.0.0"
+  }
+}

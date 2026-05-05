@@ -36,11 +36,12 @@ import {
 } from "@workspace/strategy-core";
 import {
   getBars,
-  placeOrder,
   getAccount,
   isAlpacaAuthFailureError,
   getAlpacaAuthFailureState,
 } from "./alpaca";
+// Phase 3: scanner now routes orders through the SOLE choke point.
+import { executeOrder } from "./order_executor";
 import { publishAlert } from "./signal_stream";
 import { listEnabledSymbols, touchScanned } from "./watchlist";
 import { recordDecision } from "./trade_journal";
@@ -370,17 +371,23 @@ async function scanSymbol(
               throw new Error(`strategy_allocation_zero_qty (${allocation.match_level})`);
             }
 
-            const order = await placeOrder({
+            const result = await executeOrder({
               symbol,
-              qty,
-              side:              direction === "long" ? "buy" : "sell",
-              type:              "market",
-              time_in_force:     "gtc",
-              take_profit_price: alert.takeProfit,
-              stop_loss_price:   alert.stopLoss,
+              side:        direction === "long" ? "buy" : "sell",
+              direction,
+              quantity:    qty,
+              setup_type:  setup,
+              regime,
+              entry_price: entryPrice,
+              stop_loss:   alert.stopLoss,
+              take_profit: alert.takeProfit,
+              // No SI ProductionDecision here — scanner is its own decision source.
             });
 
-            orderId  = order.id;
+            if (!result.executed) {
+              throw new Error(`execute_blocked:${result.blocking_gate ?? "unknown"}:${result.error ?? ""}`);
+            }
+            orderId  = result.order_id ?? null;
             accepted = true;
             logger.info(
               {
