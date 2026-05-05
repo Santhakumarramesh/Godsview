@@ -159,22 +159,29 @@ export function validateExecutionRequest(req: ExecutionRequest): string[] {
     errors.push(`Order value $${dollarValue.toFixed(2)} exceeds max $${MAX_SINGLE_ORDER_USD}`);
   }
 
-  // Stop loss validation
-  if (!Number.isFinite(req.stop_loss) || req.stop_loss <= 0) {
-    errors.push(`Invalid stop loss: ${req.stop_loss}`);
-  } else if (req.direction === "long" && req.stop_loss >= req.entry_price) {
-    errors.push("Long stop loss must be below entry price");
-  } else if (req.direction === "short" && req.stop_loss <= req.entry_price) {
-    errors.push("Short stop loss must be above entry price");
-  }
+  // Stop loss / take profit validation — skipped for closing orders and
+  // stop-out bypass (the position is exiting; SL/TP are not meaningful and
+  // the bypass logic must be allowed to run). Entry-side orders still validate.
+  const isClosingOrStopOut =
+    req.closing === true || (req.bypassReasons ?? []).includes("stop_out");
+  if (!isClosingOrStopOut) {
+    // Stop loss validation
+    if (!Number.isFinite(req.stop_loss) || req.stop_loss <= 0) {
+      errors.push(`Invalid stop loss: ${req.stop_loss}`);
+    } else if (req.direction === "long" && req.stop_loss >= req.entry_price) {
+      errors.push("Long stop loss must be below entry price");
+    } else if (req.direction === "short" && req.stop_loss <= req.entry_price) {
+      errors.push("Short stop loss must be above entry price");
+    }
 
-  // Take profit validation
-  if (!Number.isFinite(req.take_profit) || req.take_profit <= 0) {
-    errors.push(`Invalid take profit: ${req.take_profit}`);
-  } else if (req.direction === "long" && req.take_profit <= req.entry_price) {
-    errors.push("Long take profit must be above entry price");
-  } else if (req.direction === "short" && req.take_profit >= req.entry_price) {
-    errors.push("Short take profit must be below entry price");
+    // Take profit validation
+    if (!Number.isFinite(req.take_profit) || req.take_profit <= 0) {
+      errors.push(`Invalid take profit: ${req.take_profit}`);
+    } else if (req.direction === "long" && req.take_profit <= req.entry_price) {
+      errors.push("Long take profit must be above entry price");
+    } else if (req.direction === "short" && req.take_profit >= req.entry_price) {
+      errors.push("Short take profit must be below entry price");
+    }
   }
 
   // Production gate must have approved (only checked when a SI decision is attached)
