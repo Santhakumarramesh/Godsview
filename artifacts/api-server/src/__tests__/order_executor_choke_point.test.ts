@@ -43,7 +43,7 @@ vi.mock("@workspace/db", () => ({
 }));
 
 const baseReq = () => ({
-  symbol: "BTCUSD",
+  symbol: "BTC",
   side: "buy" as const,
   direction: "long" as const,
   quantity: 0.01,
