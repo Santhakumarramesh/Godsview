@@ -109,6 +109,66 @@ router.use("/api/proof/reconciliation/run",
 router.use("/api/proof/reconciliation/run", requireOperator);
 router.use("/api/proof/reconciliation/run", (_req, _res, next) => { incReconciliationRun(); next(); });
 
+// ── Commit 2: Mock/demo route 410-disable ──────────────────────────────
+// Production-surface honesty cleanup. The route prefixes below were identified
+// (via `Math.random()` audit + manual inspection) as serving generated, random,
+// hard-coded, or fixture data rather than real DB / live-broker / proof-system
+// data. They are intercepted here with HTTP 410 Gone so callers (including the
+// dashboard pages that have not yet been removed) get an explicit, debuggable
+// error instead of silently consuming fake data. Source files remain in the
+// tree but their handlers are unreachable until they are rewired to real data
+// sources or removed in a later cleanup commit.
+//
+// Whitelisted (NEVER intercepted by this middleware):
+//   /api/healthz, /api/health/phase6, /api/ready/phase6, /api/proof/*,
+//   /api/alpaca/*, /api/system/* (status), /api/ops/metrics, /api/ready
+//
+// Disabled (return 410):
+//   /api/brain/*           (Math.random in routes/brain.ts)
+//   /api/autonomous/*      (hard-coded brain personalities)
+//   /api/backtest/*        (Math.random in routes/backtest.ts)
+//   /api/backtest-v2/*     (Math.random)
+//   /api/mcp/backtest/*    (Math.random in routes/mcp_backtest.ts)
+//   /api/mcp-backtest/*    (alias of above)
+//   /api/mcp/stream/brain-graph  (random fixtures in routes/mcp_stream.ts)
+//   /api/execution-control/*     (5x Math.random in routes/execution_control.ts)
+//   /api/decision-loop/run       (Math.random in routes/unified_decision.ts)
+//   /api/ude/*                   (alias for unified-decision)
+//   /api/memory/*                (Math.random in routes/memory.ts)
+//   /api/journal/*               (Math.random in routes/trade_journal.ts)
+//
+const MOCK_DISABLED_PREFIXES: ReadonlyArray<string> = [
+  "/brain",
+  "/autonomous",
+  "/backtest",
+  "/backtest-v2",
+  "/mcp/backtest",
+  "/mcp-backtest",
+  "/mcp/stream/brain-graph",
+  "/execution-control",
+  "/decision-loop/run",
+  "/ude",
+  "/memory",
+  "/journal",
+];
+function pathStartsWith(reqPath: string, prefix: string): boolean {
+  return reqPath === prefix || reqPath.startsWith(prefix + "/");
+}
+router.use((req, res, next) => {
+  const p = req.path;
+  for (const prefix of MOCK_DISABLED_PREFIXES) {
+    if (pathStartsWith(p, prefix) || pathStartsWith(p, "/api" + prefix)) {
+      res.status(410).json({
+        error: "demo_endpoint_removed",
+        message: "This mock/demo endpoint was removed from the production surface.",
+        replacement: "/production-proof",
+      });
+      return;
+    }
+  }
+  next();
+});
+
 router.use(governanceRouter);
 router.use(healthRouter);
 router.use(signalsRouter);
