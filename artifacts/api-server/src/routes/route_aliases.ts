@@ -631,8 +631,8 @@ router.get("/api/alpaca/quote/:symbol", async (req: Request, res: Response) => {
       }
       res.json({
         symbol,
-        price: bar.close,
-        timestamp: bar.timestamp,
+        price: bar.Close,
+        timestamp: bar.Timestamp,
         source: "latest_bar",
       });
       return;

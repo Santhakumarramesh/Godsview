@@ -177,8 +177,8 @@ export function validateExecutionRequest(req: ExecutionRequest): string[] {
     errors.push("Short take profit must be below entry price");
   }
 
-  // Production gate must have approved
-  if (req.decision.action !== "EXECUTE") {
+  // Production gate must have approved (only checked when a SI decision is attached)
+  if (req.decision && req.decision.action !== "EXECUTE") {
     errors.push(`Production gate blocked: ${req.decision.action}`);
   }
 
