@@ -312,6 +312,12 @@ type NavSection = { section: string; items: NavItem[] };
 
 const navSections: NavSection[] = [
   {
+    section: "Production",
+    items: [
+      { href: "/production-proof", label: "Production Proof", icon: "verified", sub: "Live Real Data Only" },
+    ],
+  },
+  {
     section: "Command",
     items: [
       { href: "/", label: "Mission Control", icon: "dashboard", sub: "Overview" },

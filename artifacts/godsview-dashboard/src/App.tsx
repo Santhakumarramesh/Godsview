@@ -10,6 +10,7 @@ import ModeBadge from "@/components/ModeBadge";
 
 // ── Eager: primary landing page (fastest first paint) ───────────────────────
 import Dashboard from "@/pages/dashboard";
+import ProductionProofPage from "@/pages/production-proof";
 
 // ── Lazy: all other pages (each becomes its own JS chunk) ───────────────────
 const Signals            = React.lazy(() => import("@/pages/signals"));
@@ -233,6 +234,13 @@ function Router() {
         <Route path="/">
           <AppErrorBoundary scope="page:dashboard">
             <Dashboard />
+          </AppErrorBoundary>
+        </Route>
+
+        {/* Production Proof — only real, DB-backed / live-broker / proof endpoints. */}
+        <Route path="/production-proof">
+          <AppErrorBoundary scope="page:production-proof">
+            <ProductionProofPage />
           </AppErrorBoundary>
         </Route>
 
