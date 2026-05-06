@@ -79,3 +79,7 @@ artifacts/api-server/public/public/
 # ── Nested clone prevention ───────────────────────────────────────────────────
 Godsview/
 logs/
+
+# Allow the new GodsView MCP server v1 (lower-cased path; case-insensitive match by Godsview/ on line 80 was over-matching)
+!mcp-servers/godsview/
+!mcp-servers/godsview/**

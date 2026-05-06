@@ -1,0 +1,24 @@
+{
+  "name": "@godsview/mcp",
+  "version": "1.0.0",
+  "description": "GodsView MCP server v1 — read-only inspection of Brain Console, signals, pipeline, risk, and proof endpoints. No order placement, no chart control, no live writes.",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "godsview-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0",
+    "tsx": "^4.19.0"
+  }
+}
