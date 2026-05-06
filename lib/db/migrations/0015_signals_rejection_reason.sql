@@ -1,0 +1,30 @@
+-- 0015_signals_rejection_reason.sql
+-- Production hotfix for column drift on the `signals` table.
+--
+-- Background:
+--   - The Drizzle schema (lib/db/src/schema/signals.ts:24) declares
+--     `rejection_reason text` (nullable) as part of the signals table.
+--   - GET /api/signals issues a `select * from signals` via Drizzle, which
+--     therefore lists `rejection_reason` in the projected columns.
+--   - On the production EC2 Postgres instance the column is missing, so the
+--     query fails with: column "rejection_reason" does not exist
+--     and the route returns HTTP 503.
+--
+-- Why a separate file even though 0010_paper_trade_lifecycle.sql already
+-- contains the same ALTER TABLE:
+--   - The Drizzle migrator only applies migrations listed in
+--     lib/db/migrations/meta/_journal.json, which currently lists only
+--     0000_initial. 0001-0014 are run as a supplemental pass via
+--     lib/db/src/run-sql-migrations.ts (now correctly wired into
+--     docker-entrypoint.sh by the same commit). Keeping this hotfix in a
+--     standalone single-statement file means it cannot be defeated by an
+--     unrelated statement failing earlier in 0010.
+--
+-- Safety:
+--   - ADD COLUMN IF NOT EXISTS is idempotent and safe to re-run on every
+--     container start.
+--   - The column is nullable with no default, so adding it is a metadata-
+--     only operation: no row rewrite, no lock escalation, sub-second on
+--     any table size.
+
+ALTER TABLE signals ADD COLUMN IF NOT EXISTS rejection_reason TEXT;

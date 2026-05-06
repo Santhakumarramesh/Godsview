@@ -48,25 +48,26 @@ if [ -n "$DATABASE_URL" ]; then
     echo "[entrypoint] WARNING: Migration runner failed — server will attempt to start anyway"
   fi
 
-  # ── Step 2b: Run all SQL migration files (IF NOT EXISTS — safe to re-run) ──
+  # ── Step 2b: Apply supplemental SQL migrations ────────────────────────
+  #
+  # The Drizzle migrator above only applies entries listed in
+  # lib/db/migrations/meta/_journal.json (currently just 0000_initial).
+  # Migrations 0001-NNNN are kept as standalone idempotent .sql files
+  # using ADD COLUMN IF NOT EXISTS / ADD CONSTRAINT IF NOT EXISTS, applied
+  # by lib/db/src/run-sql-migrations.ts on every boot.
+  #
+  # Why we use the dedicated runner instead of an inline `node -e` block:
+  # pnpm does not hoist the `pg` dependency to /app/node_modules (it lives
+  # under /app/lib/db/node_modules/pg via symlink), so an inline
+  # `import('pg')` from /app silently fails to resolve and every .sql
+  # file gets logged as SKIP. tsx resolves workspace symlinks correctly,
+  # so npx tsx finds pg through @workspace/db without any hoisting.
   echo "[entrypoint] Applying supplemental migration SQL files..."
-  for sqlfile in ./lib/db/migrations/*.sql; do
-    if [ -f "$sqlfile" ]; then
-      echo "[entrypoint]   Running $(basename "$sqlfile")..."
-      # Use node with dynamic import for ESM pg driver, fallback to warning
-      node -e "
-        import('pg').then(({ default: pg }) => {
-          const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 1 });
-          const fs = require('fs');
-          pool.query(fs.readFileSync('$sqlfile', 'utf8'))
-            .then(() => { console.log('  OK'); pool.end(); })
-            .catch(e => { console.error('  WARN:', e.message); pool.end(); });
-        }).catch(() => {
-          console.log('  SKIP (pg module not available — migrations handled by drizzle)');
-        });
-      " 2>&1 || echo "[entrypoint]   SKIP: supplemental SQL (non-critical)"
-    fi
-  done
+  if npx tsx ./lib/db/src/run-sql-migrations.ts 2>&1; then
+    echo "[entrypoint] Supplemental SQL migrations applied"
+  else
+    echo "[entrypoint] WARNING: supplemental SQL runner failed — server will attempt to start anyway"
+  fi
 else
   echo "[entrypoint] No DATABASE_URL — using PGlite (in-process, dev mode)"
 fi
