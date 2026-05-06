@@ -35,6 +35,24 @@ import {
 
 import type { ExecutionRequest, ExecutionResult } from "../lib/order_executor";
 import type { Signal } from "@workspace/strategy-ob-retest-long-1h";
+import {
+  setMacroNewsGateStateForTesting,
+  resetMacroNewsGateCache,
+  type MacroNewsGateState,
+} from "../lib/risk/macro_news_gate";
+
+// M5d-rng: deterministic "macro-news-gate inactive" state used by every
+// attemptExecution test. Without this, attemptExecution() would call the
+// real /api/macro-risk producer (FRED / Alpaca News network), making tests
+// flaky and slow. The override is reset in beforeEach below.
+const INACTIVE_MACRO_GATE: MacroNewsGateState = {
+  enabled: true,
+  active: false,
+  reason: null,
+  affected_symbols: [],
+  source: "macro-risk",
+  last_refreshed_at: "2025-01-01T00:00:00.000Z",
+};
 
 // ── Fixture helpers (deterministic; NO Math.random) ──────────────────────────
 
@@ -66,6 +84,9 @@ function makeFlatBars(n: number, basePrice = 100): Array<{
 
 beforeEach(() => {
   resetPipelineSnapshot();
+  // M5d-rng: ensure tests don't hit the real /api/macro-risk producer.
+  setMacroNewsGateStateForTesting(INACTIVE_MACRO_GATE);
+  resetMacroNewsGateCache();
 });
 
 // ── alpacaBarToStrategyBar ───────────────────────────────────────────────────
@@ -280,6 +301,170 @@ describe("attemptExecution", () => {
     expect(updated.execution?.executed).toBe(false);
     expect(updated.execution?.skipped_reason).toMatch(/^qty_zero_or_invalid:0$/);
     expect(getPipelineSnapshot().totals.execution_blocked).toBe(1);
+  });
+
+  // ── M5d-rng: macro-news-gate plumbing through attemptExecution ────────────
+
+  it("M5d-rng: passes macroNewsGate=inactive to executeOrder when news_window is inactive", async () => {
+    setMacroNewsGateStateForTesting({
+      enabled: true,
+      active: false,
+      reason: null,
+      affected_symbols: [],
+      source: "macro-risk",
+      last_refreshed_at: "2025-05-06T00:00:00.000Z",
+    });
+    const record = makeAcceptedRecord();
+    let capturedReq: ExecutionRequest | null = null;
+    const fakeExec = vi.fn(async (req: ExecutionRequest): Promise<ExecutionResult> => {
+      capturedReq = req;
+      return { executed: true, order_id: "ord_inactive", mode: "paper", details: {}, audit_id: "aud_inactive" };
+    });
+    await attemptExecution(record, 1, fakeExec);
+    expect(capturedReq).not.toBeNull();
+    expect(capturedReq!.macroNewsGate).toBeDefined();
+    expect(capturedReq!.macroNewsGate!.active).toBe(false);
+    expect(capturedReq!.macroNewsGate!.reason).toBeNull();
+    // Invariant preserved
+    expect(capturedReq!.bypassReasons).toBeUndefined();
+    // Snapshot also reflects global state
+    const snap = getPipelineSnapshot();
+    expect(snap.macro_news_gate).not.toBeNull();
+    expect(snap.macro_news_gate!.active).toBe(false);
+    expect(snap.macro_news_gate!.source).toBe("macro-risk");
+  });
+
+  it("M5d-rng: passes macroNewsGate=active when symbol is in affected_symbols", async () => {
+    setMacroNewsGateStateForTesting({
+      enabled: true,
+      active: true,
+      reason: 'macro_news_window_active: critical event "Employment Situation (NFP)" in ~12 min (within news window -15m..+30m).',
+      affected_symbols: ["BTCUSD", "SPY", "QQQ"],
+      source: "macro-risk",
+      last_refreshed_at: "2025-05-06T13:18:00.000Z",
+    });
+    const record = makeAcceptedRecord(); // symbol = BTCUSD
+    let capturedReq: ExecutionRequest | null = null;
+    const fakeExec = vi.fn(async (req: ExecutionRequest): Promise<ExecutionResult> => {
+      capturedReq = req;
+      return {
+        executed: false,
+        mode: "paper",
+        details: {},
+        blocking_gate: "news_lockout",
+        error: req.macroNewsGate?.reason ?? "news",
+      };
+    });
+    const updated = await attemptExecution(record, 1, fakeExec);
+    expect(capturedReq!.macroNewsGate!.active).toBe(true);
+    expect(capturedReq!.macroNewsGate!.reason).toMatch(/^macro_news_window_active:/);
+    expect(updated.execution?.executed).toBe(false);
+    expect(updated.execution?.blocking_gate).toBe("news_lockout");
+    // Invariant preserved
+    expect(capturedReq!.bypassReasons).toBeUndefined();
+    expect(getPipelineSnapshot().totals.execution_blocked).toBe(1);
+    expect(getPipelineSnapshot().totals.executed).toBe(0);
+  });
+
+  it("M5d-rng: empty affected_symbols + active=true → applies to ALL symbols (conservative)", async () => {
+    setMacroNewsGateStateForTesting({
+      enabled: true,
+      active: true,
+      reason: "macro_news_window_active: critical event without explicit symbol mapping.",
+      affected_symbols: [], // empty = applies to all
+      source: "macro-risk",
+      last_refreshed_at: "2025-05-06T13:18:00.000Z",
+    });
+    const record = makeAcceptedRecord();
+    let capturedReq: ExecutionRequest | null = null;
+    const fakeExec = vi.fn(async (req: ExecutionRequest): Promise<ExecutionResult> => {
+      capturedReq = req;
+      return { executed: false, mode: "paper", details: {} };
+    });
+    await attemptExecution(record, 1, fakeExec);
+    expect(capturedReq!.macroNewsGate!.active).toBe(true);
+  });
+
+  it("M5d-rng: symbol NOT in affected_symbols → macroNewsGate.active=false (no over-reach)", async () => {
+    setMacroNewsGateStateForTesting({
+      enabled: true,
+      active: true,
+      reason: "macro_news_window_active: equity-only NFP",
+      affected_symbols: ["SPY", "QQQ"], // BTCUSD is NOT here
+      source: "macro-risk",
+      last_refreshed_at: "2025-05-06T13:18:00.000Z",
+    });
+    const record = makeAcceptedRecord(); // BTCUSD
+    let capturedReq: ExecutionRequest | null = null;
+    const fakeExec = vi.fn(async (req: ExecutionRequest): Promise<ExecutionResult> => {
+      capturedReq = req;
+      return { executed: true, order_id: "ord_btc", mode: "paper", details: {}, audit_id: "aud_btc" };
+    });
+    await attemptExecution(record, 1, fakeExec);
+    expect(capturedReq!.macroNewsGate!.active).toBe(false);
+    expect(capturedReq!.macroNewsGate!.reason).toBeNull();
+    // Global state still reflects the macro-news-gate is active overall
+    const snap = getPipelineSnapshot();
+    expect(snap.macro_news_gate!.active).toBe(true);
+    expect(snap.macro_news_gate!.affected_symbols).toEqual(["SPY", "QQQ"]);
+  });
+
+  it("M5d-rng: enabled=false (disabled mode) → never blocks even if active=true", async () => {
+    setMacroNewsGateStateForTesting({
+      enabled: false,
+      active: true,
+      reason: "should be ignored when disabled",
+      affected_symbols: [],
+      source: "disabled",
+      last_refreshed_at: "2025-05-06T13:18:00.000Z",
+    });
+    const record = makeAcceptedRecord();
+    let capturedReq: ExecutionRequest | null = null;
+    const fakeExec = vi.fn(async (req: ExecutionRequest): Promise<ExecutionResult> => {
+      capturedReq = req;
+      return { executed: true, order_id: "ord_dis", mode: "paper", details: {}, audit_id: "aud_dis" };
+    });
+    await attemptExecution(record, 1, fakeExec);
+    expect(capturedReq!.macroNewsGate!.active).toBe(false);
+  });
+
+  it("M5d-rng: macro-risk-unavailable degraded source → does NOT crash scanner, fails open", async () => {
+    setMacroNewsGateStateForTesting({
+      enabled: true,
+      active: false,
+      reason: "macro-risk endpoint unavailable: simulated outage",
+      affected_symbols: [],
+      source: "macro-risk-unavailable",
+      last_refreshed_at: "2025-05-06T13:18:00.000Z",
+    });
+    const record = makeAcceptedRecord();
+    let capturedReq: ExecutionRequest | null = null;
+    const fakeExec = vi.fn(async (req: ExecutionRequest): Promise<ExecutionResult> => {
+      capturedReq = req;
+      return { executed: true, order_id: "ord_deg", mode: "paper", details: {}, audit_id: "aud_deg" };
+    });
+    const updated = await attemptExecution(record, 1, fakeExec);
+    // Scanner did not crash; trade went through (fail-open is the milestone choice).
+    expect(updated.execution?.executed).toBe(true);
+    expect(capturedReq!.macroNewsGate!.active).toBe(false);
+    // Snapshot exposes the degraded source label honestly.
+    const snap = getPipelineSnapshot();
+    expect(snap.macro_news_gate!.source).toBe("macro-risk-unavailable");
+    expect(snap.macro_news_gate!.reason).toMatch(/macro-risk endpoint unavailable/);
+  });
+
+  it("M5d-rng: M5b/M5c per-decision diagnostics still populate (no regression)", () => {
+    const decision = runPipelineEvaluation({
+      symbol: "BTCUSD",
+      bars: makeFlatBars(60) as any,
+    });
+    expect(decision.diagnostics).not.toBeNull();
+    expect(decision.diagnostics!.active_config).toBeDefined();
+    expect(decision.diagnostics!.active_config.ob_break_buffer_pct).toBe(0);
+    expect(decision.diagnostics!.active_config.max_retest_bars).toBe(24);
+    expect(decision.diagnostics!.active_config.min_displacement_atr).toBe(1.5);
+    // M5b reason_class + active_config still in place
+    expect(decision.diagnostics!.reason_class).not.toBeNull();
   });
 
   it("does not call executeOrder for a non-accepted record", async () => {

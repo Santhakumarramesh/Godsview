@@ -35,6 +35,20 @@ export interface SnapshotInputs {
   /** Pre-fetched live counts. */
   openPositionCount?: number;
   tradesTodayCount?: number;
+  /**
+   * M5d-rng: pre-evaluated macro-news-gate state for THIS request's symbol.
+   *
+   * Caller (e.g. m2_pipeline.attemptExecution) is expected to have called
+   * `evaluateMacroNewsGateForSymbol(state, symbol)` already, so `active`
+   * reflects "this symbol is affected" and `reason` is the human-readable
+   * lockout text. Default (undefined) collapses to {active:false,reason:null}
+   * which preserves legacy env-only news_lockout semantics for callers that
+   * have not yet been updated (e.g. position_monitor stop-outs).
+   */
+  macroNewsGate?: {
+    active: boolean;
+    reason: string | null;
+  };
 }
 
 /**
@@ -58,6 +72,14 @@ export function buildRiskSnapshot(inputs: SnapshotInputs): RiskSnapshot {
   // like per-strategy %). The pipeline checks the user-specified hard caps.
   void getExposureLimits; // referenced for future cross-check; not used here
 
+  // M5d-rng: macro-news-gate contribution. Caller-pre-filtered by symbol;
+  // we only forward into the snapshot. Default off if not provided (preserves
+  // legacy callers).
+  const macroNewsBlockActive = !!inputs.macroNewsGate?.active;
+  const macroNewsBlockReason = macroNewsBlockActive
+    ? (inputs.macroNewsGate?.reason ?? null)
+    : null;
+
   return {
     systemMode: SYSTEM_MODE,
     killSwitchActive: killActive,
@@ -67,6 +89,8 @@ export function buildRiskSnapshot(inputs: SnapshotInputs): RiskSnapshot {
     sessionAllowed: isSessionAllowed(session, controls),
     activeSession: session,
     newsLockoutActive: isNewsLockoutActive(),
+    macroNewsBlockActive,
+    macroNewsBlockReason,
     dailyPnLPct: inputs.dailyPnLPct ?? 0,
     maxDailyLossPct: MAX_DAILY_LOSS_PCT,
     openPositionCount: inputs.openPositionCount ?? 0,

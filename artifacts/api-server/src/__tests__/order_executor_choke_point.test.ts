@@ -63,6 +63,9 @@ const happySnap = {
   sessionAllowed: true,
   activeSession: "NY",
   newsLockoutActive: false,
+  // M5d-rng: macro-news-gate contribution. Off in fixtures.
+  macroNewsBlockActive: false,
+  macroNewsBlockReason: null as string | null,
   dailyPnLPct: 0,
   maxDailyLossPct: 2,
   openPositionCount: 0,

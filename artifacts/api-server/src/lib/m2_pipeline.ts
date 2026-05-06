@@ -25,6 +25,16 @@
  *   7. Per-rejection-reason counters in `totals.reasons` so /api/brain-state
  *      shows reason distribution at a glance.
  *
+ *   M5d-rng additions (read-only macro-news-gate plumbing):
+ *   8. Each call to attemptExecution() reads the current macro-news-gate
+ *      state via lib/risk/macro_news_gate.ts and forwards it into
+ *      ExecutionRequest.macroNewsGate so the 9-gate risk pipeline (gate 6
+ *      news_lockout) can block NEW entries during macro release windows.
+ *      Stop-out exits and explicit closes are NOT affected.
+ *   9. The current global state is mirrored on _snapshot.macro_news_gate so
+ *      /api/brain-state can show "what does macro-news see right now"
+ *      without picking a per-symbol record.
+ *
  * What this module does NOT do:
  *   - Bypass the risk pipeline.
  *   - Place orders directly.
@@ -56,6 +66,11 @@ import {
 import type { AlpacaBar } from "./alpaca";
 import { logger as _logger } from "./logger";
 import type { ExecutionRequest, ExecutionResult } from "./order_executor";
+import {
+  getMacroNewsGateState,
+  evaluateMacroNewsGateForSymbol,
+  type MacroNewsGateState,
+} from "./risk/macro_news_gate.js";
 
 const logger = _logger.child({ module: "m2_pipeline" });
 
@@ -258,6 +273,22 @@ export interface ActiveConfigDiagnostic {
   source: "default" | "env_override";  // which path produced these values
 }
 
+/**
+ * M5d-rng: per-decision macro-news-gate diagnostic.
+ * Snapshots whether the macro-news-gate would block a NEW entry on this
+ * symbol at the moment attemptExecution() ran. For records that never
+ * reach attemptExecution (no_trade, evaluation_error), this stays null.
+ */
+export interface MacroNewsGateDiagnostic {
+  enabled: boolean;
+  active: boolean;
+  reason: string | null;
+  affected_symbols: string[];
+  source: "macro-risk" | "macro-risk-cached" | "macro-risk-unavailable" | "disabled";
+  applies_to_symbol: boolean;
+  last_refreshed_at: string | null;
+}
+
 export interface PipelineDiagnostics {
   bos: BosDiagnostic | null;
   order_block: OrderBlockDiagnostic | null;
@@ -266,6 +297,10 @@ export interface PipelineDiagnostics {
   reason_class: ReasonClass | null;
   /** M5c: which thresholds were used for THIS evaluation. Always populated. */
   active_config: ActiveConfigDiagnostic;
+  /** M5d-rng: macro-news-gate decision for THIS symbol when attemptExecution
+   *  ran. Null on records that did not reach attemptExecution. Optional so
+   *  pre-existing fixtures still type-check. */
+  macro_news_gate?: MacroNewsGateDiagnostic | null;
 }
 
 export interface ExecutionAttempt {
@@ -367,6 +402,24 @@ interface Snapshot {
   last_no_trade: DecisionRecord | null;
   by_symbol: Record<string, DecisionRecord>;
   totals: Totals;
+  /**
+   * M5d-rng: GLOBAL macro-news-gate state from the last attemptExecution()
+   * call. Mirrors the per-decision diagnostic but lives on the snapshot so
+   * /api/brain-state can show "what does macro-news see RIGHT NOW" without
+   * having to pick a per-symbol record.
+   * null until at least one attemptExecution() runs.
+   */
+  macro_news_gate: MacroNewsGateGlobal | null;
+}
+
+/** M5d-rng: shape of the global per-tick state surfaced on the snapshot. */
+export interface MacroNewsGateGlobal {
+  enabled: boolean;
+  active: boolean;
+  reason: string | null;
+  affected_symbols: string[];
+  source: "macro-risk" | "macro-risk-cached" | "macro-risk-unavailable" | "disabled";
+  last_refreshed_at: string | null;
 }
 
 function emptyReasonTotals(): ReasonTotals {
@@ -409,6 +462,7 @@ const _snapshot: Snapshot = {
     fetch_errors: 0,
     reasons: emptyReasonTotals(),
   },
+  macro_news_gate: null,
 };
 
 /** Returns a deep copy of the current snapshot. Safe to expose via API. */
@@ -438,6 +492,7 @@ export function resetPipelineSnapshot(): void {
   _snapshot.totals.insufficient_bars = 0;
   _snapshot.totals.fetch_errors = 0;
   _snapshot.totals.reasons = emptyReasonTotals();
+  _snapshot.macro_news_gate = null;
 }
 
 // ── Diagnostic recorders (called by scanner before/around runPipelineEvaluation) ─
@@ -884,6 +939,55 @@ export async function attemptExecution(
   }
 
   const long = record.signal;
+
+  // M5d-rng: read macro-news-gate state once for this attempt. Never throws
+  // (adapter is fail-open with degraded source label). The pre-symbol filter
+  // tells the risk pipeline whether THIS symbol's new entry should be blocked.
+  let macroState: MacroNewsGateState;
+  try {
+    macroState = await getMacroNewsGateState();
+  } catch (err) {
+    // Defensive: adapter already swallows errors, but if anything escapes we
+    // must not crash the scanner.
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.warn({ err: msg, symbol: record.symbol }, "[m2] macro-news-gate adapter unexpected throw");
+    macroState = {
+      enabled: true,
+      active: false,
+      reason: `macro_news_gate adapter threw: ${msg}`,
+      affected_symbols: [],
+      source: "macro-risk-unavailable",
+      last_refreshed_at: null,
+    };
+  }
+  const macroForSymbol = evaluateMacroNewsGateForSymbol(macroState, record.symbol);
+
+  // Stamp the GLOBAL state on the snapshot so /api/brain-state can show
+  // "what does macro-news see right now" without picking a per-symbol record.
+  _snapshot.macro_news_gate = {
+    enabled: macroState.enabled,
+    active: macroState.active,
+    reason: macroState.reason,
+    affected_symbols: [...macroState.affected_symbols],
+    source: macroState.source,
+    last_refreshed_at: macroState.last_refreshed_at,
+  };
+
+  // Stamp the per-decision diagnostic. record.diagnostics may be null for
+  // pathological inputs (no normalized bars); in that case skip — the global
+  // _snapshot.macro_news_gate above still surfaces the state.
+  if (record.diagnostics) {
+    record.diagnostics.macro_news_gate = {
+      enabled: macroState.enabled,
+      active: macroState.active,
+      reason: macroState.reason,
+      affected_symbols: [...macroState.affected_symbols],
+      source: macroState.source,
+      applies_to_symbol: macroForSymbol.active,
+      last_refreshed_at: macroState.last_refreshed_at,
+    };
+  }
+
   const req: ExecutionRequest = {
     symbol: record.symbol,
     side: "buy",
@@ -894,6 +998,7 @@ export async function attemptExecution(
     entry_price: long.entry,
     stop_loss: long.stop,
     take_profit: long.target,
+    macroNewsGate: macroForSymbol,
   };
 
   let executed = false;

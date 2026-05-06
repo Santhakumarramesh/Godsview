@@ -69,6 +69,17 @@ export interface ExecutionRequest {
   closing?: boolean;
   /** Phase 5: account equity at moment of open (quote currency); used to compute pnl_pct on close. */
   equity_at_entry?: number;
+  /**
+   * M5d-rng: pre-evaluated macro-news-gate state for THIS symbol. Caller has
+   * already filtered by symbol via evaluateMacroNewsGateForSymbol(). Forwarded
+   * into buildRiskSnapshot. Optional — when undefined the legacy env-only
+   * news_lockout path applies (preserves backward compat for stop-outs and
+   * other non-scanner callers that haven't been updated).
+   */
+  macroNewsGate?: {
+    active: boolean;
+    reason: string | null;
+  };
 }
 
 export interface ExecutionResult {
@@ -112,7 +123,8 @@ export interface ExecutionHealthCheck {
 // ── Config ─────────────────────────────────────────────────────────
 
 const LEGACY_LIVE = String(process.env.GODSVIEW_ENABLE_LIVE_TRADING ?? "").toLowerCase() === "true";
-const SYSTEM_MODE = resolveSystemMode(process.env.GODSVIEW_SYSTEM_MODE, { liveTradingEnabled: LEGACY_LIVE });const OPERATOR_TOKEN = (process.env.GODSVIEW_OPERATOR_TOKEN ?? "").trim();
+const SYSTEM_MODE = resolveSystemMode(process.env.GODSVIEW_SYSTEM_MODE, { liveTradingEnabled: LEGACY_LIVE });
+const OPERATOR_TOKEN = (process.env.GODSVIEW_OPERATOR_TOKEN ?? "").trim();
 const MAX_SINGLE_ORDER_QTY = 100;
 const MAX_SINGLE_ORDER_USD = 25_000;
 
@@ -222,7 +234,8 @@ async function persistSIDecision(
       take_profit: String(req.take_profit),
       final_quality: String(signal.enhanced_quality),
       gate_action: gateAction,
-      gate_block_reasons: blockReasons.length > 0 ? blockReasons.join("; ") : null,      trailing_stop_json: signal.trailing_stop ? JSON.stringify(signal.trailing_stop) : null,
+      gate_block_reasons: blockReasons.length > 0 ? blockReasons.join("; ") : null,
+      trailing_stop_json: signal.trailing_stop ? JSON.stringify(signal.trailing_stop) : null,
       profit_targets_json: signal.profit_targets ? JSON.stringify(signal.profit_targets) : null,
     }).returning({ id: siDecisionsTable.id });
 
@@ -320,6 +333,7 @@ export async function executeOrder(req: ExecutionRequest): Promise<ExecutionResu
       dailyPnLPct: req.dailyPnLPct ?? null,
       openPositionCount: req.openPositionCount,
       tradesTodayCount: req.tradesTodayCount,
+      macroNewsGate: req.macroNewsGate,
     });
     const fauxPipeline = {
       allowed: false,
@@ -360,6 +374,7 @@ export async function executeOrder(req: ExecutionRequest): Promise<ExecutionResu
     dailyPnLPct: req.dailyPnLPct ?? null,
     openPositionCount: req.openPositionCount,
     tradesTodayCount: req.tradesTodayCount,
+    macroNewsGate: req.macroNewsGate,
   });
   const pipeline = evaluatePipeline(toRiskRequest(req), snap);
 

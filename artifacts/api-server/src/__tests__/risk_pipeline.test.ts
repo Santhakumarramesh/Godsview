@@ -26,6 +26,9 @@ const baseSnap = (over: Partial<RiskSnapshot> = {}): RiskSnapshot => ({
   sessionAllowed: true,
   activeSession: "NY",
   newsLockoutActive: false,
+  // M5d-rng: macro-news-gate contribution. Off by default in fixtures.
+  macroNewsBlockActive: false,
+  macroNewsBlockReason: null,
   dailyPnLPct: 0,
   maxDailyLossPct: 2,
   openPositionCount: 0,

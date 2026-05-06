@@ -54,8 +54,26 @@ export interface RiskSnapshot {
   sessionAllowed: boolean;
   /** Active session label (for audit). */
   activeSession: string;
-  /** True if news lockout is active. */
+  /** True if news lockout is active (env GODSVIEW_NEWS_LOCKOUT_ACTIVE; legacy
+   *  hard-block path that applies to BOTH new entries and stop-out exits). */
   newsLockoutActive: boolean;
+  /**
+   * M5d-rng: macro-news-gate contribution for THIS request.
+   *
+   * Distinct from `newsLockoutActive`. When this is true, gate 6 BLOCKS the
+   * request only when it is a NEW ENTRY (req.closing !== true and
+   * bypassReasons does NOT include "stop_out"). Stop-out exits and explicit
+   * close requests are allowed through — per M5d-rng scope: "Block ONLY new
+   * entries; do NOT close existing positions."
+   *
+   * Producer: lib/risk/macro_news_gate.ts (consumes /api/macro-risk
+   * news_window). Caller pre-filters by symbol via
+   * evaluateMacroNewsGateForSymbol() before populating SnapshotInputs.
+   */
+  macroNewsBlockActive: boolean;
+  /** Human-readable reason surfaced verbatim by gate 6 when this drives the
+   *  block. Null when macroNewsBlockActive=false. */
+  macroNewsBlockReason: string | null;
   /** Realized + open PnL today as a percentage of equity. Negative means loss. */
   dailyPnLPct: number;
   /** Maximum allowed daily loss as a percentage (positive number, e.g. 2 = 2%). */
@@ -205,11 +223,30 @@ export function evaluatePipeline(
   if (!d5.allowed) return fail(d5);
 
   // 6. news_lockout
-  const d6 = record(
-    "news_lockout",
-    !snap.newsLockoutActive,
-    snap.newsLockoutActive ? "news_lockout_active" : "no_news_lockout",
-  );
+  // Two contributions are OR'd:
+  //   (a) snap.newsLockoutActive — env GODSVIEW_NEWS_LOCKOUT_ACTIVE. Legacy
+  //       hard-block; applies to BOTH new entries and stop-out exits.
+  //   (b) snap.macroNewsBlockActive — M5d-rng macro-news-gate. Applies ONLY
+  //       to new entries. Stop-out exits and explicit close requests
+  //       short-circuit this contribution.
+  const isClosingOrStopOut = req.closing === true || isStopOut;
+  const macroContributes = snap.macroNewsBlockActive && !isClosingOrStopOut;
+  const newsBlocked = snap.newsLockoutActive || macroContributes;
+
+  let newsReason: string;
+  if (snap.newsLockoutActive) {
+    // Legacy env-driven contribution wins for the reason — preserves the
+    // pre-M5d-rng audit trail wording for that path.
+    newsReason = "news_lockout_active";
+  } else if (macroContributes) {
+    // Macro-news drove the block. Surface the explicit reason so audit
+    // logs and the m2 snapshot show WHY (which event, which window).
+    newsReason = snap.macroNewsBlockReason ?? "macro_news_window_active";
+  } else {
+    newsReason = "no_news_lockout";
+  }
+
+  const d6 = record("news_lockout", !newsBlocked, newsReason);
   if (!d6.allowed) return fail(d6);
 
   // 7. daily_loss_limit (negative dailyPnLPct = loss)
