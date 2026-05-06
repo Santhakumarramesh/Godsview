@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * GodsView MCP Server v1.1 — read-only inspection layer.
+ * GodsView MCP Server v1.2 — read-only inspection layer.
  *
  * Hard constraints (do NOT relax without an explicit Milestone bump):
  *  - Read-only: every tool issues HTTP GET only.
@@ -11,14 +11,14 @@
  *    (status, reason, base_url, path) — never a fabricated success.
  *  - No browser automation, no chart control, no order book scraping.
  *
- * Eleven tools:
+ * Fifteen tools:
  *   1. get_brain_state                  → GET /api/brain-state
  *   2. get_active_signals               → GET /api/signals
  *   3. explain_latest_pipeline_decision → /api/brain-state, projects pipeline
  *   4. get_risk_status                  → /api/brain-state, projects risk
  *   5. get_proof_status                 → /api/brain-state, projects proof
  *
- *   Milestone 4 additions:
+ *   Milestone 4 additions (v1.1):
  *   6. get_phase6_health           → GET /api/health/phase6 + /api/ready/phase6
  *   7. get_recent_rejected_signals → /api/signals/rejected if available, else
  *                                    /api/brain-state.signals.rejected
@@ -28,11 +28,25 @@
  *  10. get_m2_pipeline_status      → /api/brain-state.pipeline (compact)
  *  11. get_system_verdict          → /api/brain-state.verdict + supporting fields
  *
+ *   Milestone 5a additions (v1.2):
+ *  12. get_strategy_history        → GET /api/strategy-registry/snapshot +
+ *                                    GET /api/strategy-registry/list (parallel)
+ *  13. get_watchlist               → GET /api/watchlist
+ *  14. get_proof_trades_paginated  → GET /api/proof/trades?limit&status
+ *                                    (limit 1–500, status executed|rejected)
+ *  15. get_phase6_data_health      → GET /api/data-quality/health +
+ *                                    GET /api/data-integrity/health (parallel)
+ *
  * Configuration:
  *   GODSVIEW_BASE_URL   Base URL of the GodsView API server.
  *                       Defaults to http://localhost:3000.
  *                       Examples: http://54.162.228.136, https://api.godsview.dev
  *   GODSVIEW_HTTP_TIMEOUT_MS  Per-request timeout. Default 6000ms.
+ *
+ * Diagnostics: per-call counters and outcome logged to stderr only
+ * (stdout is reserved for JSON-RPC). One line per tool call:
+ *   [godsview-mcp] tool=<name> outcome=<ok|not_connected|error> dt_ms=<n>
+ *                  calls=<n> ok=<n> nc=<n> err=<n>
  *
  * Transport: stdio (JSON-RPC over stdin/stdout) via the official
  * @modelcontextprotocol/sdk StdioServerTransport.
@@ -50,12 +64,32 @@ const RAW_BASE_URL = process.env.GODSVIEW_BASE_URL ?? "http://localhost:3000";
 const BASE_URL = RAW_BASE_URL.replace(/\/+$/, "");
 const HTTP_TIMEOUT_MS = Number(process.env.GODSVIEW_HTTP_TIMEOUT_MS ?? "6000");
 const SERVER_NAME = "godsview-mcp";
-const SERVER_VERSION = "1.1.0";
+const SERVER_VERSION = "1.2.0";
 
 /* Types */
 type FetchOk<T> = { ok: true; status: number; data: T };
 type FetchErr = { ok: false; status: number; reason: string; body?: string };
 type FetchResult<T> = FetchOk<T> | FetchErr;
+
+type ToolOutcome = "ok" | "not_connected" | "error";
+type CounterEntry = { calls: number; ok: number; not_connected: number; error: number };
+const counters: Record<string, CounterEntry> = {};
+function incCounter(name: string, outcome: ToolOutcome): CounterEntry {
+  let c = counters[name];
+  if (!c) {
+    c = { calls: 0, ok: 0, not_connected: 0, error: 0 };
+    counters[name] = c;
+  }
+  c.calls += 1;
+  c[outcome] += 1;
+  return c;
+}
+function classifyOutcome(data: unknown): ToolOutcome {
+  if (data && typeof data === "object" && (data as { status?: unknown }).status === "not_connected") {
+    return "not_connected";
+  }
+  return "ok";
+}
 
 function notConnected(opts: {
   tool: string;
@@ -184,6 +218,46 @@ const TOOLS = [
     name: "get_system_verdict",
     description:
       "Read-only. Returns the server-generated verdict string from /api/brain-state.verdict plus supporting fields (mode, generated_at, broker buying_power/equity, scanner running, last decision reason, kill_switch state, mcp_status). One-line system summary.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "get_strategy_history",
+    description:
+      "Read-only (Milestone 5a). Returns the strategy registry snapshot and full strategy list in parallel via GET /api/strategy-registry/snapshot and GET /api/strategy-registry/list. Snapshot includes totalStrategies, byState counts, recentPromotions, recentRetirements, topPerformers. List returns all registered strategies. Honest empty arrays when no strategies are registered. Never modifies the registry.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "get_watchlist",
+    description:
+      "Read-only (Milestone 5a). Returns the active watchlist via GET /api/watchlist — symbol, label, assetClass (crypto|forex|equity|commodity), enabled flag, addedAt, lastScannedAt, signalCount, note. Never adds, removes, or modifies watchlist entries.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "get_proof_trades_paginated",
+    description:
+      "Read-only (Milestone 5a). Returns paginated paper-trade proof entries via GET /api/proof/trades. Accepts `limit` (1–500, default 50) and `status` (executed | rejected, default executed). For executed: returns count, open_count, closed_count, trades. For rejected: returns count, trades (each with rejection reason). Never places, modifies, or closes any trade.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        limit: {
+          type: "number",
+          description: "Max trades to return. Default 50. Capped at 500.",
+          minimum: 1,
+          maximum: 500,
+        },
+        status: {
+          type: "string",
+          enum: ["executed", "rejected"],
+          description: "Filter by trade status. Default 'executed'.",
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "get_phase6_data_health",
+    description:
+      "Read-only (Milestone 5a). Calls GET /api/data-quality/health and GET /api/data-integrity/health in parallel. Returns feed health (tracked / fresh / stale / dead counts), recent stale/dead alerts, rejection rate, buffer utilization, stale symbol count, and module uptime. Complementary to get_phase6_health, which covers DB/Redis/readiness. Honest not_connected envelope on upstream failure.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
 ] as const;
@@ -402,8 +476,142 @@ async function toolGetSystemVerdict(): Promise<unknown> {
   };
 }
 
+/* Tool implementations — Milestone 5a (v1.2) */
+async function toolGetStrategyHistory(): Promise<unknown> {
+  const [snapR, listR] = await Promise.all([
+    safeGet<Record<string, any>>("/api/strategy-registry/snapshot"),
+    safeGet<Record<string, any>>("/api/strategy-registry/list"),
+  ]);
+
+  const snapshotSection = snapR.ok
+    ? { status: "ok" as const, value: snapR.data }
+    : {
+        status: "not_connected" as const,
+        value: null,
+        path: "/api/strategy-registry/snapshot",
+        upstream_status: snapR.status,
+        reason: snapR.reason,
+      };
+
+  const listSection = listR.ok
+    ? { status: "ok" as const, value: listR.data }
+    : {
+        status: "not_connected" as const,
+        value: null,
+        path: "/api/strategy-registry/list",
+        upstream_status: listR.status,
+        reason: listR.reason,
+      };
+
+  if (!snapR.ok && !listR.ok) {
+    return {
+      status: "not_connected",
+      tool: "get_strategy_history",
+      base_url: BASE_URL,
+      reason: `Both /api/strategy-registry/snapshot and /api/strategy-registry/list unreachable. snapshot=${snapR.reason}; list=${listR.reason}`,
+    };
+  }
+  return {
+    status: "ok",
+    tool: "get_strategy_history",
+    base_url: BASE_URL,
+    snapshot: snapshotSection,
+    list: listSection,
+  };
+}
+
+async function toolGetWatchlist(): Promise<unknown> {
+  const path = "/api/watchlist";
+  const r = await safeGet<Record<string, any>>(path);
+  if (!r.ok) return notConnected({ tool: "get_watchlist", path, status: r.status, reason: r.reason, body: r.body });
+  const wl = r.data?.watchlist;
+  const wlArray = Array.isArray(wl) ? wl : [];
+  const count = typeof r.data?.count === "number" ? r.data.count : wlArray.length;
+  return {
+    status: "ok",
+    tool: "get_watchlist",
+    source: path,
+    note: "Read-only watchlist snapshot. POST/DELETE are not exposed via MCP.",
+    count,
+    watchlist: wlArray,
+  };
+}
+
+async function toolGetProofTradesPaginated(args: unknown): Promise<unknown> {
+  const a = (args && typeof args === "object" ? args : {}) as Record<string, unknown>;
+
+  const rawLimit = a.limit;
+  let limit: number;
+  if (typeof rawLimit === "number" && Number.isFinite(rawLimit)) {
+    limit = Math.floor(rawLimit);
+  } else if (typeof rawLimit === "string" && rawLimit.trim() !== "" && Number.isFinite(Number(rawLimit))) {
+    limit = Math.floor(Number(rawLimit));
+  } else {
+    limit = 50;
+  }
+  if (limit < 1) limit = 1;
+  if (limit > 500) limit = 500;
+
+  const rawStatus = typeof a.status === "string" ? a.status.toLowerCase() : "";
+  const status: "executed" | "rejected" = rawStatus === "rejected" ? "rejected" : "executed";
+
+  const path = `/api/proof/trades?limit=${limit}&status=${status}`;
+  const r = await safeGet<Record<string, any>>(path);
+  if (!r.ok) return notConnected({ tool: "get_proof_trades_paginated", path, status: r.status, reason: r.reason, body: r.body });
+  return {
+    status: "ok",
+    tool: "get_proof_trades_paginated",
+    source: path,
+    requested: { limit, status },
+    data: r.data,
+  };
+}
+
+async function toolGetPhase6DataHealth(): Promise<unknown> {
+  const [qR, iR] = await Promise.all([
+    safeGet<Record<string, any>>("/api/data-quality/health"),
+    safeGet<Record<string, any>>("/api/data-integrity/health"),
+  ]);
+
+  const dataQualitySection = qR.ok
+    ? { status: "ok" as const, value: qR.data }
+    : {
+        status: "not_connected" as const,
+        value: null,
+        path: "/api/data-quality/health",
+        upstream_status: qR.status,
+        reason: qR.reason,
+      };
+
+  const dataIntegritySection = iR.ok
+    ? { status: "ok" as const, value: iR.data }
+    : {
+        status: "not_connected" as const,
+        value: null,
+        path: "/api/data-integrity/health",
+        upstream_status: iR.status,
+        reason: iR.reason,
+      };
+
+  if (!qR.ok && !iR.ok) {
+    return {
+      status: "not_connected",
+      tool: "get_phase6_data_health",
+      base_url: BASE_URL,
+      reason: `Both /api/data-quality/health and /api/data-integrity/health unreachable. quality=${qR.reason}; integrity=${iR.reason}`,
+    };
+  }
+  return {
+    status: "ok",
+    tool: "get_phase6_data_health",
+    base_url: BASE_URL,
+    data_quality: dataQualitySection,
+    data_integrity: dataIntegritySection,
+  };
+}
+
 /* Dispatch */
-async function dispatchTool(name: string): Promise<unknown> {
+async function dispatchTool(name: string, args: unknown): Promise<unknown> {
   switch (name) {
     case "get_brain_state": return toolGetBrainState();
     case "get_active_signals": return toolGetActiveSignals();
@@ -416,6 +624,10 @@ async function dispatchTool(name: string): Promise<unknown> {
     case "get_scanner_status": return toolGetScannerStatus();
     case "get_m2_pipeline_status": return toolGetM2PipelineStatus();
     case "get_system_verdict": return toolGetSystemVerdict();
+    case "get_strategy_history": return toolGetStrategyHistory();
+    case "get_watchlist": return toolGetWatchlist();
+    case "get_proof_trades_paginated": return toolGetProofTradesPaginated(args);
+    case "get_phase6_data_health": return toolGetPhase6DataHealth();
     default: throw new Error(`Unknown tool: ${name}`);
   }
 }
@@ -431,11 +643,24 @@ async function main() {
 
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
     const name = req.params.name;
+    const args = req.params.arguments;
+    const t0 = Date.now();
     try {
-      const data = await dispatchTool(name);
+      const data = await dispatchTool(name, args);
+      const dt = Date.now() - t0;
+      const outcome = classifyOutcome(data);
+      const c = incCounter(name, outcome);
+      process.stderr.write(
+        `[${SERVER_NAME}] tool=${name} outcome=${outcome} dt_ms=${dt} calls=${c.calls} ok=${c.ok} nc=${c.not_connected} err=${c.error}\n`,
+      );
       return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
     } catch (err) {
+      const dt = Date.now() - t0;
       const reason = err instanceof Error ? err.message : String(err);
+      const c = incCounter(name, "error");
+      process.stderr.write(
+        `[${SERVER_NAME}] tool=${name} outcome=error dt_ms=${dt} reason=${reason} calls=${c.calls} ok=${c.ok} nc=${c.not_connected} err=${c.error}\n`,
+      );
       return {
         content: [{ type: "text", text: JSON.stringify({ status: "error", tool: name, base_url: BASE_URL, reason }, null, 2) }],
         isError: true,
