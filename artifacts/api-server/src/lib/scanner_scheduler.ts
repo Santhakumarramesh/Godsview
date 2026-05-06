@@ -468,6 +468,7 @@ async function scanSymbol(
           symbol,
           bars: bars1H,
           data_source: "alpaca_live",
+          asset_class: assetClass,  // M5c: enables per-class retest window
         });
         if (m2Decision.status === "accepted" && m2Decision.signal && m2Decision.signal.kind === "long") {
           // Reuse the same position-sizing helper the legacy auto-trade uses.

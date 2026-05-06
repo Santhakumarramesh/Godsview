@@ -54,7 +54,7 @@ export function evaluate(input: EvaluateInput): Signal {
   };
   if (dispATR < cfg.minDisplacementATR) return noTrade(bars, "displacement_too_small");
 
-  const retest = findRetestConfirmation(bars, ob, cfg.maxRetestBars);
+  const retest = findRetestConfirmation(bars, ob, cfg.maxRetestBars, cfg.obBreakBufferPct);
   if (retest.kind === "ob_broken") return noTrade(bars, "ob_broken_before_retest");
   if (retest.kind === "expired")  return noTrade(bars, "retest_window_expired");
 

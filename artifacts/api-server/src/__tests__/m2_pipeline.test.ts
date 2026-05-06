@@ -482,3 +482,61 @@ describe("runPipelineEvaluation — diagnostics field", () => {
     expect(snap.totals.reasons.insufficient_bars).toBe(2);
   });
 });
+
+// ── M5c: active_config in diagnostics ────────────────────────────────────────
+
+describe("M5c — active_config visibility (no behavior change)", () => {
+  it("populates active_config with strict baseline defaults when no env override + no asset_class", () => {
+    const decision = runPipelineEvaluation({
+      symbol: "BTCUSD",
+      bars: makeFlatBars(60) as any,
+    });
+    expect(decision.diagnostics).not.toBeNull();
+    const ac = decision.diagnostics!.active_config;
+    expect(ac).toBeDefined();
+    // Defaults preserve M5b production behavior
+    expect(ac.ob_break_buffer_pct).toBe(0);
+    expect(ac.max_retest_bars).toBe(24);
+    expect(ac.min_displacement_atr).toBe(1.5);
+    expect(ac.asset_class).toBeNull();
+    expect(ac.source).toBe("default");
+  });
+
+  it("threads asset_class into diagnostics.active_config.asset_class", () => {
+    const decision = runPipelineEvaluation({
+      symbol: "BTCUSD",
+      bars: makeFlatBars(60) as any,
+      asset_class: "crypto",
+    });
+    expect(decision.diagnostics!.active_config.asset_class).toBe("crypto");
+  });
+
+  it("does NOT touch the executeOrder path — bypassReasons remains undefined", async () => {
+    // Construct an accepted record manually (the strategy will not accept
+    // flat bars), then verify M5c's runtime cfg doesn't leak into the
+    // ExecutionRequest.
+    const sig: Signal = {
+      kind: "long",
+      timestamp: "2025-01-02T00:00:00Z",
+      entry: 100, stop: 99, target: 102,
+      invalidation: { obLow: 98, expireAt: "2025-01-03T00:00:00Z" },
+    };
+    const record: DecisionRecord = {
+      decided_at: "2025-01-02T00:00:00Z",
+      symbol: "BTCUSD", timeframe: "1Hour", bars_consumed: 100,
+      status: "accepted", signal: sig, reason: null,
+      chart_payload: buildChartPayload("BTCUSD", sig),
+      execution: null, data_source: "alpaca_live", diagnostics: null,
+    };
+    let capturedReq: ExecutionRequest | null = null;
+    const fakeExec = vi.fn(async (req: ExecutionRequest): Promise<ExecutionResult> => {
+      capturedReq = req;
+      return { executed: true, order_id: "ord_m5c", mode: "paper", details: {}, audit_id: "aud_m5c" };
+    });
+    await attemptExecution(record, 1, fakeExec);
+    expect(capturedReq).not.toBeNull();
+    // CRITICAL: M5c must not introduce any risk-pipeline bypass
+    expect(capturedReq!.bypassReasons).toBeUndefined();
+    expect(capturedReq!.setup_type).toBe(M2_STRATEGY_NAME);
+  });
+});

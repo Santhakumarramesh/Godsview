@@ -33,6 +33,18 @@ export interface Config {
   atrAvgWindow: number;
   newsBlockMinutes: number;
   requireBullishStructure: boolean;
+  /**
+   * M5c: tolerance below `obLow` before a Close-through is treated as an
+   * OB break during the retest window. 0 = strict baseline (Close < obLow
+   * invalidates). 0.002 = 0.2% wick-spike tolerance — useful for crypto.
+   *
+   * IMPORTANT: production default is 0 (strict). Backtest evidence (M5c
+   * 607 evaluations across 4 symbols) shows raising this to 0.001–0.005
+   * shuffles rejections between buckets without unblocking acceptance —
+   * therefore it is NOT raised in the default. Exposed for future
+   * experiments via env var override in the runtime adapter.
+   */
+  obBreakBufferPct: number;
 }
 
 export const DEFAULT_CONFIG: Config = {
@@ -47,6 +59,7 @@ export const DEFAULT_CONFIG: Config = {
   atrAvgWindow: 50,
   newsBlockMinutes: 30,
   requireBullishStructure: true,
+  obBreakBufferPct: 0,  // M5c: strict baseline; do not raise without backtest
 };
 
 /** Internal struct used during evaluation. NOT part of the output Signal. */

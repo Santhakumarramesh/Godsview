@@ -49,6 +49,7 @@ import {
   findRetestConfirmation,
   displacementATR,
   DEFAULT_CONFIG,
+  type Config as StrategyConfig,
   type Signal,
   type Bar as StrategyBar,
 } from "@workspace/strategy-ob-retest-long-1h";
@@ -60,6 +61,60 @@ const logger = _logger.child({ module: "m2_pipeline" });
 
 const STRATEGY_NAME = "ob-retest-long-1h";
 const STRATEGY_VERSION = "1.0.0";
+
+// ── M5c: env-var overrides for tunable parameters ────────────────────────────
+//
+// All defaults preserve the strict baseline shipped through M5b. Backtest
+// evidence (M5c, 607 evaluations across BTCUSD/ETHUSD/QQQ/SPY over ~3 weeks)
+// showed that raising obBreakBufferPct to 0.001–0.005 or extending equity
+// retest windows to 36–48 bars does NOT unblock acceptance — it only shuffles
+// rejections between buckets. The dominant gate is `requireBullishStructure`
+// (30 of 607 evals would accept if it were disabled, but disabling it is a
+// strategy rewrite, NOT a tune — out of M5c scope).
+//
+// These knobs are exposed so future ops experiments can A/B test without code
+// changes. DO NOT raise them in production without backtest evidence.
+
+export type AssetClass = "crypto" | "forex" | "equity" | "commodity";
+
+function clampNumber(raw: string | undefined, fallback: number, min: number, max: number): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
+function clampInt(raw: string | undefined, fallback: number, min: number, max: number): number {
+  const n = Math.floor(Number(raw));
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
+const ENV_OB_BREAK_BUFFER_PCT = clampNumber(process.env.GODSVIEW_M2_OB_BREAK_BUFFER_PCT, 0, 0, 0.05);
+const ENV_RETEST_BARS_CRYPTO  = clampInt(process.env.GODSVIEW_M2_RETEST_BARS_CRYPTO, DEFAULT_CONFIG.maxRetestBars, 6, 96);
+const ENV_RETEST_BARS_EQUITY  = clampInt(process.env.GODSVIEW_M2_RETEST_BARS_EQUITY, DEFAULT_CONFIG.maxRetestBars, 6, 96);
+const ENV_RETEST_BARS_FOREX   = clampInt(process.env.GODSVIEW_M2_RETEST_BARS_FOREX,  DEFAULT_CONFIG.maxRetestBars, 6, 96);
+const ENV_RETEST_BARS_COMMOD  = clampInt(process.env.GODSVIEW_M2_RETEST_BARS_COMMODITY, DEFAULT_CONFIG.maxRetestBars, 6, 96);
+
+function maxRetestBarsFor(assetClass: AssetClass | undefined): number {
+  switch (assetClass) {
+    case "crypto":    return ENV_RETEST_BARS_CRYPTO;
+    case "equity":    return ENV_RETEST_BARS_EQUITY;
+    case "forex":     return ENV_RETEST_BARS_FOREX;
+    case "commodity": return ENV_RETEST_BARS_COMMOD;
+    default:          return DEFAULT_CONFIG.maxRetestBars;
+  }
+}
+
+/**
+ * Build the effective strategy Config for a single evaluation.
+ * Pure function. Same inputs always produce the same output.
+ */
+export function buildRunConfig(assetClass: AssetClass | undefined): StrategyConfig {
+  return {
+    ...DEFAULT_CONFIG,
+    obBreakBufferPct: ENV_OB_BREAK_BUFFER_PCT,
+    maxRetestBars:    maxRetestBarsFor(assetClass),
+  };
+}
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -188,12 +243,29 @@ export type RetestDiagnostic =
       close: number;
     };
 
+/**
+ * M5c: snapshot of the strategy parameters that were actually used for THIS
+ * evaluation, so /api/brain-state always shows which thresholds the running
+ * scanner is enforcing. Values are pulled from buildRunConfig() (which reads
+ * env-var overrides at module load and falls back to DEFAULT_CONFIG). When
+ * no override is set, all values match DEFAULT_CONFIG byte-for-byte.
+ */
+export interface ActiveConfigDiagnostic {
+  ob_break_buffer_pct: number;     // 0 = strict baseline
+  max_retest_bars: number;         // per asset-class window
+  min_displacement_atr: number;    // current floor (1.5)
+  asset_class: AssetClass | null;  // null when caller did not pass one
+  source: "default" | "env_override";  // which path produced these values
+}
+
 export interface PipelineDiagnostics {
   bos: BosDiagnostic | null;
   order_block: OrderBlockDiagnostic | null;
   displacement: DisplacementDiagnostic | null;
   retest: RetestDiagnostic | null;
   reason_class: ReasonClass | null;
+  /** M5c: which thresholds were used for THIS evaluation. Always populated. */
+  active_config: ActiveConfigDiagnostic;
 }
 
 export interface ExecutionAttempt {
@@ -510,14 +582,26 @@ export function buildChartPayload(symbol: string, signal: Signal): ChartPayload 
 export function computeDiagnostics(
   bars: StrategyBar[],
   signal: Signal,
+  runCfg?: StrategyConfig,
+  assetClass?: AssetClass,
 ): PipelineDiagnostics {
-  const cfg = DEFAULT_CONFIG;
+  const cfg = runCfg ?? DEFAULT_CONFIG;
+  const isOverride =
+    cfg.obBreakBufferPct !== DEFAULT_CONFIG.obBreakBufferPct ||
+    cfg.maxRetestBars !== DEFAULT_CONFIG.maxRetestBars;
   const out: PipelineDiagnostics = {
     bos: null,
     order_block: null,
     displacement: null,
     retest: null,
     reason_class: signal.kind === "long" ? "accepted" : classifyReason(signal.reason),
+    active_config: {
+      ob_break_buffer_pct: cfg.obBreakBufferPct,
+      max_retest_bars: cfg.maxRetestBars,
+      min_displacement_atr: cfg.minDisplacementATR,
+      asset_class: assetClass ?? null,
+      source: isOverride ? "env_override" : "default",
+    },
   };
 
   // Insufficient bars → nothing more to compute.
@@ -577,7 +661,7 @@ export function computeDiagnostics(
       obHigh: obF.obHigh,
       displacementATR: dispATR,
     };
-    const r = findRetestConfirmation(bars, ob, cfg.maxRetestBars);
+    const r = findRetestConfirmation(bars, ob, cfg.maxRetestBars, cfg.obBreakBufferPct);
     if (r.kind === "ob_broken") {
       const bk = bars[r.atIndex];
       if (bk) {
@@ -642,6 +726,13 @@ export interface RunPipelineInput {
   symbol: string;
   bars: AlpacaBar[];
   data_source?: "alpaca_live" | "fixture" | "unavailable";
+  /**
+   * M5c: optional asset-class hint. When provided, the runtime adapter picks
+   * the per-class retest window (env-var configurable; defaults to baseline).
+   * When omitted, the strategy's DEFAULT_CONFIG.maxRetestBars is used. NEVER
+   * affects strategy logic beyond which Config is constructed.
+   */
+  asset_class?: AssetClass;
 }
 
 /**
@@ -659,12 +750,17 @@ export function runPipelineEvaluation(input: RunPipelineInput): DecisionRecord {
     .map(alpacaBarToStrategyBar)
     .filter((b): b is NonNullable<ReturnType<typeof alpacaBarToStrategyBar>> => b !== null);
 
+  // M5c: build the per-evaluation strategy config from env-var overrides +
+  // asset-class hint. When no env vars are set and no asset class is given,
+  // this is byte-for-byte equivalent to DEFAULT_CONFIG (baseline preserved).
+  const runCfg = buildRunConfig(input.asset_class);
+
   let signal: Signal;
   let status: DecisionStatus;
   let reason: string | null = null;
 
   try {
-    signal = evaluate({ symbol: input.symbol, bars: normalized });
+    signal = evaluate({ symbol: input.symbol, bars: normalized, config: runCfg });
     if (signal.kind === "long") {
       status = "accepted";
     } else {
@@ -683,13 +779,28 @@ export function runPipelineEvaluation(input: RunPipelineInput): DecisionRecord {
 
   // M5b: read-only recompute of strategy internals for visibility. Pure;
   // never affects `status`, `reason`, or chart_payload.
+  // M5c: also surfaces active_config so /api/brain-state shows the actual
+  // thresholds enforced by THIS evaluation (env-var aware).
   let diagnostics: PipelineDiagnostics | null = null;
   try {
-    diagnostics = normalized.length > 0 ? computeDiagnostics(normalized, signal) : null;
+    diagnostics = normalized.length > 0
+      ? computeDiagnostics(normalized, signal, runCfg, input.asset_class)
+      : null;
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
     logger.warn({ symbol: input.symbol, err: errMsg }, "[m2] Diagnostics recompute threw (non-fatal)");
-    diagnostics = { bos: null, order_block: null, displacement: null, retest: null, reason_class: classifyReason(reason ?? undefined) };
+    diagnostics = {
+      bos: null, order_block: null, displacement: null, retest: null,
+      reason_class: classifyReason(reason ?? undefined),
+      active_config: {
+        ob_break_buffer_pct: runCfg.obBreakBufferPct,
+        max_retest_bars: runCfg.maxRetestBars,
+        min_displacement_atr: runCfg.minDisplacementATR,
+        asset_class: input.asset_class ?? null,
+        source: (runCfg.obBreakBufferPct !== DEFAULT_CONFIG.obBreakBufferPct
+                 || runCfg.maxRetestBars !== DEFAULT_CONFIG.maxRetestBars) ? "env_override" : "default",
+      },
+    };
   }
 
   const record: DecisionRecord = {
