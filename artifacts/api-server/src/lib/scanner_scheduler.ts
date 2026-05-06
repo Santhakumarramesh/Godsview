@@ -48,6 +48,9 @@ import { executeOrder } from "./order_executor";
 import {
   runPipelineEvaluation as m2RunPipelineEvaluation,
   attemptExecution as m2AttemptExecution,
+  recordPipelineAttempt as m2RecordAttempt,
+  recordInsufficientBars as m2RecordInsufficientBars,
+  recordFetchError as m2RecordFetchError,
 } from "./m2_pipeline";
 
 import { publishAlert } from "./signal_stream";
@@ -441,9 +444,26 @@ async function scanSymbol(
     // than the legacy 1m/5m detection above). On accepted long signals,
     // routes through the SAME executeOrder() choke point as the legacy
     // auto-trade. Risk pipeline is NEVER bypassed.
+    //
+    // Important: we pass an EXPLICIT 14-day start window. Without it the
+    // Alpaca crypto/equity /bars endpoint defaults to the most recent ~24h,
+    // which yields only ~24 1H bars — well under the strategy's 50-bar
+    // minimum (atrAvgWindow). 14 days × 24h = 336 1H bars on crypto, and
+    // ~91 on equity (6.5h × 14d), both safely above the threshold.
+    m2RecordAttempt(symbol, "1Hour");
     try {
-      const bars1H = await getBars(symbol, "1Hour", 200);
-      if (bars1H.length >= 50) {
+      const M2_LOOKBACK_DAYS = 14;
+      const M2_MIN_BARS = 50;
+      const m2Start = new Date(Date.now() - M2_LOOKBACK_DAYS * 24 * 60 * 60 * 1000).toISOString();
+      const m2End = new Date().toISOString();
+      let bars1H: typeof bars1m;
+      try {
+        bars1H = await getBars(symbol, "1Hour", 200, m2Start, m2End);
+      } catch (fetchErr) {
+        m2RecordFetchError(symbol, fetchErr);
+        throw fetchErr;
+      }
+      if (bars1H.length >= M2_MIN_BARS) {
         const m2Decision = m2RunPipelineEvaluation({
           symbol,
           bars: bars1H,
@@ -494,7 +514,8 @@ async function scanSymbol(
           logger.debug({ symbol, reason: m2Decision.reason, bars: m2Decision.bars_consumed }, "[m2] no_trade");
         }
       } else {
-        logger.debug({ symbol, bars: bars1H.length }, "[m2] insufficient 1H bars — skipped");
+        m2RecordInsufficientBars(symbol, bars1H.length, M2_MIN_BARS);
+        logger.debug({ symbol, bars: bars1H.length, threshold: M2_MIN_BARS }, "[m2] insufficient 1H bars — skipped");
       }
     } catch (m2Err) {
       // Pipeline must NEVER break the legacy scan loop.

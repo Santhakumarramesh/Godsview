@@ -105,18 +105,41 @@ export interface DecisionRecord {
 // ── In-memory snapshot ───────────────────────────────────────────────────────
 
 interface Totals {
+  /** Strategy was attempted (bars fetched OK and evaluate() called). */
   evaluated: number;
+  /** evaluate() returned a valid long Signal. */
   accepted: number;
+  /** evaluate() returned no_trade. */
   no_trade: number;
+  /** evaluate() threw or returned a malformed result. */
   error: number;
+  /** executeOrder reported executed=true. */
   executed: number;
+  /** executeOrder reported executed=false (risk gate or qty=0). */
   execution_blocked: number;
+  /** Pipeline pass entered scanSymbol — counts every (symbol × cycle). */
+  attempted: number;
+  /** Bars fetch succeeded but returned fewer than minBars. */
+  insufficient_bars: number;
+  /** Bars fetch threw — network, auth, symbol-format. */
+  fetch_errors: number;
 }
 
 interface Snapshot {
   strategy_name: string;
   strategy_version: string;
+  /** Last time runPipelineEvaluation actually ran (bars OK, evaluate called). */
   last_evaluation_at: string | null;
+  /** Last time scanSymbol entered the M2 try-block (always set if pass ran). */
+  last_attempt_at: string | null;
+  /** Symbol of the last attempt (regardless of outcome). */
+  last_symbol: string | null;
+  /** Timeframe of the last attempt. */
+  last_timeframe: string | null;
+  /** Last error string (fetch or evaluation). null when last attempt succeeded. */
+  last_error: string | null;
+  /** Diagnostic for the most recent insufficient_bars skip. */
+  last_insufficient_bars_reason: { symbol: string; bars: number; threshold: number; at: string } | null;
   last_decision: DecisionRecord | null;
   last_accepted: DecisionRecord | null;
   last_no_trade: DecisionRecord | null;
@@ -128,6 +151,11 @@ const _snapshot: Snapshot = {
   strategy_name: STRATEGY_NAME,
   strategy_version: STRATEGY_VERSION,
   last_evaluation_at: null,
+  last_attempt_at: null,
+  last_symbol: null,
+  last_timeframe: null,
+  last_error: null,
+  last_insufficient_bars_reason: null,
   last_decision: null,
   last_accepted: null,
   last_no_trade: null,
@@ -139,6 +167,9 @@ const _snapshot: Snapshot = {
     error: 0,
     executed: 0,
     execution_blocked: 0,
+    attempted: 0,
+    insufficient_bars: 0,
+    fetch_errors: 0,
   },
 };
 
@@ -150,6 +181,11 @@ export function getPipelineSnapshot(): Snapshot {
 /** Test helper. Resets all counters and the per-symbol map. */
 export function resetPipelineSnapshot(): void {
   _snapshot.last_evaluation_at = null;
+  _snapshot.last_attempt_at = null;
+  _snapshot.last_symbol = null;
+  _snapshot.last_timeframe = null;
+  _snapshot.last_error = null;
+  _snapshot.last_insufficient_bars_reason = null;
   _snapshot.last_decision = null;
   _snapshot.last_accepted = null;
   _snapshot.last_no_trade = null;
@@ -160,6 +196,58 @@ export function resetPipelineSnapshot(): void {
   _snapshot.totals.error = 0;
   _snapshot.totals.executed = 0;
   _snapshot.totals.execution_blocked = 0;
+  _snapshot.totals.attempted = 0;
+  _snapshot.totals.insufficient_bars = 0;
+  _snapshot.totals.fetch_errors = 0;
+}
+
+// ── Diagnostic recorders (called by scanner before/around runPipelineEvaluation) ─
+
+/**
+ * Record that the M2 pass was attempted for a given symbol/timeframe.
+ * Always called BEFORE the bars fetch so that even fetch errors increment
+ * `attempted`. Lets the snapshot show "we tried; here is why nothing
+ * evaluated" instead of just a static zero.
+ */
+export function recordPipelineAttempt(symbol: string, timeframe: string): void {
+  _snapshot.totals.attempted++;
+  _snapshot.last_attempt_at = new Date().toISOString();
+  _snapshot.last_symbol = symbol;
+  _snapshot.last_timeframe = timeframe;
+  // Reset error & insufficient-bars markers when a fresh attempt begins;
+  // they get re-set below if this attempt also fails.
+  _snapshot.last_error = null;
+}
+
+/**
+ * Record that the bars fetch returned fewer than the minimum required.
+ * The strategy needs >= 50 1H bars; without an explicit start window the
+ * Alpaca crypto endpoint returns only ~24 (last 24h). This counter makes
+ * the cause visible in /api/brain-state instead of silently skipping.
+ */
+export function recordInsufficientBars(
+  symbol: string,
+  bars: number,
+  threshold: number,
+): void {
+  _snapshot.totals.insufficient_bars++;
+  _snapshot.last_insufficient_bars_reason = {
+    symbol,
+    bars,
+    threshold,
+    at: new Date().toISOString(),
+  };
+}
+
+/**
+ * Record that the bars fetch threw — network, auth, malformed symbol.
+ * Captures the message for the snapshot so production can self-diagnose
+ * without docker compose logs access.
+ */
+export function recordFetchError(symbol: string, error: unknown): void {
+  _snapshot.totals.fetch_errors++;
+  _snapshot.last_error = error instanceof Error ? error.message : String(error);
+  _snapshot.last_symbol = symbol;
 }
 
 // ── Pure helpers (testable in isolation) ─────────────────────────────────────

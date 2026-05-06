@@ -21,6 +21,9 @@ import {
   attemptExecution,
   resetPipelineSnapshot,
   getPipelineSnapshot,
+  recordPipelineAttempt,
+  recordInsufficientBars,
+  recordFetchError,
   M2_STRATEGY_NAME,
   M2_STRATEGY_VERSION,
   M2_NOT_CONNECTED_LAYERS,
@@ -315,5 +318,64 @@ describe("snapshot metadata", () => {
     expect(M2_NOT_CONNECTED_LAYERS).toContain("heatmap");
     expect(M2_NOT_CONNECTED_LAYERS).toContain("fvg_zone");
     expect(M2_NOT_CONNECTED_LAYERS).toContain("mcp");
+  });
+});
+
+// ── Diagnostic recorders ──────────────────────────────────────────────────
+
+describe("diagnostic recorders", () => {
+  it("recordPipelineAttempt increments attempted and sets last_symbol/last_timeframe/last_attempt_at", () => {
+    expect(getPipelineSnapshot().totals.attempted).toBe(0);
+    recordPipelineAttempt("BTCUSD", "1Hour");
+    const snap = getPipelineSnapshot();
+    expect(snap.totals.attempted).toBe(1);
+    expect(snap.last_symbol).toBe("BTCUSD");
+    expect(snap.last_timeframe).toBe("1Hour");
+    expect(typeof snap.last_attempt_at).toBe("string");
+    expect(Number.isNaN(Date.parse(snap.last_attempt_at as string))).toBe(false);
+    // attempt always clears stale last_error so the next failure re-populates it
+    expect(snap.last_error).toBeNull();
+  });
+
+  it("recordInsufficientBars increments insufficient_bars and captures the diagnostic", () => {
+    expect(getPipelineSnapshot().totals.insufficient_bars).toBe(0);
+    recordInsufficientBars("ETHUSD", 24, 50);
+    const snap = getPipelineSnapshot();
+    expect(snap.totals.insufficient_bars).toBe(1);
+    expect(snap.last_insufficient_bars_reason).not.toBeNull();
+    expect(snap.last_insufficient_bars_reason!.symbol).toBe("ETHUSD");
+    expect(snap.last_insufficient_bars_reason!.bars).toBe(24);
+    expect(snap.last_insufficient_bars_reason!.threshold).toBe(50);
+  });
+
+  it("recordFetchError increments fetch_errors and stores the message", () => {
+    expect(getPipelineSnapshot().totals.fetch_errors).toBe(0);
+    recordFetchError("BTCUSD", new Error("network unreachable"));
+    const snap = getPipelineSnapshot();
+    expect(snap.totals.fetch_errors).toBe(1);
+    expect(snap.last_error).toBe("network unreachable");
+    expect(snap.last_symbol).toBe("BTCUSD");
+  });
+
+  it("recordFetchError handles non-Error thrown values", () => {
+    recordFetchError("SOLUSD", "string-thrown");
+    expect(getPipelineSnapshot().last_error).toBe("string-thrown");
+  });
+
+  it("resetPipelineSnapshot clears all new diagnostic counters and last_* fields", () => {
+    recordPipelineAttempt("BTCUSD", "1Hour");
+    recordInsufficientBars("BTCUSD", 10, 50);
+    recordFetchError("BTCUSD", new Error("boom"));
+    expect(getPipelineSnapshot().totals.attempted).toBeGreaterThan(0);
+    resetPipelineSnapshot();
+    const snap = getPipelineSnapshot();
+    expect(snap.totals.attempted).toBe(0);
+    expect(snap.totals.insufficient_bars).toBe(0);
+    expect(snap.totals.fetch_errors).toBe(0);
+    expect(snap.last_attempt_at).toBeNull();
+    expect(snap.last_symbol).toBeNull();
+    expect(snap.last_timeframe).toBeNull();
+    expect(snap.last_error).toBeNull();
+    expect(snap.last_insufficient_bars_reason).toBeNull();
   });
 });

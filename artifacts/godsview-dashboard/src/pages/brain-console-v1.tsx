@@ -211,6 +211,11 @@ interface BrainState {
     strategy_name: string;
     strategy_version: string;
     last_evaluation_at: string | null;
+    last_attempt_at: string | null;
+    last_symbol: string | null;
+    last_timeframe: string | null;
+    last_error: string | null;
+    last_insufficient_bars_reason: { symbol: string; bars: number; threshold: number; at: string } | null;
     totals: {
       evaluated: number;
       accepted: number;
@@ -218,6 +223,9 @@ interface BrainState {
       error: number;
       executed: number;
       execution_blocked: number;
+      attempted: number;
+      insufficient_bars: number;
+      fetch_errors: number;
     };
     last_decision: M2DecisionLite | null;
     last_accepted: M2DecisionLite | null;
@@ -955,14 +963,54 @@ export default function BrainConsoleV1Page() {
             <div>
               <KV k="Strategy" v={`${data.pipeline.value.strategy_name}@${data.pipeline.value.strategy_version}`} />
               <KV k="Last evaluation at" v={fmtTime(data.pipeline.value.last_evaluation_at)} />
+              <KV k="Last attempt at" v={fmtTime(data.pipeline.value.last_attempt_at)} />
+              <KV k="Last attempted symbol/timeframe" v={data.pipeline.value.last_symbol ? `${data.pipeline.value.last_symbol} · ${data.pipeline.value.last_timeframe ?? "—"}` : "—"} />
               <KV
-                k="Totals"
-                v={`${data.pipeline.value.totals.evaluated} evaluated · ${data.pipeline.value.totals.accepted} accepted · ${data.pipeline.value.totals.no_trade} no_trade · ${data.pipeline.value.totals.error} error`}
+                k="Attempts"
+                v={`${data.pipeline.value.totals.attempted} attempted · ${data.pipeline.value.totals.evaluated} evaluated · ${data.pipeline.value.totals.insufficient_bars} insufficient bars · ${data.pipeline.value.totals.fetch_errors} fetch errors`}
+              />
+              <KV
+                k="Strategy outcomes"
+                v={`${data.pipeline.value.totals.accepted} accepted · ${data.pipeline.value.totals.no_trade} no_trade · ${data.pipeline.value.totals.error} error`}
               />
               <KV
                 k="Execution"
                 v={`${data.pipeline.value.totals.executed} executed · ${data.pipeline.value.totals.execution_blocked} blocked by risk`}
               />
+              {/* Diagnostic block — surfaces WHY evaluated may be 0 */}
+              {data.pipeline.value.totals.attempted > 0 && data.pipeline.value.totals.evaluated === 0 && (
+                <div
+                  style={{
+                    marginTop: 10,
+                    padding: 10,
+                    background: "#3f2d04",
+                    border: "1px solid #854d0e",
+                    borderRadius: 6,
+                    color: C.amber,
+                    fontSize: 12,
+                  }}
+                >
+                  <div style={{ fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 4 }}>
+                    Pipeline attempted but never reached the strategy
+                  </div>
+                  {data.pipeline.value.last_error && (
+                    <div>Last fetch error: <code>{data.pipeline.value.last_error}</code></div>
+                  )}
+                  {data.pipeline.value.last_insufficient_bars_reason && (
+                    <div>
+                      Latest insufficient-bars: <code>{data.pipeline.value.last_insufficient_bars_reason.symbol}</code> returned {data.pipeline.value.last_insufficient_bars_reason.bars} of {data.pipeline.value.last_insufficient_bars_reason.threshold} required at {fmtTime(data.pipeline.value.last_insufficient_bars_reason.at)}
+                    </div>
+                  )}
+                  {!data.pipeline.value.last_error && !data.pipeline.value.last_insufficient_bars_reason && (
+                    <div>Cause not classified yet — check container logs for [m2] entries.</div>
+                  )}
+                </div>
+              )}
+              {data.pipeline.value.totals.attempted > 0 && data.pipeline.value.last_error && data.pipeline.value.totals.evaluated > 0 && (
+                <div style={{ marginTop: 8, fontSize: 12, color: C.amber }}>
+                  Last error (recovered): <code>{data.pipeline.value.last_error}</code>
+                </div>
+              )}
               {/* Latest decision */}
               {data.pipeline.value.last_decision ? (
                 <div

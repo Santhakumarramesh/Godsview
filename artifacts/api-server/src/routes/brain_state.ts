@@ -207,12 +207,34 @@ function buildVerdict(s: BrainStateResponse): string {
   // M2 pipeline
   if (s.pipeline.status === "ok" && s.pipeline.value) {
     const t = s.pipeline.value.totals;
-    if (t.evaluated === 0) {
-      out.push(`Milestone 2 pipeline: ${s.pipeline.value.strategy_name} ready, no evaluations yet.`);
+    const lastErr = s.pipeline.value.last_error;
+    const lastBars = s.pipeline.value.last_insufficient_bars_reason;
+    if (t.attempted === 0) {
+      out.push(`Milestone 2 pipeline: ${s.pipeline.value.strategy_name} ready, scanner has not yet attempted a pass.`);
+    } else if (t.evaluated === 0) {
+      // We tried but never reached the strategy. Surface why.
+      if (t.fetch_errors > 0 && lastErr) {
+        out.push(
+          `Milestone 2 pipeline (${s.pipeline.value.strategy_name}): ` +
+            `${t.attempted} attempted but ${t.fetch_errors} bar-fetch errors; latest: ${lastErr}.`,
+        );
+      } else if (t.insufficient_bars > 0 && lastBars) {
+        out.push(
+          `Milestone 2 pipeline (${s.pipeline.value.strategy_name}): ` +
+            `${t.attempted} attempted but ${t.insufficient_bars} skipped for insufficient bars ` +
+            `(latest ${lastBars.symbol}: ${lastBars.bars}/${lastBars.threshold}).`,
+        );
+      } else {
+        out.push(
+          `Milestone 2 pipeline (${s.pipeline.value.strategy_name}): ` +
+            `${t.attempted} attempted, 0 evaluated; root cause not classified yet.`,
+        );
+      }
     } else {
       out.push(
         `Milestone 2 pipeline (${s.pipeline.value.strategy_name}): ` +
-          `${t.evaluated} evaluated, ${t.accepted} accepted, ${t.no_trade} no-trade, ` +
+          `${t.attempted} attempted, ${t.evaluated} evaluated, ` +
+          `${t.accepted} accepted, ${t.no_trade} no-trade, ` +
           `${t.executed} executed, ${t.execution_blocked} blocked by risk.`,
       );
     }
@@ -263,6 +285,11 @@ interface BrainStateResponse {
     strategy_name: string;
     strategy_version: string;
     last_evaluation_at: string | null;
+    last_attempt_at: string | null;
+    last_symbol: string | null;
+    last_timeframe: string | null;
+    last_error: string | null;
+    last_insufficient_bars_reason: { symbol: string; bars: number; threshold: number; at: string } | null;
     totals: {
       evaluated: number;
       accepted: number;
@@ -270,6 +297,9 @@ interface BrainStateResponse {
       error: number;
       executed: number;
       execution_blocked: number;
+      attempted: number;
+      insufficient_bars: number;
+      fetch_errors: number;
     };
     last_decision: unknown | null;
     last_accepted: unknown | null;
@@ -399,7 +429,15 @@ router.get("/brain-state", async (_req: Request, res: Response): Promise<void> =
           strategy_name: M2_STRATEGY_NAME,
           strategy_version: M2_STRATEGY_VERSION,
           last_evaluation_at: null,
-          totals: { evaluated: 0, accepted: 0, no_trade: 0, error: 0, executed: 0, execution_blocked: 0 },
+          last_attempt_at: null,
+          last_symbol: null,
+          last_timeframe: null,
+          last_error: null,
+          last_insufficient_bars_reason: null,
+          totals: {
+            evaluated: 0, accepted: 0, no_trade: 0, error: 0, executed: 0, execution_blocked: 0,
+            attempted: 0, insufficient_bars: 0, fetch_errors: 0,
+          },
           last_decision: null,
           last_accepted: null,
           last_no_trade: null,
@@ -426,6 +464,11 @@ router.get("/brain-state", async (_req: Request, res: Response): Promise<void> =
           strategy_name: snap.strategy_name,
           strategy_version: snap.strategy_version,
           last_evaluation_at: snap.last_evaluation_at,
+          last_attempt_at: snap.last_attempt_at,
+          last_symbol: snap.last_symbol,
+          last_timeframe: snap.last_timeframe,
+          last_error: snap.last_error,
+          last_insufficient_bars_reason: snap.last_insufficient_bars_reason,
           totals: snap.totals,
           last_decision: snap.last_decision,
           last_accepted: snap.last_accepted,
