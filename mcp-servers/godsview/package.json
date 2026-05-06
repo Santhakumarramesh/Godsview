@@ -1,6 +1,6 @@
 {
   "name": "@godsview/mcp",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "GodsView MCP server v1 — read-only inspection of Brain Console, signals, pipeline, risk, and proof endpoints. No order placement, no chart control, no live writes.",
   "type": "module",
   "main": "dist/index.js",
