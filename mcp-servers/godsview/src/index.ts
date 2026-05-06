@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * GodsView MCP Server v1.2 — read-only inspection layer.
+ * GodsView MCP Server v1.3 — read-only inspection layer.
  *
  * Hard constraints (do NOT relax without an explicit Milestone bump):
  *  - Read-only: every tool issues HTTP GET only.
@@ -11,7 +11,7 @@
  *    (status, reason, base_url, path) — never a fabricated success.
  *  - No browser automation, no chart control, no order book scraping.
  *
- * Fifteen tools:
+ * Sixteen tools:
  *   1. get_brain_state                  → GET /api/brain-state
  *   2. get_active_signals               → GET /api/signals
  *   3. explain_latest_pipeline_decision → /api/brain-state, projects pipeline
@@ -36,6 +36,12 @@
  *                                    (limit 1–500, status executed|rejected)
  *  15. get_phase6_data_health      → GET /api/data-quality/health +
  *                                    GET /api/data-integrity/health (parallel)
+ *
+ *   Milestone 5d-β addition (v1.3):
+ *  16. get_macro_risk              → GET /api/macro-risk
+ *                                    (FRED snapshot + macro_engine events +
+ *                                     news_window + news_feed; per-section
+ *                                     source_quality labels; never fabricated)
  *
  * Configuration:
  *   GODSVIEW_BASE_URL   Base URL of the GodsView API server.
@@ -64,7 +70,7 @@ const RAW_BASE_URL = process.env.GODSVIEW_BASE_URL ?? "http://localhost:3000";
 const BASE_URL = RAW_BASE_URL.replace(/\/+$/, "");
 const HTTP_TIMEOUT_MS = Number(process.env.GODSVIEW_HTTP_TIMEOUT_MS ?? "6000");
 const SERVER_NAME = "godsview-mcp";
-const SERVER_VERSION = "1.2.0";
+const SERVER_VERSION = "1.3.0";
 
 /* Types */
 type FetchOk<T> = { ok: true; status: number; data: T };
@@ -258,6 +264,12 @@ const TOOLS = [
     name: "get_phase6_data_health",
     description:
       "Read-only (Milestone 5a). Calls GET /api/data-quality/health and GET /api/data-integrity/health in parallel. Returns feed health (tracked / fresh / stale / dead counts), recent stale/dead alerts, rejection rate, buffer utilization, stale symbol count, and module uptime. Complementary to get_phase6_health, which covers DB/Redis/readiness. Honest not_connected envelope on upstream failure.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "get_macro_risk",
+    description:
+      "Read-only (Milestone 5d-β). Returns the GodsView macro/news aggregate via GET /api/macro-risk: synthesized macro_risk level (anchored on REAL FRED label), full FRED snapshot when available (CPI, Fed Funds, treasuries, VIX, GDP, unemployment, claims) with explicit source-quality status, macro_engine events section (high_impact_upcoming + next_event; honest not_connected when no event provider is wired), news_window state (active flag + affected_symbols), news_feed status (currently not_connected with explicit reason — no news provider configured), and last_updated timestamp. Every section carries its own source_quality label; never fabricates values. The endpoint itself returns ok | partial | not_connected based on which layers answered.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
 ] as const;
@@ -610,6 +622,32 @@ async function toolGetPhase6DataHealth(): Promise<unknown> {
   };
 }
 
+/* Tool implementation — Milestone 5d-β (v1.3) */
+async function toolGetMacroRisk(): Promise<unknown> {
+  const path = "/api/macro-risk";
+  const r = await safeGet<Record<string, unknown>>(path);
+  if (!r.ok) {
+    return notConnected({ tool: "get_macro_risk", path, status: r.status, reason: r.reason, body: r.body });
+  }
+  // Pass through the aggregate shape verbatim — it already carries
+  // per-section source_quality labels and overall status.
+  // Wrap in our standard MCP envelope so callers get a consistent shape.
+  const data = r.data as Record<string, any>;
+  return {
+    status: "ok",
+    tool: "get_macro_risk",
+    source: path,
+    aggregate_status: data?.status ?? null,
+    generated_at: data?.generated_at ?? null,
+    last_updated: data?.last_updated ?? null,
+    macro_risk: data?.macro_risk ?? null,
+    fred: data?.fred ?? null,
+    events: data?.events ?? null,
+    news_window: data?.news_window ?? null,
+    news_feed: data?.news_feed ?? null,
+  };
+}
+
 /* Dispatch */
 async function dispatchTool(name: string, args: unknown): Promise<unknown> {
   switch (name) {
@@ -628,6 +666,7 @@ async function dispatchTool(name: string, args: unknown): Promise<unknown> {
     case "get_watchlist": return toolGetWatchlist();
     case "get_proof_trades_paginated": return toolGetProofTradesPaginated(args);
     case "get_phase6_data_health": return toolGetPhase6DataHealth();
+    case "get_macro_risk": return toolGetMacroRisk();
     default: throw new Error(`Unknown tool: ${name}`);
   }
 }

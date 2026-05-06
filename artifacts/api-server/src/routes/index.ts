@@ -25,6 +25,7 @@ import { counterMiddleware } from "../lib/ops/counter_middleware";
 import phase6Router from "./phase6";
 import { incReconciliationRun } from "../lib/ops/counters";
 import macroRouter from "./macro";
+import macroRiskRouter from "./macro_risk"; // M5d-β News/Macro Monitor
 import journalRouter from "./journal";
 import watchlistRouter from "./watchlist";
 import analyticsRouter from "./analytics";
@@ -194,6 +195,7 @@ router.use("/api/proof", proofRouter);
 router.use("/api", paperProofRouter); // Phase 4 proof endpoints (trades/metrics/equity)
 router.use(phase6Router); // Phase 6 health/ready/metrics
 router.use("/api/macro", macroRouter);
+router.use("/api", macroRiskRouter); // M5d-β: /api/macro-risk aggregator
 router.use("/api/assisted-live", assistedLiveRouter);
 router.use("/api/webhooks", vcPipelineRouter);
 router.use("/api/system", vcStatusRouter);

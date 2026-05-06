@@ -196,11 +196,58 @@ interface BrainState {
       layers: Array<{ name: string; status: string; message: string }>;
     }>;
   };
+  // M5d-β: macro/news aggregator (real FRED + macro_engine + honest not_connected)
   macro: Section<{
-    name: string | null;
-    status: string | null;
-    message: string | null;
-    last_update: string | null;
+    status: "ok" | "partial" | "not_connected";
+    generated_at: string;
+    macro_risk: {
+      level: "low" | "moderate" | "elevated" | "extreme" | null;
+      drivers: string[];
+      source_quality: "real" | "partial" | "not_connected";
+    };
+    fred: {
+      status: "ok" | "not_connected";
+      value: {
+        cpi_yoy: number | null;
+        cpi_mom: number | null;
+        fed_funds_rate: number | null;
+        unemployment_rate: number | null;
+        treasury_10y: number | null;
+        treasury_2y: number | null;
+        yield_curve_spread: number | null;
+        gdp_growth: number | null;
+        initial_claims: number | null;
+        vix: number | null;
+        macro_risk: string | null;
+        fetched_at: string | null;
+        quality: string | null;
+      } | null;
+      reason?: string;
+    };
+    events: {
+      status: "ok" | "not_connected";
+      count_24h: number;
+      high_impact_upcoming: Array<{
+        id: string; type: string; title: string; impact: string;
+        sentiment: number; related_symbols: string[]; source: string; timestamp: string;
+      }>;
+      next_event: {
+        id: string; type: string; title: string; impact: string; timestamp: string;
+        related_symbols: string[];
+      } | null;
+      reason?: string;
+    };
+    news_window: {
+      active: boolean;
+      reason: string | null;
+      affected_symbols: string[];
+    };
+    news_feed: {
+      status: "ok" | "not_connected";
+      feed_connected: boolean;
+      reason: string;
+    };
+    last_updated: string | null;
   }>;
   mcp: {
     status: "not_connected";
@@ -904,26 +951,92 @@ export default function BrainConsoleV1Page() {
 
       {/* ── Row 5: Macro · MCP ──────────────────────────────────────────── */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16, marginTop: 16 }}>
-        <Card title="Macro / News Layer" icon={<Newspaper size={16} color={C.violet} />}>
+        <Card title="News / Macro Risk" icon={<Newspaper size={16} color={C.violet} />}>
+          {/* M5d-β: aggregator-driven view. Per-section source quality always shown. */}
           {!data ? (
             <NotConnected reason={q.isLoading ? "loading" : "no payload"} />
           ) : data.macro.status !== "ok" || !data.macro.value ? (
             <NotConnected reason={data.macro.reason} />
           ) : (
             <>
-              <KV k="Layer" v={data.macro.value.name ?? "—"} />
+              {/* Synthesized risk level — anchored on REAL FRED label */}
               <KV
-                k="Status"
+                k="Risk level"
                 v={
                   <>
-                    <StatusDot ok={data.macro.value.status === "active"} />
-                    {data.macro.value.status ?? "—"}
+                    <StatusDot
+                      ok={
+                        data.macro.value.macro_risk.level === "low" ||
+                        data.macro.value.macro_risk.level === "moderate"
+                      }
+                    />
+                    {(data.macro.value.macro_risk.level ?? "unknown").toUpperCase()}
+                    <span style={{ marginLeft: 8, fontSize: 11, color: C.textMuted }}>
+                      ({data.macro.value.macro_risk.source_quality})
+                    </span>
                   </>
                 }
               />
-              <KV k="Last update" v={fmtTime(data.macro.value.last_update)} />
-              <div style={{ fontSize: 12, color: C.textMuted, marginTop: 8 }}>
-                {data.macro.value.message ?? "—"}
+              <KV
+                k="Source quality"
+                v={
+                  <span style={{ fontSize: 11 }}>
+                    FRED: <b style={{ color: data.macro.value.fred.status === "ok" ? C.green : C.amber }}>{data.macro.value.fred.status}</b>
+                    {" · "}
+                    Events: <b style={{ color: data.macro.value.events.status === "ok" ? C.green : C.amber }}>{data.macro.value.events.status}</b>
+                    {" · "}
+                    News: <b style={{ color: data.macro.value.news_feed.feed_connected ? C.green : C.amber }}>{data.macro.value.news_feed.feed_connected ? "ok" : "not_connected"}</b>
+                  </span>
+                }
+              />
+              {/* News window state (REAL, derived from macro_engine events) */}
+              <KV
+                k="News window"
+                v={
+                  <span style={{ color: data.macro.value.news_window.active ? C.red : C.textMuted }}>
+                    {data.macro.value.news_window.active ? "ACTIVE" : "off"}
+                    {data.macro.value.news_window.affected_symbols.length > 0
+                      ? ` (${data.macro.value.news_window.affected_symbols.join(", ")})`
+                      : ""}
+                  </span>
+                }
+              />
+              {/* Real FRED values when available */}
+              {data.macro.value.fred.status === "ok" && data.macro.value.fred.value && (
+                <div style={{ fontSize: 11, color: C.textMuted, marginTop: 6, lineHeight: 1.6 }}>
+                  CPI {data.macro.value.fred.value.cpi_yoy?.toFixed(2) ?? "—"}% ·{" "}
+                  Fed {data.macro.value.fred.value.fed_funds_rate?.toFixed(2) ?? "—"}% ·{" "}
+                  10Y {data.macro.value.fred.value.treasury_10y?.toFixed(2) ?? "—"}% ·{" "}
+                  VIX {data.macro.value.fred.value.vix?.toFixed(1) ?? "—"}
+                </div>
+              )}
+              {/* Next event when an event provider is connected */}
+              {data.macro.value.events.status === "ok" && data.macro.value.events.next_event ? (
+                <div style={{ fontSize: 11, color: C.textMuted, marginTop: 6 }}>
+                  Next: <b style={{ color: C.text }}>{data.macro.value.events.next_event.title}</b>
+                  {" · "}
+                  {data.macro.value.events.next_event.impact} ·{" "}
+                  {fmtTime(data.macro.value.events.next_event.timestamp)}
+                </div>
+              ) : data.macro.value.events.status === "not_connected" ? (
+                <div style={{ fontSize: 11, color: C.amber, marginTop: 6 }}>
+                  Events: not_connected — {data.macro.value.events.reason ?? "no provider"}
+                </div>
+              ) : null}
+              {/* News feed honesty */}
+              {!data.macro.value.news_feed.feed_connected && (
+                <div style={{ fontSize: 11, color: C.amber, marginTop: 4 }}>
+                  News feed: not_connected — {data.macro.value.news_feed.reason}
+                </div>
+              )}
+              {/* Drivers (always real, sourced from FRED + events) */}
+              {data.macro.value.macro_risk.drivers.length > 0 && (
+                <div style={{ fontSize: 11, color: C.textMuted, marginTop: 8 }}>
+                  Drivers: {data.macro.value.macro_risk.drivers.slice(0, 3).join(" · ")}
+                </div>
+              )}
+              <div style={{ fontSize: 10, color: C.textMuted, marginTop: 6 }}>
+                Last updated: {fmtTime(data.macro.value.last_updated)}
               </div>
             </>
           )}

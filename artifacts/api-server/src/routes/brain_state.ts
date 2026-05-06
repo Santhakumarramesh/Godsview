@@ -31,6 +31,8 @@ import {
   M2_STRATEGY_VERSION,
   M2_NOT_CONNECTED_LAYERS,
 } from "../lib/m2_pipeline";
+// M5d-β: macro/news aggregator (real FRED + macro_engine + honest not_connected layers)
+import { buildMacroRiskAggregate, type MacroRiskResponse } from "./macro_risk";
 
 const router = Router();
 
@@ -273,7 +275,7 @@ interface BrainStateResponse {
   risk: {
     summary: Section<unknown>;
   };
-  macro: Section<unknown>;
+  macro: Section<MacroRiskResponse>;
   mcp: {
     status: "not_connected";
     reason: string;
@@ -389,22 +391,20 @@ router.get("/brain-state", async (_req: Request, res: Response): Promise<void> =
         }
       : { status: "not_connected", value: null };
 
-    // ── Macro/news layer extracted from system/status if present ──
-    const layers = (sysVal?.["layers"] as Array<Record<string, unknown>> | undefined) ?? [];
-    const macroLayer = layers.find((l) =>
-      /macro|news|claude|reasoning/i.test(String(l["name"] ?? "")),
-    );
-    const macro: Section<unknown> = macroLayer
-      ? {
-          status: "ok",
-          value: {
-            name: macroLayer["name"] ?? null,
-            status: macroLayer["status"] ?? null,
-            message: macroLayer["message"] ?? null,
-            last_update: macroLayer["last_update"] ?? null,
-          },
-        }
-      : { status: "not_connected", value: null, reason: "no_macro_layer_in_system_status" };
+    // ── Macro/news layer (M5d-β: REAL FRED + macro_engine aggregator) ──
+    // Replaces the prior system_status.layers extraction (which was a degraded
+    // fallback that produced 'not_connected' even when FRED data was flowing).
+    // The new aggregator returns honest per-section source quality labels and
+    // never fabricates values.
+    let macro: Section<MacroRiskResponse>;
+    try {
+      const aggregate = await buildMacroRiskAggregate();
+      macro = { status: "ok", value: aggregate };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.warn({ err: msg }, "[brain-state] macro aggregate threw (non-fatal)");
+      macro = { status: "not_connected", value: null, reason: `macro_aggregate_error: ${msg}` };
+    }
 
     const out: BrainStateResponse = {
       generated_at: new Date().toISOString(),
