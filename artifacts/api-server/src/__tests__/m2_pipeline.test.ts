@@ -24,10 +24,13 @@ import {
   recordPipelineAttempt,
   recordInsufficientBars,
   recordFetchError,
+  classifyReason,
+  computeDiagnostics,
   M2_STRATEGY_NAME,
   M2_STRATEGY_VERSION,
   M2_NOT_CONNECTED_LAYERS,
   type DecisionRecord,
+  type PipelineDiagnostics,
 } from "../lib/m2_pipeline";
 
 import type { ExecutionRequest, ExecutionResult } from "../lib/order_executor";
@@ -219,6 +222,7 @@ describe("attemptExecution", () => {
       chart_payload: buildChartPayload("BTCUSD", sig),
       execution: null,
       data_source: "alpaca_live",
+      diagnostics: null,
     };
   }
 
@@ -290,6 +294,7 @@ describe("attemptExecution", () => {
       chart_payload: buildChartPayload("BTCUSD", { kind: "no_trade", timestamp: "2025-01-02T00:00:00Z", reason: "no_bos_up" }),
       execution: null,
       data_source: "alpaca_live",
+      diagnostics: null,
     };
     const fakeExec = vi.fn();
     await attemptExecution(record, 5, fakeExec as any);
@@ -377,5 +382,103 @@ describe("diagnostic recorders", () => {
     expect(snap.last_timeframe).toBeNull();
     expect(snap.last_error).toBeNull();
     expect(snap.last_insufficient_bars_reason).toBeNull();
+    // M5b: reason counters cleared too
+    expect(snap.totals.reasons.no_bos_up).toBe(0);
+    expect(snap.totals.reasons.ob_broken_before_retest).toBe(0);
+    expect(snap.totals.reasons.regime_not_bullish).toBe(0);
+  });
+});
+
+// ── M5b: classifyReason (pure helper) ────────────────────────────────────────
+
+describe("classifyReason", () => {
+  it("maps each known RejectionReason to a ReasonClass bucket", () => {
+    expect(classifyReason("insufficient_bars")).toBe("data");
+    expect(classifyReason("no_bos_up")).toBe("structure");
+    expect(classifyReason("no_order_block")).toBe("order_block");
+    expect(classifyReason("displacement_too_small")).toBe("order_block");
+    expect(classifyReason("ob_broken_before_retest")).toBe("retest");
+    expect(classifyReason("retest_window_expired")).toBe("retest");
+    expect(classifyReason("opposite_bos_before_retest")).toBe("retest");
+    expect(classifyReason("regime_not_bullish")).toBe("regime");
+    expect(classifyReason("atr_too_low")).toBe("atr");
+    expect(classifyReason("news_window")).toBe("news");
+  });
+  it("returns null for empty/unknown reasons (no fabricated bucket)", () => {
+    expect(classifyReason(null)).toBeNull();
+    expect(classifyReason(undefined)).toBeNull();
+    expect(classifyReason("")).toBeNull();
+    expect(classifyReason("totally_made_up_reason")).toBeNull();
+  });
+});
+
+// ── M5b: computeDiagnostics (pure helper, never mutates strategy logic) ──────
+
+describe("computeDiagnostics", () => {
+  it("returns null-internals + reason_class=data when bars are insufficient", () => {
+    const sig: Signal = { kind: "no_trade", timestamp: "2025-01-01T00:00:00Z", reason: "insufficient_bars" };
+    const diag: PipelineDiagnostics = computeDiagnostics([], sig);
+    expect(diag.bos).toBeNull();
+    expect(diag.order_block).toBeNull();
+    expect(diag.displacement).toBeNull();
+    expect(diag.retest).toBeNull();
+    expect(diag.reason_class).toBe("data");
+  });
+
+  it("returns reason_class=accepted when signal kind is long", () => {
+    const sig: Signal = {
+      kind: "long",
+      timestamp: "2025-01-01T00:00:00Z",
+      entry: 100, stop: 99, target: 102,
+      invalidation: { obLow: 98, expireAt: "2025-01-02T00:00:00Z" },
+    };
+    const diag = computeDiagnostics([], sig);
+    expect(diag.reason_class).toBe("accepted");
+  });
+
+  it("returns null bos / order_block when bars produce no BOS up (flat series)", () => {
+    const sig: Signal = { kind: "no_trade", timestamp: "2025-01-01T00:00:00Z", reason: "no_bos_up" };
+    // 80 flat bars (no displacement, no BOS)
+    const flatBars = Array.from({ length: 80 }, (_, i) => ({
+      Timestamp: new Date(Date.UTC(2025, 0, 1, i)).toISOString(),
+      Open: 100, High: 100.5, Low: 99.5, Close: 100, Volume: 1000,
+    }));
+    const diag = computeDiagnostics(flatBars, sig);
+    // structure helpers will likely find pivots but no BOS up → bos null
+    expect(diag.bos).toBeNull();
+    expect(diag.order_block).toBeNull();
+    expect(diag.reason_class).toBe("structure");
+  });
+});
+
+// ── M5b: runPipelineEvaluation populates DecisionRecord.diagnostics ─────────
+
+describe("runPipelineEvaluation — diagnostics field", () => {
+  it("attaches a diagnostics object on no_trade decisions", () => {
+    const decision = runPipelineEvaluation({
+      symbol: "BTCUSD",
+      bars: makeFlatBars(60) as any,  // enough bars to clear insufficient_bars
+    });
+    expect(decision.status).toBe("no_trade");
+    expect(decision.diagnostics).not.toBeNull();
+    expect(decision.diagnostics!.reason_class).not.toBeNull();
+  });
+
+  it("returns diagnostics=null when there are no bars at all", () => {
+    const decision = runPipelineEvaluation({
+      symbol: "BTCUSD",
+      bars: [],
+    });
+    expect(decision.status).toBe("no_trade");
+    expect(decision.diagnostics).toBeNull();
+  });
+
+  it("increments the corresponding totals.reasons counter on no_trade", () => {
+    runPipelineEvaluation({ symbol: "BTC1", bars: makeFlatBars(5) as any });
+    runPipelineEvaluation({ symbol: "BTC2", bars: makeFlatBars(5) as any });
+    const snap = getPipelineSnapshot();
+    expect(snap.totals.no_trade).toBe(2);
+    // 5 bars < min → both increment insufficient_bars
+    expect(snap.totals.reasons.insufficient_bars).toBe(2);
   });
 });

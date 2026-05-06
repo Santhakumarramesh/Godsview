@@ -14,19 +14,44 @@
  *      bypassed — every accepted signal still passes through the 9-gate
  *      risk pipeline.
  *
+ *   M5b additions (diagnostics-only — no strategy logic change):
+ *   6. Recompute the strategy's BOS / OB / displacement / retest internals
+ *      after evaluate() returns and attach them to the DecisionRecord as
+ *      `diagnostics`. When evaluate() rejects with `ob_broken_before_retest`
+ *      we surface the actual obLow, the breaking bar's Close, the
+ *      Close-minus-obLow distance, and the OB candle's wick anatomy so
+ *      operators can decide whether the rejection was honest or whether
+ *      the strategy is mis-calibrated.
+ *   7. Per-rejection-reason counters in `totals.reasons` so /api/brain-state
+ *      shows reason distribution at a glance.
+ *
  * What this module does NOT do:
  *   - Bypass the risk pipeline.
  *   - Place orders directly.
  *   - Generate fake order-flow / heatmap / news data.
  *   - Persist anything to the DB. Snapshot is in-process. The real proof
  *     of accepted trades lives in `paper_trades` (via order_executor).
+ *   - Mutate strategy logic. Diagnostics are observed via the strategy's
+ *     own exported helpers (atr, detectPivots, findLatestBOSUp,
+ *     findOrderBlockForBOS, displacementATR, findRetestConfirmation).
  *
  * Layers honestly NOT connected (label = "not_connected" in chart payload):
  *   - order_block_zone   (strategy emits invalidation.obLow but not obHigh)
  *   - fvg_zone           (no FVG layer wired yet)
  *   - mcp                (separate; reported by brain-state directly)
  */
-import { evaluate, type Signal } from "@workspace/strategy-ob-retest-long-1h";
+import {
+  evaluate,
+  atr,
+  detectPivots,
+  findLatestBOSUp,
+  findOrderBlockForBOS,
+  findRetestConfirmation,
+  displacementATR,
+  DEFAULT_CONFIG,
+  type Signal,
+  type Bar as StrategyBar,
+} from "@workspace/strategy-ob-retest-long-1h";
 import type { AlpacaBar } from "./alpaca";
 import { logger as _logger } from "./logger";
 import type { ExecutionRequest, ExecutionResult } from "./order_executor";
@@ -74,6 +99,103 @@ export interface ChartPayload {
   confidence: number | null;
 }
 
+// ── M5b diagnostics types (observe-only; never used by execution) ────────────
+
+/**
+ * Bucket label for a rejection reason. Lets dashboards group reasons into
+ * meaningful failure-mode classes without hardcoding the string list.
+ */
+export type ReasonClass =
+  | "data"        // insufficient_bars
+  | "structure"   // no_bos_up
+  | "order_block" // no_order_block, displacement_too_small
+  | "retest"      // ob_broken_before_retest, retest_window_expired, opposite_bos_before_retest
+  | "regime"      // regime_not_bullish
+  | "atr"         // atr_too_low
+  | "news"        // news_window
+  | "accepted";
+
+export function classifyReason(reason: string | null | undefined): ReasonClass | null {
+  if (!reason) return null;
+  switch (reason) {
+    case "insufficient_bars": return "data";
+    case "no_bos_up": return "structure";
+    case "no_order_block":
+    case "displacement_too_small": return "order_block";
+    case "ob_broken_before_retest":
+    case "retest_window_expired":
+    case "opposite_bos_before_retest": return "retest";
+    case "regime_not_bullish": return "regime";
+    case "atr_too_low": return "atr";
+    case "news_window": return "news";
+    default: return null;
+  }
+}
+
+export interface BosDiagnostic {
+  bos_index: number;
+  broken_swing_index: number;
+  broken_swing_price: number;
+  bar_timestamp: string;
+}
+
+export interface OrderBlockDiagnostic {
+  ob_index: number;
+  ob_low: number;
+  ob_high: number;
+  bar_timestamp: string;
+  /** OB candle body bounds — useful to see if the OB has a long lower wick. */
+  body_low: number;
+  body_high: number;
+  /** Distance from OB candle body low down to OB low (i.e. lower-wick size). */
+  lower_wick_size: number;
+  /** lower_wick_size / (obHigh - obLow), 0..1. Higher = OB low is far below the body. */
+  lower_wick_pct_of_range: number;
+}
+
+export interface DisplacementDiagnostic {
+  atr_at_bos: number;
+  displacement_atr: number;
+  min_required: number;
+  passed: boolean;
+}
+
+export type RetestDiagnostic =
+  | {
+      kind: "ob_broken";
+      at_index: number;
+      bar_timestamp: string;
+      break_close: number;
+      ob_low: number;
+      close_minus_ob_low: number;
+      /** (break_close - ob_low) / ob_low × 100; negative = below OB low. */
+      pct_below_ob_low: number;
+      /** Bars consumed from BOS+1 up to and including the break bar. */
+      bars_in_window_used: number;
+      max_retest_bars: number;
+    }
+  | {
+      kind: "expired";
+      checked_through_index: number;
+      max_retest_bars: number;
+      ob_low: number;
+      ob_high: number;
+    }
+  | {
+      kind: "confirmed";
+      index: number;
+      bar_timestamp: string;
+      close: number;
+    };
+
+export interface PipelineDiagnostics {
+  bos: BosDiagnostic | null;
+  order_block: OrderBlockDiagnostic | null;
+  displacement: DisplacementDiagnostic | null;
+  retest: RetestDiagnostic | null;
+  reason_class: ReasonClass | null;
+}
+
 export interface ExecutionAttempt {
   attempted: boolean;
   executed: boolean;
@@ -100,9 +222,35 @@ export interface DecisionRecord {
   execution: ExecutionAttempt | null;
   /** Where the input bars came from. Always "alpaca_live" for production. */
   data_source: "alpaca_live" | "fixture" | "unavailable";
+  /**
+   * M5b: BOS / OB / displacement / retest internals re-derived from the
+   * strategy's exported helpers AFTER evaluate() returns. Read-only; used
+   * for /api/brain-state visibility. Never feeds back into execution.
+   * null only when bars normalization stripped everything (no inputs).
+   */
+  diagnostics: PipelineDiagnostics | null;
 }
 
 // ── In-memory snapshot ───────────────────────────────────────────────────────
+
+/**
+ * Per-rejection-reason counter object. Each field counts how many times
+ * evaluate() emitted the corresponding RejectionReason since the snapshot
+ * was reset. Sum across these equals totals.no_trade except for any
+ * unknown future reason which would NOT be counted (additive safety).
+ */
+export interface ReasonTotals {
+  no_bos_up: number;
+  no_order_block: number;
+  displacement_too_small: number;
+  ob_broken_before_retest: number;
+  retest_window_expired: number;
+  opposite_bos_before_retest: number;
+  regime_not_bullish: number;
+  atr_too_low: number;
+  news_window: number;
+  insufficient_bars: number;
+}
 
 interface Totals {
   /** Strategy was attempted (bars fetched OK and evaluate() called). */
@@ -123,6 +271,8 @@ interface Totals {
   insufficient_bars: number;
   /** Bars fetch threw — network, auth, symbol-format. */
   fetch_errors: number;
+  /** M5b: per-rejection-reason counters. */
+  reasons: ReasonTotals;
 }
 
 interface Snapshot {
@@ -145,6 +295,21 @@ interface Snapshot {
   last_no_trade: DecisionRecord | null;
   by_symbol: Record<string, DecisionRecord>;
   totals: Totals;
+}
+
+function emptyReasonTotals(): ReasonTotals {
+  return {
+    no_bos_up: 0,
+    no_order_block: 0,
+    displacement_too_small: 0,
+    ob_broken_before_retest: 0,
+    retest_window_expired: 0,
+    opposite_bos_before_retest: 0,
+    regime_not_bullish: 0,
+    atr_too_low: 0,
+    news_window: 0,
+    insufficient_bars: 0,
+  };
 }
 
 const _snapshot: Snapshot = {
@@ -170,6 +335,7 @@ const _snapshot: Snapshot = {
     attempted: 0,
     insufficient_bars: 0,
     fetch_errors: 0,
+    reasons: emptyReasonTotals(),
   },
 };
 
@@ -199,6 +365,7 @@ export function resetPipelineSnapshot(): void {
   _snapshot.totals.attempted = 0;
   _snapshot.totals.insufficient_bars = 0;
   _snapshot.totals.fetch_errors = 0;
+  _snapshot.totals.reasons = emptyReasonTotals();
 }
 
 // ── Diagnostic recorders (called by scanner before/around runPipelineEvaluation) ─
@@ -329,6 +496,146 @@ export function buildChartPayload(symbol: string, signal: Signal): ChartPayload 
   return { ...base, reason: signal.reason };
 }
 
+// ── M5b: diagnostics recompute (read-only, never mutates strategy logic) ─────
+
+/**
+ * Re-derive BOS / OB / displacement / retest internals from the same
+ * helpers the strategy uses, so /api/brain-state can show operators
+ * EXACTLY what the strategy saw and where it stopped. Pure function.
+ *
+ * Returns null only when there are no bars to inspect. Returns a
+ * partially-populated diagnostics object when an upstream step fails
+ * (e.g. no BOS up → bos=null, order_block=null, etc.).
+ */
+export function computeDiagnostics(
+  bars: StrategyBar[],
+  signal: Signal,
+): PipelineDiagnostics {
+  const cfg = DEFAULT_CONFIG;
+  const out: PipelineDiagnostics = {
+    bos: null,
+    order_block: null,
+    displacement: null,
+    retest: null,
+    reason_class: signal.kind === "long" ? "accepted" : classifyReason(signal.reason),
+  };
+
+  // Insufficient bars → nothing more to compute.
+  const minBars = Math.max(cfg.atrPeriod + cfg.pivotLeft + cfg.pivotRight + 2, cfg.atrAvgWindow);
+  if (bars.length < minBars) return out;
+
+  const atrSeries = atr(bars, cfg.atrPeriod);
+  const pivots = detectPivots(bars, cfg.pivotLeft, cfg.pivotRight);
+  const bos = findLatestBOSUp(bars, pivots, bars.length - 1, cfg.pivotRight);
+  if (!bos) return out;
+
+  const bosBar = bars[bos.bosIndex];
+  if (bosBar) {
+    out.bos = {
+      bos_index: bos.bosIndex,
+      broken_swing_index: bos.brokenSwingIndex,
+      broken_swing_price: bos.brokenSwingPrice,
+      bar_timestamp: bosBar.Timestamp,
+    };
+  }
+
+  const obF = findOrderBlockForBOS(bars, bos.bosIndex, bos.brokenSwingIndex);
+  if (!obF) return out;
+  const obBar = bars[obF.obIndex];
+  if (obBar) {
+    const bodyLow = Math.min(obBar.Open, obBar.Close);
+    const bodyHigh = Math.max(obBar.Open, obBar.Close);
+    const range = obF.obHigh - obF.obLow;
+    const lowerWick = bodyLow - obF.obLow;
+    out.order_block = {
+      ob_index: obF.obIndex,
+      ob_low: obF.obLow,
+      ob_high: obF.obHigh,
+      bar_timestamp: obBar.Timestamp,
+      body_low: bodyLow,
+      body_high: bodyHigh,
+      lower_wick_size: lowerWick,
+      lower_wick_pct_of_range: range > 0 ? lowerWick / range : 0,
+    };
+  }
+
+  const atrAtBos = atrSeries[bos.bosIndex];
+  if (Number.isFinite(atrAtBos as number)) {
+    const dispATR = displacementATR(bars, obF.obIndex, bos.bosIndex, atrAtBos as number);
+    out.displacement = {
+      atr_at_bos: atrAtBos as number,
+      displacement_atr: dispATR,
+      min_required: cfg.minDisplacementATR,
+      passed: dispATR >= cfg.minDisplacementATR,
+    };
+    if (!out.displacement.passed) return out;
+
+    const ob = {
+      obIndex: obF.obIndex,
+      bosIndex: bos.bosIndex,
+      obLow: obF.obLow,
+      obHigh: obF.obHigh,
+      displacementATR: dispATR,
+    };
+    const r = findRetestConfirmation(bars, ob, cfg.maxRetestBars);
+    if (r.kind === "ob_broken") {
+      const bk = bars[r.atIndex];
+      if (bk) {
+        out.retest = {
+          kind: "ob_broken",
+          at_index: r.atIndex,
+          bar_timestamp: bk.Timestamp,
+          break_close: bk.Close,
+          ob_low: obF.obLow,
+          close_minus_ob_low: bk.Close - obF.obLow,
+          pct_below_ob_low: obF.obLow > 0 ? ((bk.Close - obF.obLow) / obF.obLow) * 100 : 0,
+          bars_in_window_used: r.atIndex - bos.bosIndex,
+          max_retest_bars: cfg.maxRetestBars,
+        };
+      }
+    } else if (r.kind === "expired") {
+      out.retest = {
+        kind: "expired",
+        checked_through_index: r.checkedThrough,
+        max_retest_bars: cfg.maxRetestBars,
+        ob_low: obF.obLow,
+        ob_high: obF.obHigh,
+      };
+    } else {
+      out.retest = {
+        kind: "confirmed",
+        index: r.index,
+        bar_timestamp: r.ts,
+        close: r.close,
+      };
+    }
+  }
+
+  return out;
+}
+
+/**
+ * Internal: bump the per-reason counter when evaluate() returns no_trade.
+ * Unknown reasons are counted under nothing (additive safety — never crash).
+ */
+function bumpReasonCounter(reason: string | null | undefined): void {
+  if (!reason) return;
+  const r = _snapshot.totals.reasons;
+  switch (reason) {
+    case "no_bos_up": r.no_bos_up++; return;
+    case "no_order_block": r.no_order_block++; return;
+    case "displacement_too_small": r.displacement_too_small++; return;
+    case "ob_broken_before_retest": r.ob_broken_before_retest++; return;
+    case "retest_window_expired": r.retest_window_expired++; return;
+    case "opposite_bos_before_retest": r.opposite_bos_before_retest++; return;
+    case "regime_not_bullish": r.regime_not_bullish++; return;
+    case "atr_too_low": r.atr_too_low++; return;
+    case "news_window": r.news_window++; return;
+    case "insufficient_bars": r.insufficient_bars++; return;
+    default: return; // unknown — observe but never fabricate a counter
+  }
+}
+
 // ── Pipeline entry points ────────────────────────────────────────────────────
 
 export interface RunPipelineInput {
@@ -374,6 +681,17 @@ export function runPipelineEvaluation(input: RunPipelineInput): DecisionRecord {
 
   const chart_payload = buildChartPayload(input.symbol, signal);
 
+  // M5b: read-only recompute of strategy internals for visibility. Pure;
+  // never affects `status`, `reason`, or chart_payload.
+  let diagnostics: PipelineDiagnostics | null = null;
+  try {
+    diagnostics = normalized.length > 0 ? computeDiagnostics(normalized, signal) : null;
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    logger.warn({ symbol: input.symbol, err: errMsg }, "[m2] Diagnostics recompute threw (non-fatal)");
+    diagnostics = { bos: null, order_block: null, displacement: null, retest: null, reason_class: classifyReason(reason ?? undefined) };
+  }
+
   const record: DecisionRecord = {
     decided_at: decidedAt,
     symbol: input.symbol,
@@ -385,6 +703,7 @@ export function runPipelineEvaluation(input: RunPipelineInput): DecisionRecord {
     chart_payload,
     execution: null,
     data_source: dataSource,
+    diagnostics,
   };
 
   _snapshot.last_evaluation_at = decidedAt;
@@ -397,6 +716,7 @@ export function runPipelineEvaluation(input: RunPipelineInput): DecisionRecord {
   } else if (status === "no_trade") {
     _snapshot.last_no_trade = record;
     _snapshot.totals.no_trade++;
+    bumpReasonCounter(reason);
   } else {
     _snapshot.totals.error++;
   }
