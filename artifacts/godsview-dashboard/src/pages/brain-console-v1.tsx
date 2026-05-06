@@ -226,7 +226,9 @@ interface BrainState {
     };
     events: {
       status: "ok" | "not_connected";
+      provider: "fred_releases" | "macro_engine" | "fred_releases+macro_engine" | "none";
       count_24h: number;
+      count_upcoming: number;
       high_impact_upcoming: Array<{
         id: string; type: string; title: string; impact: string;
         sentiment: number; related_symbols: string[]; source: string; timestamp: string;
@@ -235,12 +237,15 @@ interface BrainState {
         id: string; type: string; title: string; impact: string; timestamp: string;
         related_symbols: string[];
       } | null;
+      last_updated: string | null;
       reason?: string;
     };
     news_window: {
       active: boolean;
       reason: string | null;
       affected_symbols: string[];
+      window_before_ms: number;
+      window_after_ms: number;
     };
     news_feed: {
       status: "ok" | "not_connected";
