@@ -1,5 +1,5 @@
 /**
- * macro_risk.ts — M5d-β Macro/News Risk Monitor (read-only)
+ * macro_risk.ts — M5d-β + M5d-news Macro/News Risk Monitor (read-only)
  *
  * Mounts at /api/macro-risk (see routes/index.ts).
  *
@@ -8,20 +8,25 @@
  *
  * Hard rules:
  *  - GET only. No state writes.
- *  - No fake events, no fake sentiment, no fake risk levels.
+ *  - No fake events, no fake sentiment, no fake risk levels, no fake articles.
  *  - Every value carries its source. When a layer has no provider, returns
  *    `status: "not_connected"` with a human-readable reason.
  *
  * Sources:
- *  - FRED API (real) via providers/fred_client
- *  - macro_engine in-memory event store (currently empty in production)
- *  - macro_engine.checkNewsLockout / news_window state
+ *  - FRED API (real) via providers/fred_client                          [M5d-β]
+ *  - macro_engine in-memory event store (currently empty in production) [M5d-β]
+ *  - macro_engine.checkNewsLockout / news_window state                  [M5d-β]
+ *  - Alpaca News API (real) via lib/news_feed_service                   [M5d-news]
  */
 
 import { Router, type Request, type Response } from "express";
 import { logger } from "../lib/logger";
 import { getMacroContext, type MacroEvent } from "../lib/macro_engine";
 import { fetchFredMacroSnapshot, type FredMacroSnapshot } from "../lib/providers/fred_client.js";
+import {
+  fetchLatestHeadlines,
+  type NewsHeadline,
+} from "../lib/news_feed_service";
 
 const router = Router();
 
@@ -49,9 +54,24 @@ export interface NewsWindowSection {
   affected_symbols: string[];
 }
 
+/**
+ * News feed section (M5d-news).
+ *
+ * `feed_connected: true` ↔ status === "ok" ↔ at least one real headline was
+ * fetched successfully from the upstream provider during this aggregator run
+ * or within the cache window. The reverse holds for `feed_connected: false`.
+ *
+ * `latest_headlines` is always real Alpaca News data when feed_connected is
+ * true, and always `[]` when feed_connected is false. NEVER a hardcoded
+ * fallback list.
+ */
 export interface NewsFeedSection {
   status: "ok" | "not_connected";
   feed_connected: boolean;
+  latest_headlines: NewsHeadline[];
+  count: number;
+  provider: "alpaca_news";
+  last_updated: string | null;
   reason: string;
 }
 
@@ -152,14 +172,35 @@ export async function buildMacroRiskAggregate(): Promise<MacroRiskResponse> {
     newsWindow = { active: false, reason: null, affected_symbols: [] };
   }
 
-  // News feed (no provider configured)
-  const newsFeedSection: NewsFeedSection = {
-    status: "not_connected",
-    feed_connected: false,
-    reason:
-      "No news provider configured. Connect an RSS / Polygon / Alpaca News / " +
-      "Finnhub feed to populate /api/news/* and feed real sentiment into macro_risk.",
-  };
+  // M5d-news: News feed layer (Alpaca News, real, cached 5min)
+  let newsFeedSection: NewsFeedSection;
+  try {
+    const feed = await fetchLatestHeadlines({ limit: 10 });
+    newsFeedSection = {
+      status: feed.status,
+      feed_connected: feed.feed_connected,
+      latest_headlines: feed.latest_headlines,
+      count: feed.count,
+      provider: feed.provider,
+      last_updated: feed.last_updated,
+      reason: feed.reason,
+    };
+    if (feed.status === "ok" && feed.last_updated) {
+      last_updated = feed.last_updated > (last_updated ?? "") ? feed.last_updated : last_updated;
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.warn({ err: msg }, "[macro-risk] news feed adapter threw (non-fatal)");
+    newsFeedSection = {
+      status: "not_connected",
+      feed_connected: false,
+      latest_headlines: [],
+      count: 0,
+      provider: "alpaca_news",
+      last_updated: null,
+      reason: `news_feed_service error: ${msg}`,
+    };
+  }
 
   const macro_risk: MacroRiskSummary = synthesizeMacroRisk(fredSection, eventsSection);
 
@@ -258,6 +299,10 @@ router.get("/macro-risk", async (_req: Request, res: Response): Promise<void> =>
       news_feed: {
         status: "not_connected",
         feed_connected: false,
+        latest_headlines: [],
+        count: 0,
+        provider: "alpaca_news",
+        last_updated: null,
         reason: `aggregator_error: ${msg}`,
       },
       last_updated: null,

@@ -245,6 +245,20 @@ interface BrainState {
     news_feed: {
       status: "ok" | "not_connected";
       feed_connected: boolean;
+      latest_headlines: Array<{
+        id: string;
+        headline: string;
+        summary: string | null;
+        author: string | null;
+        source: string;
+        url: string | null;
+        symbols: string[];
+        published_at: string;
+        provider: string;
+      }>;
+      count: number;
+      provider: string;
+      last_updated: string | null;
       reason: string;
     };
     last_updated: string | null;
@@ -1023,8 +1037,22 @@ export default function BrainConsoleV1Page() {
                   Events: not_connected — {data.macro.value.events.reason ?? "no provider"}
                 </div>
               ) : null}
-              {/* News feed honesty */}
-              {!data.macro.value.news_feed.feed_connected && (
+              {/* News feed: real headlines when connected, honest reason otherwise */}
+              {data.macro.value.news_feed.feed_connected && data.macro.value.news_feed.latest_headlines.length > 0 ? (
+                <div style={{ fontSize: 11, marginTop: 6 }}>
+                  <div style={{ color: C.textMuted, marginBottom: 4 }}>
+                    Latest news ({data.macro.value.news_feed.provider} · {data.macro.value.news_feed.count} articles):
+                  </div>
+                  {data.macro.value.news_feed.latest_headlines.slice(0, 3).map((h) => (
+                    <div key={h.id} style={{ marginBottom: 3 }}>
+                      <span style={{ color: C.text }}>• {h.headline}</span>
+                      <span style={{ color: C.textMuted, marginLeft: 6 }}>
+                        ({h.source}{h.symbols.length > 0 ? ` · ${h.symbols.slice(0, 3).join(", ")}` : ""} · {fmtTime(h.published_at)})
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
                 <div style={{ fontSize: 11, color: C.amber, marginTop: 4 }}>
                   News feed: not_connected — {data.macro.value.news_feed.reason}
                 </div>
