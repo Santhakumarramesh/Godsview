@@ -24,6 +24,13 @@
  */
 import { Router, type Request, type Response } from "express";
 import { logger } from "../lib/logger";
+// Milestone 2: read-only access to the in-memory pipeline snapshot.
+import {
+  getPipelineSnapshot as getM2Snapshot,
+  M2_STRATEGY_NAME,
+  M2_STRATEGY_VERSION,
+  M2_NOT_CONNECTED_LAYERS,
+} from "../lib/m2_pipeline";
 
 const router = Router();
 
@@ -197,6 +204,22 @@ function buildVerdict(s: BrainStateResponse): string {
   // Risk defense
   out.push(s.mode.kill_switch_active ? "Kill switch ACTIVE." : "Kill switch off.");
 
+  // M2 pipeline
+  if (s.pipeline.status === "ok" && s.pipeline.value) {
+    const t = s.pipeline.value.totals;
+    if (t.evaluated === 0) {
+      out.push(`Milestone 2 pipeline: ${s.pipeline.value.strategy_name} ready, no evaluations yet.`);
+    } else {
+      out.push(
+        `Milestone 2 pipeline (${s.pipeline.value.strategy_name}): ` +
+          `${t.evaluated} evaluated, ${t.accepted} accepted, ${t.no_trade} no-trade, ` +
+          `${t.executed} executed, ${t.execution_blocked} blocked by risk.`,
+      );
+    }
+  } else {
+    out.push("Milestone 2 pipeline: not connected.");
+  }
+
   // MCP
   out.push("MCP layer: not connected yet.");
 
@@ -234,6 +257,26 @@ interface BrainStateResponse {
     reason: string;
     servers: string[];
   };
+  /** Milestone 2 pipeline snapshot. Always present; values may be null when no
+   *  evaluation has run yet (cold start). Honest about layers not connected. */
+  pipeline: Section<{
+    strategy_name: string;
+    strategy_version: string;
+    last_evaluation_at: string | null;
+    totals: {
+      evaluated: number;
+      accepted: number;
+      no_trade: number;
+      error: number;
+      executed: number;
+      execution_blocked: number;
+    };
+    last_decision: unknown | null;
+    last_accepted: unknown | null;
+    last_no_trade: unknown | null;
+    by_symbol: Record<string, unknown>;
+    not_connected_layers: ReadonlyArray<string>;
+  }>;
   verdict: string;
 }
 
@@ -350,6 +393,20 @@ router.get("/brain-state", async (_req: Request, res: Response): Promise<void> =
       signals: { active, rejected },
       risk: { summary: risk },
       macro,
+      pipeline: {
+        status: "ok",
+        value: {
+          strategy_name: M2_STRATEGY_NAME,
+          strategy_version: M2_STRATEGY_VERSION,
+          last_evaluation_at: null,
+          totals: { evaluated: 0, accepted: 0, no_trade: 0, error: 0, executed: 0, execution_blocked: 0 },
+          last_decision: null,
+          last_accepted: null,
+          last_no_trade: null,
+          by_symbol: {},
+          not_connected_layers: M2_NOT_CONNECTED_LAYERS,
+        },
+      },
       mcp: {
         status: "not_connected",
         reason:
@@ -358,6 +415,30 @@ router.get("/brain-state", async (_req: Request, res: Response): Promise<void> =
       },
       verdict: "",
     };
+    // Read the live snapshot AFTER initial wiring so verdict text can also
+    // use it. Failures here are non-fatal — pipeline section degrades to
+    // status:"not_connected" with no fabricated values.
+    try {
+      const snap = getM2Snapshot();
+      out.pipeline = {
+        status: "ok",
+        value: {
+          strategy_name: snap.strategy_name,
+          strategy_version: snap.strategy_version,
+          last_evaluation_at: snap.last_evaluation_at,
+          totals: snap.totals,
+          last_decision: snap.last_decision,
+          last_accepted: snap.last_accepted,
+          last_no_trade: snap.last_no_trade,
+          by_symbol: snap.by_symbol,
+          not_connected_layers: M2_NOT_CONNECTED_LAYERS,
+        },
+      };
+    } catch (snapErr) {
+      const reason = snapErr instanceof Error ? snapErr.message : String(snapErr);
+      logger.warn({ err: reason }, "[brain-state] m2 snapshot read failed");
+      out.pipeline = { status: "not_connected", value: null, reason };
+    }
     out.verdict = buildVerdict(out);
     res.json(out);
   } catch (err: unknown) {

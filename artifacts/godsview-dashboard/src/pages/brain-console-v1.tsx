@@ -50,6 +50,45 @@ interface Mode {
   starting_equity_usd: number;
 }
 
+interface M2ChartPayload {
+  symbol: string;
+  timeframe: string;
+  timestamp: string;
+  direction: "long" | "short" | null;
+  entry: number | null;
+  stop_loss: number | null;
+  take_profit: number | null;
+  invalidation: { ob_low: number | null; expire_at: string | null };
+  order_block_zone: { status: string; value: unknown };
+  fvg_zone: { status: string; value: unknown };
+  strategy_name: string;
+  strategy_version: string;
+  reason: string | null;
+  confidence: number | null;
+}
+
+interface M2Execution {
+  attempted: boolean;
+  executed: boolean;
+  order_id: string | null;
+  blocking_gate: string | null;
+  error: string | null;
+  audit_id: string | null;
+  skipped_reason: string | null;
+}
+
+interface M2DecisionLite {
+  decided_at: string;
+  symbol: string;
+  timeframe: string;
+  bars_consumed: number;
+  status: "accepted" | "no_trade" | "evaluation_error";
+  reason: string | null;
+  chart_payload: M2ChartPayload;
+  execution: M2Execution | null;
+  data_source: string;
+}
+
 interface BrainState {
   generated_at: string;
   mode: Mode;
@@ -168,6 +207,24 @@ interface BrainState {
     reason: string;
     servers: string[];
   };
+  pipeline?: Section<{
+    strategy_name: string;
+    strategy_version: string;
+    last_evaluation_at: string | null;
+    totals: {
+      evaluated: number;
+      accepted: number;
+      no_trade: number;
+      error: number;
+      executed: number;
+      execution_blocked: number;
+    };
+    last_decision: M2DecisionLite | null;
+    last_accepted: M2DecisionLite | null;
+    last_no_trade: M2DecisionLite | null;
+    by_symbol: Record<string, M2DecisionLite>;
+    not_connected_layers: string[];
+  }>;
   verdict: string;
 }
 
@@ -883,6 +940,132 @@ export default function BrainConsoleV1Page() {
                 {data.mcp.reason}
               </div>
             </>
+          )}
+        </Card>
+      </div>
+
+      {/* ── Row 6: Milestone 2 Intelligence Pipeline ────────────────────── */}
+      <div style={{ marginTop: 16 }}>
+        <Card title="Milestone 2 Intelligence Pipeline" icon={<Bot size={16} color={C.cyan} />}>
+          {!data || !data.pipeline ? (
+            <NotConnected reason={q.isLoading ? "loading" : "field absent on server (older build)"} />
+          ) : data.pipeline.status !== "ok" || !data.pipeline.value ? (
+            <NotConnected reason={data.pipeline.reason} />
+          ) : (
+            <div>
+              <KV k="Strategy" v={`${data.pipeline.value.strategy_name}@${data.pipeline.value.strategy_version}`} />
+              <KV k="Last evaluation at" v={fmtTime(data.pipeline.value.last_evaluation_at)} />
+              <KV
+                k="Totals"
+                v={`${data.pipeline.value.totals.evaluated} evaluated · ${data.pipeline.value.totals.accepted} accepted · ${data.pipeline.value.totals.no_trade} no_trade · ${data.pipeline.value.totals.error} error`}
+              />
+              <KV
+                k="Execution"
+                v={`${data.pipeline.value.totals.executed} executed · ${data.pipeline.value.totals.execution_blocked} blocked by risk`}
+              />
+              {/* Latest decision */}
+              {data.pipeline.value.last_decision ? (
+                <div
+                  style={{
+                    marginTop: 14,
+                    padding: 12,
+                    background: C.panel2,
+                    border: `1px solid ${C.border}`,
+                    borderRadius: 6,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      letterSpacing: 0.5,
+                      textTransform: "uppercase",
+                      color:
+                        data.pipeline.value.last_decision.status === "accepted"
+                          ? C.green
+                          : data.pipeline.value.last_decision.status === "no_trade"
+                          ? C.amber
+                          : C.red,
+                      marginBottom: 8,
+                    }}
+                  >
+                    Latest decision: {data.pipeline.value.last_decision.status}
+                  </div>
+                  <KV k="Symbol" v={data.pipeline.value.last_decision.symbol} />
+                  <KV k="Timeframe" v={data.pipeline.value.last_decision.timeframe} />
+                  <KV k="Decided at" v={fmtTime(data.pipeline.value.last_decision.decided_at)} />
+                  <KV k="Bars consumed" v={data.pipeline.value.last_decision.bars_consumed} />
+                  <KV k="Reason" v={data.pipeline.value.last_decision.reason ?? (data.pipeline.value.last_decision.status === "accepted" ? "—" : "—")} />
+                  <KV k="Data source" v={data.pipeline.value.last_decision.data_source} />
+                  {/* Chart payload */}
+                  <div style={{ fontSize: 11, color: C.textMuted, margin: "10px 0 4px" }}>Chart Payload</div>
+                  <KV k="Direction" v={data.pipeline.value.last_decision.chart_payload.direction ?? "—"} />
+                  <KV
+                    k="Entry / Stop / Target"
+                    v={`${fmtNum(data.pipeline.value.last_decision.chart_payload.entry)} / ${fmtNum(data.pipeline.value.last_decision.chart_payload.stop_loss)} / ${fmtNum(data.pipeline.value.last_decision.chart_payload.take_profit)}`}
+                  />
+                  <KV
+                    k="Invalidation OB low"
+                    v={fmtNum(data.pipeline.value.last_decision.chart_payload.invalidation.ob_low)}
+                  />
+                  <KV
+                    k="Invalidation expires"
+                    v={fmtTime(data.pipeline.value.last_decision.chart_payload.invalidation.expire_at)}
+                  />
+                  <KV
+                    k="Order block zone"
+                    v={
+                      <>
+                        <StatusDot ok={data.pipeline.value.last_decision.chart_payload.order_block_zone.status === "ok"} />
+                        {data.pipeline.value.last_decision.chart_payload.order_block_zone.status}
+                      </>
+                    }
+                  />
+                  <KV
+                    k="FVG zone"
+                    v={
+                      <>
+                        <StatusDot ok={data.pipeline.value.last_decision.chart_payload.fvg_zone.status === "ok"} />
+                        {data.pipeline.value.last_decision.chart_payload.fvg_zone.status}
+                      </>
+                    }
+                  />
+                  {/* Execution */}
+                  {data.pipeline.value.last_decision.execution && (
+                    <>
+                      <div style={{ fontSize: 11, color: C.textMuted, margin: "10px 0 4px" }}>Execution (paper)</div>
+                      <KV
+                        k="Attempted / Executed"
+                        v={`${data.pipeline.value.last_decision.execution.attempted ? "yes" : "no"} / ${data.pipeline.value.last_decision.execution.executed ? "yes" : "no"}`}
+                      />
+                      {data.pipeline.value.last_decision.execution.blocking_gate && (
+                        <KV k="Blocking gate" v={data.pipeline.value.last_decision.execution.blocking_gate} />
+                      )}
+                      {data.pipeline.value.last_decision.execution.error && (
+                        <KV k="Error" v={data.pipeline.value.last_decision.execution.error} />
+                      )}
+                      {data.pipeline.value.last_decision.execution.skipped_reason && (
+                        <KV k="Skipped reason" v={data.pipeline.value.last_decision.execution.skipped_reason} />
+                      )}
+                      {data.pipeline.value.last_decision.execution.order_id && (
+                        <KV k="Order id" v={data.pipeline.value.last_decision.execution.order_id} />
+                      )}
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div style={{ marginTop: 10 }}>
+                  <NotConnected reason="No evaluations yet — first 1H bar fetch pending" />
+                </div>
+              )}
+              {/* Not-connected layers */}
+              <div style={{ fontSize: 11, color: C.textMuted, margin: "12px 0 4px" }}>Not connected layers</div>
+              <div style={{ fontSize: 12, color: C.textBold }}>
+                {data.pipeline.value.not_connected_layers.length === 0
+                  ? "—"
+                  : data.pipeline.value.not_connected_layers.join(", ")}
+              </div>
+            </div>
           )}
         </Card>
       </div>

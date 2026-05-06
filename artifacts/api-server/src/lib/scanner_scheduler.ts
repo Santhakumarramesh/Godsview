@@ -42,6 +42,14 @@ import {
 } from "./alpaca";
 // Phase 3: scanner now routes orders through the SOLE choke point.
 import { executeOrder } from "./order_executor";
+// Milestone 2: institutional liquidity intelligence (slim) — slots in alongside
+// the legacy detection. Does NOT replace it. Routes accepted long signals
+// through the same executeOrder() choke point as the legacy auto-trade path.
+import {
+  runPipelineEvaluation as m2RunPipelineEvaluation,
+  attemptExecution as m2AttemptExecution,
+} from "./m2_pipeline";
+
 import { publishAlert } from "./signal_stream";
 import { listEnabledSymbols, touchScanned } from "./watchlist";
 import { recordDecision } from "./trade_journal";
@@ -427,6 +435,72 @@ async function scanSymbol(
     }
 
     touchScanned(symbol, run.signalsFound > 0);
+
+    // ── Milestone 2 pipeline (additive): pure-function ob-retest-long-1h ──
+    // Fetches its own 1H bars (the strategy operates on a higher timeframe
+    // than the legacy 1m/5m detection above). On accepted long signals,
+    // routes through the SAME executeOrder() choke point as the legacy
+    // auto-trade. Risk pipeline is NEVER bypassed.
+    try {
+      const bars1H = await getBars(symbol, "1Hour", 200);
+      if (bars1H.length >= 50) {
+        const m2Decision = m2RunPipelineEvaluation({
+          symbol,
+          bars: bars1H,
+          data_source: "alpaca_live",
+        });
+        if (m2Decision.status === "accepted" && m2Decision.signal && m2Decision.signal.kind === "long") {
+          // Reuse the same position-sizing helper the legacy auto-trade uses.
+          let qty = 0;
+          let sizingErr: string | null = null;
+          try {
+            const acct = await getAccount() as any;
+            const equity = Number(acct?.equity ?? acct?.portfolio_value ?? 0);
+            if (equity <= 0) {
+              sizingErr = "zero_equity";
+            } else {
+              const sz = computePositionSize({
+                entryPrice: m2Decision.signal.entry,
+                stopLossPrice: m2Decision.signal.stop,
+                accountEquity: equity,
+                method: "fixed_fractional",
+              });
+              qty = Math.max(0, Math.floor(sz.qty));
+            }
+          } catch (e: any) {
+            sizingErr = e?.message ?? String(e);
+          }
+          if (sizingErr) {
+            logger.warn({ symbol, err: sizingErr }, "[m2] sizing failed — execution skipped");
+            await m2AttemptExecution(m2Decision, 0, executeOrder);
+          } else {
+            // Fire-and-forget so the scanner cycle isn't blocked.
+            void m2AttemptExecution(m2Decision, qty, executeOrder)
+              .then((rec) => {
+                logger.info(
+                  {
+                    symbol,
+                    qty,
+                    executed: rec.execution?.executed,
+                    blockingGate: rec.execution?.blocking_gate,
+                    orderId: rec.execution?.order_id,
+                  },
+                  "[m2] Execution attempted via order_executor",
+                );
+              })
+              .catch((e: any) => logger.warn({ symbol, err: e?.message }, "[m2] execution promise rejected"));
+          }
+        } else if (m2Decision.status === "no_trade") {
+          logger.debug({ symbol, reason: m2Decision.reason, bars: m2Decision.bars_consumed }, "[m2] no_trade");
+        }
+      } else {
+        logger.debug({ symbol, bars: bars1H.length }, "[m2] insufficient 1H bars — skipped");
+      }
+    } catch (m2Err) {
+      // Pipeline must NEVER break the legacy scan loop.
+      const msg = m2Err instanceof Error ? m2Err.message : String(m2Err);
+      logger.warn({ symbol, err: msg }, "[m2] pipeline pass failed (non-fatal)");
+    }
   } catch (err) {
     if (isAlpacaAuthFailureError(err)) {
       const normalizedErr = err instanceof Error ? err : new Error(String(err));

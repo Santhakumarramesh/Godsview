@@ -88,6 +88,18 @@ describe("GET /api/brain-state — Brain Console v1", () => {
     expect(body).toHaveProperty("macro");
     expect(body).toHaveProperty("mcp");
     expect(body).toHaveProperty("verdict");
+
+    // Milestone 2: pipeline section is present and exposes strategy meta.
+    expect(body).toHaveProperty("pipeline");
+    expect(body.pipeline).toHaveProperty("status");
+    expect(body.pipeline).toHaveProperty("value");
+    if (body.pipeline.status === "ok" && body.pipeline.value) {
+      expect(body.pipeline.value).toHaveProperty("strategy_name");
+      expect(body.pipeline.value).toHaveProperty("strategy_version");
+      expect(body.pipeline.value).toHaveProperty("totals");
+      expect(body.pipeline.value).toHaveProperty("not_connected_layers");
+      expect(Array.isArray(body.pipeline.value.not_connected_layers)).toBe(true);
+    }
   });
 
   it("each aggregated section follows the SectionResult shape", async () => {
