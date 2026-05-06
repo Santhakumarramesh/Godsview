@@ -201,7 +201,7 @@ interface BrainState {
     status: "ok" | "partial" | "not_connected";
     generated_at: string;
     macro_risk: {
-      level: "low" | "moderate" | "elevated" | "extreme" | null;
+      level: "low" | "moderate" | "elevated" | "high" | null;
       drivers: string[];
       source_quality: "real" | "partial" | "not_connected";
     };
